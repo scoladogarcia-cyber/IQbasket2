@@ -1,7 +1,6 @@
 /**
  * @fileoverview Vista del Dashboard de Temporada de IQ Basket.
- * Incluye tooltips explicativos en KPIs, Líderes de Valoración (VAL/PJ), Gráficas, Tabla
- * y Botón de Sincronización y Auditoría Directa con Supabase a través de StatsSyncService.
+ * Mapeo robusto de propiedades para garantizar el pintado correcto de partidos, KPIs y tablas.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -18,40 +17,58 @@ export class SeasonDashboardView {
     };
 
     this.cachedGames = [];
+    this.cachedPlayerStats = [];
     this.cachedStatsMap = new Map();
     this.currentTeamId = null;
   }
 
   _formatDateES(dateStr) {
     if (!dateStr || dateStr === '-') return '-';
-    const parts = dateStr.split('-');
+    const parts = String(dateStr).split('T')[0].split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
     return dateStr;
   }
 
+  /**
+   * Extrae la puntuación probando todos los nombres posibles de columna en Supabase.
+   */
   _normalizeGameScore(g) {
-    const teamPts = g.team_score ?? g.our_score ?? null;
-    const oppPts = g.opponent_score ?? g.opp_score ?? null;
-    return { teamPts, oppPts };
+    if (!g) return { teamPts: 0, oppPts: 0, hasPlayed: false };
+
+    const teamPts = g.team_score ?? g.our_score ?? g.points ?? null;
+    const oppPts = g.opponent_score ?? g.opp_score ?? g.opp_points ?? null;
+
+    const statusUpper = String(g.status || '').toUpperCase();
+    const isCompleted = statusUpper === 'COMPLETED' || statusUpper === 'FINALIZADO' || statusUpper === 'FINAL';
+    const hasPlayed = (teamPts !== null && oppPts !== null) || isCompleted;
+
+    return { 
+      teamPts: teamPts !== null ? Number(teamPts) : 0, 
+      oppPts: oppPts !== null ? Number(oppPts) : 0,
+      hasPlayed 
+    };
   }
 
+  /**
+   * Obtiene los líderes en Valoración FIBA relacionando 'player_game_stats' con 'players'.
+   */
   _getTopPlayers(playerStatsRows, playersMap) {
     const map = {};
 
     if (playerStatsRows && playerStatsRows.length > 0) {
       playerStatsRows.forEach((row) => {
-        const pId = row.player_id;
+        const pId = row.player_id || row.id;
         if (!pId) return;
 
         const pInfo = playersMap.get(pId) || {};
         const firstName = pInfo.first_name || "";
         const lastName = pInfo.last_name || "";
         const fullName = `${firstName} ${lastName}`.trim() || pInfo.name || "Jugador";
-        const jerseyNum = pInfo.jersey !== undefined && pInfo.jersey !== null ? `#${pInfo.jersey}` : "";
+        const jerseyNum = (pInfo.jersey !== undefined && pInfo.jersey !== null) ? `#${pInfo.jersey}` : "";
 
-        // Lectura directa de evaluation FIBA o cálculo con StatsEngine
+        // Calcular o leer la Valoración FIBA (evaluation / valuation)
         let val = 0;
         if (row.evaluation !== undefined && row.evaluation !== null) {
           val = Number(row.evaluation);
@@ -60,17 +77,6 @@ export class SeasonDashboardView {
         } else if (StatsEngine && typeof StatsEngine.calculatePlayerStats === "function") {
           const processedRow = StatsEngine.calculatePlayerStats(row);
           val = processedRow.evaluation || 0;
-        } else {
-          // Fallback FIBA básico: (PTS + REB + AST + STL + BLK) - (MISS_FG + MISS_FT + TO + FOULS)
-          const pts = Number(row.points || row.pts || 0);
-          const oReb = Number(row.off_reb || row.rebounds_offensive || 0);
-          const dReb = Number(row.def_reb || row.rebounds_defensive || 0);
-          const ast = Number(row.assists || 0);
-          const stl = Number(row.steals || 0);
-          const blk = Number(row.blocks || 0);
-          const to  = Number(row.turnovers || 0);
-          const fc  = Number(row.fouls_committed || 0);
-          val = (pts + oReb + dReb + ast + stl + blk) - (to + fc);
         }
 
         if (!map[pId]) {
@@ -93,7 +99,7 @@ export class SeasonDashboardView {
         ...p,
         avgVal: p.gamesPlayed > 0 ? Number((p.totalVal / p.gamesPlayed).toFixed(1)) : 0
       }))
-      .filter((p) => p.gamesPlayed > 0) // Excluir jugadores sin partidos disputados
+      .filter((p) => p.gamesPlayed > 0)
       .sort((a, b) => b.avgVal - a.avgVal)
       .slice(0, 3);
 
@@ -156,10 +162,10 @@ export class SeasonDashboardView {
       const orbCount = st.rebounds_offensive || st.off_reb || Math.floor(8 + (idx % 4) * 3);
       const drbCount = st.rebounds_defensive || st.def_reb || Math.floor(22 + (idx % 5) * 2);
 
-      const efgVal = fga > 0 ? Number((((fgm + 0.5 * fg3m) / fga) * 100).toFixed(1)) : 28.0;
+      const efgVal = (st.efg && st.efg > 0) ? Number(st.efg) : (fga > 0 ? Number((((fgm + 0.5 * fg3m) / fga) * 100).toFixed(1)) : 28.0);
       const poss = st.estimated_possessions || (0.5 * (fga + 0.44 * fta - orbCount + tov + 70));
-      const ortg = poss > 0 ? (ptsUs / poss) * 100 : 60;
-      const drtg = poss > 0 ? (ptsThem / poss) * 100 : 100;
+      const ortg = (st.ortg && st.ortg > 0) ? Number(st.ortg) : (poss > 0 ? (ptsUs / poss) * 100 : 60);
+      const drtg = (st.drtg && st.drtg > 0) ? Number(st.drtg) : (poss > 0 ? (ptsThem / poss) * 100 : 100);
       const netRating = Number((ortg - drtg).toFixed(1));
 
       return {
@@ -457,17 +463,17 @@ export class SeasonDashboardView {
       const { teamPts: ptsA, oppPts: oppA } = this._normalizeGameScore(a);
       const { teamPts: ptsB, oppPts: oppB } = this._normalizeGameScore(b);
 
-      const diffA = (ptsA || 0) - (oppA || 0);
-      const diffB = (ptsB || 0) - (oppB || 0);
+      const diffA = ptsA - oppA;
+      const diffB = ptsB - oppB;
 
       const possEstA = stA.estimated_possessions || 70;
       const possEstB = stB.estimated_possessions || 70;
 
-      const offA = stA.ortg || stA.off_rating || (ptsA > 0 ? (ptsA / possEstA) * 100 : 0);
-      const offB = stB.ortg || stB.off_rating || (ptsB > 0 ? (ptsB / possEstB) * 100 : 0);
+      const offA = stA.ortg || (ptsA > 0 ? (ptsA / possEstA) * 100 : 0);
+      const offB = stB.ortg || (ptsB > 0 ? (ptsB / possEstB) * 100 : 0);
 
-      const defA = stA.drtg || stA.def_rating || (oppA > 0 ? (oppA / possEstA) * 100 : 0);
-      const defB = stB.drtg || stB.def_rating || (oppB > 0 ? (oppB / possEstB) * 100 : 0);
+      const defA = stA.drtg || (oppA > 0 ? (oppA / possEstA) * 100 : 0);
+      const defB = stB.drtg || (oppB > 0 ? (oppB / possEstB) * 100 : 0);
 
       switch (column) {
         case "date":
@@ -477,7 +483,7 @@ export class SeasonDashboardView {
         case "venue":
           return mult * (a.venue || "").localeCompare(b.venue || "");
         case "score":
-          return mult * ((ptsA || 0) - (ptsB || 0));
+          return mult * (ptsA - ptsB);
         case "diff":
           return mult * (diffA - diffB);
         case "off":
@@ -493,10 +499,8 @@ export class SeasonDashboardView {
   _renderTableRows(sortedGames) {
     return sortedGames.map((g) => {
       const st = this.cachedStatsMap.get(g.id) || {};
-      const { teamPts, oppPts } = this._normalizeGameScore(g);
+      const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(g);
 
-      const hasPlayed = teamPts !== null && oppPts !== null && (teamPts > 0 || oppPts > 0 || String(g.status || '').toUpperCase() === 'COMPLETED');
-      
       const isWin = hasPlayed && teamPts > oppPts;
       const diff = hasPlayed ? teamPts - oppPts : 0;
 
@@ -505,8 +509,8 @@ export class SeasonDashboardView {
       const opponentName = g.opponent || "Rival";
 
       const possEst = st.estimated_possessions || 70;
-      let offRating = hasPlayed ? (st.ortg || st.off_rating ? Number(st.ortg || st.off_rating).toFixed(1) : Number((teamPts / possEst) * 100).toFixed(1)) : "-";
-      let defRating = hasPlayed ? (st.drtg || st.def_rating ? Number(st.drtg || st.def_rating).toFixed(1) : Number((oppPts / possEst) * 100).toFixed(1)) : "-";
+      let offRating = hasPlayed ? (st.ortg ? Number(st.ortg).toFixed(1) : Number((teamPts / possEst) * 100).toFixed(1)) : "-";
+      let defRating = hasPlayed ? (st.drtg ? Number(st.drtg).toFixed(1) : Number((oppPts / possEst) * 100).toFixed(1)) : "-";
 
       const formattedDate = this._formatDateES(g.date || g.game_date || '-');
 
@@ -568,9 +572,6 @@ export class SeasonDashboardView {
     });
   }
 
-  /**
-   * Vincula la acción del botón de auditoría y resincronización de datos.
-   */
   _attachSyncButtonListener(container, teamId) {
     const syncBtn = container.querySelector("#btn-sync-data");
     if (!syncBtn) return;
@@ -580,8 +581,7 @@ export class SeasonDashboardView {
       syncBtn.innerHTML = `⏳ Sincronizando...`;
       syncBtn.style.opacity = "0.7";
 
-      // Ejecuta la resincronización y auditoría integrada en StatsSyncService
-      const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId);
+      const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
         syncBtn.innerHTML = `✅ ¡Datos Al Día!`;
@@ -616,7 +616,13 @@ export class SeasonDashboardView {
     }
 
     this.cachedGames = data.playedGames || [];
+    this.cachedPlayerStats = data.playerStats || [];
     this.cachedStatsMap = new Map((data.teamStats || []).map((st) => [st.game_id, st]));
+
+    // Auto-sincronización silenciosa
+    this.syncService.runFullAuditAndSync(teamId).catch(err => {
+      console.warn("[SeasonDashboardView] Auto-sync en segundo plano:", err.message);
+    });
 
     const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, data.teamStats) : {
       wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0
@@ -637,7 +643,6 @@ export class SeasonDashboardView {
         <div style="text-align: right;">
           <span style="font-size: 20px; font-weight: 900; color: #facc15;">${p.avgVal}</span>
           
-          <!-- TOOLTIP EN VAL / PJ DE LÍDERES -->
           <span class="has-tooltip" style="display: inline-block;">
             <span style="font-size: 9px; color: #c084fc; font-weight: 800; border-bottom: 1px dashed #c084fc; cursor: pointer;">
               VAL / PJ <span class="info-badge" style="background: rgba(255,255,255,0.2); color: white;">?</span>
@@ -652,7 +657,7 @@ export class SeasonDashboardView {
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding-bottom: 40px;">
         
-        <!-- Estado Nube y Botón de Sincronización -->
+        <!-- Estado Nube -->
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
@@ -663,7 +668,7 @@ export class SeasonDashboardView {
           </button>
         </div>
 
-        <!-- Encabezado de Equipo -->
+        <!-- Encabezado -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
             <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${data.teamName || 'Equipo'}</h1>
@@ -676,13 +681,13 @@ export class SeasonDashboardView {
           </div>
         </div>
 
-        <!-- Rejilla de KPIs CON TOOLTIPS EN CADA TARJETA -->
+        <!-- KPIs -->
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
           
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">PARTIDOS JUGADOS</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Total de partidos disputados o programados en el calendario de la temporada.</span>
+              <span class="tooltip-box">Total de partidos disputados o programados en el calendario.</span>
             </span>
             <span class="kpi-val-big">${this.cachedGames.length}</span>
           </div>
@@ -690,7 +695,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">VICTORIAS</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Número total de partidos ganados por el equipo.</span>
+              <span class="tooltip-box">Número total de partidos ganados.</span>
             </span>
             <span class="kpi-val-big" style="color: #16a34a;">${kpis.wins}</span>
           </div>
@@ -698,7 +703,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">DERROTAS</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Número total de partidos perdidos por el equipo.</span>
+              <span class="tooltip-box">Número total de partidos perdidos.</span>
             </span>
             <span class="kpi-val-big" style="color: #dc2626;">${kpis.losses}</span>
           </div>
@@ -706,7 +711,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">PUNTOS POR PARTIDO</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Promedio de puntos anotados a favor por encuentro (PPG).</span>
+              <span class="tooltip-box">Promedio de puntos anotados a favor (PPG).</span>
             </span>
             <span class="kpi-val-big">${kpis.ppg}</span>
           </div>
@@ -714,7 +719,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">PUNTOS RECIBIDOS</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Promedio de puntos encajados en contra por encuentro (Opp PPG).</span>
+              <span class="tooltip-box">Promedio de puntos encajados en contra (Opp PPG).</span>
             </span>
             <span class="kpi-val-big">${kpis.oppPpg}</span>
           </div>
@@ -722,7 +727,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">DIFERENCIA MEDIA</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Diferencia media de puntos por partido (Puntos A Favor menos Puntos En Contra).</span>
+              <span class="tooltip-box">Diferencia media de puntos por partido (A Favor menos En Contra).</span>
             </span>
             <span class="kpi-val-big" style="color: ${kpis.diffPpg < 0 ? '#dc2626' : '#16a34a'};">${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}</span>
           </div>
@@ -730,7 +735,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">OFFENSIVE RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Eficiencia ofensiva: Puntos anotados por cada 100 posesiones de juego.</span>
+              <span class="tooltip-box">Eficiencia ofensiva: Puntos anotados por cada 100 posesiones.</span>
             </span>
             <span class="kpi-val-big">${kpis.ortg}</span>
           </div>
@@ -738,7 +743,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">DEFENSIVE RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Eficiencia defensiva: Puntos permitidos al rival por cada 100 posesiones.</span>
+              <span class="tooltip-box">Eficiencia defensiva: Puntos permitidos por cada 100 posesiones.</span>
             </span>
             <span class="kpi-val-big">${kpis.drtg}</span>
           </div>
@@ -746,7 +751,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">NET RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Margen de eficiencia neto por cada 100 posesiones (Offensive Rating - Defensive Rating).</span>
+              <span class="tooltip-box">Margen de eficiencia neto por cada 100 posesiones (Offense - Defense).</span>
             </span>
             <span class="kpi-val-big" style="color: ${kpis.netRtg < 0 ? '#dc2626' : '#16a34a'};">${kpis.netRtg > 0 ? '+' : ''}${kpis.netRtg}</span>
           </div>
@@ -754,7 +759,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">PACE</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Ritmo de juego: Estimación del número de posesiones jugadas por partido (40 min).</span>
+              <span class="tooltip-box">Ritmo de juego: Estimación de posesiones jugadas por partido (40 min).</span>
             </span>
             <span class="kpi-val-big">${kpis.pace}</span>
           </div>
@@ -762,7 +767,7 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">EFG%</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Porcentaje de Tiro Efectivo: Mide la precisión en tiros de campo dando un 50% más de valor al triple.</span>
+              <span class="tooltip-box">Porcentaje de Tiro Efectivo dando un 50% más de valor al triple.</span>
             </span>
             <span class="kpi-val-big">${kpis.efg}%</span>
           </div>
@@ -770,14 +775,14 @@ export class SeasonDashboardView {
           <div class="kpi-card-custom">
             <span class="has-tooltip">
               <span class="kpi-title">TOV%</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Porcentaje de Pérdidas: Porcentaje de posesiones propias que terminan en balón perdido.</span>
+              <span class="tooltip-box">Porcentaje de posesiones propias terminadas en pérdida.</span>
             </span>
             <span class="kpi-val-big">${kpis.tovPct}%</span>
           </div>
 
         </div>
 
-        <!-- Tarjeta Morada de Líderes FIBA CON TOOLTIP EN VAL/PJ -->
+        <!-- Tarjeta Morada de Líderes FIBA -->
         <div style="background: #2e1065; border-radius: 14px; padding: 20px; color: white;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
             <span style="font-size: 18px;">🏆</span>
@@ -791,7 +796,7 @@ export class SeasonDashboardView {
         <!-- 6 Gráficas de Evolución -->
         ${this._renderCharts(this.cachedGames, this.cachedStatsMap)}
 
-        <!-- Tabla de Partidos con Ordenación y Tooltips -->
+        <!-- Tabla de Partidos -->
         <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
           <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px;">ÚLTIMOS PARTIDOS</h3>
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -821,7 +826,7 @@ export class SeasonDashboardView {
                 <th data-sort="off" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
                   <span class="has-tooltip">
                     OFF <span class="info-badge">?</span>
-                    <span class="tooltip-box">Offensive Rating: Puntos anotados por cada 100 posesiones de juego.</span>
+                    <span class="tooltip-box">Offensive Rating: Puntos anotados por cada 100 posesiones.</span>
                   </span>
                   <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
@@ -829,7 +834,7 @@ export class SeasonDashboardView {
                 <th data-sort="def" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
                   <span class="has-tooltip">
                     DEF <span class="info-badge">?</span>
-                    <span class="tooltip-box">Defensive Rating: Puntos recibidos por cada 100 posesiones del rival.</span>
+                    <span class="tooltip-box">Defensive Rating: Puntos recibidos por cada 100 posesiones.</span>
                   </span>
                   <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
@@ -845,7 +850,6 @@ export class SeasonDashboardView {
 
       </div>
 
-      <!-- Estilos CSS Universales -->
       <style>
         .kpi-card-custom {
           background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;
@@ -856,76 +860,13 @@ export class SeasonDashboardView {
         .kpi-val-big {
           font-size: 22px; font-weight: 900; color: #0f172a;
         }
-
-        .sortable-th:hover {
-          color: #2563eb;
-        }
-
-        .has-tooltip {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          cursor: pointer;
-        }
-
-        .info-badge {
-          background: #e2e8f0;
-          color: #475569;
-          border-radius: 50%;
-          width: 14px;
-          height: 14px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 9px;
-          font-weight: 800;
-          transition: all 0.2s ease;
-        }
-
-        .has-tooltip:hover .info-badge {
-          background: #2563eb;
-          color: white;
-        }
-
-        .tooltip-box {
-          visibility: hidden;
-          opacity: 0;
-          width: 210px;
-          background-color: #0f172a;
-          color: #ffffff;
-          text-align: center;
-          border-radius: 6px;
-          padding: 8px 10px;
-          position: absolute;
-          z-index: 100;
-          bottom: 125%;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 11px;
-          font-weight: 500;
-          line-height: 1.35;
-          text-transform: none;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          transition: opacity 0.2s ease, visibility 0.2s ease;
-          pointer-events: none;
-        }
-
-        .tooltip-box::after {
-          content: "";
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          margin-left: -5px;
-          border-width: 5px;
-          border-style: solid;
-          border-color: #0f172a transparent transparent transparent;
-        }
-
-        .has-tooltip:hover .tooltip-box {
-          visibility: visible;
-          opacity: 1;
-        }
+        .sortable-th:hover { color: #2563eb; }
+        .has-tooltip { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+        .info-badge { background: #e2e8f0; color: #475569; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; transition: all 0.2s ease; }
+        .has-tooltip:hover .info-badge { background: #2563eb; color: white; }
+        .tooltip-box { visibility: hidden; opacity: 0; width: 210px; background-color: #0f172a; color: #ffffff; text-align: center; border-radius: 6px; padding: 8px 10px; position: absolute; z-index: 100; bottom: 125%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500; line-height: 1.35; text-transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: opacity 0.2s ease, visibility 0.2s ease; pointer-events: none; }
+        .tooltip-box::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #0f172a transparent transparent transparent; }
+        .has-tooltip:hover .tooltip-box { visibility: visible; opacity: 1; }
       </style>
     `;
 

@@ -1,7 +1,6 @@
 /**
  * @fileoverview Orquestador Principal de IQ Basket.
- * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditor y GameController.
- * Garantiza que las vistas se inyecten de forma independiente en 'dashboard-content-area'.
+ * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditor y PlayerStatsView.
  */
 
 import { supabase } from "./config/database.config.js";
@@ -10,13 +9,12 @@ import { LayoutView } from "./views/LayoutView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
 
-// 📌 1. Módulos de anotación en vivo
+// 📌 1. Módulos de anotación en vivo y controladores
 import { GameController } from "./controllers/GameController.js";
 import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
 
-// 📌 Vistas pendientes para descomentar al crear sus archivos:
-// import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
-// import { PlayerStatsView } from "./views/PlayerStatsView.js";
+// 📌 2. Módulo Único de Jugadores (Parrilla + Ficha Detallada)
+import { PlayerStatsView } from "./views/PlayerStatsView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -26,35 +24,32 @@ export class IQBasketApp {
     this.routeParams = {};
     this.teamId = "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22"; // JMJ Manyanet Sant Andreu
 
-    // 📌 2. Instancia del Controlador de Negocio de Partidos
+    // Controller para partidos
     this.gameController = new GameController(
       null, 
       { can: () => true }, 
       { supabase }
     );
 
-    // 📌 3. Instancias activas de Vistas
+    // Instancias activas de Vistas
     this.views = {
       auth: new AuthView(),
       dashboard: new SeasonDashboardView(supabase),
       team: new TeamStatsView(supabase),
       equipo: new TeamStatsView(supabase),
       
-      // Conectamos el GameLiveEditorView pasándole el GameController
       liveeditor: new GameLiveEditorView(this.gameController),
       live: new GameLiveEditorView(this.gameController),
       registro: new GameLiveEditorView(this.gameController),
 
-      // boxscore: new GameBoxScoreView(supabase),
-      // player: new PlayerStatsView(supabase)
+      player: new PlayerStatsView(supabase)
     };
   }
 
   /**
-   * Vincula los eventos exactos de AuthView.js (Login y Ver/Ocultar contraseña)
+   * Vincula los eventos de AuthView.js (Login y Ver/Ocultar contraseña)
    */
   bindAuthEvents() {
-    // 1. Mostrar / Ocultar Contraseña (Ojo 👁️)
     const toggleBtn = document.getElementById("toggle-password-btn");
     const passwordInput = document.getElementById("login-password");
 
@@ -67,7 +62,6 @@ export class IQBasketApp {
       });
     }
 
-    // 2. Submit del Formulario de Login
     const loginForm = document.getElementById("login-form");
     if (loginForm) {
       loginForm.addEventListener("submit", (e) => {
@@ -82,7 +76,6 @@ export class IQBasketApp {
    * Vincula los eventos del Layout (Menú lateral, Logout y navegación responsive)
    */
   bindLayoutEvents() {
-    // Botón de Cerrar Sesión
     const logoutBtn = document.getElementById("btn-logout");
     if (logoutBtn) {
       logoutBtn.addEventListener("click", (e) => {
@@ -92,7 +85,6 @@ export class IQBasketApp {
       });
     }
 
-    // Escuchar cambios de hash en la URL (#/dashboard, #/team, #/live, etc.)
     window.onhashchange = () => {
       this.parseHashRoute();
       this.render();
@@ -100,7 +92,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Extrae la ruta activa y parámetros opcionales de la URL (#/game/ID_PARTIDO)
+   * Extrae la ruta activa y parámetros opcionales de la URL (#/player/ID_JUGADOR)
    */
   parseHashRoute() {
     const rawHash = window.location.hash.replace("#/", "").trim();
@@ -118,7 +110,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Helper para renderizar módulos en desarrollo cuando aún no existe el archivo .js
+   * Helper para renderizar módulos en desarrollo
    */
   renderPlaceholder(title, className = "") {
     const area = document.getElementById("dashboard-content-area");
@@ -141,15 +133,12 @@ export class IQBasketApp {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
-    // A) SI NO ESTÁ AUTENTICADO -> Muestra la tarjeta de AuthView
     if (!this.isAuthenticated) {
       appContainer.innerHTML = this.views.auth.render();
       this.bindAuthEvents();
       return;
     }
 
-    // B) SI ESTÁ AUTENTICADO -> Genera el contenedor Layout con el área de trabajo
-    // Solo reescribe el Layout si el contenedor aún no existe en el DOM para evitar parpadeos
     let contentAreaEl = document.getElementById("dashboard-content-area");
     if (!contentAreaEl) {
       appContainer.innerHTML = LayoutView.wrap(
@@ -164,7 +153,6 @@ export class IQBasketApp {
     const route = this.currentRoute;
     const contentArea = "dashboard-content-area";
 
-    // C) ENRUTADOR DINÁMICO
     switch (route) {
       case "dashboard":
         if (this.views.dashboard) {
@@ -197,13 +185,15 @@ export class IQBasketApp {
         }
         break;
 
+      // 🏀 RUTA UNIFICADA DE JUGADORES (Parrilla o Detalle según parámetro ID)
+      case "players":
+      case "jugadores":
       case "player":
       case "jugador":
-      case "jugadores":
         if (this.views.player) {
-          await this.views.player.render(contentArea, this.routeParams.id || this.teamId);
+          await this.views.player.render(contentArea, this.routeParams.id, this.teamId);
         } else {
-          this.renderPlaceholder("Estadísticas de Jugador", "PlayerStatsView");
+          this.renderPlaceholder("Sección de Jugadores", "PlayerStatsView");
         }
         break;
 
@@ -214,7 +204,6 @@ export class IQBasketApp {
   }
 }
 
-// Inicialización automática cuando el DOM esté listo
 document.addEventListener("DOMContentLoaded", () => {
   const app = new IQBasketApp();
   app.parseHashRoute();
