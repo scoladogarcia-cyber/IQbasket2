@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IQ Basket - Basketball Stats Studio Pro</title>
+  
+  <!-- Parche para evitar el error 'process is not defined' en el navegador -->
+  <script>
+    window.process = window.process || { env: { NODE_ENV: 'development' } };
+  </script>
+
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #0f172a; }
+    #app { max-width: 1200px; margin: 0 auto; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+    .kpi-card { background: white; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
+    .kpi-val { font-size: 1.875rem; font-weight: 700; display: block; }
+    .kpi-lbl { font-size: 0.875rem; color: #64748b; }
+  </style>
+</head>
+<body>
+
+  <!-- Contenedor principal donde IQ Basket renderizará las vistas -->
+  <div id="app"></div>
+
+  <!-- Carga el punto de entrada principal (index.js) como módulo ES6 -->
+  <script type="module" src="./index.js"></script>
+
+</body>
+</html>

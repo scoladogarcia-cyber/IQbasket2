@@ -1,0 +1,13 @@
+{
+  "name": "iq-basket-js",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
