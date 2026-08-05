@@ -1,14 +1,17 @@
 /**
  * @fileoverview Vista del Dashboard de Temporada de IQ Basket.
+ * Sincronizado con DataStore para carga instantánea desde memoria local y control de permisos por rol.
  * Mapeo robusto de propiedades para garantizar el pintado correcto de partidos, KPIs y tablas.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
+import { DataStore } from "../services/DataStore.js";
 
 export class SeasonDashboardView {
-  constructor(supabaseClient) {
+  constructor(supabaseClient, authController) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
+    this.auth = authController;
     this.syncService = new StatsSyncService(this.supabase);
 
     this.sortState = {
@@ -20,6 +23,19 @@ export class SeasonDashboardView {
     this.cachedPlayerStats = [];
     this.cachedStatsMap = new Map();
     this.currentTeamId = null;
+  }
+
+  // =========================================================================
+  // CONTROL DE PERMISOS POR ROL
+  // =========================================================================
+  _canSync() {
+    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
+    return (
+      this.auth.hasRole("SUPERADMIN") ||
+      this.auth.hasRole("ADMIN") ||
+      this.auth.hasRole("ENTRENADOR") ||
+      this.auth.hasRole("ANALISTA")
+    );
   }
 
   _formatDateES(dateStr) {
@@ -530,7 +546,7 @@ export class SeasonDashboardView {
           <td style="padding: 14px 12px; color: #64748b;">${offRating}</td>
           <td style="padding: 14px 12px; color: #64748b;">${defRating}</td>
           <td style="padding: 14px 12px;">
-            <a href="#/game/${g.id}" style="color: #2563eb; text-decoration: none; font-weight: 600;">Análisis</a>
+            <a href="#/boxscore/${g.id}" style="color: #2563eb; text-decoration: none; font-weight: 600;">Análisis</a>
           </td>
         </tr>
       `;
@@ -581,6 +597,8 @@ export class SeasonDashboardView {
       syncBtn.innerHTML = `⏳ Sincronizando...`;
       syncBtn.style.opacity = "0.7";
 
+      // Refrescar caché local forzada
+      await DataStore.init(teamId || this.currentTeamId, true);
       const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
@@ -607,31 +625,42 @@ export class SeasonDashboardView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    container.innerHTML = `<div style="padding: 24px; color: #64748b;">📊 Cargando datos desde Supabase...</div>`;
+    // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
+    const games = DataStore.getGames() || [];
+    const players = DataStore.getPlayers() || [];
+    const playerStats = DataStore.getPlayerGameStats() || [];
 
-    const data = await this.syncService.fetchTeamDashboardData(teamId);
-    if (!data.isSuccess) {
-      container.innerHTML = `<div style="padding: 20px; color: red;">Error: ${data.error}</div>`;
-      return;
+    this.cachedGames = games;
+    this.cachedPlayerStats = playerStats;
+
+    const playersMap = new Map((players || []).map(p => [p.id, p]));
+
+    const teamData = {
+      teamName: "JMJ Manyanet Sant Andreu",
+      category: "Sénior Masculino",
+      season: "2026",
+      playedGames: games,
+      playerStats: playerStats,
+      playersMap: playersMap
+    };
+
+    // Auto-sincronización silenciosa en segundo plano solo si tiene permisos
+    if (this._canSync()) {
+      this.syncService.runFullAuditAndSync(teamId).catch(err => {
+        console.warn("[SeasonDashboardView] Auto-sync en segundo plano:", err.message);
+      });
     }
 
-    this.cachedGames = data.playedGames || [];
-    this.cachedPlayerStats = data.playerStats || [];
-    this.cachedStatsMap = new Map((data.teamStats || []).map((st) => [st.game_id, st]));
-
-    // Auto-sincronización silenciosa
-    this.syncService.runFullAuditAndSync(teamId).catch(err => {
-      console.warn("[SeasonDashboardView] Auto-sync en segundo plano:", err.message);
-    });
-
-    const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, data.teamStats) : {
+    const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, []) : {
       wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0
     };
     
-    const topPlayers = this._getTopPlayers(data.playerStats, data.playersMap);
+    const topPlayers = this._getTopPlayers(playerStats, playersMap);
 
     const sortedGames = this._sortGames(this.cachedGames);
     const gamesTableRows = this._renderTableRows(sortedGames);
+
+    const canSyncData = this._canSync();
 
     const topPlayersMarkup = topPlayers.map((p, index) => `
       <div style="background: rgba(255, 255, 255, 0.08); padding: 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
@@ -657,23 +686,29 @@ export class SeasonDashboardView {
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding-bottom: 40px;">
         
-        <!-- Estado Nube -->
+        <!-- Estado Nube y Permisos -->
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
-            NUBE CONECTADA: Base de datos Supabase sincronizada
+            NUBE CONECTADA: Memoria local sincronizada con Supabase
           </div>
-          <button id="btn-sync-data" style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
-            🔄 Sincronizar y Auditar Datos
-          </button>
+          ${canSyncData ? `
+            <button id="btn-sync-data" style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+              🔄 Sincronizar y Auditar Datos
+            </button>
+          ` : `
+            <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px;">
+              🔒 Modo Solo Lectura
+            </span>
+          `}
         </div>
 
         <!-- Encabezado -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
-            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${data.teamName || 'Equipo'}</h1>
+            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${teamData.teamName || 'Equipo'}</h1>
             <p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">
-              ${data.category || 'Categoría'} · Temporada ${data.season || '2026'} &nbsp;·&nbsp; 
+              ${teamData.category || 'Categoría'} · Temporada ${teamData.season || '2026'} &nbsp;·&nbsp; 
               <strong style="color: #16a34a;">${kpis.wins}V</strong> 
               <strong style="color: #dc2626;">${kpis.losses}D</strong> &nbsp;·&nbsp; 
               ${this.cachedGames.length} partidos totales
@@ -871,6 +906,8 @@ export class SeasonDashboardView {
     `;
 
     this._attachSortEventListeners(container);
-    this._attachSyncButtonListener(container, teamId);
+    if (canSyncData) {
+      this._attachSyncButtonListener(container, teamId);
+    }
   }
 }

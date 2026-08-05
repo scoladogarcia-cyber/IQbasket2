@@ -1,17 +1,20 @@
 /**
  * @fileoverview Orquestador Principal de IQ Basket.
- * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditor y PlayerStatsView.
+ * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView, GameBoxScoreView, PlayerStatsView y DataStore.
  */
 
 import { supabase } from "./config/database.config.js";
+import { DataStore } from "./services/DataStore.js";
+
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
 
-// 📌 1. Módulos de anotación en vivo y controladores
+// 📌 1. Módulos de anotación en vivo, BoxScore y controladores
 import { GameController } from "./controllers/GameController.js";
 import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
+import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
 
 // 📌 2. Módulo Único de Jugadores (Parrilla + Ficha Detallada)
 import { PlayerStatsView } from "./views/PlayerStatsView.js";
@@ -19,7 +22,7 @@ import { PlayerStatsView } from "./views/PlayerStatsView.js";
 export class IQBasketApp {
   constructor() {
     this.isAuthenticated = false; // Pantalla de Login al arrancar
-    this.userRole = "SUPERADMIN"; // Rol asignado a Sergio Colado
+    this.userRole = "SUPERADMIN"; // Rol asignado
     this.currentRoute = "dashboard";
     this.routeParams = {};
     this.teamId = "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22"; // JMJ Manyanet Sant Andreu
@@ -31,6 +34,11 @@ export class IQBasketApp {
       { supabase }
     );
 
+    // Instancia auxiliar de Auth Controller simplificada para vistas
+    const authController = {
+      hasRole: (role) => ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(this.userRole)
+    };
+
     // Instancias activas de Vistas
     this.views = {
       auth: new AuthView(),
@@ -38,11 +46,13 @@ export class IQBasketApp {
       team: new TeamStatsView(supabase),
       equipo: new TeamStatsView(supabase),
       
+      // Vistas del Módulo de Partidos
       liveeditor: new GameLiveEditorView(this.gameController),
-      live: new GameLiveEditorView(this.gameController),
-      registro: new GameLiveEditorView(this.gameController),
+      partidos: new GameLiveEditorView(this.gameController),
+      boxscore: new GameBoxScoreView(supabase, authController),
 
-      player: new PlayerStatsView(supabase)
+      // Vista del Módulo de Jugadores
+      player: new PlayerStatsView(supabase, authController)
     };
   }
 
@@ -81,6 +91,7 @@ export class IQBasketApp {
       logoutBtn.addEventListener("click", (e) => {
         e.preventDefault();
         this.isAuthenticated = false;
+        DataStore.isLoaded = false; // Resetear caché local al cerrar sesión
         this.render();
       });
     }
@@ -92,7 +103,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Extrae la ruta activa y parámetros opcionales de la URL (#/player/ID_JUGADOR)
+   * Extrae la ruta activa y parámetros opcionales de la URL (#/game/ID_PARTIDO o #/boxscore/ID_PARTIDO)
    */
   parseHashRoute() {
     const rawHash = window.location.hash.replace("#/", "").trim();
@@ -133,12 +144,29 @@ export class IQBasketApp {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
+    // A) PANTALLA DE LOGIN
     if (!this.isAuthenticated) {
       appContainer.innerHTML = this.views.auth.render();
       this.bindAuthEvents();
       return;
     }
 
+    // B) PRECARGA MASIVA ÚNICA EN MEMORIA LOCAL (DATASTORE) AL INICIAR SESIÓN
+    if (!DataStore.isLoaded) {
+      appContainer.innerHTML = `
+        <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc;">
+          <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #1e3a8a; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+          <h3 style="margin: 0 0 8px 0; color: #0f172a; font-size: 18px; font-weight: 800;">⚡ Precargando IQ Basket</h3>
+          <p style="margin: 0; color: #64748b; font-size: 13px;">Sincronizando plantilla, partidos y estadísticas en memoria local...</p>
+        </div>
+        <style>
+          @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+      `;
+      await DataStore.init(this.teamId);
+    }
+
+    // C) ESTRUCTURA DEL LAYOUT PRINCIPAL
     let contentAreaEl = document.getElementById("dashboard-content-area");
     if (!contentAreaEl) {
       appContainer.innerHTML = LayoutView.wrap(
@@ -153,6 +181,7 @@ export class IQBasketApp {
     const route = this.currentRoute;
     const contentArea = "dashboard-content-area";
 
+    // D) ENRUTADOR PRINCIPAL
     switch (route) {
       case "dashboard":
         if (this.views.dashboard) {
@@ -167,25 +196,29 @@ export class IQBasketApp {
         }
         break;
 
+      // 🏀 1. RUTA DE PARTIDOS Y EDITOR (#/partidos, #/live, #/game/ID_PARTIDO)
+      case "partidos":
+      case "games":
       case "game":
+      case "live":
+      case "registro":
+        if (this.views.liveeditor) {
+          await this.views.liveeditor.render(contentArea, this.routeParams.id, this.teamId);
+        } else {
+          this.renderPlaceholder("Listado y Registro de Partidos", "GameLiveEditorView");
+        }
+        break;
+
+      // 📊 2. RUTA DE BOXSCORE Y MÉTRICAS AVANZADAS (#/boxscore o #/boxscore/ID_PARTIDO)
       case "boxscore":
         if (this.views.boxscore) {
-          await this.views.boxscore.render(contentArea, this.routeParams.id || this.teamId);
+          await this.views.boxscore.render(contentArea, this.routeParams.id);
         } else {
           this.renderPlaceholder("Análisis de Partido (BoxScore)", "GameBoxScoreView");
         }
         break;
 
-      case "live":
-      case "registro":
-        if (this.views.liveeditor) {
-          await this.views.liveeditor.render(contentArea, this.routeParams.id || this.teamId);
-        } else {
-          this.renderPlaceholder("Registro Estadístico en Vivo", "GameLiveEditorView");
-        }
-        break;
-
-      // 🏀 RUTA UNIFICADA DE JUGADORES (Parrilla o Detalle según parámetro ID)
+      // 👤 3. RUTA DE JUGADORES (#/players, #/jugadores, #/player/ID_JUGADOR)
       case "players":
       case "jugadores":
       case "player":

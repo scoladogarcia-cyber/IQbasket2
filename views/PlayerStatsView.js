@@ -1,10 +1,12 @@
 /**
  * @fileoverview Vista Inteligente de Jugadores (PlayerStatsView.js).
+ * Sincronizado con DataStore para respuesta instantánea (0ms) y control de permisos por rol.
  * Maneja la parrilla general con fotos/dorsales, ordenación por nombre/número, buscador,
  * y la ficha detallada con las 7 pestañas oficiales, gráficas SVG y observaciones editables.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
+import { DataStore } from "../services/DataStore.js";
 
 export class PlayerStatsView {
   constructor(supabaseClient, authController) {
@@ -22,6 +24,28 @@ export class PlayerStatsView {
     this.selectedPlayer = null;
     this.gamesMap = new Map();
     this.activeTab = "resumen";
+  }
+
+  // =========================================================================
+  // CONTROL DE PERMISOS POR ROL
+  // =========================================================================
+  _canEditFullProfile() {
+    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
+    return (
+      this.auth.hasRole("SUPERADMIN") ||
+      this.auth.hasRole("ADMIN") ||
+      this.auth.hasRole("ENTRENADOR")
+    );
+  }
+
+  _canEditNotes() {
+    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
+    return (
+      this.auth.hasRole("SUPERADMIN") ||
+      this.auth.hasRole("ADMIN") ||
+      this.auth.hasRole("ENTRENADOR") ||
+      this.auth.hasRole("ANALISTA")
+    );
   }
 
   // =========================================================================
@@ -249,6 +273,7 @@ export class PlayerStatsView {
   _renderDetailHeader() {
     const p = this.selectedPlayer || {};
     const photo = p.photo_url || "";
+    const canEditFull = this._canEditFullProfile();
     
     const secPos = (Array.isArray(p.secondary_positions) ? p.secondary_positions : [])
       .map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
@@ -277,9 +302,15 @@ export class PlayerStatsView {
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-          <button id="btn-edit-tab" style="background: #1e3a8a; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-            ✏️ Editar Jugador
-          </button>
+          ${canEditFull ? `
+            <button id="btn-edit-tab" style="background: #1e3a8a; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              ✏️ Editar Jugador
+            </button>
+          ` : `
+            <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">
+              🔒 Solo Lectura
+            </span>
+          `}
           <span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
             Muestra suficiente
           </span>
@@ -295,9 +326,12 @@ export class PlayerStatsView {
       { id: "avanzadas", label: "Avanzadas" },
       { id: "evolucion", label: "Evolución" },
       { id: "comparacion", label: "Comparación" },
-      { id: "observaciones", label: "Observaciones" },
-      { id: "editar", label: "Editar Datos" }
+      { id: "observaciones", label: "Observaciones" }
     ];
+
+    if (this._canEditFullProfile()) {
+      tabs.push({ id: "editar", label: "Editar Datos" });
+    }
 
     return `
       <div style="display: flex; gap: 24px; border-bottom: 2px solid #e2e8f0; margin-bottom: 24px;">
@@ -565,31 +599,47 @@ export class PlayerStatsView {
 
     // 6. OBSERVACIONES
     if (this.activeTab === "observaciones") {
+      const canNotes = this._canEditNotes();
+
       return `
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <form id="form-observations" style="display: flex; flex-direction: column; gap: 16px;">
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
               <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 800; color: #0f172a;">📄 OBSERVACIONES DEL ENTRENADOR</h4>
-              <textarea name="notes" rows="4" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Escribe observaciones generales del jugador...">${p.notes || ''}</textarea>
+              ${canNotes ? `
+                <textarea name="notes" rows="4" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Escribe observaciones generales del jugador...">${p.notes || ''}</textarea>
+              ` : `
+                <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
+                  ${p.notes || 'Sin observaciones registradas.'}
+                </div>
+              `}
             </div>
 
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
               <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 800; color: #0f172a;">🎯 OBJETIVOS</h4>
-              <textarea name="objectives" rows="3" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Defina los objetivos tácticos o físicos para la temporada...">${p.objectives || ''}</textarea>
+              ${canNotes ? `
+                <textarea name="objectives" rows="3" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Defina los objetivos tácticos o físicos para la temporada...">${p.objectives || ''}</textarea>
+              ` : `
+                <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
+                  ${p.objectives || 'Sin objetivos definidos.'}
+                </div>
+              `}
             </div>
 
-            <div style="display: flex; justify-content: flex-end;">
-              <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                💾 Guardar Observaciones y Objetivos
-              </button>
-            </div>
+            ${canNotes ? `
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                  💾 Guardar Observaciones y Objetivos
+                </button>
+              </div>
+            ` : ''}
           </form>
         </div>
       `;
     }
 
-    // 7. EDITAR DATOS (FORMULARIO CON SUBIDA DE ARCHIVO DE FOTO)
-    if (this.activeTab === "editar") {
+    // 7. EDITAR DATOS (SOLO VISIBLE SI TIENE PERMISO DE EDICIÓN COMPLETO)
+    if (this.activeTab === "editar" && this._canEditFullProfile()) {
       const photo = p.photo_url || "";
       const secPositions = Array.isArray(p.secondary_positions) ? p.secondary_positions : [];
 
@@ -720,23 +770,21 @@ export class PlayerStatsView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const { data: pStats } = await this.supabase.from("player_game_stats").select("*");
-    this.playerStats = pStats || [];
+    // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
+    this.players = DataStore.getPlayers() || [];
+    this.playerStats = DataStore.getPlayerGameStats() || [];
+
+    const gamesList = DataStore.getGames() || [];
+    this.gamesMap = new Map(gamesList.map(g => [g.id, g]));
 
     // CASO A: DETALLE DE JUGADOR (#/player/UUID)
     if (playerId) {
-      container.innerHTML = `<div style="padding: 24px; color: #64748b;">👤 Cargando ficha de jugador...</div>`;
-
-      const { data: pData } = await this.supabase.from("players").select("*").eq("id", playerId).maybeSingle();
-      this.selectedPlayer = pData;
+      this.selectedPlayer = DataStore.getPlayerById(playerId);
 
       if (!this.selectedPlayer) {
         container.innerHTML = `<div style="padding: 20px; color: red;">Jugador no encontrado.</div>`;
         return;
       }
-
-      const { data: gamesList } = await this.supabase.from("games").select("*");
-      this.gamesMap = new Map((gamesList || []).map(g => [g.id, g]));
 
       const renderDetail = () => {
         container.innerHTML = `
@@ -782,7 +830,7 @@ export class PlayerStatsView {
               objectives: formData.get("objectives")
             };
 
-            await this.supabase.from("players").update(updates).eq("id", playerId);
+            await DataStore.updatePlayer(playerId, updates);
             this.selectedPlayer = { ...this.selectedPlayer, ...updates };
             alert("✅ Observaciones y objetivos guardados correctamente.");
           });
@@ -859,7 +907,7 @@ export class PlayerStatsView {
               notes: formData.get("notes")
             };
 
-            await this.supabase.from("players").update(updates).eq("id", playerId);
+            await DataStore.updatePlayer(playerId, updates);
             this.selectedPlayer = { ...this.selectedPlayer, ...updates };
             this.activeTab = "resumen";
             renderDetail();
@@ -872,13 +920,6 @@ export class PlayerStatsView {
     }
 
     // CASO B: PARRILLA GENERAL (#/players)
-    container.innerHTML = `<div style="padding: 24px; color: #64748b;">👤 Cargando plantilla de jugadores...</div>`;
-
-    let playersQuery = this.supabase.from("players").select("*");
-    if (teamId) playersQuery = playersQuery.eq("team_id", teamId);
-    const { data: pList } = await playersQuery;
-    this.players = pList || [];
-
     container.innerHTML = `
       <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -895,7 +936,6 @@ export class PlayerStatsView {
               <option value="Pívot" ${this.filterPosition === 'Pívot' ? 'selected' : ''}>Pívot</option>
             </select>
 
-            <!-- NUEVO SELECTOR DE ORDENACIÓN POR NOMBRE O DORSAL -->
             <select id="select-sort" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
               <option value="jersey_asc" ${this.sortBy === 'jersey_asc' ? 'selected' : ''}>🔢 Dorsal (Menor a Mayor)</option>
               <option value="jersey_desc" ${this.sortBy === 'jersey_desc' ? 'selected' : ''}>🔢 Dorsal (Mayor a Menor)</option>
