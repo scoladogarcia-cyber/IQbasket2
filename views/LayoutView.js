@@ -1,37 +1,68 @@
 /**
- * @fileoverview Layout contenedor principal con la barra lateral azul e integración Responsive para Móviles.
- * Ajustado para garantizar encaje perfecto centrado en pantallas grandes sin desbordamientos hacia la derecha.
+ * @fileoverview Layout contenedor principal con Sidebar fija en pantalla.
+ * El selector de Idioma y el botón de Cerrar Sesión permanecen siempre visibles
+ * a continuación del menú principal, sin desplazarse con el scroll del contenido.
  */
 
-import { i18n } from "../core-modules/i18n/I18nEngine.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class LayoutView {
   static t(key, fallback) {
-    const val = i18n ? i18n.t(key) : null;
-    return (!val || val === key) ? fallback : val;
+    return TranslationStore.t(key, fallback);
+  }
+
+  static _normalizeRouteKey(route) {
+    const r = String(route || '').toLowerCase().trim();
+    if (['partidos', 'games', 'game', 'live'].includes(r)) return 'games';
+    if (['advanced', 'advanced_stats'].includes(r)) return 'advanced';
+    if (['boxscore', 'registro'].includes(r)) return 'boxscore';
+    if (['team', 'equipo'].includes(r)) return 'team';
+    if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
+    if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
+    if (['lineups', 'quintetos'].includes(r)) return 'lineups';
+    if (['comparator', 'comparador'].includes(r)) return 'comparator';
+    return r || 'dashboard';
+  }
+
+  static updateActiveMenu(route) {
+    const activeKey = LayoutView._normalizeRouteKey(route);
+    const links = document.querySelectorAll(".app-sidebar .nav-link");
+
+    links.forEach(link => {
+      const linkKey = link.getAttribute("data-route-key");
+      if (linkKey === activeKey) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
   }
 
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
+    const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
+    const currentLang = TranslationStore.currentLang;
+
     const navItems = [
-      { label: LayoutView.t("dashboard", "Dashboard"), icon: "📊", route: "dashboard" },
-      { label: LayoutView.t("team", "Equipo"), icon: "👥", route: "team" },
-      { label: LayoutView.t("players", "Jugadores"), icon: "👤", route: "players" },
-      { label: LayoutView.t("games", "Partidos"), icon: "📅", route: "games" },
-      { label: LayoutView.t("boxscore", "Registro estadístico"), icon: "📋", route: "boxscore" },
-      { label: LayoutView.t("advanced_stats", "Estadística avanzada"), icon: "📈", route: "advanced" },
-      { label: LayoutView.t("lineups", "Quintetos"), icon: "🔥", route: "lineups" },
-      { label: LayoutView.t("comparator", "Comparador"), icon: "🔀", route: "comparator" },
-      { label: LayoutView.t("reports", "Informes"), icon: "📄", route: "reports" },
-      { label: LayoutView.t("ask_ai", "Pregúntale a tus datos"), icon: "🤖", route: "ask" },
-      { label: LayoutView.t("profile", "Mi Perfil"), icon: "👤", route: "profile" },
-      { label: LayoutView.t("settings", "Configuración"), icon: "⚙️", route: "settings" }
+      { key: "dashboard", label: LayoutView.t("dashboard", "Dashboard"), icon: "📊", route: "dashboard" },
+      { key: "team", label: LayoutView.t("team", "Equipo"), icon: "👥", route: "team" },
+      { key: "players", label: LayoutView.t("players", "Jugadores"), icon: "👤", route: "players" },
+      { key: "games", label: LayoutView.t("games", "Partidos"), icon: "📅", route: "games" },
+      { key: "boxscore", label: LayoutView.t("boxscore", "Registro estadístico"), icon: "📋", route: "boxscore" },
+      { key: "advanced", label: LayoutView.t("advanced_stats", "Estadística avanzada"), icon: "📈", route: "advanced" },
+      { key: "lineups", label: LayoutView.t("lineups", "Quintetos"), icon: "🔥", route: "lineups" },
+      { key: "comparator", label: LayoutView.t("comparator", "Comparador"), icon: "🔀", route: "comparator" },
+      { key: "reports", label: LayoutView.t("reports", "Informes"), icon: "📄", route: "reports" },
+      { key: "ask", label: LayoutView.t("ask_ai", "Pregúntale a tus datos"), icon: "🤖", route: "ask" },
+      { key: "profile", label: LayoutView.t("profile", "Mi Perfil"), icon: "👤", route: "profile" },
+      { key: "settings", label: LayoutView.t("settings", "Configuración"), icon: "⚙️", route: "settings" }
     ];
 
     const navLinksMarkup = navItems.map(item => {
-      const isActive = activeRoute === item.route;
+      const isActive = currentActiveKey === item.key;
       return `
         <a href="#/${item.route}" 
-           class="nav-link ${isActive ? 'active' : ''}">
+           class="nav-link ${isActive ? 'active' : ''}" 
+           data-route-key="${item.key}">
           <span style="font-size: 14px;">${item.icon}</span>
           <span>${item.label}</span>
         </a>
@@ -41,10 +72,10 @@ export class LayoutView {
     return `
       <div class="app-layout">
         
-        <!-- BARRA LATERAL AZUL (SIDEBAR) -->
+        <!-- BARRA LATERAL AZUL FIJA -->
         <aside class="app-sidebar">
           
-          <div style="padding: 20px 16px; display: flex; flex-direction: column; gap: 20px;">
+          <div style="display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 4px;">
             
             <!-- Logo Header -->
             <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px;">
@@ -55,15 +86,19 @@ export class LayoutView {
             </div>
 
             <!-- Selectores de Equipo y Temporada -->
-            <div class="sidebar-selectors" style="display: flex; flex-direction: column; gap: 12px; padding: 0 8px;">
+            <div class="sidebar-selectors" style="display: flex; flex-direction: column; gap: 10px; padding: 0 8px;">
               <div>
-                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">EQUIPO</label>
+                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">
+                  ${LayoutView.t("team", "EQUIPO").toUpperCase()}
+                </label>
                 <select style="width: 100%; background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; outline: none; box-sizing: border-box;">
                   <option>JMJ Manyanet Sant Andreu</option>
                 </select>
               </div>
               <div>
-                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">TEMPORADA</label>
+                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">
+                  ${LayoutView.t("season", "TEMPORADA").toUpperCase()}
+                </label>
                 <select style="width: 100%; background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; outline: none; box-sizing: border-box;">
                   <option>2026</option>
                 </select>
@@ -74,55 +109,62 @@ export class LayoutView {
             <nav class="sidebar-nav">
               ${navLinksMarkup}
             </nav>
-          </div>
 
-          <!-- Botón Cerrar Sesión -->
-          <div class="logout-container" style="padding: 16px; border-top: 1px solid #1e3a8a;">
-            <button id="btn-logout" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px; font-size: 13px; font-weight: 600; color: #93c5fd; background: none; border: none; cursor: pointer; border-radius: 8px; text-align: left;">
-              🚪 ${LayoutView.t("logout", "Cerrar sesión")}
-            </button>
+            <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN (A continuación de Configuración) -->
+            <div style="border-top: 1px solid #1e3a8a; padding-top: 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px;">
+              
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px;">
+                <span style="font-size: 11px; font-weight: 800; color: #93c5fd; letter-spacing: 0.05em;">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
+                <select id="select-lang-toggle" style="background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; outline: none; cursor: pointer;">
+                  <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
+                  <option value="cat" ${currentLang === 'cat' ? 'selected' : ''}>CAT</option>
+                  <option value="en" ${currentLang === 'en' ? 'selected' : ''}>EN</option>
+                </select>
+              </div>
+
+              <button id="btn-logout" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; font-weight: 600; color: #93c5fd; background: none; border: none; cursor: pointer; border-radius: 8px; text-align: left;">
+                🚪 ${LayoutView.t("logout", "Cerrar sesión")}
+              </button>
+            </div>
+
           </div>
         </aside>
 
-        <!-- ÁREA PRINCIPAL DE CONTENIDO (DASHBOARD / PÁGINAS) -->
+        <!-- ÁREA PRINCIPAL CON MARGEN IZQUIERDO CORRESPONDIENTE AL SIDEBAR FIJO -->
         <main class="app-main">
           ${contentHtml}
         </main>
 
       </div>
 
-      <!-- ESTILOS CORREGIDOS Y RESPONSIVE PARA EL LAYOUT -->
+      <!-- ESTILOS Y POSICIONAMIENTO FIJO -->
       <style>
-        /* Reset para evitar scrollbars fantasma */
         html, body {
           margin: 0;
           padding: 0;
           width: 100%;
-          overflow-x: hidden;
           background-color: #f8fafc;
           font-family: system-ui, -apple-system, sans-serif;
         }
 
-        /* Layout de la App (width: 100% evita que 100vw cree desbordamiento horizontal) */
         .app-layout {
           min-height: 100vh;
           width: 100%;
           display: flex;
           background-color: #f8fafc;
-          margin: 0;
           box-sizing: border-box;
         }
 
-        /* Sidebar lateral azul */
+        /* Sidebar con posicionamiento fijo para no desplazarse en scrolls largos */
         .app-sidebar {
           width: 260px;
+          height: 100vh;
+          position: fixed;
+          top: 0;
+          left: 0;
           background-color: #172554;
           color: #ffffff;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          flex-shrink: 0;
-          min-height: 100vh;
+          padding: 16px;
           box-sizing: border-box;
           z-index: 50;
         }
@@ -152,23 +194,22 @@ export class LayoutView {
         }
 
         .nav-link.active {
-          background-color: #1e40af;
-          color: #ffffff;
+          background-color: #1e40af !important;
+          color: #ffffff !important;
           box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
         }
 
-        /* Contenedor principal que se expande sin empujar hacia la derecha */
+        /* Desplazamiento del contenido principal a la derecha de la sidebar fija */
         .app-main {
           flex: 1;
-          min-width: 0; /* Previene desbordamientos por componentes flex anchos */
+          margin-left: 260px;
           padding: 32px 24px;
-          overflow-y: auto;
           box-sizing: border-box;
           display: flex;
           justify-content: center;
+          min-width: 0;
         }
 
-        /* El área donde vive SeasonDashboardView se auto-centra y limita a 1200px */
         #dashboard-content-area {
           width: 100%;
           max-width: 1200px;
@@ -176,43 +217,13 @@ export class LayoutView {
           box-sizing: border-box;
         }
 
-        /* 📱 MEDIA QUERIES (MÓVILES Y TABLETS) */
         @media (max-width: 868px) {
-          .app-layout {
-            flex-direction: column;
-          }
-
-          .app-sidebar {
-            width: 100%;
-            min-height: auto;
-            border-bottom: 2px solid #1e3a8a;
-          }
-
-          .sidebar-selectors {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .sidebar-nav {
-            flex-direction: row;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding-bottom: 8px;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .nav-link {
-            padding: 8px 12px;
-            font-size: 12px;
-          }
-
-          .logout-container {
-            display: none;
-          }
-
-          .app-main {
-            padding: 16px;
-          }
+          .app-layout { flex-direction: column; }
+          .app-sidebar { position: relative; width: 100%; height: auto; border-bottom: 2px solid #1e3a8a; }
+          .app-main { margin-left: 0; padding: 16px; }
+          .sidebar-selectors { display: grid !important; grid-template-columns: 1fr 1fr; }
+          .sidebar-nav { flex-direction: row; overflow-x: auto; white-space: nowrap; padding-bottom: 8px; }
+          .nav-link { padding: 8px 12px; font-size: 12px; }
         }
       </style>
     `;

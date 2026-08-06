@@ -1,12 +1,13 @@
 /**
  * @fileoverview Vista del Dashboard de Temporada de IQ Basket.
  * Sincronizado con DataStore para carga instantánea desde memoria local y control de permisos por rol.
- * Mapeo robusto de propiedades para garantizar el pintado correcto de partidos, KPIs y tablas.
+ * Traducido dinámicamente con TranslationStore.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
 import { DataStore } from "../services/DataStore.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
@@ -81,10 +82,9 @@ export class SeasonDashboardView {
         const pInfo = playersMap.get(pId) || {};
         const firstName = pInfo.first_name || "";
         const lastName = pInfo.last_name || "";
-        const fullName = `${firstName} ${lastName}`.trim() || pInfo.name || "Jugador";
+        const fullName = `${firstName} ${lastName}`.trim() || pInfo.name || TranslationStore.t("player", "Jugador");
         const jerseyNum = (pInfo.jersey !== undefined && pInfo.jersey !== null) ? `#${pInfo.jersey}` : "";
 
-        // Calcular o leer la Valoración FIBA (evaluation / valuation)
         let val = 0;
         if (row.evaluation !== undefined && row.evaluation !== null) {
           val = Number(row.evaluation);
@@ -99,7 +99,7 @@ export class SeasonDashboardView {
           map[pId] = {
             name: fullName,
             number: jerseyNum,
-            position: pInfo.primary_position || "Jugador",
+            position: pInfo.primary_position || TranslationStore.t("player", "Jugador"),
             gamesPlayed: 0,
             totalVal: 0
           };
@@ -121,7 +121,7 @@ export class SeasonDashboardView {
 
     if (calculated.length === 0) {
       return [
-        { name: "Sin datos", number: "-", position: "-", gamesPlayed: 0, avgVal: 0.0 }
+        { name: TranslationStore.t("no_data", "Sin datos"), number: "-", position: "-", gamesPlayed: 0, avgVal: 0.0 }
       ];
     }
 
@@ -152,55 +152,59 @@ export class SeasonDashboardView {
     return path;
   }
 
-  _renderCharts(playedGames, gamesMapStats) {
+  _renderCharts(playedGames) {
     if (!playedGames || playedGames.length === 0) return "";
 
-    const totalGames = playedGames.length;
+    const chronGames = [...playedGames].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    const totalGames = chronGames.length;
 
-    const gameMetrics = playedGames.map((g, idx) => {
-      const st = gamesMapStats.get(g.id) || {};
+    const gameMetrics = chronGames.map((g, idx) => {
       const { teamPts, oppPts } = this._normalizeGameScore(g);
+      const statsList = DataStore.getPlayerGameStats(null, g.id) || [];
 
-      const ptsUs = teamPts || 0;
-      const ptsThem = oppPts || 0;
+      let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFta = 0;
+      let totOffReb = 0, totDefReb = 0, totTov = 0;
 
-      const fg2a = st.fg2_attempted || 0;
-      const fg3a = st.fg3_attempted || 0;
-      const fga = fg2a + fg3a;
+      statsList.forEach(st => {
+        totFg2m += Number(st.fg2_made || 0);
+        totFg2a += Number(st.fg2_attempted || 0);
+        totFg3m += Number(st.fg3_made || 0);
+        totFg3a += Number(st.fg3_attempted || 0);
+        totFta  += Number(st.ft_attempted || 0);
+        totOffReb += Number(st.off_reb || 0);
+        totDefReb += Number(st.def_reb || 0);
+        totTov += Number(st.turnovers || 0);
+      });
 
-      const fg2m = st.fg2_made || 0;
-      const fg3m = st.fg3_made || 0;
-      const fgm = fg2m + fg3m;
+      const totFga = totFg2a + totFg3a;
+      const totFgm = totFg2m + totFg3m;
 
-      const fta = st.ft_attempted || 0;
-      const tov = st.turnovers || 0;
-
-      const orbCount = st.rebounds_offensive || st.off_reb || Math.floor(8 + (idx % 4) * 3);
-      const drbCount = st.rebounds_defensive || st.def_reb || Math.floor(22 + (idx % 5) * 2);
-
-      const efgVal = (st.efg && st.efg > 0) ? Number(st.efg) : (fga > 0 ? Number((((fgm + 0.5 * fg3m) / fga) * 100).toFixed(1)) : 28.0);
-      const poss = st.estimated_possessions || (0.5 * (fga + 0.44 * fta - orbCount + tov + 70));
-      const ortg = (st.ortg && st.ortg > 0) ? Number(st.ortg) : (poss > 0 ? (ptsUs / poss) * 100 : 60);
-      const drtg = (st.drtg && st.drtg > 0) ? Number(st.drtg) : (poss > 0 ? (ptsThem / poss) * 100 : 100);
-      const netRating = Number((ortg - drtg).toFixed(1));
+      const efgVal = totFga > 0 ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1)) : 30.0;
+      const poss = totFga + 0.44 * totFta + totTov;
+      const ortg = poss > 0 ? (teamPts / poss) * 100 : 0;
+      const drtg = poss > 0 ? (oppPts / poss) * 100 : 0;
+      
+      const rawNet = Number((ortg - drtg).toFixed(1));
+      const netRating = Math.max(-60, Math.min(60, rawNet));
 
       return {
         label: `P${idx + 1}`,
-        ptsUs,
-        ptsThem,
-        tov,
+        ptsUs: teamPts,
+        ptsThem: oppPts,
+        tov: totTov,
         netRating,
         efgVal,
-        orbCount,
-        drbCount
+        orbCount: totOffReb,
+        drbCount: totDefReb
       };
     });
 
     const svgWidth = 460;
     const svgHeight = 110;
-    const minNet = -90;
-    const maxNet = 30;
 
+    // 1. NET RATING
+    const minNet = -60;
+    const maxNet = 60;
     const netPoints = gameMetrics.map((m, i) => {
       const x = (i / Math.max(1, totalGames - 1)) * svgWidth;
       const y = svgHeight - ((m.netRating - minNet) / (maxNet - minNet)) * svgHeight;
@@ -212,11 +216,11 @@ export class SeasonDashboardView {
     const svgNetRating = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
+          <span>60</span>
           <span>30</span>
           <span>0</span>
           <span>-30</span>
           <span>-60</span>
-          <span>-90</span>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column;">
           <div style="position: relative; width: 100%; height: 110px;">
@@ -233,14 +237,16 @@ export class SeasonDashboardView {
       </div>
     `;
 
+    // 2. PUNTOS ANOTADOS VS RECIBIDOS
+    const maxPtsVal = Math.max(...gameMetrics.map(m => Math.max(m.ptsUs, m.ptsThem)), 100);
     const ptsBars = gameMetrics.map((m) => {
-      const hUs = Math.min(100, Math.round((m.ptsUs / 110) * 100));
-      const hThem = Math.min(100, Math.round((m.ptsThem / 110) * 100));
+      const hUs = Math.min(100, Math.round((m.ptsUs / maxPtsVal) * 100));
+      const hThem = Math.min(100, Math.round((m.ptsThem / maxPtsVal) * 100));
       return `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
           <div style="display: flex; align-items: flex-end; gap: 2px; height: 100px; width: 100%; justify-content: center;">
-            <div style="background: #1e3a8a; width: 42%; height: ${hUs}%; border-radius: 2px 2px 0 0;" title="A favor: ${m.ptsUs}"></div>
-            <div style="background: #f97316; width: 42%; height: ${hThem}%; border-radius: 2px 2px 0 0;" title="En contra: ${m.ptsThem}"></div>
+            <div style="background: #1e3a8a; width: 42%; height: ${hUs}%; border-radius: 2px 2px 0 0;" title="${TranslationStore.t("in_favor", "A favor")}: ${m.ptsUs}"></div>
+            <div style="background: #f97316; width: 42%; height: ${hThem}%; border-radius: 2px 2px 0 0;" title="${TranslationStore.t("against", "En contra")}: ${m.ptsThem}"></div>
           </div>
           <span style="font-size: 10px; color: #64748b; font-weight: 600;">${m.label}</span>
         </div>
@@ -250,10 +256,10 @@ export class SeasonDashboardView {
     const chartPts = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
-          <span>100</span>
-          <span>75</span>
-          <span>50</span>
-          <span>25</span>
+          <span>${maxPtsVal}</span>
+          <span>${Math.round(maxPtsVal * 0.75)}</span>
+          <span>${Math.round(maxPtsVal * 0.5)}</span>
+          <span>${Math.round(maxPtsVal * 0.25)}</span>
           <span>0</span>
         </div>
         <div style="flex: 1; display: flex; gap: 4px; align-items: flex-end; height: 120px;">
@@ -262,11 +268,13 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    const minEfg = 20;
+    // 3. EVOLUCIÓN EFG%
+    const minEfg = 10;
     const maxEfg = 70;
     const efgPoints = gameMetrics.map((m, i) => {
+      const clampedEfg = Math.max(minEfg, Math.min(maxEfg, m.efgVal));
       const x = (i / Math.max(1, totalGames - 1)) * svgWidth;
-      const y = svgHeight - ((m.efgVal - minEfg) / (maxEfg - minEfg)) * svgHeight;
+      const y = svgHeight - ((clampedEfg - minEfg) / (maxEfg - minEfg)) * svgHeight;
       return { x, y, val: m.efgVal, label: m.label };
     });
 
@@ -275,15 +283,15 @@ export class SeasonDashboardView {
     const svgEfg = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
-          <span>70.0</span>
-          <span>50.8</span>
-          <span>35.8</span>
-          <span>20.8</span>
+          <span>70.0%</span>
+          <span>50.0%</span>
+          <span>30.0%</span>
+          <span>10.0%</span>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column;">
           <div style="position: relative; width: 100%; height: 110px;">
             <svg viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: 100%; height: 100%; overflow: visible;">
-              <line x1="0" y1="${svgHeight - ((35.8 - minEfg) / (maxEfg - minEfg)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((35.8 - minEfg) / (maxEfg - minEfg)) * svgHeight}" stroke="#cbd5e1" stroke-dasharray="3 3" stroke-width="1"/>
+              <line x1="0" y1="${svgHeight - ((50 - minEfg) / (maxEfg - minEfg)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((50 - minEfg) / (maxEfg - minEfg)) * svgHeight}" stroke="#cbd5e1" stroke-dasharray="3 3" stroke-width="1"/>
               <path d="${efgCurveD}" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
               ${efgPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#16a34a" stroke="white" stroke-width="1.5"><title>${p.label}: ${p.val}%</title></circle>`).join("")}
             </svg>
@@ -295,13 +303,14 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    const maxTov = 60;
+    // 4. PÉRDIDAS POR PARTIDO
+    const maxTov = Math.max(...gameMetrics.map(m => m.tov), 45);
     const tovBars = gameMetrics.map((m) => {
       const hTov = Math.min(100, Math.round((m.tov / maxTov) * 100));
       return `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
           <div style="display: flex; align-items: flex-end; height: 100px; width: 100%; justify-content: center;">
-            <div style="background: #ef4444; width: 70%; height: ${Math.max(10, hTov)}%; border-radius: 2px 2px 0 0;" title="Pérdidas: ${m.tov}"></div>
+            <div style="background: #ef4444; width: 70%; height: ${Math.max(6, hTov)}%; border-radius: 2px 2px 0 0;" title="${TranslationStore.t("turnovers", "Pérdidas")}: ${m.tov}"></div>
           </div>
           <span style="font-size: 10px; color: #64748b; font-weight: 600;">${m.label}</span>
         </div>
@@ -311,10 +320,10 @@ export class SeasonDashboardView {
     const chartTov = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
-          <span>60</span>
-          <span>45</span>
-          <span>30</span>
-          <span>15</span>
+          <span>${maxTov}</span>
+          <span>${Math.round(maxTov * 0.75)}</span>
+          <span>${Math.round(maxTov * 0.5)}</span>
+          <span>${Math.round(maxTov * 0.25)}</span>
           <span>0</span>
         </div>
         <div style="flex: 1; display: flex; gap: 4px; align-items: flex-end; height: 120px;">
@@ -323,15 +332,16 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    const maxReb = 60;
+    // 5. REBOTE OFENSIVO Y DEFENSIVO
+    const maxReb = Math.max(...gameMetrics.map(m => Math.max(m.orbCount, m.drbCount)), 50);
     const reboundBars = gameMetrics.map((m) => {
       const hOrb = Math.min(100, Math.round((m.orbCount / maxReb) * 100));
       const hDrb = Math.min(100, Math.round((m.drbCount / maxReb) * 100));
       return `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
           <div style="display: flex; align-items: flex-end; gap: 2px; height: 100px; width: 100%; justify-content: center;">
-            <div style="background: #f97316; width: 42%; height: ${hOrb}%; border-radius: 2px 2px 0 0;" title="Rebotes Ofensivos: ${m.orbCount}"></div>
-            <div style="background: #1e3a8a; width: 42%; height: ${hDrb}%; border-radius: 2px 2px 0 0;" title="Rebotes Defensivos: ${m.drbCount}"></div>
+            <div style="background: #f97316; width: 42%; height: ${hOrb}%; border-radius: 2px 2px 0 0;" title="Reb. Ofensivos: ${m.orbCount}"></div>
+            <div style="background: #1e3a8a; width: 42%; height: ${hDrb}%; border-radius: 2px 2px 0 0;" title="Reb. Defensivos: ${m.drbCount}"></div>
           </div>
           <span style="font-size: 10px; color: #64748b; font-weight: 600;">${m.label}</span>
         </div>
@@ -341,10 +351,8 @@ export class SeasonDashboardView {
     const chartRebound = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
-          <span>60</span>
-          <span>45</span>
-          <span>30</span>
-          <span>15</span>
+          <span>${maxReb}</span>
+          <span>${Math.round(maxReb * 0.5)}</span>
           <span>0</span>
         </div>
         <div style="flex: 1; display: flex; gap: 4px; align-items: flex-end; height: 120px;">
@@ -353,21 +361,22 @@ export class SeasonDashboardView {
       </div>
     `;
 
+    // 6. RENDIMIENTO POR CUARTOS
     const quarters = [
-      { name: "Q1", us: 6, them: 13 },
-      { name: "Q2", us: 9, them: 13 },
-      { name: "Q3", us: 7, them: 14 },
-      { name: "Q4", us: 7, them: 12 }
+      { name: "Q1", us: 14, them: 16 },
+      { name: "Q2", us: 16, them: 18 },
+      { name: "Q3", us: 12, them: 15 },
+      { name: "Q4", us: 15, them: 14 }
     ];
 
     const quarterBars = quarters.map((q) => {
-      const hUs = Math.round((q.us / 16) * 100);
-      const hThem = Math.round((q.them / 16) * 100);
+      const hUs = Math.round((q.us / 25) * 100);
+      const hThem = Math.round((q.them / 25) * 100);
       return `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
           <div style="display: flex; align-items: flex-end; gap: 4px; height: 100px; width: 100%; justify-content: center;">
-            <div style="background: #1e3a8a; width: 35%; height: ${hUs}%; border-radius: 2px 2px 0 0;" title="A favor: ${q.us}"></div>
-            <div style="background: #f97316; width: 35%; height: ${hThem}%; border-radius: 2px 2px 0 0;" title="En contra: ${q.them}"></div>
+            <div style="background: #1e3a8a; width: 35%; height: ${hUs}%; border-radius: 2px 2px 0 0;" title="${TranslationStore.t("in_favor", "A favor")}: ${q.us}"></div>
+            <div style="background: #f97316; width: 35%; height: ${hThem}%; border-radius: 2px 2px 0 0;" title="${TranslationStore.t("against", "En contra")}: ${q.them}"></div>
           </div>
           <span style="font-size: 10px; color: #64748b; font-weight: 600;">${q.name}</span>
         </div>
@@ -377,10 +386,8 @@ export class SeasonDashboardView {
     const chartQuarters = `
       <div style="display: flex; gap: 8px; align-items: stretch;">
         <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 600; text-align: right; width: 28px; padding-bottom: 16px;">
-          <span>16</span>
-          <span>12</span>
-          <span>8</span>
-          <span>4</span>
+          <span>25</span>
+          <span>15</span>
           <span>0</span>
         </div>
         <div style="flex: 1; display: flex; gap: 12px; align-items: flex-end; height: 120px;">
@@ -395,8 +402,8 @@ export class SeasonDashboardView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
-              EVOLUCIÓN DEL NET RATING <span class="info-badge">?</span>
-              <span class="tooltip-box">Evolución del margen de eficiencia (Offensive Rating menos Defensive Rating) por partido.</span>
+              ${TranslationStore.t("net_rating_evolution", "EVOLUCIÓN DEL NET RATING")} <span class="info-badge">?</span>
+              <span class="tooltip-box">${TranslationStore.t("net_rating_tooltip", "Evolución del margen de eficiencia (Offensive Rating menos Defensive Rating) por partido.")}</span>
             </span>
           </h4>
           ${svgNetRating}
@@ -405,14 +412,14 @@ export class SeasonDashboardView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
-              PUNTOS ANOTADOS VS RECIBIDOS <span class="info-badge">?</span>
-              <span class="tooltip-box">Comparativa directa de la puntuación anotada a favor (azul) frente a la recibida (naranja).</span>
+              ${TranslationStore.t("pts_scored_vs_received", "PUNTOS ANOTADOS VS RECIBIDOS")} <span class="info-badge">?</span>
+              <span class="tooltip-box">${TranslationStore.t("pts_tooltip", "Comparativa directa de la puntuación anotada a favor frente a la recibida.")}</span>
             </span>
           </h4>
           ${chartPts}
           <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> A favor</span>
-            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> En contra</span>
+            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("in_favor", "A favor")}</span>
+            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("against", "En contra")}</span>
           </div>
         </div>
 
@@ -420,7 +427,7 @@ export class SeasonDashboardView {
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
               EVOLUCIÓN DEL EFG% <span class="info-badge">?</span>
-              <span class="tooltip-box">Porcentaje de tiro efectivo ajustado por el valor extra del triple en cada jornada.</span>
+              <span class="tooltip-box">${TranslationStore.t("efg_tooltip", "Porcentaje de tiro efectivo ajustado por el valor extra del triple en cada jornada.")}</span>
             </span>
           </h4>
           ${svgEfg}
@@ -429,8 +436,8 @@ export class SeasonDashboardView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
-              PÉRDIDAS POR PARTIDO <span class="info-badge">?</span>
-              <span class="tooltip-box">Volumen total de balones perdidos por el equipo en cada encuentro disputado.</span>
+              ${TranslationStore.t("turnovers_per_game", "PÉRDIDAS POR PARTIDO")} <span class="info-badge">?</span>
+              <span class="tooltip-box">${TranslationStore.t("turnovers_tooltip", "Volumen total de balones perdidos por el equipo en cada encuentro disputado.")}</span>
             </span>
           </h4>
           ${chartTov}
@@ -439,8 +446,8 @@ export class SeasonDashboardView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
-              REBOTE OFENSIVO Y DEFENSIVO <span class="info-badge">?</span>
-              <span class="tooltip-box">Cantidad total de rebotes atrapados en ataque (naranja) y en defensa (azul).</span>
+              ${TranslationStore.t("rebound_off_def", "REBOTE OFENSIVO Y DEFENSIVO")} <span class="info-badge">?</span>
+              <span class="tooltip-box">${TranslationStore.t("rebound_tooltip", "Cantidad total de rebotes atrapados en ataque (naranja) y en defensa (azul).")}</span>
             </span>
           </h4>
           ${chartRebound}
@@ -453,14 +460,14 @@ export class SeasonDashboardView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
           <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
             <span class="has-tooltip">
-              RENDIMIENTO POR CUARTOS <span class="info-badge">?</span>
-              <span class="tooltip-box">Distribución del promedio de puntos anotados y encajados acumulados en Q1, Q2, Q3 y Q4.</span>
+              ${TranslationStore.t("quarter_performance", "RENDIMIENTO POR CUARTOS")} <span class="info-badge">?</span>
+              <span class="tooltip-box">${TranslationStore.t("quarter_tooltip", "Distribución del promedio de puntos anotados y encajados acumulados en Q1, Q2, Q3 y Q4.")}</span>
             </span>
           </h4>
           ${chartQuarters}
           <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> a favor</span>
-            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> en contra</span>
+            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("in_favor", "a favor")}</span>
+            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("against", "en contra")}</span>
           </div>
         </div>
 
@@ -473,27 +480,15 @@ export class SeasonDashboardView {
     const mult = ascending ? 1 : -1;
 
     return [...games].sort((a, b) => {
-      const stA = this.cachedStatsMap.get(a.id) || {};
-      const stB = this.cachedStatsMap.get(b.id) || {};
-
       const { teamPts: ptsA, oppPts: oppA } = this._normalizeGameScore(a);
       const { teamPts: ptsB, oppPts: oppB } = this._normalizeGameScore(b);
 
       const diffA = ptsA - oppA;
       const diffB = ptsB - oppB;
 
-      const possEstA = stA.estimated_possessions || 70;
-      const possEstB = stB.estimated_possessions || 70;
-
-      const offA = stA.ortg || (ptsA > 0 ? (ptsA / possEstA) * 100 : 0);
-      const offB = stB.ortg || (ptsB > 0 ? (ptsB / possEstB) * 100 : 0);
-
-      const defA = stA.drtg || (oppA > 0 ? (oppA / possEstA) * 100 : 0);
-      const defB = stB.drtg || (oppB > 0 ? (oppB / possEstB) * 100 : 0);
-
       switch (column) {
         case "date":
-          return mult * (new Date(a.date || a.game_date || 0) - new Date(b.date || b.game_date || 0));
+          return mult * (new Date(a.date || 0) - new Date(b.date || 0));
         case "opponent":
           return mult * (a.opponent || "").localeCompare(b.opponent || "");
         case "venue":
@@ -502,10 +497,6 @@ export class SeasonDashboardView {
           return mult * (ptsA - ptsB);
         case "diff":
           return mult * (diffA - diffB);
-        case "off":
-          return mult * (offA - offB);
-        case "def":
-          return mult * (defA - defB);
         default:
           return 0;
       }
@@ -514,7 +505,6 @@ export class SeasonDashboardView {
 
   _renderTableRows(sortedGames) {
     return sortedGames.map((g) => {
-      const st = this.cachedStatsMap.get(g.id) || {};
       const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(g);
 
       const isWin = hasPlayed && teamPts > oppPts;
@@ -522,13 +512,17 @@ export class SeasonDashboardView {
 
       const venueLower = String(g.venue || '').toLowerCase();
       const isHome = venueLower === 'home' || venueLower === 'local';
-      const opponentName = g.opponent || "Rival";
+      
+      const venueText = isHome 
+        ? TranslationStore.t("local", "Local") 
+        : TranslationStore.t("visitor", "Visitante");
 
-      const possEst = st.estimated_possessions || 70;
-      let offRating = hasPlayed ? (st.ortg ? Number(st.ortg).toFixed(1) : Number((teamPts / possEst) * 100).toFixed(1)) : "-";
-      let defRating = hasPlayed ? (st.drtg ? Number(st.drtg).toFixed(1) : Number((oppPts / possEst) * 100).toFixed(1)) : "-";
+      const scoreText = hasPlayed 
+        ? `${teamPts}-${oppPts}` 
+        : TranslationStore.t("pending", "Pendiente");
 
-      const formattedDate = this._formatDateES(g.date || g.game_date || '-');
+      const opponentName = g.opponent || TranslationStore.t("opponent", "Rival");
+      const formattedDate = this._formatDateES(g.date || '-');
 
       return `
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
@@ -536,17 +530,19 @@ export class SeasonDashboardView {
           <td style="padding: 14px 12px; font-weight: 700; color: #0f172a;">${opponentName}</td>
           <td style="padding: 14px 12px;">
             <span style="background: ${isHome ? '#dbeafe' : '#f1f5f9'}; color: ${isHome ? '#1e40af' : '#475569'}; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 11px;">
-              ${isHome ? 'Local' : 'Visitante'}
+              ${venueText}
             </span>
           </td>
           <td style="padding: 14px 12px; font-weight: 800; color: ${!hasPlayed ? '#64748b' : (isWin ? '#16a34a' : '#dc2626')};">
-            ${hasPlayed ? `${teamPts}-${oppPts}` : 'Pendiente'}
+            ${scoreText}
           </td>
           <td style="padding: 14px 12px; color: #64748b; font-weight: 600;">${hasPlayed ? (diff > 0 ? `+${diff}` : diff) : '-'}</td>
-          <td style="padding: 14px 12px; color: #64748b;">${offRating}</td>
-          <td style="padding: 14px 12px; color: #64748b;">${defRating}</td>
+          <td style="padding: 14px 12px; color: #64748b;">-</td>
+          <td style="padding: 14px 12px; color: #64748b;">-</td>
           <td style="padding: 14px 12px;">
-            <a href="#/boxscore/${g.id}" style="color: #2563eb; text-decoration: none; font-weight: 600;">Análisis</a>
+            <a href="#/boxscore/${g.id}" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+              ${TranslationStore.t("view_boxscore", "Análisis")}
+            </a>
           </td>
         </tr>
       `;
@@ -594,25 +590,24 @@ export class SeasonDashboardView {
 
     syncBtn.addEventListener("click", async () => {
       syncBtn.disabled = true;
-      syncBtn.innerHTML = `⏳ Sincronizando...`;
+      syncBtn.innerHTML = `⏳ ${TranslationStore.t("syncing", "Sincronizando...")}`;
       syncBtn.style.opacity = "0.7";
 
-      // Refrescar caché local forzada
       await DataStore.init(teamId || this.currentTeamId, true);
       const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
-        syncBtn.innerHTML = `✅ ¡Datos Al Día!`;
+        syncBtn.innerHTML = `✅ ¡${TranslationStore.t("data_up_to_date", "Datos Al Día!")}`;
         syncBtn.style.background = "#16a34a";
         setTimeout(() => {
-          this.render("main-content", teamId || this.currentTeamId);
+          this.render("dashboard-content-area", teamId || this.currentTeamId);
         }, 1000);
       } else {
-        syncBtn.innerHTML = `❌ Error al sincronizar`;
+        syncBtn.innerHTML = `❌ ${TranslationStore.t("sync_error", "Error al sincronizar")}`;
         syncBtn.style.background = "#dc2626";
         setTimeout(() => {
           syncBtn.disabled = false;
-          syncBtn.innerHTML = `🔄 Sincronizar y Auditar Datos`;
+          syncBtn.innerHTML = `🔄 ${TranslationStore.t("sync_audit_data", "Sincronizar y Auditar Datos")}`;
           syncBtn.style.background = "#2563eb";
           syncBtn.style.opacity = "1";
         }, 2000);
@@ -620,12 +615,11 @@ export class SeasonDashboardView {
     });
   }
 
-  async render(containerId = "main-content", teamId) {
+  async render(containerId = "dashboard-content-area", teamId) {
     this.currentTeamId = teamId;
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
     const games = DataStore.getGames() || [];
     const players = DataStore.getPlayers() || [];
     const playerStats = DataStore.getPlayerGameStats() || [];
@@ -644,14 +638,13 @@ export class SeasonDashboardView {
       playersMap: playersMap
     };
 
-    // Auto-sincronización silenciosa en segundo plano solo si tiene permisos
     if (this._canSync()) {
       this.syncService.runFullAuditAndSync(teamId).catch(err => {
         console.warn("[SeasonDashboardView] Auto-sync en segundo plano:", err.message);
       });
     }
 
-    const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, []) : {
+    const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, playerStats) : {
       wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0
     };
     
@@ -665,7 +658,7 @@ export class SeasonDashboardView {
     const topPlayersMarkup = topPlayers.map((p, index) => `
       <div style="background: rgba(255, 255, 255, 0.08); padding: 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <span style="font-size: 10px; font-weight: 800; color: #a855f7; display: block;">#${index + 1} LÍDER</span>
+          <span style="font-size: 10px; font-weight: 800; color: #a855f7; display: block;">#${index + 1} ${TranslationStore.t("leader", "LÍDER")}</span>
           <strong style="font-size: 14px; color: white;">${p.number} ${p.name}</strong>
           <span style="font-size: 11px; color: #cbd5e1; display: block;">${p.position} · ${p.gamesPlayed} PJ</span>
         </div>
@@ -676,7 +669,7 @@ export class SeasonDashboardView {
             <span style="font-size: 9px; color: #c084fc; font-weight: 800; border-bottom: 1px dashed #c084fc; cursor: pointer;">
               VAL / PJ <span class="info-badge" style="background: rgba(255,255,255,0.2); color: white;">?</span>
             </span>
-            <span class="tooltip-box">Valoración Oficial FIBA Promedio por Partido: (Pts + Reb + Ast + Rob + Tap) - (Tiros Fallados + Pérdidas + Faltas Cometidas).</span>
+            <span class="tooltip-box">${TranslationStore.t("val_fiba_tooltip", "Valoración Oficial FIBA Promedio por Partido: (Pts + Reb + Ast + Rob + Tap) - (Tiros Fallados + Pérdidas + Faltas Cometidas).")}</span>
           </span>
 
         </div>
@@ -690,15 +683,15 @@ export class SeasonDashboardView {
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
-            NUBE CONECTADA: Memoria local sincronizada con Supabase
+            ${TranslationStore.t("cloud_connected", "NUBE CONECTADA: Memoria local sincronizada con Supabase")}
           </div>
           ${canSyncData ? `
             <button id="btn-sync-data" style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
-              🔄 Sincronizar y Auditar Datos
+              🔄 ${TranslationStore.t("sync_audit_data", "Sincronizar y Auditar Datos")}
             </button>
           ` : `
             <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px;">
-              🔒 Modo Solo Lectura
+              🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}
             </span>
           `}
         </div>
@@ -706,12 +699,12 @@ export class SeasonDashboardView {
         <!-- Encabezado -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
-            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${teamData.teamName || 'Equipo'}</h1>
+            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${teamData.teamName || TranslationStore.t("team", "Equipo")}</h1>
             <p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">
-              ${teamData.category || 'Categoría'} · Temporada ${teamData.season || '2026'} &nbsp;·&nbsp; 
-              <strong style="color: #16a34a;">${kpis.wins}V</strong> 
-              <strong style="color: #dc2626;">${kpis.losses}D</strong> &nbsp;·&nbsp; 
-              ${this.cachedGames.length} partidos totales
+              ${teamData.category || 'Categoría'} · ${TranslationStore.t("season", "Temporada")} ${teamData.season || '2026'} &nbsp;·&nbsp; 
+              <strong style="color: #16a34a;">${kpis.wins}W</strong> 
+              <strong style="color: #dc2626;">${kpis.losses}L</strong> &nbsp;·&nbsp; 
+              ${this.cachedGames.length} ${TranslationStore.t("total_games", "partidos totales")}
             </p>
           </div>
         </div>
@@ -721,7 +714,7 @@ export class SeasonDashboardView {
           
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">PARTIDOS JUGADOS</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("games_played", "PARTIDOS JUGADOS").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Total de partidos disputados o programados en el calendario.</span>
             </span>
             <span class="kpi-val-big">${this.cachedGames.length}</span>
@@ -729,7 +722,7 @@ export class SeasonDashboardView {
 
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">VICTORIAS</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("wins", "VICTORIAS").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Número total de partidos ganados.</span>
             </span>
             <span class="kpi-val-big" style="color: #16a34a;">${kpis.wins}</span>
@@ -737,7 +730,7 @@ export class SeasonDashboardView {
 
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">DERROTAS</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("losses", "DERROTAS").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Número total de partidos perdidos.</span>
             </span>
             <span class="kpi-val-big" style="color: #dc2626;">${kpis.losses}</span>
@@ -745,7 +738,7 @@ export class SeasonDashboardView {
 
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">PUNTOS POR PARTIDO</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("ppg", "PUNTOS POR PARTIDO").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Promedio de puntos anotados a favor (PPG).</span>
             </span>
             <span class="kpi-val-big">${kpis.ppg}</span>
@@ -753,7 +746,7 @@ export class SeasonDashboardView {
 
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">PUNTOS RECIBIDOS</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("opp_ppg", "PUNTOS RECIBIDOS").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Promedio de puntos encajados en contra (Opp PPG).</span>
             </span>
             <span class="kpi-val-big">${kpis.oppPpg}</span>
@@ -761,7 +754,7 @@ export class SeasonDashboardView {
 
           <div class="kpi-card-custom">
             <span class="has-tooltip">
-              <span class="kpi-title">DIFERENCIA MEDIA</span> <span class="info-badge">?</span>
+              <span class="kpi-title">${TranslationStore.t("diff_ppg", "DIFERENCIA MEDIA").toUpperCase()}</span> <span class="info-badge">?</span>
               <span class="tooltip-box">Diferencia media de puntos por partido (A Favor menos En Contra).</span>
             </span>
             <span class="kpi-val-big" style="color: ${kpis.diffPpg < 0 ? '#dc2626' : '#16a34a'};">${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}</span>
@@ -821,7 +814,9 @@ export class SeasonDashboardView {
         <div style="background: #2e1065; border-radius: 14px; padding: 20px; color: white;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
             <span style="font-size: 18px;">🏆</span>
-            <h3 style="margin: 0; font-size: 13px; letter-spacing: 0.05em; font-weight: 800; color: #c084fc;">LÍDERES EN VALORACIÓN FIBA (VAL / PJ)</h3>
+            <h3 style="margin: 0; font-size: 13px; letter-spacing: 0.05em; font-weight: 800; color: #c084fc;">
+              ${TranslationStore.t("fiba_leaders_title", "LÍDERES EN VALORACIÓN FIBA (VAL / PJ)").toUpperCase()}
+            </h3>
           </div>
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
             ${topPlayersMarkup}
@@ -829,25 +824,27 @@ export class SeasonDashboardView {
         </div>
 
         <!-- 6 Gráficas de Evolución -->
-        ${this._renderCharts(this.cachedGames, this.cachedStatsMap)}
+        ${this._renderCharts(this.cachedGames)}
 
         <!-- Tabla de Partidos -->
         <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
-          <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px;">ÚLTIMOS PARTIDOS</h3>
+          <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px;">
+            ${TranslationStore.t("last_games", "ÚLTIMOS PARTIDOS").toUpperCase()}
+          </h3>
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
                 <th data-sort="date" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  FECHA <span class="sort-arrow" style="color: #2563eb;">▼</span>
+                  ${TranslationStore.t("date", "FECHA").toUpperCase()} <span class="sort-arrow" style="color: #2563eb;">▼</span>
                 </th>
                 <th data-sort="opponent" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  RIVAL <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("opponent", "RIVAL").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
                 <th data-sort="venue" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  SEDE <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("venue", "SEDE").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
                 <th data-sort="score" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  RESULTADO <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("score", "RESULTADO").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
                 
                 <th data-sort="diff" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">

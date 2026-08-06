@@ -1,10 +1,11 @@
 /**
  * @fileoverview Vista de Partidos y Formulario de Edición (GameLiveEditorView.js).
- * Sincronizado con la tabla 'game_period_scores' y función de borrado de prórrogas (sin ceros residuales).
+ * Sincronizado con la tabla 'game_period_scores', función de borrado de prórrogas y traducido dinámicamente mediante TranslationStore.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -63,15 +64,16 @@ export class GameLiveEditorView {
     const canEdit = this._canEdit();
 
     const filteredGames = this.games.filter(g => {
-      if (this.filterCondition === "Local") return g.venue === "Local";
-      if (this.filterCondition === "Visitante") return g.venue === "Visitante";
+      const v = String(g.venue || '').toLowerCase();
+      if (this.filterCondition === "Local") return v === "local" || v === "home";
+      if (this.filterCondition === "Visitante") return v === "visitante" || v === "away";
       return true;
     });
 
     const gamesCardsMarkup = filteredGames.map(g => {
       const isWin = Number(g.team_score || 0) > Number(g.opponent_score || 0);
       const resultClass = isWin ? "background: #166534; color: white;" : "background: #dc2626; color: white;";
-      const resultText = isWin ? "VICTORIA" : "DERROTA";
+      const resultText = isWin ? TranslationStore.t("win", "VICTORIA") : TranslationStore.t("loss", "DERROTA");
 
       // Leer periodos reales cargados desde game_period_scores
       const periods = DataStore.getGamePeriodScores(g.id);
@@ -88,6 +90,11 @@ export class GameLiveEditorView {
         otMarkup = overtimes.map((ot, i) => `<b>OT${i + 1}:</b> ${ot.team_score}-${ot.opponent_score} `).join(" ");
       }
 
+      const venueLower = String(g.venue || '').toLowerCase();
+      const isHome = venueLower === 'home' || venueLower === 'local';
+      const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
+      const opponentText = g.opponent || TranslationStore.t("opponent", "Rival");
+
       return `
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <div style="display: flex; align-items: center; gap: 20px;">
@@ -98,24 +105,24 @@ export class GameLiveEditorView {
 
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">vs ${g.opponent || 'Rival'}</h3>
-                <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${g.venue || 'Local'}</span>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">vs ${opponentText}</h3>
+                <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${venueText}</span>
               </div>
               <div style="font-size: 12px; color: #64748b; margin: 4px 0;">
                 📅 ${g.date || '-'} &nbsp;·&nbsp; 🏆 ${g.competition || 'B1'}
               </div>
               <div style="font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #f1f5f9; display: inline-block;">
-                <b>CUARTOS:</b> Q1: ${q1} &nbsp; Q2: ${q2} &nbsp; Q3: ${q3} &nbsp; Q4: ${q4} ${otMarkup ? `&nbsp; ${otMarkup}` : ''}
+                <b>${TranslationStore.t("quarters", "CUARTOS")}:</b> Q1: ${q1} &nbsp; Q2: ${q2} &nbsp; Q3: ${q3} &nbsp; Q4: ${q4} ${otMarkup ? `&nbsp; ${otMarkup}` : ''}
               </div>
             </div>
           </div>
 
           <div style="display: flex; align-items: center; gap: 10px;">
             <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">👁️ Boxscore</button>
-            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">📊 Informe</button>
+            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">📊 ${TranslationStore.t("report", "Informe")}</button>
             ${canEdit ? `
-              <button class="btn-edit-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #64748b;" title="Editar partido">✏️</button>
-              <button class="btn-delete-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #ef4444;" title="Eliminar partido">🗑️</button>
+              <button class="btn-edit-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #64748b;" title="${TranslationStore.t("edit_game", "Editar partido")}">✏️</button>
+              <button class="btn-delete-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #ef4444;" title="${TranslationStore.t("delete_game", "Eliminar partido")}">🗑️</button>
             ` : ''}
           </div>
         </div>
@@ -126,21 +133,21 @@ export class GameLiveEditorView {
       <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div>
-            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Partidos del Equipo</h1>
-            <span style="font-size: 13px; color: #64748b;">JMJ Manyanet Sant Andreu · ${this.games.length} partidos registrados</span>
+            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("team_games", "Partidos del Equipo")}</h1>
+            <span style="font-size: 13px; color: #64748b;">JMJ Manyanet Sant Andreu · ${this.games.length} ${TranslationStore.t("registered_games", "partidos registrados")}</span>
           </div>
           ${canEdit ? `
-            <button id="btn-create-game" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;">+ Registrar nuevo partido</button>
-          ` : '<span style="background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">🔒 Modo Solo Lectura</span>'}
+            <button id="btn-create-game" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;">+ ${TranslationStore.t("register_new_game", "Registrar nuevo partido")}</button>
+          ` : `<span style="background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 20px;">
-          <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">Todos (${this.games.length})</button>
-          <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">Local</button>
-          <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">Visitante</button>
+          <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${TranslationStore.t("all", "Todos")} (${this.games.length})</button>
+          <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${TranslationStore.t("local", "Local")}</button>
+          <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${TranslationStore.t("visitor", "Visitante")}</button>
         </div>
 
-        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : '<div style="padding: 40px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">No hay partidos registrados.</div>'}</div>
+        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding: 40px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">${TranslationStore.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
       </div>
     `;
 
@@ -183,7 +190,7 @@ export class GameLiveEditorView {
     container.querySelectorAll(".btn-delete-game").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         const id = e.target.getAttribute("data-id");
-        if (confirm("¿Estás seguro de que deseas eliminar este partido?")) {
+        if (confirm(TranslationStore.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido?"))) {
           await this.supabase.from("game_period_scores").delete().eq("game_id", id);
           await this.supabase.from("player_game_stats").delete().eq("game_id", id);
           await this.supabase.from("games").delete().eq("id", id);
@@ -258,8 +265,8 @@ export class GameLiveEditorView {
     const isPointsMatch = playerPointsTotal === qTeamSum;
     const badgeClass = isPointsMatch ? "background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;" : "background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;";
     const badgeText = isPointsMatch 
-      ? `✔ Puntos Cuadrados: ${playerPointsTotal} pts (Jugadores) = ${qTeamSum} pts (Equipo)`
-      : `⚠️ Descuadre de puntos: ${playerPointsTotal} pts (Jugadores) vs ${qTeamSum} pts (Equipo)`;
+      ? `✔ ${TranslationStore.t("points_matched", "Puntos Cuadrados")}: ${playerPointsTotal} pts (${TranslationStore.t("players", "Jugadores")}) = ${qTeamSum} pts (${TranslationStore.t("team", "Equipo")})`
+      : `⚠️ ${TranslationStore.t("points_mismatch", "Descuadre de puntos")}: ${playerPointsTotal} pts (${TranslationStore.t("players", "Jugadores")}) vs ${qTeamSum} pts (${TranslationStore.t("team", "Equipo")})`;
 
     const isWin = qTeamSum > qOppSum;
 
@@ -268,7 +275,7 @@ export class GameLiveEditorView {
       return `
         <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" ${canEdit ? '' : 'disabled'} style="padding: 8px 12px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
           <span>#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</span>
-          <span style="font-size: 10px; opacity: 0.8; font-weight: 600;">${p.primary_position || 'Jugador'}</span>
+          <span style="font-size: 10px; opacity: 0.8; font-weight: 600;">${p.primary_position || TranslationStore.t("player", "Jugador")}</span>
         </button>
       `;
     }).join("");
@@ -308,7 +315,7 @@ export class GameLiveEditorView {
 
     const quartersMarkup = quarters.map((q, i) => `
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 12px; font-weight: 700; color: #64748b;">${i + 1}º cuarto:</span>
+        <span style="font-size: 12px; font-weight: 700; color: #64748b;">${i + 1}º ${TranslationStore.t("quarter", "cuarto")}:</span>
         <input type="number" class="q-input" data-index="${i}" data-side="team" value="${q.team_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" /> -
         <input type="number" class="q-input" data-index="${i}" data-side="opp" value="${q.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" />
       </div>
@@ -316,12 +323,12 @@ export class GameLiveEditorView {
 
     const overtimesMarkup = overtimes.map((ot, i) => `
       <div style="display: flex; align-items: center; gap: 6px; background: #fff7ed; border: 1px solid #ffedd5; padding: 4px 8px; border-radius: 8px;">
-        <span style="font-size: 12px; font-weight: 800; color: #c2410c;">Prórroga ${i + 1}:</span>
+        <span style="font-size: 12px; font-weight: 800; color: #c2410c;">${TranslationStore.t("overtime", "Prórroga")} ${i + 1}:</span>
         <input type="number" class="ot-input" data-otindex="${i}" data-side="team" value="${ot.team_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
         <span>-</span>
         <input type="number" class="ot-input" data-otindex="${i}" data-side="opp" value="${ot.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
         ${canEdit ? `
-          <button type="button" class="btn-delete-ot" data-otindex="${i}" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #ef4444; margin-left: 4px;" title="Eliminar prórroga">🗑️</button>
+          <button type="button" class="btn-delete-ot" data-otindex="${i}" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #ef4444; margin-left: 4px;" title="${TranslationStore.t("delete_ot", "Eliminar prórroga")}">🗑️</button>
         ` : ''}
       </div>
     `).join("");
@@ -330,32 +337,32 @@ export class GameLiveEditorView {
       <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-          <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">Editar partido</h1>
-          <button id="btn-cancel-edit" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">✕ Cancelar</button>
+          <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("edit_game", "Editar partido")}</h1>
+          <button id="btn-cancel-edit" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">✕ ${TranslationStore.t("cancel", "Cancelar")}</button>
         </div>
 
         <form id="form-game-editor" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Fecha</label><input type="date" name="date" value="${g.date || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Hora</label><input type="time" name="time" value="${g.time || '18:00'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Rival *</label><input type="text" name="opponent" value="${g.opponent || ''}" ${canEdit ? '' : 'disabled'} required style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Competición</label><input type="text" name="competition" value="${g.competition || 'B1'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Jornada</label><input type="text" name="matchday" value="${g.matchday || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("date", "Fecha")}</label><input type="date" name="date" value="${g.date || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("time", "Hora")}</label><input type="time" name="time" value="${g.time || '18:00'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("opponent", "Rival")} *</label><input type="text" name="opponent" value="${g.opponent || ''}" ${canEdit ? '' : 'disabled'} required style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("competition", "Competición")}</label><input type="text" name="competition" value="${g.competition || 'B1'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("matchday", "Jornada")}</label><input type="text" name="matchday" value="${g.matchday || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Sede</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("venue", "Sede")}</label>
               <select name="venue" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
-                <option value="Local" ${g.venue === 'Local' ? 'selected' : ''}>Local</option>
-                <option value="Visitante" ${g.venue === 'Visitante' ? 'selected' : ''}>Visitante</option>
+                <option value="Local" ${g.venue === 'Local' ? 'selected' : ''}>${TranslationStore.t("local", "Local")}</option>
+                <option value="Visitante" ${g.venue === 'Visitante' ? 'selected' : ''}>${TranslationStore.t("visitor", "Visitante")}</option>
               </select>
             </div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Pabellón / Arena</label><input type="text" name="arena" value="${g.arena || ''}" ${canEdit ? '' : 'disabled'} placeholder="Ej: Polideportivo Municipal" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("arena", "Pabellón / Arena")}</label><input type="text" name="arena" value="${g.arena || ''}" ${canEdit ? '' : 'disabled'} placeholder="Ej: Polideportivo Municipal" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Estado</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("status", "Estado")}</label>
               <select name="status" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
-                <option value="Finalizado" ${g.status === 'Finalizado' ? 'selected' : ''}>Finalizado</option>
-                <option value="Programado" ${g.status === 'Programado' ? 'selected' : ''}>Programado</option>
-                <option value="En juego" ${g.status === 'En juego' ? 'selected' : ''}>En juego</option>
+                <option value="Finalizado" ${g.status === 'Finalizado' ? 'selected' : ''}>${TranslationStore.t("completed", "Finalizado")}</option>
+                <option value="Programado" ${g.status === 'Programado' ? 'selected' : ''}>${TranslationStore.t("scheduled", "Programado")}</option>
+                <option value="En juego" ${g.status === 'En juego' ? 'selected' : ''}>${TranslationStore.t("live", "En juego")}</option>
               </select>
             </div>
           </div>
@@ -363,7 +370,7 @@ export class GameLiveEditorView {
           <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 4px 0;" />
 
           <div>
-            <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 12px 0;">QUINTETO TITULAR (${starters.length}/5)</h3>
+            <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 12px 0;">${TranslationStore.t("starting_five", "QUINTETO TITULAR")} (${starters.length}/5)</h3>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
               ${startersMarkup}
             </div>
@@ -373,7 +380,7 @@ export class GameLiveEditorView {
 
           <div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">Estadísticas de Jugadores (${this.players.length})</h3>
+              <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("player_stats", "Estadísticas de Jugadores")} (${this.players.length})</h3>
               <span style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${badgeClass}">
                 ${badgeText}
               </span>
@@ -383,7 +390,7 @@ export class GameLiveEditorView {
               <table style="width: 100%; border-collapse: collapse; text-align: left;">
                 <thead>
                   <tr style="background: #f8fafc; font-size: 10px; font-weight: 800; color: #64748b; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 10px;">Jugador</th>
+                    <th style="padding: 10px;">${TranslationStore.t("player", "Jugador")}</th>
                     <th style="padding: 10px;">MIN</th>
                     <th style="padding: 10px;">T2C</th><th style="padding: 10px;">T2I</th>
                     <th style="padding: 10px;">T3C</th><th style="padding: 10px;">T3I</th>
@@ -391,7 +398,7 @@ export class GameLiveEditorView {
                     <th style="padding: 10px;">RO</th><th style="padding: 10px;">RD</th>
                     <th style="padding: 10px;">AST</th><th style="padding: 10px;">ROB</th><th style="padding: 10px;">TAP</th>
                     <th style="padding: 10px;">PER</th><th style="padding: 10px;">FC</th><th style="padding: 10px;">FR</th>
-                    <th style="padding: 10px;">+/- (Sistema)</th>
+                    <th style="padding: 10px;">+/- (${TranslationStore.t("system", "Sistema")})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -406,13 +413,13 @@ export class GameLiveEditorView {
           <!-- RESULTADO POR CUARTOS Y PRÓRROGAS DEDICADO A GAME_PERIOD_SCORES -->
           <div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">RESULTADO POR CUARTOS</h3>
+              <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("quarter_results", "RESULTADO POR CUARTOS")}</h3>
               <div style="display: flex; gap: 10px; align-items: center;">
                 <span style="background: #f1f5f9; color: #0f172a; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
-                  Total Marcador: ${qTeamSum} - ${qOppSum}
+                  ${TranslationStore.t("total_score", "Total Marcador")}: ${qTeamSum} - ${qOppSum}
                 </span>
                 <span style="background: ${isWin ? '#dcfce7' : '#fef2f2'}; color: ${isWin ? '#166534' : '#dc2626'}; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
-                  ${isWin ? 'Victoria' : 'Derrota'}
+                  ${isWin ? TranslationStore.t("win", "Victoria") : TranslationStore.t("loss", "Derrota")}
                 </span>
               </div>
             </div>
@@ -423,26 +430,26 @@ export class GameLiveEditorView {
 
               ${canEdit ? `
                 <button type="button" id="btn-add-ot" style="background: #f1f5f9; color: #1e3a8a; border: 1px dashed #2563eb; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                  + Añadir Prórroga (OT)
+                  + ${TranslationStore.t("add_overtime", "Añadir Prórroga (OT)")}
                 </button>
               ` : ''}
             </div>
           </div>
 
           <div>
-            <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Observaciones</label>
-            <textarea name="notes" rows="3" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-family: inherit;" placeholder="Notas tácticas del partido...">${g.notes || ''}</textarea>
+            <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("notes", "Observaciones")}</label>
+            <textarea name="notes" rows="3" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-family: inherit;" placeholder="${TranslationStore.t("notes_placeholder", "Notas tácticas del partido...")}">${g.notes || ''}</textarea>
           </div>
 
           <div>
-            <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Enlace a vídeo (opcional)</label>
+            <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("video_url", "Enlace a vídeo (opcional)")}</label>
             <input type="text" name="video_url" value="${g.video_url || ''}" ${canEdit ? '' : 'disabled'} placeholder="https://..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
-            <button type="button" id="btn-cancel-edit-form" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+            <button type="button" id="btn-cancel-edit-form" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">${TranslationStore.t("cancel", "Cancelar")}</button>
             ${canEdit ? `
-              <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">💾 Guardar cambios</button>
+              <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">💾 ${TranslationStore.t("save_changes", "Guardar cambios")}</button>
             ` : ''}
           </div>
 
@@ -469,7 +476,7 @@ export class GameLiveEditorView {
             currentStarters = currentStarters.filter(s => s !== id);
           } else {
             if (currentStarters.length >= 5) {
-              alert("Solo puedes seleccionar máximo 5 titulares.");
+              alert(TranslationStore.t("max_starters_warning", "Solo puedes seleccionar máximo 5 titulares."));
               return;
             }
             currentStarters.push(id);
@@ -603,7 +610,7 @@ export class GameLiveEditorView {
           await DataStore.saveGameAndStats(gameData, this.currentGameStats, this.currentPeriods);
 
           this.isEditing = false;
-          alert("✅ Partido guardado exitosamente con cuartos y prórrogas sincronizados en 'game_period_scores'.");
+          alert("✅ " + TranslationStore.t("game_saved_msg", "Partido guardado exitosamente con cuartos y prórrogas sincronizados en 'game_period_scores'."));
           this._renderGamesList(container, gameData.team_id);
         });
       }

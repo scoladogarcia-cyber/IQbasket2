@@ -3,10 +3,12 @@
  * Sincronizado con DataStore para respuesta instantánea (0ms) y control de permisos por rol.
  * Maneja la parrilla general con fotos/dorsales, ordenación por nombre/número, buscador,
  * y la ficha detallada con las 7 pestañas oficiales, gráficas SVG y observaciones editables.
+ * Traducido dinámicamente mediante TranslationStore.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class PlayerStatsView {
   constructor(supabaseClient, authController) {
@@ -72,7 +74,7 @@ export class PlayerStatsView {
 
   _renderLineChartSVG(dataPoints, color = "#1e3a8a", minVal = 0, maxVal = 40) {
     if (!dataPoints || dataPoints.length === 0) {
-      return `<div style="height: 100px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 11px;">Sin datos registrados</div>`;
+      return `<div style="height: 100px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 11px;">${TranslationStore.t("no_registered_data", "Sin datos registrados")}</div>`;
     }
 
     const width = 400;
@@ -104,11 +106,11 @@ export class PlayerStatsView {
 
   _renderRadarChartSVG(playerMetrics, teamMetrics) {
     const categories = [
-      { key: "pts", label: "Puntos", max: 20 },
-      { key: "reb", label: "Rebotes", max: 10 },
-      { key: "ast", label: "Asistencias", max: 8 },
-      { key: "stl", label: "Robos", max: 5 },
-      { key: "blk", label: "Tapones", max: 3 },
+      { key: "pts", label: TranslationStore.t("points", "Puntos"), max: 20 },
+      { key: "reb", label: TranslationStore.t("rebounds", "Rebotes"), max: 10 },
+      { key: "ast", label: TranslationStore.t("assists", "Asistencias"), max: 8 },
+      { key: "stl", label: TranslationStore.t("steals", "Robos"), max: 5 },
+      { key: "blk", label: TranslationStore.t("blocks", "Tapones"), max: 3 },
       { key: "efg", label: "eFG%", max: 100 }
     ];
 
@@ -159,8 +161,8 @@ export class PlayerStatsView {
           <polygon points="${playerPoly}" fill="rgba(30, 58, 138, 0.35)" stroke="#1e3a8a" stroke-width="2.5" />
         </svg>
         <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 11px; font-weight: 700;">
-          <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> Jugador</span>
-          <span style="color: #f97316; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> Media Equipo</span>
+          <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("player", "Jugador")}</span>
+          <span style="color: #f97316; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("team_avg", "Media Equipo")}</span>
         </div>
       </div>
     `;
@@ -226,7 +228,7 @@ export class PlayerStatsView {
     });
 
     if (filtered.length === 0) {
-      return `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #64748b;">No se encontraron jugadores en la plantilla.</div>`;
+      return `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #64748b;">${TranslationStore.t("no_players_found", "No se encontraron jugadores en la plantilla.")}</div>`;
     }
 
     return filtered.map(p => {
@@ -246,12 +248,12 @@ export class PlayerStatsView {
               <div>
                 <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h3>
                 <span style="font-size: 12px; color: #64748b; font-weight: 500;">
-                  ${photo ? `#${p.jersey ?? '-'} · ` : ''}${p.primary_position || 'Jugador'}
+                  ${photo ? `#${p.jersey ?? '-'} · ` : ''}${p.primary_position || TranslationStore.t("player", "Jugador")}
                 </span>
               </div>
             </div>
             <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">
-              ${p.status || 'Activo'}
+              ${p.status || TranslationStore.t("active", "Activo")}
             </span>
           </div>
 
@@ -291,12 +293,12 @@ export class PlayerStatsView {
               <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h1>
             </div>
             <div style="display: flex; gap: 6px; align-items: center; margin: 6px 0;">
-              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${p.primary_position || 'Jugador'}</span>
+              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${p.primary_position || TranslationStore.t("player", "Jugador")}</span>
               ${secPos}
-              <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${p.status || 'Activo'}</span>
+              <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${p.status || TranslationStore.t("active", "Activo")}</span>
             </div>
             <div style="font-size: 12px; color: #64748b;">
-              Mano: <strong>${p.dominant_hand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; Nac: <strong>${p.birth_date || '-'}</strong>
+              ${TranslationStore.t("dominant_hand", "Mano")}: <strong>${p.dominant_hand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; ${TranslationStore.t("birth_date", "Nac")}: <strong>${p.birth_date || '-'}</strong>
             </div>
           </div>
         </div>
@@ -304,15 +306,15 @@ export class PlayerStatsView {
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
           ${canEditFull ? `
             <button id="btn-edit-tab" style="background: #1e3a8a; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-              ✏️ Editar Jugador
+              ✏️ ${TranslationStore.t("edit_player", "Editar Jugador")}
             </button>
           ` : `
             <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">
-              🔒 Solo Lectura
+              🔒 ${TranslationStore.t("read_only", "Solo Lectura")}
             </span>
           `}
           <span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
-            Muestra suficiente
+            ${TranslationStore.t("sufficient_sample", "Muestra suficiente")}
           </span>
         </div>
       </div>
@@ -321,16 +323,16 @@ export class PlayerStatsView {
 
   _renderNavTabs() {
     const tabs = [
-      { id: "resumen", label: "Resumen" },
-      { id: "porcentajes", label: "Porcentajes" },
-      { id: "avanzadas", label: "Avanzadas" },
-      { id: "evolucion", label: "Evolución" },
-      { id: "comparacion", label: "Comparación" },
-      { id: "observaciones", label: "Observaciones" }
+      { id: "resumen", label: TranslationStore.t("summary", "Resumen") },
+      { id: "porcentajes", label: TranslationStore.t("percentages", "Porcentajes") },
+      { id: "avanzadas", label: TranslationStore.t("advanced", "Avanzadas") },
+      { id: "evolucion", label: TranslationStore.t("evolution", "Evolución") },
+      { id: "comparacion", label: TranslationStore.t("comparison", "Comparación") },
+      { id: "observaciones", label: TranslationStore.t("observations", "Observaciones") }
     ];
 
     if (this._canEditFullProfile()) {
-      tabs.push({ id: "editar", label: "Editar Datos" });
+      tabs.push({ id: "editar", label: TranslationStore.t("edit_data", "Editar Datos") });
     }
 
     return `
@@ -401,27 +403,27 @@ export class PlayerStatsView {
     // 1. RESUMEN
     if (this.activeTab === "resumen") {
       const avgVal = gp > 0 ? (totVal / gp).toFixed(1) : "0.0";
-      const secPosText = (Array.isArray(p.secondary_positions) ? p.secondary_positions : []).join(", ") || "Ninguna";
+      const secPosText = (Array.isArray(p.secondary_positions) ? p.secondary_positions : []).join(", ") || TranslationStore.t("none", "Ninguna");
 
       return `
         <div style="display: flex; flex-direction: column; gap: 20px;">
           <!-- Métricas Deportivas -->
           <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;">
-            <div class="kpi-card"><span class="kpi-title">Partidos (PJ)</span><span class="kpi-val">${gp}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Minutos</span><span class="kpi-val">${totMin}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Puntos</span><span class="kpi-val">${totPts}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Rebotes</span><span class="kpi-val">${totReb}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Asistencias</span><span class="kpi-val">${totAst}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Robos</span><span class="kpi-val">${totStl}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Tapones</span><span class="kpi-val">${totBlk}</span></div>
-            <div class="kpi-card"><span class="kpi-title">Pérdidas</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("games_played", "Partidos (PJ)")}</span><span class="kpi-val">${gp}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("minutes", "Minutos")}</span><span class="kpi-val">${totMin}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("points", "Puntos")}</span><span class="kpi-val">${totPts}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("rebounds", "Rebotes")}</span><span class="kpi-val">${totReb}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("assists", "Asistencias")}</span><span class="kpi-val">${totAst}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("steals", "Robos")}</span><span class="kpi-val">${totStl}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("blocks", "Tapones")}</span><span class="kpi-val">${totBlk}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("turnovers", "Pérdidas")}</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
             <div class="kpi-card"><span class="kpi-title">VAL (FIBA Total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
-            <div class="kpi-card"><span class="kpi-title">VAL / Partido</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
+            <div class="kpi-card"><span class="kpi-title">VAL / ${TranslationStore.t("game", "Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
           </div>
 
           <!-- Datos Biográficos del Perfil -->
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-            <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; text-transform: uppercase;">INFORMACIÓN DE LA FICHA</h3>
+            <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; text-transform: uppercase;">${TranslationStore.t("profile_info", "INFORMACIÓN DE LA FICHA")}</h3>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
               <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">DORSAL</span><strong style="color: #0f172a;">#${p.jersey ?? '-'}</strong></div>
               <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">POSICIÓN PRINCIPAL</span><strong style="color: #0f172a;">${p.primary_position || '-'}</strong></div>
@@ -434,7 +436,7 @@ export class PlayerStatsView {
             </div>
             <div style="margin-top: 16px; border-top: 1px solid #f1f5f9; padding-top: 12px;">
               <span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">OBSERVACIONES / NOTAS</span>
-              <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px;">${p.notes || 'Sin observaciones registradas.'}</p>
+              <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px;">${p.notes || TranslationStore.t("no_notes_recorded", "Sin observaciones registradas.")}</p>
             </div>
           </div>
         </div>
@@ -493,12 +495,17 @@ export class PlayerStatsView {
       const rowsMarkup = stats.map((r, idx) => {
         const gInfo = this.gamesMap.get(r.game_id) || {};
         const comp = StatsEngine.calculatePlayerStats(r);
+        const venueLower = String(gInfo.venue || '').toLowerCase();
+        const isHome = venueLower === 'home' || venueLower === 'local';
+        const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
+        const opponentText = gInfo.opponent || TranslationStore.t("opponent", "Rival");
+
         return `
           <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;">
             <td style="padding: 10px; font-weight: 800; color: #1e3a8a;">P${idx + 1}</td>
             <td style="padding: 10px; color: #64748b;">${gInfo.date || '2026-01-17'}</td>
-            <td style="padding: 10px; font-weight: 700;">vs ${gInfo.opponent || 'Rival'}</td>
-            <td style="padding: 10px; color: #64748b;">${gInfo.venue || 'Local'}</td>
+            <td style="padding: 10px; font-weight: 700;">vs ${opponentText}</td>
+            <td style="padding: 10px; color: #64748b;">${venueText}</td>
             <td style="padding: 10px; font-weight: 700;">${gInfo.team_score ?? 0} - ${gInfo.opponent_score ?? 0}</td>
             <td style="padding: 10px;">${r.minutes || 0}'</td>
             <td style="padding: 10px; font-weight: 800; color: #a855f7;">${comp.evaluation || 0}</td>
@@ -509,11 +516,11 @@ export class PlayerStatsView {
       return `
         <div style="display: flex; flex-direction: column; gap: 24px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">MINUTOS</h4>${this._renderLineChartSVG(minPts, "#1e3a8a", 0, 40)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">PUNTOS</h4>${this._renderLineChartSVG(ptsPts, "#f97316", 0, 30)}</div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">${TranslationStore.t("minutes", "MINUTOS").toUpperCase()}</h4>${this._renderLineChartSVG(minPts, "#1e3a8a", 0, 40)}</div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">${TranslationStore.t("points", "PUNTOS").toUpperCase()}</h4>${this._renderLineChartSVG(ptsPts, "#f97316", 0, 30)}</div>
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #ef4444;">PÉRDIDAS</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #ef4444;">${TranslationStore.t("turnovers", "PÉRDIDAS").toUpperCase()}</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #a855f7;">VAL (FIBA)</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
           </div>
 
@@ -552,11 +559,11 @@ export class PlayerStatsView {
       const tAvgs = { pts: 5.2, reb: 3.5, ast: 1.2, stl: 0.8, blk: 0.3, efg: 30.5 };
 
       const barItems = [
-        { label: "Puntos", pVal: pAvgs.pts, tVal: tAvgs.pts, max: 20 },
-        { label: "Rebotes", pVal: pAvgs.reb, tVal: tAvgs.reb, max: 10 },
-        { label: "Asistencias", pVal: pAvgs.ast, tVal: tAvgs.ast, max: 8 },
-        { label: "Robos", pVal: pAvgs.stl, tVal: tAvgs.stl, max: 5 },
-        { label: "Tapones", pVal: pAvgs.blk, tVal: tAvgs.blk, max: 3 },
+        { label: TranslationStore.t("points", "Puntos"), pVal: pAvgs.pts, tVal: tAvgs.pts, max: 20 },
+        { label: TranslationStore.t("rebounds", "Rebotes"), pVal: pAvgs.reb, tVal: tAvgs.reb, max: 10 },
+        { label: TranslationStore.t("assists", "Asistencias"), pVal: pAvgs.ast, tVal: tAvgs.ast, max: 8 },
+        { label: TranslationStore.t("steals", "Robos"), pVal: pAvgs.stl, tVal: tAvgs.stl, max: 5 },
+        { label: TranslationStore.t("blocks", "Tapones"), pVal: pAvgs.blk, tVal: tAvgs.blk, max: 3 },
         { label: "eFG%", pVal: pAvgs.efg, tVal: tAvgs.efg, max: 100 }
       ];
 
@@ -584,8 +591,8 @@ export class PlayerStatsView {
             <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">JUGADOR VS MEDIA DEL EQUIPO</h4>
             <div style="display: flex; flex-direction: column; gap: 12px;">${barsMarkup}</div>
             <div style="display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 11px; font-weight: 700;">
-              <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> Jugador</span>
-              <span style="color: #f97316; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> Media Equipo</span>
+              <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("player", "Jugador")}</span>
+              <span style="color: #f97316; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("team_avg", "Media Equipo")}</span>
             </div>
           </div>
 
@@ -610,7 +617,7 @@ export class PlayerStatsView {
                 <textarea name="notes" rows="4" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Escribe observaciones generales del jugador...">${p.notes || ''}</textarea>
               ` : `
                 <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
-                  ${p.notes || 'Sin observaciones registradas.'}
+                  ${p.notes || TranslationStore.t("no_notes_recorded", "Sin observaciones registradas.")}
                 </div>
               `}
             </div>
@@ -621,7 +628,7 @@ export class PlayerStatsView {
                 <textarea name="objectives" rows="3" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Defina los objetivos tácticos o físicos para la temporada...">${p.objectives || ''}</textarea>
               ` : `
                 <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
-                  ${p.objectives || 'Sin objetivos definidos.'}
+                  ${p.objectives || TranslationStore.t("no_objectives_defined", "Sin objetivos definidos.")}
                 </div>
               `}
             </div>
@@ -629,7 +636,7 @@ export class PlayerStatsView {
             ${canNotes ? `
               <div style="display: flex; justify-content: flex-end;">
                 <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                  💾 Guardar Observaciones y Objetivos
+                  💾 ${TranslationStore.t("save_notes_and_objectives", "Guardar Observaciones y Objetivos")}
                 </button>
               </div>
             ` : ''}
@@ -753,8 +760,8 @@ export class PlayerStatsView {
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
-            <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-            <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">💾 Guardar Cambios</button>
+            <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">${TranslationStore.t("cancel", "Cancelar")}</button>
+            <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">💾 ${TranslationStore.t("save_changes", "Guardar Cambios")}</button>
           </div>
         </form>
       `;
@@ -782,14 +789,14 @@ export class PlayerStatsView {
       this.selectedPlayer = DataStore.getPlayerById(playerId);
 
       if (!this.selectedPlayer) {
-        container.innerHTML = `<div style="padding: 20px; color: red;">Jugador no encontrado.</div>`;
+        container.innerHTML = `<div style="padding: 20px; color: red;">${TranslationStore.t("player_not_found", "Jugador no encontrado.")}</div>`;
         return;
       }
 
       const renderDetail = () => {
         container.innerHTML = `
           <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
-            <a href="#/players" style="color: #64748b; text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 6px;">← Volver a jugadores</a>
+            <a href="#/players" style="color: #64748b; text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 6px;">← ${TranslationStore.t("back_to_players", "Volver a jugadores")}</a>
             ${this._renderDetailHeader()}
             ${this._renderNavTabs()}
             <div id="tab-content">${this._renderTabContent(playerId)}</div>
@@ -832,7 +839,7 @@ export class PlayerStatsView {
 
             await DataStore.updatePlayer(playerId, updates);
             this.selectedPlayer = { ...this.selectedPlayer, ...updates };
-            alert("✅ Observaciones y objetivos guardados correctamente.");
+            alert("✅ " + TranslationStore.t("observations_saved_msg", "Observaciones y objetivos guardados correctamente."));
           });
         }
 
@@ -923,12 +930,12 @@ export class PlayerStatsView {
     container.innerHTML = `
       <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">Jugadores</h1>
+          <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("players", "Jugadores")}</h1>
           <div style="display: flex; gap: 12px; align-items: center;">
-            <input type="text" id="search-player" placeholder="🔍 Buscar jugador..." value="${this.filterText}" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+            <input type="text" id="search-player" placeholder="🔍 ${TranslationStore.t("search_player", "Buscar jugador...")}" value="${this.filterText}" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             
             <select id="select-pos" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
-              <option value="Todos" ${this.filterPosition === 'Todos' ? 'selected' : ''}>Todas las Posiciones</option>
+              <option value="Todos" ${this.filterPosition === 'Todos' ? 'selected' : ''}>${TranslationStore.t("all_positions", "Todas las Posiciones")}</option>
               <option value="Base" ${this.filterPosition === 'Base' ? 'selected' : ''}>Base</option>
               <option value="Escolta" ${this.filterPosition === 'Escolta' ? 'selected' : ''}>Escolta</option>
               <option value="Alero" ${this.filterPosition === 'Alero' ? 'selected' : ''}>Alero</option>
@@ -937,10 +944,10 @@ export class PlayerStatsView {
             </select>
 
             <select id="select-sort" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
-              <option value="jersey_asc" ${this.sortBy === 'jersey_asc' ? 'selected' : ''}>🔢 Dorsal (Menor a Mayor)</option>
-              <option value="jersey_desc" ${this.sortBy === 'jersey_desc' ? 'selected' : ''}>🔢 Dorsal (Mayor a Menor)</option>
-              <option value="name_asc" ${this.sortBy === 'name_asc' ? 'selected' : ''}>🔤 Nombre (A - Z)</option>
-              <option value="name_desc" ${this.sortBy === 'name_desc' ? 'selected' : ''}>🔤 Nombre (Z - A)</option>
+              <option value="jersey_asc" ${this.sortBy === 'jersey_asc' ? 'selected' : ''}>🔢 ${TranslationStore.t("jersey_asc", "Dorsal (Menor a Mayor)")}</option>
+              <option value="jersey_desc" ${this.sortBy === 'jersey_desc' ? 'selected' : ''}>🔢 ${TranslationStore.t("jersey_desc", "Dorsal (Mayor a Menor)")}</option>
+              <option value="name_asc" ${this.sortBy === 'name_asc' ? 'selected' : ''}>🔤 ${TranslationStore.t("name_asc", "Nombre (A - Z)")}</option>
+              <option value="name_desc" ${this.sortBy === 'name_desc' ? 'selected' : ''}>🔤 ${TranslationStore.t("name_desc", "Nombre (Z - A)")}</option>
             </select>
           </div>
         </div>

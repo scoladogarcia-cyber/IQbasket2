@@ -1,27 +1,38 @@
 /**
  * @fileoverview Orquestador Principal de IQ Basket.
- * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView, GameBoxScoreView, PlayerStatsView y DataStore.
+ * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView,
+ * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
+ * TranslationsView y DataStore.
+ * 
+ * Corrección de arquitectura:
+ * - Invocación dinámica de bindLayoutEvents() en cada renderizado para garantizar
+ *   que el selector de idioma (#select-lang-toggle) funcione en TODAS las vistas.
+ * - Registro de los módulos Quintetos (#/lineups) y Comparador (#/comparator).
+ * - Sincronización con TranslationStore y el motor i18n.
  */
 
 import { supabase } from "./config/database.config.js";
 import { DataStore } from "./services/DataStore.js";
+import { TranslationStore } from "./services/TranslationStore.js";
+import { i18n } from "./core-modules/i18n/I18nEngine.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
 
-// 📌 1. Módulos de anotación en vivo, BoxScore y controladores
 import { GameController } from "./controllers/GameController.js";
 import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
 import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
-
-// 📌 2. Módulo Único de Jugadores (Parrilla + Ficha Detallada)
+import { AdvancedStatsView } from "./views/AdvancedStatsView.js";
 import { PlayerStatsView } from "./views/PlayerStatsView.js";
+import { LineupsView } from "./views/LineupsView.js";
+import { ComparatorView } from "./views/ComparatorView.js";
+import { TranslationsView } from "./views/TranslationsView.js";
 
 export class IQBasketApp {
   constructor() {
-    this.isAuthenticated = false; // Pantalla de Login al arrancar
+    this.isAuthenticated = false; // Estado inicial de autenticación
     this.userRole = "SUPERADMIN"; // Rol asignado
     this.currentRoute = "dashboard";
     this.routeParams = {};
@@ -36,23 +47,28 @@ export class IQBasketApp {
 
     // Instancia auxiliar de Auth Controller simplificada para vistas
     const authController = {
-      hasRole: (role) => ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(this.userRole)
+      hasRole: (role) => {
+        if (Array.isArray(role)) return role.includes(this.userRole);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(this.userRole);
+      }
     };
 
     // Instancias activas de Vistas
     this.views = {
       auth: new AuthView(),
-      dashboard: new SeasonDashboardView(supabase),
-      team: new TeamStatsView(supabase),
-      equipo: new TeamStatsView(supabase),
+      dashboard: new SeasonDashboardView(supabase, authController),
+      team: new TeamStatsView(supabase, authController),
+      equipo: new TeamStatsView(supabase, authController),
       
-      // Vistas del Módulo de Partidos
       liveeditor: new GameLiveEditorView(this.gameController),
       partidos: new GameLiveEditorView(this.gameController),
+      advanced: new AdvancedStatsView(this.gameController),
       boxscore: new GameBoxScoreView(supabase, authController),
 
-      // Vista del Módulo de Jugadores
-      player: new PlayerStatsView(supabase, authController)
+      player: new PlayerStatsView(supabase, authController),
+      lineups: new LineupsView(authController),
+      comparator: new ComparatorView(authController),
+      settings: new TranslationsView(authController)
     };
   }
 
@@ -83,23 +99,54 @@ export class IQBasketApp {
   }
 
   /**
-   * Vincula los eventos del Layout (Menú lateral, Logout y navegación responsive)
+   * Vincula los eventos del Layout (Cerrar Sesión, Selector de Idioma Global y Navegación Hash).
+   * Se ejecuta dinámicamente para asegurar que los elementos del DOM siempre tengan listeners activos.
    */
   bindLayoutEvents() {
+    // 1. Logout
     const logoutBtn = document.getElementById("btn-logout");
-    if (logoutBtn) {
+    if (logoutBtn && !logoutBtn.dataset.bound) {
+      logoutBtn.dataset.bound = "true";
       logoutBtn.addEventListener("click", (e) => {
         e.preventDefault();
         this.isAuthenticated = false;
-        DataStore.isLoaded = false; // Resetear caché local al cerrar sesión
+        DataStore.isLoaded = false;
         this.render();
       });
     }
 
-    window.onhashchange = () => {
-      this.parseHashRoute();
-      this.render();
-    };
+    // 2. Selector de Idioma Global en el Sidebar
+    const langSelect = document.getElementById("select-lang-toggle");
+    if (langSelect && !langSelect.dataset.bound) {
+      langSelect.dataset.bound = "true";
+      langSelect.addEventListener("change", (e) => {
+        const lang = e.target.value;
+
+        // Actualizar el motor i18n y la tienda de traducciones
+        if (i18n && typeof i18n.changeLanguage === "function") {
+          i18n.changeLanguage(lang);
+        }
+        if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
+          TranslationStore.setLanguage(lang);
+        } else {
+          localStorage.setItem("iq_lang", lang);
+        }
+
+        // Reconstrucción limpia del DOM para aplicar las nuevas etiquetas traducidas
+        const appContainer = document.getElementById("app");
+        if (appContainer) appContainer.innerHTML = "";
+        this.render();
+      });
+    }
+
+    // 3. Navegación Hash (Solo se vincula una vez al window)
+    if (!window.isHashBound) {
+      window.isHashBound = true;
+      window.onhashchange = () => {
+        this.parseHashRoute();
+        this.render();
+      };
+    }
   }
 
   /**
@@ -138,7 +185,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Renderiza la aplicación según el estado de sesión y ruta
+   * Renderiza la aplicación según el estado de sesión, precarga y ruta activa
    */
   async render() {
     const appContainer = document.getElementById("app");
@@ -151,7 +198,7 @@ export class IQBasketApp {
       return;
     }
 
-    // B) PRECARGA MASIVA ÚNICA EN MEMORIA LOCAL (DATASTORE) AL INICIAR SESIÓN
+    // B) PRECARGA MASIVA ÚNICA EN MEMORIA LOCAL (DATASTORE)
     if (!DataStore.isLoaded) {
       appContainer.innerHTML = `
         <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc;">
@@ -174,60 +221,68 @@ export class IQBasketApp {
         this.currentRoute, 
         this.userRole
       );
-      this.bindLayoutEvents();
       contentAreaEl = document.getElementById("dashboard-content-area");
     }
+
+    // Revincular eventos del Layout y actualizar el marcado 'active' en cada render
+    this.bindLayoutEvents();
+    LayoutView.updateActiveMenu(this.currentRoute);
 
     const route = this.currentRoute;
     const contentArea = "dashboard-content-area";
 
-    // D) ENRUTADOR PRINCIPAL
+    // D) ENRUTADOR PRINCIPAL (SWITCH DE VISTAS)
     switch (route) {
       case "dashboard":
-        if (this.views.dashboard) {
-          await this.views.dashboard.render(contentArea, this.teamId);
-        }
+        if (this.views.dashboard) await this.views.dashboard.render(contentArea, this.teamId);
         break;
 
       case "team":
       case "equipo":
-        if (this.views.team) {
-          await this.views.team.render(contentArea, this.teamId);
-        }
+        if (this.views.team) await this.views.team.render(contentArea, this.teamId);
         break;
 
-      // 🏀 1. RUTA DE PARTIDOS Y EDITOR (#/partidos, #/live, #/game/ID_PARTIDO)
-      case "partidos":
       case "games":
+      case "partidos":
       case "game":
       case "live":
-      case "registro":
         if (this.views.liveeditor) {
           await this.views.liveeditor.render(contentArea, this.routeParams.id, this.teamId);
         } else {
-          this.renderPlaceholder("Listado y Registro de Partidos", "GameLiveEditorView");
+          this.renderPlaceholder("Listado y Editor de Partidos", "GameLiveEditorView");
         }
         break;
 
-      // 📊 2. RUTA DE BOXSCORE Y MÉTRICAS AVANZADAS (#/boxscore o #/boxscore/ID_PARTIDO)
+      case "advanced":
+        if (this.views.advanced) await this.views.advanced.render(contentArea);
+        break;
+
       case "boxscore":
-        if (this.views.boxscore) {
-          await this.views.boxscore.render(contentArea, this.routeParams.id);
-        } else {
-          this.renderPlaceholder("Análisis de Partido (BoxScore)", "GameBoxScoreView");
-        }
+      case "registro":
+        if (this.views.boxscore) await this.views.boxscore.render(contentArea, this.routeParams.id);
         break;
 
-      // 👤 3. RUTA DE JUGADORES (#/players, #/jugadores, #/player/ID_JUGADOR)
       case "players":
       case "jugadores":
       case "player":
       case "jugador":
-        if (this.views.player) {
-          await this.views.player.render(contentArea, this.routeParams.id, this.teamId);
-        } else {
-          this.renderPlaceholder("Sección de Jugadores", "PlayerStatsView");
-        }
+        if (this.views.player) await this.views.player.render(contentArea, this.routeParams.id, this.teamId);
+        break;
+
+      case "lineups":
+      case "quintetos":
+        if (this.views.lineups) await this.views.lineups.render(contentArea);
+        break;
+
+      case "comparator":
+      case "comparador":
+        if (this.views.comparator) await this.views.comparator.render(contentArea);
+        break;
+
+      case "settings":
+      case "configuracion":
+      case "translations":
+        if (this.views.settings) await this.views.settings.render(contentArea);
         break;
 
       default:

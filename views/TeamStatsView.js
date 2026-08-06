@@ -2,10 +2,12 @@
  * @fileoverview Vista de Presentación: Informe de Equipo y Plantilla (TeamStatsView.js).
  * Sincronizado con DataStore para carga instantánea desde memoria local y preparado para control de permisos.
  * Ignora el ppg precalculado en BD para garantizar el cálculo 100% real de player_game_stats.
+ * Traducido dinámicamente mediante TranslationStore.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class TeamStatsView {
   constructor(supabaseClient, authController) {
@@ -89,7 +91,7 @@ export class TeamStatsView {
 
         return {
           ...p,
-          fullName: `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Jugador",
+          fullName: `${p.first_name || ''} ${p.last_name || ''}`.trim() || TranslationStore.t("player", "Jugador"),
           jerseyNum: p.jersey !== undefined && p.jersey !== null ? p.jersey : 99,
           position: p.primary_position || "—",
           statusTxt: String(p.status || "Activo").trim(),
@@ -138,7 +140,7 @@ export class TeamStatsView {
 
   _renderPlayerRows(players) {
     if (!players || players.length === 0) {
-      return `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #64748b;">No hay jugadores cargados en la plantilla.</td></tr>`;
+      return `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #64748b;">${TranslationStore.t("no_players_loaded", "No hay jugadores cargados en la plantilla.")}</td></tr>`;
     }
 
     return players.map((p) => {
@@ -220,7 +222,7 @@ export class TeamStatsView {
     const sortedPlayers = this._sortPlayers(this.cachedPlayers);
     const tableRowsMarkup = this._renderPlayerRows(sortedPlayers);
 
-    const teamName = team.name || "Equipo";
+    const teamName = team.name || TranslationStore.t("team", "Equipo");
     const teamCategory = team.category || "—";
     const teamCompetition = team.competition || "—";
     const teamCoach = team.coach_name || "—";
@@ -230,7 +232,7 @@ export class TeamStatsView {
     const htmlContent = `
       <div style="display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding-bottom: 40px;">
         
-        <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">Equipo</h1>
+        <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("team", "Equipo")}</h1>
 
         <!-- Tarjeta Principal del Equipo -->
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; display: flex; align-items: center; gap: 16px;">
@@ -251,24 +253,24 @@ export class TeamStatsView {
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
           
           <div class="team-stat-card">
-            <span class="team-stat-title">🏆 BALANCE</span>
+            <span class="team-stat-title">🏆 ${TranslationStore.t("record", "BALANCE").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; margin-top: 4px;">
-              <strong style="color: #16a34a;">${data.wins}V</strong> - <strong style="color: #dc2626;">${data.losses}D</strong>
+              <strong style="color: #16a34a;">${data.wins}W</strong> - <strong style="color: #dc2626;">${data.losses}L</strong>
             </span>
           </div>
 
           <div class="team-stat-card">
-            <span class="team-stat-title">📅 PARTIDOS</span>
+            <span class="team-stat-title">📅 ${TranslationStore.t("games", "PARTIDOS").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">${data.totalGames}</span>
           </div>
 
           <div class="team-stat-card">
-            <span class="team-stat-title">👥 JUGADORES ACTIVOS</span>
+            <span class="team-stat-title">👥 ${TranslationStore.t("active_players", "JUGADORES ACTIVOS").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">${activePlayersCount}</span>
           </div>
 
           <div class="team-stat-card">
-            <span class="team-stat-title">📍 TEMPORADA</span>
+            <span class="team-stat-title">📍 ${TranslationStore.t("season", "TEMPORADA").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">2026</span>
           </div>
 
@@ -277,31 +279,31 @@ export class TeamStatsView {
         <!-- Tabla de Información del Equipo -->
         <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
           <h3 style="font-size: 12px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">
-            INFORMACIÓN DEL EQUIPO
+            ${TranslationStore.t("team_info", "INFORMACIÓN DEL EQUIPO").toUpperCase()}
           </h3>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Club</span>
+              <span style="color: #64748b;">${TranslationStore.t("club", "Club")}</span>
               <strong style="color: #0f172a;">${teamName}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Categoría</span>
+              <span style="color: #64748b;">${TranslationStore.t("category", "Categoría")}</span>
               <strong style="color: #0f172a;">${teamCategory}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Competición</span>
+              <span style="color: #64748b;">${TranslationStore.t("competition", "Competición")}</span>
               <strong style="color: #0f172a;">${teamCompetition}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Entrenador</span>
+              <span style="color: #64748b;">${TranslationStore.t("coach", "Entrenador")}</span>
               <strong style="color: #0f172a;">${teamCoach}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Periodos</span>
+              <span style="color: #64748b;">${TranslationStore.t("periods", "Periodos")}</span>
               <strong style="color: #0f172a;">${teamPeriods}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
-              <span style="color: #64748b;">Color principal</span>
+              <span style="color: #64748b;">${TranslationStore.t("primary_color", "Color principal")}</span>
               <strong style="color: #0f172a;">${teamColor}</strong>
             </div>
           </div>
@@ -310,36 +312,36 @@ export class TeamStatsView {
         <!-- Tabla de Plantilla con Encabezados Ordenables -->
         <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
           <h3 style="font-size: 12px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">
-            PLANTILLA
+            ${TranslationStore.t("roster", "PLANTILLA").toUpperCase()}
           </h3>
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
                 
                 <th data-sort-player="jersey" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  DORSAL <span class="sort-arrow" style="color: #2563eb;">▲</span>
+                  ${TranslationStore.t("jersey", "DORSAL").toUpperCase()} <span class="sort-arrow" style="color: #2563eb;">▲</span>
                 </th>
 
                 <th data-sort-player="name" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  JUGADOR <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("player", "JUGADOR").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
 
                 <th data-sort-player="position" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  POSICIÓN <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("position", "POSICIÓN").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
 
                 <th data-sort-player="status" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ESTADO <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("status", "ESTADO").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
 
                 <th data-sort-player="height" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ALTURA <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
+                  ${TranslationStore.t("height", "ALTURA").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>
 
                 <th data-sort-player="ppg" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
                   <span class="has-tooltip">
                     PPG <span class="info-badge">?</span>
-                    <span class="tooltip-box">Puntos Por Partido promedio anotados por el jugador.</span>
+                    <span class="tooltip-box">${TranslationStore.t("ppg_tooltip", "Puntos Por Partido promedio anotados por el jugador.")}</span>
                   </span>
                   <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
                 </th>

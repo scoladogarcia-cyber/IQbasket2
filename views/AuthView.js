@@ -1,13 +1,12 @@
 /**
- * @fileoverview Vista de Autenticación / Login con soporte para mostrar/ocultar contraseña.
+ * @fileoverview Vista de Autenticación / Login con soporte para mostrar/ocultar contraseña y traducción mediante TranslationStore.
  */
 
-import { i18n } from "../core-modules/i18n/I18nEngine.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class AuthView {
   t(key, fallback) {
-    const val = i18n.t(key);
-    return (!val || val === key) ? fallback : val;
+    return TranslationStore.t(key, fallback);
   }
 
   render(params = {}) {
@@ -69,7 +68,7 @@ export class AuthView {
                   type="button"
                   id="toggle-password-btn"
                   style="position: absolute; right: 10px; background: none; border: none; cursor: pointer; color: #64748b; font-size: 16px; padding: 4px;"
-                  title="Mostrar/Ocultar contraseña"
+                  title="${this.t("toggle_password_title", "Mostrar/Ocultar contraseña")}"
                 >
                   👁️
                 </button>

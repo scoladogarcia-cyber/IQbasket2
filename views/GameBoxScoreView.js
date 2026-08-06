@@ -1,11 +1,14 @@
 /**
  * @fileoverview Registro Estadístico Avanzado / BoxScore (GameBoxScoreView.js).
- * Sincronizado con DataStore para respuesta instantánea (0ms) y control de permisos por rol.
- * Réplica exacta con cálculo de %eFG, VAL (FIBA), AST/TO, %USG y restricción de edición por rol.
+ * Sincronizado con DataStore (0ms), control de permisos por rol y traducción dinámica con TranslationStore.
+ * Flujo en 2 Vistas: 
+ * 1) Listado general de partidos con métricas avanzadas del equipo.
+ * 2) Ficha detallada por jugador con casillas editables y recálculo en tiempo real.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class GameBoxScoreView {
   constructor(supabaseClient, authController) {
@@ -34,16 +37,156 @@ export class GameBoxScoreView {
 
     // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
     this.games = DataStore.getGames() || [];
+    this.players = DataStore.getPlayers() || [];
 
     if (this.games.length === 0) {
-      container.innerHTML = `<div style="padding: 20px; color: red;">No hay partidos registrados.</div>`;
+      container.innerHTML = `<div style="padding: 20px; color: red;">${TranslationStore.t("no_games_recorded", "No hay partidos registrados.")}</div>`;
       return;
     }
 
-    this.selectedGameId = targetGameId || this.games[0].id;
-    const currentGame = this.games.find(g => String(g.id) === String(this.selectedGameId)) || this.games[0];
+    // SI HAY UN ID DE PARTIDO ESPECÍFICO -> VISTA 2: DETALLE DEL BOXSCORE
+    if (targetGameId) {
+      this.selectedGameId = targetGameId;
+      this._renderGameBoxScoreDetail(container, containerId);
+      return;
+    }
 
-    this.players = DataStore.getPlayers() || [];
+    // SI NO HAY ID -> VISTA 1: LISTADO GENERAL CON MÉTRICAS DE EQUIPO
+    this._renderGamesBoxScoreList(container, containerId);
+  }
+
+  // =========================================================================
+  // VISTA 1: RESUMEN GENERAL DE MÉTRICAS AVANZADAS POR PARTIDO
+  // =========================================================================
+  _renderGamesBoxScoreList(container, containerId) {
+    const rowsMarkup = this.games.map(g => {
+      const isWin = Number(g.team_score || 0) > Number(g.opponent_score || 0);
+      const scoreColor = isWin ? '#16a34a' : '#dc2626';
+
+      // Obtener estadísticas de todos los jugadores de este partido
+      const statsList = DataStore.getPlayerGameStats(null, g.id) || [];
+
+      let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
+      let totReb = 0, totAst = 0, totRob = 0, totTap = 0, totPer = 0;
+
+      statsList.forEach(st => {
+        totFg2m += Number(st.fg2_made || 0);
+        totFg2a += Number(st.fg2_attempted || 0);
+        totFg3m += Number(st.fg3_made || 0);
+        totFg3a += Number(st.fg3_attempted || 0);
+        totFtm  += Number(st.ft_made || 0);
+        totFta  += Number(st.ft_attempted || 0);
+
+        totReb += Number(st.off_reb || 0) + Number(st.def_reb || 0);
+        totAst += Number(st.assists || 0);
+        totRob += Number(st.steals || 0);
+        totTap += Number(st.blocks || 0);
+        totPer += Number(st.turnovers || 0);
+      });
+
+      const totFgm = totFg2m + totFg3m;
+      const totFga = totFg2a + totFg3a;
+
+      const efgVal = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "0.0";
+      const pct2p  = totFg2a > 0 ? ((totFg2m / totFg2a) * 100).toFixed(1) : "0.0";
+      const pct3p  = totFg3a > 0 ? ((totFg3m / totFg3a) * 100).toFixed(1) : "0.0";
+      const pctFt  = totFta > 0 ? ((totFtm / totFta) * 100).toFixed(1) : "0.0";
+
+      const venueLower = String(g.venue || '').toLowerCase();
+      const isHome = venueLower === 'home' || venueLower === 'local';
+      const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
+      const opponentText = g.opponent || TranslationStore.t("opponent", "Rival");
+
+      return `
+        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
+          <td style="padding: 14px 12px;">
+            <div style="font-weight: 800; color: #0f172a;">vs ${opponentText}</div>
+            <div style="font-size: 11px; color: #94a3b8; font-weight: 500;">${g.date || '-'} · ${venueText}</div>
+          </td>
+          <td style="padding: 14px 12px; text-align: center;">
+            <span style="font-weight: 900; color: ${scoreColor}; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              ${g.team_score ?? 0} - ${g.opponent_score ?? 0}
+            </span>
+          </td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 800; color: #1e3a8a;">${efgVal}%</td>
+          <td style="padding: 14px 12px; text-align: center;">
+            <strong style="color: #0f172a;">${pct2p}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg2m}/${totFg2a})</span>
+          </td>
+          <td style="padding: 14px 12px; text-align: center;">
+            <strong style="color: #0f172a;">${pct3p}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg3m}/${totFg3a})</span>
+          </td>
+          <td style="padding: 14px 12px; text-align: center;">
+            <strong style="color: #0f172a;">${pctFt}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFtm}/${totFta})</span>
+          </td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totReb}</td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totAst}</td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totRob}</td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totTap}</td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 800; color: #dc2626;">${totPer}</td>
+          <td style="padding: 14px 12px; text-align: center;">
+            <button class="btn-open-boxscore" data-id="${g.id}" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+              👁️ Box Score
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    container.innerHTML = `
+      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
+        
+        <!-- Header -->
+        <div style="margin-bottom: 24px;">
+          <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+            📊 ${TranslationStore.t("boxscore", "Registro estadístico")}
+          </h1>
+          <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">
+            ${TranslationStore.t("boxscore_subtitle", "Resumen de métricas avanzadas por equipo. Selecciona un partido para ver o editar las estadísticas por jugador.")}
+          </p>
+        </div>
+
+        <!-- Tabla General -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+          <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
+                <th style="padding: 10px 12px;">FECHA / ${TranslationStore.t("opponent", "RIVAL").toUpperCase()}</th>
+                <th style="padding: 10px 12px; text-align: center;">${TranslationStore.t("score", "RESULTADO").toUpperCase()}</th>
+                <th style="padding: 10px 12px; text-align: center;">EFG%</th>
+                <th style="padding: 10px 12px; text-align: center;">%T2</th>
+                <th style="padding: 10px 12px; text-align: center;">%T3</th>
+                <th style="padding: 10px 12px; text-align: center;">%TL</th>
+                <th style="padding: 10px 12px; text-align: center;">REB</th>
+                <th style="padding: 10px 12px; text-align: center;">AST</th>
+                <th style="padding: 10px 12px; text-align: center;">ROB</th>
+                <th style="padding: 10px 12px; text-align: center;">TAP</th>
+                <th style="padding: 10px 12px; text-align: center;">PER</th>
+                <th style="padding: 10px 12px; text-align: center;">${TranslationStore.t("actions", "ACCIONES").toUpperCase()}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsMarkup}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    `;
+
+    // Manejador para abrir el detalle de un partido
+    container.querySelectorAll(".btn-open-boxscore").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        window.location.hash = `#/boxscore/${id}`;
+      });
+    });
+  }
+
+  // =========================================================================
+  // VISTA 2: DETALLE DEL BOXSCORE POR JUGADOR
+  // =========================================================================
+  _renderGameBoxScoreDetail(container, containerId) {
+    const currentGame = this.games.find(g => String(g.id) === String(this.selectedGameId)) || this.games[0];
     this.gameStats = DataStore.getPlayerGameStats(null, currentGame.id) || [];
 
     const starters = currentGame.starter_ids || [];
@@ -80,7 +223,7 @@ export class GameBoxScoreView {
       const efgText = computed.eFG ? `${computed.eFG.toFixed(1)}%` : "0.0%";
       const valText = computed.evaluation ?? 0;
       const astToText = Number(st.turnovers || 0) > 0 ? (Number(st.assists || 0) / Number(st.turnovers)).toFixed(1) : Number(st.assists || 0).toFixed(1);
-      const usgText = "40.0%"; // Valor estimado de Usage Rate
+      const usgText = computed.usageRate ? `${computed.usageRate.toFixed(1)}%` : "40.0%";
 
       return `
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;" data-player-id="${p.id}">
@@ -117,34 +260,35 @@ export class GameBoxScoreView {
     const teamEfg = totalFga > 0 ? (((totalFgm + 0.5 * totFg3m) / totalFga) * 100).toFixed(1) : "0.0";
     const teamAstTo = totPer > 0 ? (totAst / totPer).toFixed(1) : totAst.toFixed(1);
 
+    const opponentText = currentGame.opponent || TranslationStore.t("opponent", "Rival");
     const optionsMarkup = this.games.map(g => `
       <option value="${g.id}" ${String(g.id) === String(currentGame.id) ? 'selected' : ''}>
-        ${g.date || ''} vs ${g.opponent || 'Rival'} (${g.team_score ?? 0} - ${g.opponent_score ?? 0})
+        ${g.date || ''} vs ${g.opponent || TranslationStore.t("opponent", "Rival")} (${g.team_score ?? 0} - ${g.opponent_score ?? 0})
       </option>
     `).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
         
-        <!-- Header -->
+        <!-- Header con Botón de Regreso -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <a href="#/partidos" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
-              ← Volver a Partidos
+            <a href="#/boxscore" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+              ← ${TranslationStore.t("back_to_register", "Volver a Registro Estadístico")}
             </a>
             <div>
               <h1 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
                 📊 Box Score e Indicadores Avanzados
               </h1>
-              <span style="font-size: 12px; color: #64748b;">Estadísticas tradicionales y métricas avanzadas por jugador (${this.players.length} en plantilla).</span>
+              <span style="font-size: 12px; color: #64748b;">${TranslationStore.t("boxscore_detail_subtitle", "Estadísticas tradicionales y métricas avanzadas por jugador")} (${this.players.length} ${TranslationStore.t("players", "jugadores")}).</span>
             </div>
           </div>
 
           ${canEdit ? `
             <button id="btn-save-boxscore" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
-              💾 Guardar Cambios
+              💾 ${TranslationStore.t("save_changes", "Guardar Cambios")}
             </button>
-          ` : '<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">Modo Solo Lectura</span>'}
+          ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
         <!-- Selector de Partido -->
@@ -152,7 +296,7 @@ export class GameBoxScoreView {
           <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
             <span style="font-size: 18px;">🏆</span>
             <div style="flex: 1; max-width: 500px;">
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">CAMBIAR DE PARTIDO:</label>
+              <label style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">${TranslationStore.t("change_game", "CAMBIAR DE PARTIDO")}:</label>
               <select id="select-game-bs" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white;">
                 ${optionsMarkup}
               </select>
@@ -160,16 +304,16 @@ export class GameBoxScoreView {
           </div>
 
           <span style="background: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
-            Marcador: ${currentGame.team_score ?? 0} - ${currentGame.opponent_score ?? 0}
+            ${TranslationStore.t("score", "Marcador")}: ${currentGame.team_score ?? 0} - ${currentGame.opponent_score ?? 0}
           </span>
         </div>
 
         <!-- Tabla BoxScore -->
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto;">
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="border-bottom: 2px solid #e2e8f0; font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; background: #f8fafc;">
-                <th style="padding: 10px;">JUGADOR</th>
+                <th style="padding: 10px;">${TranslationStore.t("players", "JUGADOR").toUpperCase()}</th>
                 <th style="padding: 10px; text-align: center;">TIT</th>
                 <th style="padding: 10px; text-align: center;">MIN</th>
                 <th style="padding: 10px; text-align: center;">PTS</th>
@@ -228,9 +372,9 @@ export class GameBoxScoreView {
       </div>
     `;
 
-    // Listener de Selector de Partido
+    // Listener del Selector de Partido Superior
     container.querySelector("#select-game-bs")?.addEventListener("change", (e) => {
-      this.render(containerId, e.target.value);
+      window.location.hash = `#/boxscore/${e.target.value}`;
     });
 
     // Guardado de BoxScore
@@ -273,10 +417,10 @@ export class GameBoxScoreView {
           starter_ids: starterIds
         };
 
-        // GUARDADO OPTIMISTA Y SINCRONIZACIÓN EN DATASTORE
+        // GUARDADO EN DATASTORE Y SINCRONIZACIÓN EN SEGUNDO PLANO
         await DataStore.saveGameAndStats(gameData, statsList);
 
-        alert("✅ BoxScore guardado y métricas recalculadas exitosamente.");
+        alert("✅ " + TranslationStore.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
         this.render(containerId, currentGame.id);
       });
     }
