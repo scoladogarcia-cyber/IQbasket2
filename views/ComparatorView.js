@@ -2,7 +2,7 @@
  * @fileoverview Vista del Comparador de Jugadores (ComparatorView.js).
  * Permite seleccionar entre 2 y 4 jugadores para comparar sus estadísticas
  * convencionales, avanzadas, selector de métrica para evolución por partido y fortalezas relativas.
- * Gráfico 100% dinámico adaptado al número real de partidos disputados/registrados.
+ * Gráfico 100% alineado mediante dibujado unificado de Eje X/Y dentro del propio SVG.
  * Totalmente integrado con DataStore y TranslationStore.
  */
 
@@ -275,22 +275,23 @@ export class ComparatorView {
   }
 
   /**
-   * Genera el Gráfico SVG de Evolución por Partido TOTALMENTE DINÁMICO (Sin valores fijos)
+   * Genera el Gráfico SVG de Evolución por Partido con Eje X y Y renderizados internamente en el mismo lienzo
    */
   _renderEvolutionChartSVG(statsMap) {
-    const width = 800;
-    const height = 180;
-    const paddingLeft = 35;
-    const paddingRight = 10;
-    const paddingBottom = 25;
-    const chartW = width - paddingLeft - paddingRight;
-    const chartH = height - paddingBottom;
+    const viewBoxWidth = 800;
+    const viewBoxHeight = 220;
+    
+    const paddingLeft = 45;
+    const paddingRight = 20;
+    const paddingTop = 15;
+    const paddingBottom = 35;
 
-    // 1. Obtener los partidos reales de la temporada ordenados por fecha
+    const chartW = viewBoxWidth - paddingLeft - paddingRight;
+    const chartH = viewBoxHeight - paddingTop - paddingBottom;
+
+    // 1. Obtener partidos de la temporada
     const rawGames = DataStore.getGames() || [];
     const allGames = [...rawGames].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-    
-    // NÚMERO TOTAL REAL DE PARTIDOS (Dinámico)
     const totalGames = Math.max(1, allGames.length);
 
     // 2. Título de la métrica seleccionada
@@ -304,7 +305,7 @@ export class ComparatorView {
     };
     const metricTitle = metricLabels[this.selectedMetric] || TranslationStore.t("points", "PUNTOS");
 
-    // 3. Calcular Mínimo y Máximo dinámicos para escalar el Eje Y
+    // 3. Mínimo y Máximo para el Eje Y
     let minVal = 0;
     let maxVal = 10;
 
@@ -330,7 +331,25 @@ export class ComparatorView {
     maxVal = Math.ceil(maxVal / 4) * 4 || 8;
     const rangeY = (maxVal - minVal) || 1;
 
-    // 4. Dibujar curvas para cada jugador seleccionado ajustando X exactamente a (0 ... totalGames - 1)
+    // Generar marcadores del Eje Y + Cuadrícula
+    const ySteps = 4;
+    let gridLinesMarkup = "";
+    let yLabelsMarkup = "";
+
+    for (let i = 0; i <= ySteps; i++) {
+      const stepVal = minVal + (rangeY / ySteps) * i;
+      const yPos = paddingTop + chartH - (i / ySteps) * chartH;
+      
+      gridLinesMarkup += `
+        <line x1="${paddingLeft}" y1="${yPos.toFixed(1)}" x2="${viewBoxWidth - paddingRight}" y2="${yPos.toFixed(1)}" stroke="${stepVal === 0 ? '#cbd5e1' : '#f1f5f9'}" stroke-dasharray="${stepVal === 0 ? 'none' : '3 3'}" stroke-width="${stepVal === 0 ? '1.5' : '1'}" />
+      `;
+
+      yLabelsMarkup += `
+        <text x="${paddingLeft - 10}" y="${yPos.toFixed(1)}" font-size="11" font-weight="700" fill="#94a3b8" text-anchor="end" dominant-baseline="central">${Math.round(stepVal)}</text>
+      `;
+    }
+
+    // Dibujar curvas de los jugadores
     const linesMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
       if (!pData) return "";
@@ -356,10 +375,9 @@ export class ComparatorView {
           }
         }
 
-        // Posición X dinámicamente dividida entre el número de partidos
         const divisorX = totalGames > 1 ? (totalGames - 1) : 1;
         const x = paddingLeft + (i / divisorX) * chartW;
-        const y = chartH - ((val - minVal) / rangeY) * chartH;
+        const y = paddingTop + chartH - ((val - minVal) / rangeY) * chartH;
 
         return { x, y, val, label: `P${i + 1}`, hasPlayed: !!st };
       });
@@ -377,42 +395,26 @@ export class ComparatorView {
       return `
         <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" />
         ${points.map(p => `
-          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" stroke="white" stroke-width="1.5">
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="white" stroke-width="1.5">
             <title>${p.label}: ${p.val} ${!p.hasPlayed ? '(Sin registro)' : ''}</title>
           </circle>
         `).join("")}
       `;
     }).join("");
 
-    // Lines horizontales del Eje Y
-    const ySteps = 4;
-    let gridLinesMarkup = "";
-    let yLabelsMarkup = "";
+    // Líneas verticales e indicadores P1...Pn dentro del SVG
+    let xGridLinesMarkup = "";
+    let xLabelsMarkup = "";
 
-    for (let i = 0; i <= ySteps; i++) {
-      const stepVal = minVal + (rangeY / ySteps) * i;
-      const yPos = chartH - (i / ySteps) * chartH;
-      
-      gridLinesMarkup += `
-        <line x1="${paddingLeft}" y1="${yPos.toFixed(1)}" x2="${width - paddingRight}" y2="${yPos.toFixed(1)}" stroke="${stepVal === 0 ? '#cbd5e1' : '#f1f5f9'}" stroke-dasharray="${stepVal === 0 ? 'none' : '3 3'}" stroke-width="${stepVal === 0 ? '1.5' : '1'}" />
-      `;
-
-      yLabelsMarkup += `
-        <text x="${paddingLeft - 8}" y="${yPos.toFixed(1)}" font-size="10" font-weight="700" fill="#94a3b8" text-anchor="end" dominant-baseline="central">${Math.round(stepVal)}</text>
-      `;
-    }
-
-    // Líneas verticales dinámicas por cada partido real
-    const xGridLines = allGames.map((_, i) => {
+    allGames.forEach((_, i) => {
       const divisorX = totalGames > 1 ? (totalGames - 1) : 1;
       const xPos = paddingLeft + (i / divisorX) * chartW;
-      return `<line x1="${xPos.toFixed(1)}" y1="0" x2="${xPos.toFixed(1)}" y2="${chartH}" stroke="#f8fafc" stroke-width="1" />`;
-    }).join("");
 
-    // Etiquetas dinámicas P1... Pn
-    const labelsXMarkup = allGames.map((_, i) => {
-      return `<span style="text-align: center; font-size: 9px; font-weight: 700; color: #64748b;">P${i + 1}</span>`;
-    }).join("");
+      xGridLinesMarkup += `<line x1="${xPos.toFixed(1)}" y1="${paddingTop}" x2="${xPos.toFixed(1)}" y2="${paddingTop + chartH}" stroke="#f8fafc" stroke-width="1" />`;
+      xLabelsMarkup += `
+        <text x="${xPos.toFixed(1)}" y="${viewBoxHeight - 10}" font-size="11" font-weight="700" fill="#64748b" text-anchor="middle">P${i + 1}</text>
+      `;
+    });
 
     const legendMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
@@ -435,7 +437,7 @@ export class ComparatorView {
             📈 EVOLUCIÓN DE ${metricTitle} POR PARTIDO (P1 - P${totalGames})
           </div>
 
-          <!-- Selector de Métrica de Evolución -->
+          <!-- Selector de Métrica -->
           <div style="display: flex; align-items: center; gap: 6px;">
             <label style="font-size: 11px; font-weight: 700; color: #64748b;">Métrica:</label>
             <select id="select-evolution-metric" style="padding: 4px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; color: #0f172a; outline: none; cursor: pointer;">
@@ -449,16 +451,14 @@ export class ComparatorView {
           </div>
         </div>
 
-        <div style="position: relative; width: 100%; height: 190px; margin-bottom: 8px;">
-          <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: 170px; overflow: visible;">
+        <div style="position: relative; width: 100%; height: 210px; margin-bottom: 8px;">
+          <svg viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}" preserveAspectRatio="none" style="width: 100%; height: 100%; overflow: visible;">
             ${gridLinesMarkup}
-            ${xGridLines}
+            ${xGridLinesMarkup}
             ${yLabelsMarkup}
+            ${xLabelsMarkup}
             ${linesMarkup}
           </svg>
-          <div style="display: flex; justify-content: space-between; padding-left: ${paddingLeft}px; padding-right: ${paddingRight}px; margin-top: 4px;">
-            ${labelsXMarkup}
-          </div>
         </div>
 
         <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
@@ -594,7 +594,7 @@ export class ComparatorView {
             <!-- 2. Tabla Comparativa -->
             ${this._renderComparisonTable(statsMap)}
 
-            <!-- 3. Evolución por Partido Dinámica (Eje Y, Cuadrícula y Selector de Métrica) -->
+            <!-- 3. Evolución por Partido (SVG Unificado con Eje X y Y) -->
             ${this._renderEvolutionChartSVG(statsMap)}
 
             <!-- 4. Fortalezas Relativas -->
