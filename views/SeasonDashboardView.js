@@ -1,7 +1,8 @@
 /**
- * @fileoverview Vista del Dashboard de Temporada de IQ Basket.
+ * @fileoverview Vista del Dashboard de Temporada de IQ Basket (SeasonDashboardView.js).
  * Sincronizado con DataStore para carga instantánea desde memoria local y control de permisos por rol.
- * Traducido dinámicamente con TranslationStore.
+ * Muestra Valoración FIBA Por Partido (VAL / PJ) y Proyección Por 40 Minutos (VAL / 40)
+ * en estricta coherencia con el Módulo de Informes. Traducido dinámicamente con TranslationStore.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -70,6 +71,7 @@ export class SeasonDashboardView {
 
   /**
    * Obtiene los líderes en Valoración FIBA relacionando 'player_game_stats' con 'players'.
+   * Calcula con precisión tanto VAL / PJ (Promedio Por Partido) como VAL / 40 min.
    */
   _getTopPlayers(playerStatsRows, playersMap) {
     const map = {};
@@ -85,43 +87,47 @@ export class SeasonDashboardView {
         const fullName = `${firstName} ${lastName}`.trim() || pInfo.name || TranslationStore.t("player", "Jugador");
         const jerseyNum = (pInfo.jersey !== undefined && pInfo.jersey !== null) ? `#${pInfo.jersey}` : "";
 
-        let val = 0;
-        if (row.evaluation !== undefined && row.evaluation !== null) {
-          val = Number(row.evaluation);
-        } else if (row.valuation !== undefined && row.valuation !== null) {
-          val = Number(row.valuation);
-        } else if (StatsEngine && typeof StatsEngine.calculatePlayerStats === "function") {
-          const processedRow = StatsEngine.calculatePlayerStats(row);
-          val = processedRow.evaluation || 0;
-        }
+        // Procesar estadística completa con StatsEngine
+        const processedRow = StatsEngine.calculatePlayerStats(row);
+        const val = processedRow.evaluation || 0;
+        const minutes = Number(row.minutes || 0);
 
         if (!map[pId]) {
           map[pId] = {
             name: fullName,
             number: jerseyNum,
-            position: pInfo.primary_position || TranslationStore.t("player", "Jugador"),
+            position: pInfo.primary_position || pInfo.position || TranslationStore.t("player", "Jugador"),
             gamesPlayed: 0,
+            totalMinutes: 0,
             totalVal: 0
           };
         }
 
         map[pId].gamesPlayed += 1;
+        map[pId].totalMinutes += minutes;
         map[pId].totalVal += val;
       });
     }
 
     const calculated = Object.values(map)
-      .map((p) => ({
-        ...p,
-        avgVal: p.gamesPlayed > 0 ? Number((p.totalVal / p.gamesPlayed).toFixed(1)) : 0
-      }))
+      .map((p) => {
+        const avgVal = p.gamesPlayed > 0 ? Number((p.totalVal / p.gamesPlayed).toFixed(1)) : 0;
+        const mult40 = p.totalMinutes > 0 ? 40 / p.totalMinutes : 0;
+        const val40 = Number((p.totalVal * mult40).toFixed(1));
+
+        return {
+          ...p,
+          avgVal,
+          val40
+        };
+      })
       .filter((p) => p.gamesPlayed > 0)
       .sort((a, b) => b.avgVal - a.avgVal)
       .slice(0, 3);
 
     if (calculated.length === 0) {
       return [
-        { name: TranslationStore.t("no_data", "Sin datos"), number: "-", position: "-", gamesPlayed: 0, avgVal: 0.0 }
+        { name: TranslationStore.t("no_data", "Sin datos"), number: "-", position: "-", gamesPlayed: 0, avgVal: 0.0, val40: 0.0 }
       ];
     }
 
@@ -664,12 +670,13 @@ export class SeasonDashboardView {
         </div>
         <div style="text-align: right;">
           <span style="font-size: 20px; font-weight: 900; color: #facc15;">${p.avgVal}</span>
+          <span style="font-size: 10px; font-weight: 700; color: #e9d5ff; display: block;">[${p.val40}/40m]</span>
           
-          <span class="has-tooltip" style="display: inline-block;">
+          <span class="has-tooltip" style="display: inline-block; margin-top: 2px;">
             <span style="font-size: 9px; color: #c084fc; font-weight: 800; border-bottom: 1px dashed #c084fc; cursor: pointer;">
               VAL / PJ <span class="info-badge" style="background: rgba(255,255,255,0.2); color: white;">?</span>
             </span>
-            <span class="tooltip-box">${TranslationStore.t("val_fiba_tooltip", "Valoración Oficial FIBA Promedio por Partido: (Pts + Reb + Ast + Rob + Tap) - (Tiros Fallados + Pérdidas + Faltas Cometidas).")}</span>
+            <span class="tooltip-box">${TranslationStore.t("val_fiba_tooltip", "Valoración Oficial FIBA Promedio por Partido (VAL/PJ) y Proyección Por 40 Minutos [VAL/40m].")}</span>
           </span>
 
         </div>

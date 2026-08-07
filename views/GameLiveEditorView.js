@@ -1,6 +1,11 @@
 /**
  * @fileoverview Vista de Partidos y Formulario de Edición (GameLiveEditorView.js).
- * Sincronizado con la tabla 'game_period_scores', función de borrado de prórrogas y traducido dinámicamente mediante TranslationStore.
+ * Sincronizado con 'game_period_scores', borrado de prórrogas y traducido con TranslationStore.
+ * Incluye validación triple de marcador:
+ *  1. Puntos de Jugadores vs Marcador Total.
+ *  2. Suma de Cuartos/Prórrogas vs Marcador Total (con indicador de diferencia).
+ *  3. Campos de Marcador Global manuales A Favor / En Contra.
+ * Mantiene la posición de scroll al teclear estadísticas o cuartos.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -16,8 +21,9 @@ export class GameLiveEditorView {
     this.players = [];
     this.currentGame = null;
     this.currentGameStats = [];
-    this.currentPeriods = []; // Array de periodos/prórrogas sincronizados con game_period_scores
+    this.currentPeriods = [];
     this.filterCondition = "Todos";
+    this.sortOrder = "desc"; // 'asc': P1 -> Pn | 'desc': Pn -> P1
     this.isEditing = false;
   }
 
@@ -41,7 +47,6 @@ export class GameLiveEditorView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // LECTURA INSTANTÁNEA DESDE DATASTORE
     this.players = DataStore.getPlayers() || [];
 
     if (gameId && gameId !== teamId) {
@@ -63,6 +68,13 @@ export class GameLiveEditorView {
     this.games = DataStore.getGames() || [];
     const canEdit = this._canEdit();
 
+    // Asignar el código P1, P2... Pn en estricto orden cronológico
+    const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    const pCodeMap = new Map();
+    chronologicalGames.forEach((g, idx) => {
+      pCodeMap.set(String(g.id), `P${idx + 1}`);
+    });
+
     const filteredGames = this.games.filter(g => {
       const v = String(g.venue || '').toLowerCase();
       if (this.filterCondition === "Local") return v === "local" || v === "home";
@@ -70,12 +82,17 @@ export class GameLiveEditorView {
       return true;
     });
 
-    const gamesCardsMarkup = filteredGames.map(g => {
+    const sortedGames = [...filteredGames].sort((a, b) => {
+      const dateA = new Date(a.date || 0);
+      const dateB = new Date(b.date || 0);
+      return this.sortOrder === "asc" ? dateA - dateB : dateB - dateA;
+    });
+
+    const gamesCardsMarkup = sortedGames.map(g => {
       const isWin = Number(g.team_score || 0) > Number(g.opponent_score || 0);
       const resultClass = isWin ? "background: #166534; color: white;" : "background: #dc2626; color: white;";
       const resultText = isWin ? TranslationStore.t("win", "VICTORIA") : TranslationStore.t("loss", "DERROTA");
 
-      // Leer periodos reales cargados desde game_period_scores
       const periods = DataStore.getGamePeriodScores(g.id);
       const quarters = periods.filter(p => !p.is_overtime);
       const overtimes = periods.filter(p => p.is_overtime);
@@ -93,6 +110,7 @@ export class GameLiveEditorView {
       const venueLower = String(g.venue || '').toLowerCase();
       const isHome = venueLower === 'home' || venueLower === 'local';
       const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
+      const pCode = pCodeMap.get(String(g.id)) || "P-";
       const opponentText = g.opponent || TranslationStore.t("opponent", "Rival");
 
       return `
@@ -106,7 +124,9 @@ export class GameLiveEditorView {
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">vs ${opponentText}</h3>
-                <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;">${venueText}</span>
+                <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">
+                  ${venueText} (${pCode})
+                </span>
               </div>
               <div style="font-size: 12px; color: #64748b; margin: 4px 0;">
                 📅 ${g.date || '-'} &nbsp;·&nbsp; 🏆 ${g.competition || 'B1'}
@@ -141,10 +161,20 @@ export class GameLiveEditorView {
           ` : `<span style="background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
-          <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${TranslationStore.t("all", "Todos")} (${this.games.length})</button>
-          <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${TranslationStore.t("local", "Local")}</button>
-          <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${TranslationStore.t("visitor", "Visitante")}</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div style="display: flex; gap: 8px;">
+            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${TranslationStore.t("all", "Todos")} (${this.games.length})</button>
+            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${TranslationStore.t("local", "Local")}</button>
+            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${TranslationStore.t("visitor", "Visitante")}</button>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 12px; font-weight: 700; color: #64748b;">ORDENAR CRONOLÓGICAMENTE:</label>
+            <select id="select-sort-games" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; cursor: pointer;">
+              <option value="desc" ${this.sortOrder === 'desc' ? 'selected' : ''}>Pn → P1 (Más recientes primero)</option>
+              <option value="asc" ${this.sortOrder === 'asc' ? 'selected' : ''}>P1 → Pn (Antiguos a recientes)</option>
+            </select>
+          </div>
         </div>
 
         <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding: 40px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">${TranslationStore.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
@@ -155,7 +185,8 @@ export class GameLiveEditorView {
       container.querySelector("#btn-create-game")?.addEventListener("click", () => {
         this.currentGame = {
           date: "2026-05-30", time: "18:00", opponent: "", competition: "B1", matchday: "Jornada 12",
-          venue: "Local", arena: "", status: "Finalizado", starter_ids: [], notes: "", video_url: ""
+          venue: "Local", arena: "", status: "Finalizado", starter_ids: [], notes: "", video_url: "",
+          team_score: 0, opponent_score: 0
         };
         this.currentPeriods = [
           { period_type: 'quarter', period_number: 1, team_score: 0, opponent_score: 0, is_overtime: false },
@@ -178,6 +209,11 @@ export class GameLiveEditorView {
         this.filterCondition = btn.getAttribute("data-cond");
         this._renderGamesList(container, teamId);
       });
+    });
+
+    container.querySelector("#select-sort-games")?.addEventListener("change", (e) => {
+      this.sortOrder = e.target.value;
+      this._renderGamesList(container, teamId);
     });
 
     container.querySelectorAll(".btn-edit-game").forEach(btn => {
@@ -207,7 +243,6 @@ export class GameLiveEditorView {
   async _openEditForm(gameId, container) {
     this.currentGame = DataStore.getGameById(gameId) || {};
     
-    // CARGAR Y NORMALIZAR PERIODOS DESDE game_period_scores
     const existingPeriods = DataStore.getGamePeriodScores(gameId);
 
     if (existingPeriods.length > 0) {
@@ -219,7 +254,6 @@ export class GameLiveEditorView {
         is_overtime: Boolean(p.is_overtime)
       }));
     } else {
-      // 4 cuartos iniciales si no existían registros previo
       this.currentPeriods = [1, 2, 3, 4].map(num => ({
         period_type: 'quarter',
         period_number: num,
@@ -243,12 +277,97 @@ export class GameLiveEditorView {
     this._renderEditForm(container);
   }
 
+  _renderEditFormPreservingScroll(container) {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    this._renderEditForm(container);
+    window.scrollTo(0, scrollTop);
+  }
+
+  /**
+   * Recalcula en tiempo real los marcadores e indicadores de descuadre.
+   * Modifica directamente el DOM sin re-renderizar la vista (sin perder foco/scroll).
+   */
+  _updateScoreBadgeAndTotals(container) {
+    // 1. Puntos Totales de Jugadores
+    let playerPointsTotal = 0;
+    this.currentGameStats.forEach(s => {
+      playerPointsTotal += (Number(s.fg2_made || 0) * 2) + (Number(s.fg3_made || 0) * 3) + Number(s.ft_made || 0);
+    });
+
+    // 2. Suma de Cuartos / Prórrogas
+    let qTeamSum = 0;
+    let qOppSum = 0;
+    this.currentPeriods.forEach(p => {
+      qTeamSum += Number(p.team_score || 0);
+      qOppSum += Number(p.opponent_score || 0);
+    });
+
+    // 3. Puntos Totales declarados manualmente en el formulario (o por defecto los de los cuartos)
+    const inpTeamScore = container.querySelector('input[name="team_score"]');
+    const inpOppScore = container.querySelector('input[name="opponent_score"]');
+
+    const totalTeamScore = inpTeamScore ? Number(inpTeamScore.value || 0) : qTeamSum;
+    const totalOppScore = inpOppScore ? Number(inpOppScore.value || 0) : qOppSum;
+
+    // Actualizar objeto en memoria
+    if (this.currentGame) {
+      this.currentGame.team_score = totalTeamScore;
+      this.currentGame.opponent_score = totalOppScore;
+    }
+
+    // 4. Indicador 1: Jugadores vs Marcador Total
+    const isPlayerPointsMatch = playerPointsTotal === totalTeamScore;
+    const playerBadgeEl = container.querySelector("#points-match-badge");
+    if (playerBadgeEl) {
+      playerBadgeEl.style.cssText = isPlayerPointsMatch 
+        ? "font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;"
+        : "font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;";
+      
+      playerBadgeEl.textContent = isPlayerPointsMatch
+        ? `✔ Puntos Plantilla Cuadrados: ${playerPointsTotal} pts = Marcador (${totalTeamScore} pts)`
+        : `⚠️ Descuadre Plantilla: Jugadores (${playerPointsTotal} pts) vs Marcador (${totalTeamScore} pts)`;
+    }
+
+    // 5. Indicador 2: Suma de Cuartos vs Marcador Total (Diferencia)
+    const diffQuartersTeam = qTeamSum - totalTeamScore;
+    const diffQuartersOpp = qOppSum - totalOppScore;
+
+    const quartersBadgeEl = container.querySelector("#quarters-diff-badge");
+    if (quartersBadgeEl) {
+      const isQuartersMatch = diffQuartersTeam === 0 && diffQuartersOpp === 0;
+      quartersBadgeEl.style.cssText = isQuartersMatch
+        ? "font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;"
+        : "font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5;";
+
+      const diffTextTeam = diffQuartersTeam > 0 ? `+${diffQuartersTeam}` : String(diffQuartersTeam);
+      const diffTextOpp = diffQuartersOpp > 0 ? `+${diffQuartersOpp}` : String(diffQuartersOpp);
+
+      quartersBadgeEl.textContent = isQuartersMatch
+        ? `✔ Cuartos Cuadrados: Suma (${qTeamSum}-${qOppSum}) = Total (${totalTeamScore}-${totalOppScore})`
+        : `⚠️ Dif. Cuartos vs Total: Nosotros (${diffTextTeam} pts) | Rival (${diffTextOpp} pts)`;
+    }
+
+    // 6. Displays del total del marcador
+    const totalScoreEl = container.querySelector("#total-score-display");
+    if (totalScoreEl) {
+      totalScoreEl.textContent = `Suma Cuartos: ${qTeamSum} - ${qOppSum} | Marcador: ${totalTeamScore} - ${totalOppScore}`;
+    }
+
+    const resultStatusEl = container.querySelector("#result-status-display");
+    if (resultStatusEl) {
+      const isWin = totalTeamScore > totalOppScore;
+      resultStatusEl.style.background = isWin ? '#dcfce7' : '#fef2f2';
+      resultStatusEl.style.color = isWin ? '#166534' : '#dc2626';
+      resultStatusEl.textContent = isWin ? TranslationStore.t("win", "Victoria") : TranslationStore.t("loss", "Derrota");
+    }
+  }
+
   _renderEditForm(container) {
     const g = this.currentGame || {};
     const starters = g.starter_ids || [];
     const canEdit = this._canEdit();
 
-    // CÁLCULOS DE MARCADOR GLOBAL
+    // Cálculos preliminares
     let playerPointsTotal = 0;
     this.currentGameStats.forEach(s => {
       playerPointsTotal += (Number(s.fg2_made || 0) * 2) + (Number(s.fg3_made || 0) * 3) + Number(s.ft_made || 0);
@@ -256,19 +375,36 @@ export class GameLiveEditorView {
 
     let qTeamSum = 0;
     let qOppSum = 0;
-
     this.currentPeriods.forEach(p => {
       qTeamSum += Number(p.team_score || 0);
       qOppSum += Number(p.opponent_score || 0);
     });
 
-    const isPointsMatch = playerPointsTotal === qTeamSum;
-    const badgeClass = isPointsMatch ? "background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;" : "background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;";
-    const badgeText = isPointsMatch 
-      ? `✔ ${TranslationStore.t("points_matched", "Puntos Cuadrados")}: ${playerPointsTotal} pts (${TranslationStore.t("players", "Jugadores")}) = ${qTeamSum} pts (${TranslationStore.t("team", "Equipo")})`
-      : `⚠️ ${TranslationStore.t("points_mismatch", "Descuadre de puntos")}: ${playerPointsTotal} pts (${TranslationStore.t("players", "Jugadores")}) vs ${qTeamSum} pts (${TranslationStore.t("team", "Equipo")})`;
+    const initTeamScore = g.team_score !== undefined && g.team_score !== null ? Number(g.team_score) : qTeamSum;
+    const initOppScore = g.opponent_score !== undefined && g.opponent_score !== null ? Number(g.opponent_score) : qOppSum;
 
-    const isWin = qTeamSum > qOppSum;
+    const isPlayerPointsMatch = playerPointsTotal === initTeamScore;
+    const badgeClass = isPlayerPointsMatch ? "background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;" : "background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;";
+    const badgeText = isPlayerPointsMatch 
+      ? `✔ Puntos Plantilla Cuadrados: ${playerPointsTotal} pts = Marcador (${initTeamScore} pts)`
+      : `⚠️ Descuadre Plantilla: Jugadores (${playerPointsTotal} pts) vs Marcador (${initTeamScore} pts)`;
+
+    const diffQuartersTeam = qTeamSum - initTeamScore;
+    const diffQuartersOpp = qOppSum - initOppScore;
+    const isQuartersMatch = diffQuartersTeam === 0 && diffQuartersOpp === 0;
+
+    const qBadgeClass = isQuartersMatch 
+      ? "background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;" 
+      : "background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5;";
+
+    const diffTextTeam = diffQuartersTeam > 0 ? `+${diffQuartersTeam}` : String(diffQuartersTeam);
+    const diffTextOpp = diffQuartersOpp > 0 ? `+${diffQuartersOpp}` : String(diffQuartersOpp);
+
+    const qBadgeText = isQuartersMatch
+      ? `✔ Cuartos Cuadrados: Suma (${qTeamSum}-${qOppSum}) = Total (${initTeamScore}-${initOppScore})`
+      : `⚠️ Dif. Cuartos vs Total: Nosotros (${diffTextTeam} pts) | Rival (${diffTextOpp} pts)`;
+
+    const isWin = initTeamScore > initOppScore;
 
     const startersMarkup = this.players.map(p => {
       const isSelected = starters.includes(p.id);
@@ -309,7 +445,6 @@ export class GameLiveEditorView {
       `;
     }).join("");
 
-    // RENDERIZADO DE CUARTOS Y PRÓRROGAS
     const quarters = this.currentPeriods.filter(p => !p.is_overtime);
     const overtimes = this.currentPeriods.filter(p => p.is_overtime);
 
@@ -367,6 +502,25 @@ export class GameLiveEditorView {
             </div>
           </div>
 
+          <!-- BLOQUE DE MARCADOR GLOBAL MANUAL -->
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block;">MARCADOR FINAL DECLARADO</span>
+              <span style="font-size: 11px; color: #64748b;">Puntos oficiales del partido (A Favor vs En Contra)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="text-align: center;">
+                <label style="font-size: 10px; font-weight: 800; color: #1e3a8a; display: block;">A FAVOR</label>
+                <input type="number" name="team_score" value="${initTeamScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; text-align: center; padding: 6px; border: 2px solid #1e3a8a; border-radius: 8px; font-size: 16px; font-weight: 900; color: #1e3a8a;" />
+              </div>
+              <span style="font-size: 20px; font-weight: 900; color: #94a3b8; margin-top: 12px;">-</span>
+              <div style="text-align: center;">
+                <label style="font-size: 10px; font-weight: 800; color: #c2410c; display: block;">EN CONTRA</label>
+                <input type="number" name="opponent_score" value="${initOppScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; text-align: center; padding: 6px; border: 2px solid #f97316; border-radius: 8px; font-size: 16px; font-weight: 900; color: #c2410c;" />
+              </div>
+            </div>
+          </div>
+
           <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 4px 0;" />
 
           <div>
@@ -381,7 +535,7 @@ export class GameLiveEditorView {
           <div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("player_stats", "Estadísticas de Jugadores")} (${this.players.length})</h3>
-              <span style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${badgeClass}">
+              <span id="points-match-badge" style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${badgeClass}">
                 ${badgeText}
               </span>
             </div>
@@ -410,15 +564,21 @@ export class GameLiveEditorView {
 
           <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 4px 0;" />
 
-          <!-- RESULTADO POR CUARTOS Y PRÓRROGAS DEDICADO A GAME_PERIOD_SCORES -->
+          <!-- RESULTADO POR CUARTOS CON INDICADOR DE DIFERENCIA VS TOTAL -->
           <div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("quarter_results", "RESULTADO POR CUARTOS")}</h3>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <span style="background: #f1f5f9; color: #0f172a; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
-                  ${TranslationStore.t("total_score", "Total Marcador")}: ${qTeamSum} - ${qOppSum}
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("quarter_results", "RESULTADO POR CUARTOS")}</h3>
+                <span id="quarters-diff-badge" style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${qBadgeClass}">
+                  ${qBadgeText}
                 </span>
-                <span style="background: ${isWin ? '#dcfce7' : '#fef2f2'}; color: ${isWin ? '#166534' : '#dc2626'}; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
+              </div>
+              
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <span id="total-score-display" style="background: #f1f5f9; color: #0f172a; font-size: 11px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
+                  Suma Cuartos: ${qTeamSum} - ${qOppSum} | Marcador: ${initTeamScore} - ${initOppScore}
+                </span>
+                <span id="result-status-display" style="background: ${isWin ? '#dcfce7' : '#fef2f2'}; color: ${isWin ? '#166534' : '#dc2626'}; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
                   ${isWin ? TranslationStore.t("win", "Victoria") : TranslationStore.t("loss", "Derrota")}
                 </span>
               </div>
@@ -468,6 +628,15 @@ export class GameLiveEditorView {
     });
 
     if (canEdit) {
+      // Listeners para campos de marcador total manual
+      container.querySelector('input[name="team_score"]')?.addEventListener("input", () => {
+        this._updateScoreBadgeAndTotals(container);
+      });
+
+      container.querySelector('input[name="opponent_score"]')?.addEventListener("input", () => {
+        this._updateScoreBadgeAndTotals(container);
+      });
+
       container.querySelectorAll(".btn-starter").forEach(btn => {
         btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-id");
@@ -482,7 +651,7 @@ export class GameLiveEditorView {
             currentStarters.push(id);
           }
           this.currentGame.starter_ids = currentStarters;
-          this._renderEditForm(container);
+          this._renderEditFormPreservingScroll(container);
         });
       });
 
@@ -498,7 +667,7 @@ export class GameLiveEditorView {
             if (side === "team") quartersList[idx].team_score = val;
             else quartersList[idx].opponent_score = val;
           }
-          this._renderEditForm(container);
+          this._updateScoreBadgeAndTotals(container);
         });
       });
 
@@ -513,10 +682,10 @@ export class GameLiveEditorView {
           opponent_score: 0,
           is_overtime: true
         });
-        this._renderEditForm(container);
+        this._renderEditFormPreservingScroll(container);
       });
 
-      // MODIFICAR VALORES DE PRÓRROGA
+      // MODIFICAR PRÓRROGAS
       container.querySelectorAll(".ot-input").forEach(inp => {
         inp.addEventListener("input", (e) => {
           const otIdx = Number(e.target.getAttribute("data-otindex"));
@@ -528,11 +697,11 @@ export class GameLiveEditorView {
             if (side === "team") overtimesList[otIdx].team_score = val;
             else overtimesList[otIdx].opponent_score = val;
           }
-          this._renderEditForm(container);
+          this._updateScoreBadgeAndTotals(container);
         });
       });
 
-      // 🗑️ ELIMINAR PRÓRROGA ESPECÍFICA (SIN CEROS RESIDUALES)
+      // ELIMINAR PRÓRROGA
       container.querySelectorAll(".btn-delete-ot").forEach(btn => {
         btn.addEventListener("click", () => {
           const otIdx = Number(btn.getAttribute("data-otindex"));
@@ -540,10 +709,8 @@ export class GameLiveEditorView {
           
           if (overtimesList[otIdx]) {
             const targetOt = overtimesList[otIdx];
-            // Eliminar del array principal
             this.currentPeriods = this.currentPeriods.filter(p => p !== targetOt);
             
-            // Reordenar number de prórrogas restantes
             let otCount = 1;
             this.currentPeriods.forEach(p => {
               if (p.is_overtime) {
@@ -551,11 +718,12 @@ export class GameLiveEditorView {
               }
             });
 
-            this._renderEditForm(container);
+            this._renderEditFormPreservingScroll(container);
           }
         });
       });
 
+      // MODIFICAR ESTADÍSTICAS INDIVIDUALES
       container.querySelectorAll(".st-input").forEach(inp => {
         inp.addEventListener("input", (e) => {
           const tr = e.target.closest("tr");
@@ -567,7 +735,7 @@ export class GameLiveEditorView {
           if (st) {
             st[field] = val;
           }
-          this._renderEditForm(container);
+          this._updateScoreBadgeAndTotals(container);
         });
       });
 
@@ -577,13 +745,8 @@ export class GameLiveEditorView {
           e.preventDefault();
           const formData = new FormData(form);
 
-          let qTeamSum = 0;
-          let qOppSum = 0;
-          this.currentPeriods.forEach(p => {
-            qTeamSum += Number(p.team_score || 0);
-            qOppSum += Number(p.opponent_score || 0);
-          });
-
+          const teamScore = Number(formData.get("team_score") || 0);
+          const oppScore = Number(formData.get("opponent_score") || 0);
           const overtimesCount = this.currentPeriods.filter(p => p.is_overtime).length;
 
           const gameData = {
@@ -598,15 +761,14 @@ export class GameLiveEditorView {
             arena: formData.get("arena"),
             status: formData.get("status"),
             starter_ids: this.currentGame.starter_ids || [],
-            team_score: qTeamSum,
-            opponent_score: qOppSum,
+            team_score: teamScore,
+            opponent_score: oppScore,
             has_overtime: overtimesCount > 0,
             overtime_count: overtimesCount,
             notes: formData.get("notes"),
             video_url: formData.get("video_url")
           };
 
-          // GUARDADO EN DATASTORE Y SUPABASE DE PARTIDO, JUGADORES Y GAME_PERIOD_SCORES
           await DataStore.saveGameAndStats(gameData, this.currentGameStats, this.currentPeriods);
 
           this.isEditing = false;

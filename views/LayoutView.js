@@ -21,6 +21,9 @@ export class LayoutView {
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
+    if (['reports', 'informes', 'informe'].includes(r)) return 'reports';
+    if (['ask', 'pregunta', 'preguntale', 'ai', 'ia', 'ask-ai'].includes(r)) return 'ask';
+    if (['profile', 'perfil'].includes(r)) return 'profile';
     return r || 'dashboard';
   }
 
@@ -110,7 +113,7 @@ export class LayoutView {
               ${navLinksMarkup}
             </nav>
 
-            <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN (A continuación de Configuración) -->
+            <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN -->
             <div style="border-top: 1px solid #1e3a8a; padding-top: 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px;">
               
               <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px;">

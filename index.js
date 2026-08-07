@@ -2,12 +2,12 @@
  * @fileoverview Orquestador Principal de IQ Basket.
  * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView,
  * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
- * TranslationsView y DataStore.
+ * ReportsView, TranslationsView, AskAIView y DataStore.
  * 
  * Corrección de arquitectura:
- * - Invocación dinámica de bindLayoutEvents() en cada renderizado para garantizar
- *   que el selector de idioma (#select-lang-toggle) funcione en TODAS las vistas.
- * - Registro de los módulos Quintetos (#/lineups) y Comparador (#/comparator).
+ * - Registro completo de AskAIView (#/ask) para la vista "Pregúntale a tus datos".
+ * - Invocación dinámica de bindLayoutEvents() en cada renderizado.
+ * - Registro de los módulos Quintetos (#/lineups), Comparador (#/comparator), Informes (#/reports) e IA (#/ask).
  * - Sincronización con TranslationStore y el motor i18n.
  */
 
@@ -28,7 +28,9 @@ import { AdvancedStatsView } from "./views/AdvancedStatsView.js";
 import { PlayerStatsView } from "./views/PlayerStatsView.js";
 import { LineupsView } from "./views/LineupsView.js";
 import { ComparatorView } from "./views/ComparatorView.js";
+import { ReportsView } from "./views/ReportsView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
+import { AskAIView } from "./views/AskAIView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -60,15 +62,17 @@ export class IQBasketApp {
       team: new TeamStatsView(supabase, authController),
       equipo: new TeamStatsView(supabase, authController),
       
-      liveeditor: new GameLiveEditorView(this.gameController),
-      partidos: new GameLiveEditorView(this.gameController),
+      liveeditor: new GameLiveEditorView(this.gameController, authController),
+      partidos: new GameLiveEditorView(this.gameController, authController),
       advanced: new AdvancedStatsView(this.gameController),
       boxscore: new GameBoxScoreView(supabase, authController),
 
       player: new PlayerStatsView(supabase, authController),
       lineups: new LineupsView(authController),
       comparator: new ComparatorView(authController),
-      settings: new TranslationsView(authController)
+      reports: new ReportsView(authController),
+      settings: new TranslationsView(authController),
+      ask: new AskAIView(authController) // 👈 REGISTRADO: Asistente IA
     };
   }
 
@@ -277,6 +281,21 @@ export class IQBasketApp {
       case "comparator":
       case "comparador":
         if (this.views.comparator) await this.views.comparator.render(contentArea);
+        break;
+
+      case "reports":
+      case "informes":
+      case "informe":
+        if (this.views.reports) await this.views.reports.render(contentArea);
+        break;
+
+      case "ask":
+      case "ask-ai":
+      case "pregunta":
+      case "preguntale":
+      case "ai":
+      case "ia":
+        if (this.views.ask) await this.views.ask.render(contentArea);
         break;
 
       case "settings":

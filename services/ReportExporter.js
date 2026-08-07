@@ -14,7 +14,10 @@ export class ReportExporter {
    */
   static printReport(title, htmlContent) {
     const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    if (!printWindow) {
+      alert(TranslationStore.t("allow_popups", "Por favor, permite las ventanas emergentes para generar el informe en PDF."));
+      return;
+    }
 
     const currentLang = TranslationStore.currentLang || "es";
     const documentTitle = title || TranslationStore.t("report", "Informe Estadístico");
@@ -68,7 +71,6 @@ export class ReportExporter {
 
     setTimeout(() => {
       printWindow.print();
-      printWindow.close();
-    }, 250);
+    }, 300);
   }
 }
