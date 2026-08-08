@@ -4,10 +4,10 @@
  * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
  * ReportsView, TranslationsView, AskAIView y DataStore.
  * 
- * Corrección de arquitectura:
+ * Correcciones & Seguridad:
+ * - Control global de cambios no guardados (window.hasUnsavedChanges) al navegar entre vistas.
  * - Registro completo de AskAIView (#/ask) para la vista "Pregúntale a tus datos".
  * - Invocación dinámica de bindLayoutEvents() en cada renderizado.
- * - Registro de los módulos Quintetos (#/lineups), Comparador (#/comparator), Informes (#/reports) e IA (#/ask).
  * - Sincronización con TranslationStore y el motor i18n.
  */
 
@@ -72,7 +72,7 @@ export class IQBasketApp {
       comparator: new ComparatorView(authController),
       reports: new ReportsView(authController),
       settings: new TranslationsView(authController),
-      ask: new AskAIView(authController) // 👈 REGISTRADO: Asistente IA
+      ask: new AskAIView(authController) // 👈 Asistente IA
     };
   }
 
@@ -143,10 +143,22 @@ export class IQBasketApp {
       });
     }
 
-    // 3. Navegación Hash (Solo se vincula una vez al window)
+    // 3. Navegación Hash (Solo se vincula una vez al window) con prevención de pérdidas de datos
     if (!window.isHashBound) {
       window.isHashBound = true;
       window.onhashchange = () => {
+        // Control de seguridad: Si hay cambios de edición pendientes sin guardar
+        if (window.hasUnsavedChanges) {
+          const confirmLeave = confirm("⚠️ Tienes cambios sin guardar. Si cambias de pantalla se perderán las modificaciones. ¿Deseas salir sin guardar?");
+          if (!confirmLeave) {
+            // Revertir la URL a la ruta donde estaba editando
+            window.location.hash = `#/${this.currentRoute}`;
+            return;
+          }
+          // Limpiar el estado de advertencia si el usuario decide descartar los cambios
+          window.hasUnsavedChanges = false;
+        }
+
         this.parseHashRoute();
         this.render();
       };

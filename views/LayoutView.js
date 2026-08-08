@@ -1,7 +1,7 @@
 /**
- * @fileoverview Layout contenedor principal con Sidebar fija en pantalla.
- * El selector de Idioma y el botón de Cerrar Sesión permanecen siempre visibles
- * a continuación del menú principal, sin desplazarse con el scroll del contenido.
+ * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop.
+ * El selector de Idioma y el botón de Cerrar Sesión permanecen siempre visibles.
+ * En móviles los elementos se apilan a 1 sola columna con scroll vertical cómodo.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
@@ -66,8 +66,8 @@ export class LayoutView {
         <a href="#/${item.route}" 
            class="nav-link ${isActive ? 'active' : ''}" 
            data-route-key="${item.key}">
-          <span style="font-size: 14px;">${item.icon}</span>
-          <span>${item.label}</span>
+          <span class="nav-icon">${item.icon}</span>
+          <span class="nav-label">${item.label}</span>
         </a>
       `;
     }).join("");
@@ -75,34 +75,28 @@ export class LayoutView {
     return `
       <div class="app-layout">
         
-        <!-- BARRA LATERAL AZUL FIJA -->
+        <!-- BARRA LATERAL AZUL -->
         <aside class="app-sidebar">
           
-          <div style="display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 4px;">
+          <div class="sidebar-inner">
             
             <!-- Logo Header -->
-            <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px;">
-              <div style="width: 32px; height: 32px; background-color: #f59e0b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #172554; font-weight: 900; font-size: 14px; flex-shrink: 0;">
-                IQ
-              </div>
-              <span style="font-weight: 900; font-size: 20px; letter-spacing: -0.02em;">BasketIQ</span>
+            <div class="sidebar-header">
+              <div class="logo-box">IQ</div>
+              <span class="logo-title">BasketIQ</span>
             </div>
 
             <!-- Selectores de Equipo y Temporada -->
-            <div class="sidebar-selectors" style="display: flex; flex-direction: column; gap: 10px; padding: 0 8px;">
-              <div>
-                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">
-                  ${LayoutView.t("team", "EQUIPO").toUpperCase()}
-                </label>
-                <select style="width: 100%; background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; outline: none; box-sizing: border-box;">
+            <div class="sidebar-selectors">
+              <div class="selector-group">
+                <label>${LayoutView.t("team", "EQUIPO").toUpperCase()}</label>
+                <select class="sidebar-select">
                   <option>JMJ Manyanet Sant Andreu</option>
                 </select>
               </div>
-              <div>
-                <label style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #93c5fd; display: block; margin-bottom: 4px;">
-                  ${LayoutView.t("season", "TEMPORADA").toUpperCase()}
-                </label>
-                <select style="width: 100%; background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; outline: none; box-sizing: border-box;">
+              <div class="selector-group">
+                <label>${LayoutView.t("season", "TEMPORADA").toUpperCase()}</label>
+                <select class="sidebar-select">
                   <option>2026</option>
                 </select>
               </div>
@@ -114,18 +108,17 @@ export class LayoutView {
             </nav>
 
             <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN -->
-            <div style="border-top: 1px solid #1e3a8a; padding-top: 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px;">
-              
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px;">
-                <span style="font-size: 11px; font-weight: 800; color: #93c5fd; letter-spacing: 0.05em;">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
-                <select id="select-lang-toggle" style="background-color: #1e3a8a; border: 1px solid #1d4ed8; color: #ffffff; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; outline: none; cursor: pointer;">
+            <div class="sidebar-footer">
+              <div class="lang-row">
+                <span class="lang-label">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
+                <select id="select-lang-toggle" class="lang-select">
                   <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
                   <option value="cat" ${currentLang === 'cat' ? 'selected' : ''}>CAT</option>
                   <option value="en" ${currentLang === 'en' ? 'selected' : ''}>EN</option>
                 </select>
               </div>
 
-              <button id="btn-logout" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; font-weight: 600; color: #93c5fd; background: none; border: none; cursor: pointer; border-radius: 8px; text-align: left;">
+              <button id="btn-logout" class="btn-logout">
                 🚪 ${LayoutView.t("logout", "Cerrar sesión")}
               </button>
             </div>
@@ -133,21 +126,28 @@ export class LayoutView {
           </div>
         </aside>
 
-        <!-- ÁREA PRINCIPAL CON MARGEN IZQUIERDO CORRESPONDIENTE AL SIDEBAR FIJO -->
+        <!-- ÁREA PRINCIPAL -->
         <main class="app-main">
-          ${contentHtml}
+          <div id="dashboard-content-area">
+            ${contentHtml}
+          </div>
         </main>
 
       </div>
 
-      <!-- ESTILOS Y POSICIONAMIENTO FIJO -->
+      <!-- ESTILOS Y RESPONSIVE MOBILE FIRST -->
       <style>
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+
         html, body {
           margin: 0;
           padding: 0;
           width: 100%;
           background-color: #f8fafc;
-          font-family: system-ui, -apple-system, sans-serif;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          overflow-x: hidden;
         }
 
         .app-layout {
@@ -155,10 +155,9 @@ export class LayoutView {
           width: 100%;
           display: flex;
           background-color: #f8fafc;
-          box-sizing: border-box;
         }
 
-        /* Sidebar con posicionamiento fijo para no desplazarse en scrolls largos */
+        /* Sidebar Escritorio */
         .app-sidebar {
           width: 260px;
           height: 100vh;
@@ -170,6 +169,71 @@ export class LayoutView {
           padding: 16px;
           box-sizing: border-box;
           z-index: 50;
+        }
+
+        .sidebar-inner {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          height: 100%;
+          overflow-y: auto;
+          padding-right: 4px;
+        }
+
+        .sidebar-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 8px;
+        }
+
+        .logo-box {
+          width: 32px;
+          height: 32px;
+          background-color: #f59e0b;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #172554;
+          font-weight: 900;
+          font-size: 14px;
+          flex-shrink: 0;
+        }
+
+        .logo-title {
+          font-weight: 900;
+          font-size: 20px;
+          letter-spacing: -0.02em;
+        }
+
+        .sidebar-selectors {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 0 8px;
+        }
+
+        .selector-group label {
+          font-size: 10px;
+          font-weight: 800;
+          text-transform: uppercase;
+          color: #93c5fd;
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .sidebar-select {
+          width: 100%;
+          background-color: #1e3a8a;
+          border: 1px solid #1d4ed8;
+          color: #ffffff;
+          border-radius: 8px;
+          padding: 8px 10px;
+          font-size: 12px;
+          font-weight: 500;
+          outline: none;
+          box-sizing: border-box;
         }
 
         .sidebar-nav {
@@ -202,7 +266,58 @@ export class LayoutView {
           box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
         }
 
-        /* Desplazamiento del contenido principal a la derecha de la sidebar fija */
+        .sidebar-footer {
+          border-top: 1px solid #1e3a8a;
+          padding-top: 12px;
+          margin-top: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .lang-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 8px;
+        }
+
+        .lang-label {
+          font-size: 11px;
+          font-weight: 800;
+          color: #93c5fd;
+          letter-spacing: 0.05em;
+        }
+
+        .lang-select {
+          background-color: #1e3a8a;
+          border: 1px solid #1d4ed8;
+          color: #ffffff;
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 11px;
+          font-weight: 700;
+          outline: none;
+          cursor: pointer;
+        }
+
+        .btn-logout {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 10px;
+          font-size: 13px;
+          font-weight: 600;
+          color: #93c5fd;
+          background: none;
+          border: none;
+          cursor: pointer;
+          border-radius: 8px;
+          text-align: left;
+        }
+
+        /* Área Principal Escritorio */
         .app-main {
           flex: 1;
           margin-left: 260px;
@@ -211,6 +326,7 @@ export class LayoutView {
           display: flex;
           justify-content: center;
           min-width: 0;
+          width: calc(100% - 260px);
         }
 
         #dashboard-content-area {
@@ -220,13 +336,86 @@ export class LayoutView {
           box-sizing: border-box;
         }
 
+        /* ========================================================
+           RESPONSIVE MÓVIL (PANTALLAS PEQUEÑAS)
+           ======================================================== */
         @media (max-width: 868px) {
-          .app-layout { flex-direction: column; }
-          .app-sidebar { position: relative; width: 100%; height: auto; border-bottom: 2px solid #1e3a8a; }
-          .app-main { margin-left: 0; padding: 16px; }
-          .sidebar-selectors { display: grid !important; grid-template-columns: 1fr 1fr; }
-          .sidebar-nav { flex-direction: row; overflow-x: auto; white-space: nowrap; padding-bottom: 8px; }
-          .nav-link { padding: 8px 12px; font-size: 12px; }
+          .app-layout {
+            flex-direction: column;
+          }
+
+          .app-sidebar {
+            position: relative;
+            width: 100%;
+            height: auto;
+            border-bottom: 2px solid #1e3a8a;
+            padding: 12px 12px 8px 12px;
+          }
+
+          .sidebar-inner {
+            overflow-y: visible;
+            gap: 12px;
+          }
+
+          .sidebar-selectors {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 0;
+          }
+
+          /* Cinta de navegación deslizante en móviles */
+          .sidebar-nav {
+            flex-direction: row;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 4px 0 8px 0;
+            gap: 6px;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .nav-link {
+            padding: 8px 14px;
+            font-size: 13px;
+            flex-shrink: 0;
+            background-color: #1e3a8a;
+            border-radius: 20px;
+          }
+
+          .sidebar-footer {
+            margin-top: 4px;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 8px;
+          }
+
+          .btn-logout {
+            width: auto;
+            padding: 4px 8px;
+          }
+
+          /* Ajuste del contenido para Móviles */
+          .app-main {
+            margin-left: 0;
+            width: 100%;
+            padding: 16px 12px;
+          }
+
+          /* Forzar 1 sola columna vertical para tarjetas */
+          #dashboard-content-area .grid,
+          #dashboard-content-area [class*="grid-cols-"],
+          #dashboard-content-area [style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+            width: 100% !important;
+          }
+
+          /* Asegurar que las tarjetas e imágenes no se corten */
+          #dashboard-content-area .card,
+          #dashboard-content-area [class*="card"] {
+            width: 100% !important;
+            box-sizing: border-box;
+          }
         }
       </style>
     `;
