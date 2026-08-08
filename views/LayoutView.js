@@ -1,9 +1,10 @@
 /**
  * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop.
- * El selector de Idioma y el botón de Cerrar Sesión permanecen siempre visibles.
- * En móviles los elementos se apilan a 1 sola columna con scroll vertical cómodo.
+ * El selector de Idioma, los selectores dinámicos de Equipo y Temporada,
+ * y el botón de Cerrar Sesión permanecen siempre visibles.
  */
 
+import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 
 export class LayoutView {
@@ -44,6 +45,14 @@ export class LayoutView {
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
     const currentLang = TranslationStore.currentLang;
+
+    // Cargar datos dinámicos de equipos y temporadas activas
+    const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2026";
+
+    const teams = DataStore.getTeams() || [];
+    const storedSeasons = localStorage.getItem("iq_seasons");
+    const seasons = storedSeasons ? JSON.parse(storedSeasons) : [{ id: "s-1", name: "2026", isActive: true }];
 
     const navItems = [
       { key: "dashboard", label: LayoutView.t("dashboard", "Dashboard"), icon: "📊", route: "dashboard" },
@@ -86,18 +95,26 @@ export class LayoutView {
               <span class="logo-title">BasketIQ</span>
             </div>
 
-            <!-- Selectores de Equipo y Temporada -->
+            <!-- Selectores Dinámicos de Equipo y Temporada -->
             <div class="sidebar-selectors">
               <div class="selector-group">
                 <label>${LayoutView.t("team", "EQUIPO").toUpperCase()}</label>
-                <select class="sidebar-select">
-                  <option>JMJ Manyanet Sant Andreu</option>
+                <select id="sidebar-select-team" class="sidebar-select">
+                  ${teams.length > 0 ? teams.map(t => `
+                    <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
+                      ${t.name} (${t.category || 'Senior'})
+                    </option>
+                  `).join("") : `<option value="${currentActiveTeamId}">JMJ Manyanet Sant Andreu</option>`}
                 </select>
               </div>
               <div class="selector-group">
                 <label>${LayoutView.t("season", "TEMPORADA").toUpperCase()}</label>
-                <select class="sidebar-select">
-                  <option>2026</option>
+                <select id="sidebar-select-season" class="sidebar-select">
+                  ${seasons.map(s => `
+                    <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
+                      ${s.name}
+                    </option>
+                  `).join("")}
                 </select>
               </div>
             </div>
@@ -234,6 +251,7 @@ export class LayoutView {
           font-weight: 500;
           outline: none;
           box-sizing: border-box;
+          cursor: pointer;
         }
 
         .sidebar-nav {

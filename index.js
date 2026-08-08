@@ -2,10 +2,12 @@
  * @fileoverview Orquestador Principal de IQ Basket.
  * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView,
  * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
- * ReportsView, TranslationsView, AskAIView y DataStore.
+ * ReportsView, TranslationsView, AskAIView, ProfileView y DataStore.
  * 
  * Correcciones & Seguridad:
  * - Control global de cambios no guardados (window.hasUnsavedChanges) al navegar entre vistas.
+ * - Sincronización instantánea de selectores de Equipo y Temporada del Sidebar.
+ * - Registro completo de ProfileView (#/profile) para la vista "Mi Perfil".
  * - Registro completo de AskAIView (#/ask) para la vista "Pregúntale a tus datos".
  * - Invocación dinámica de bindLayoutEvents() en cada renderizado.
  * - Sincronización con TranslationStore y el motor i18n.
@@ -31,6 +33,7 @@ import { ComparatorView } from "./views/ComparatorView.js";
 import { ReportsView } from "./views/ReportsView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
 import { AskAIView } from "./views/AskAIView.js";
+import { ProfileView } from "./views/ProfileView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -38,7 +41,7 @@ export class IQBasketApp {
     this.userRole = "SUPERADMIN"; // Rol asignado
     this.currentRoute = "dashboard";
     this.routeParams = {};
-    this.teamId = "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22"; // JMJ Manyanet Sant Andreu
+    this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22"; // JMJ Manyanet Sant Andreu por defecto
 
     // Controller para partidos
     this.gameController = new GameController(
@@ -72,7 +75,9 @@ export class IQBasketApp {
       comparator: new ComparatorView(authController),
       reports: new ReportsView(authController),
       settings: new TranslationsView(authController),
-      ask: new AskAIView(authController) // 👈 Asistente IA
+      ask: new AskAIView(authController), // 👈 Asistente IA
+      profile: new ProfileView(authController), // 👈 Mi Perfil
+      perfil: new ProfileView(authController)
     };
   }
 
@@ -103,8 +108,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Vincula los eventos del Layout (Cerrar Sesión, Selector de Idioma Global y Navegación Hash).
-   * Se ejecuta dinámicamente para asegurar que los elementos del DOM siempre tengan listeners activos.
+   * Vincula los eventos del Layout (Cerrar Sesión, Selector de Idioma Global, Selectores de Equipo/Temporada y Navegación Hash).
    */
   bindLayoutEvents() {
     // 1. Logout
@@ -143,7 +147,50 @@ export class IQBasketApp {
       });
     }
 
-    // 3. Navegación Hash (Solo se vincula una vez al window) con prevención de pérdidas de datos
+    // 3. Selector Dinámico de Equipo Activo en la Sidebar
+    const teamSelect = document.getElementById("sidebar-select-team");
+    if (teamSelect && !teamSelect.dataset.bound) {
+      teamSelect.dataset.bound = "true";
+      teamSelect.addEventListener("change", async (e) => {
+        const newTeamId = e.target.value;
+        this.teamId = newTeamId;
+        
+        if (typeof DataStore.setActiveTeamAndSeason === "function") {
+          DataStore.setActiveTeamAndSeason(newTeamId, null);
+        } else {
+          localStorage.setItem("iq_active_team_id", newTeamId);
+          DataStore.isLoaded = false;
+        }
+
+        await DataStore.init(newTeamId, true);
+        const appContainer = document.getElementById("app");
+        if (appContainer) appContainer.innerHTML = "";
+        this.render();
+      });
+    }
+
+    // 4. Selector Dinámico de Temporada Activa en la Sidebar
+    const seasonSelect = document.getElementById("sidebar-select-season");
+    if (seasonSelect && !seasonSelect.dataset.bound) {
+      seasonSelect.dataset.bound = "true";
+      seasonSelect.addEventListener("change", async (e) => {
+        const newSeason = e.target.value;
+
+        if (typeof DataStore.setActiveTeamAndSeason === "function") {
+          DataStore.setActiveTeamAndSeason(null, newSeason);
+        } else {
+          localStorage.setItem("iq_active_season", newSeason);
+          DataStore.isLoaded = false;
+        }
+
+        await DataStore.init(this.teamId, true);
+        const appContainer = document.getElementById("app");
+        if (appContainer) appContainer.innerHTML = "";
+        this.render();
+      });
+    }
+
+    // 5. Navegación Hash con prevención de pérdidas de datos
     if (!window.isHashBound) {
       window.isHashBound = true;
       window.onhashchange = () => {
@@ -308,6 +355,11 @@ export class IQBasketApp {
       case "ai":
       case "ia":
         if (this.views.ask) await this.views.ask.render(contentArea);
+        break;
+
+      case "profile":
+      case "perfil":
+        if (this.views.profile) await this.views.profile.render(contentArea);
         break;
 
       case "settings":
