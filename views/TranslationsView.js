@@ -1,14 +1,18 @@
 /**
- * @fileoverview Vista de Configuración de IQ Basket.
- * Solución integral y probada:
- * 1. Todos los listeners (Editar Club, Configurar Equipo, Abrir Mercado, etc.) dentro de render().
- * 2. Simulación de roles segura: preserva el rol real SUPERADMIN y permite salir en todo momento.
- * 3. Idiomas con plantilla base para Francés (FR) y guardado en Supabase sin cierres de pestaña.
+ * @fileoverview Vista de Configuración de IQ Basket (TranslationsView.js).
+ * Sincronización Real con Supabase:
+ * 1. Carga real de temporadas desde la tabla 'seasons' de Supabase (Sincronizado con UUID).
+ * 2. Marcado dinámico de Temporada Activa inteligente.
+ * 3. Integración con LanguageSettingsView para gestión Zero Hardcode de Idiomas.
+ * 4. Preservación del rol real SUPERADMIN y Simulación.
+ * 5. Guardado directo y verificado de Traducciones e Idiomas en Supabase.
  */
 
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { supabase } from "../config/database.config.js";
+import { LanguageSettingsView } from "./LanguageSettingsView.js";
+import { I18n } from "../services/I18nService.js";
 
 export class TranslationsView {
   constructor(authController) {
@@ -17,9 +21,12 @@ export class TranslationsView {
     this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
 
     this.activeTab = "club";
-    this.clubSubView = "list";
+    this.clubSubView = "list"; // 'list' | 'edit-club' | 'edit-team'
     this.selectedTeamForEdit = null;
     this.selectedClubForEdit = null;
+
+    // Sub-vista de administración de idiomas
+    this.languageSettingsView = new LanguageSettingsView();
 
     // Mercado Global
     this.marketSearchQuery = "";
@@ -41,7 +48,7 @@ export class TranslationsView {
     // Temporadas
     this.seasonsList = [];
 
-    // Traspasos locales
+    // Traspasos
     const storedTransfers = localStorage.getItem("iq_transfers");
     this.transfers = storedTransfers ? JSON.parse(storedTransfers) : [];
 
@@ -53,25 +60,23 @@ export class TranslationsView {
     return this.simulatedRole || this.currentUserRole;
   }
 
-  showSyncOverlay(message = "⚡ Sincronizando datos...") {
+  showSyncOverlay(message = "⚡ Sincronizando con Supabase...") {
     let overlay = document.getElementById("sync-loading-overlay");
     if (!overlay) {
       overlay = document.createElement("div");
       overlay.id = "sync-loading-overlay";
       overlay.style.cssText = `
-        position: fixed;
-        top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(15, 23, 42, 0.75);
-        backdrop-filter: blur(4px);
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         z-index: 9999; color: white; font-family: system-ui, sans-serif;
       `;
       document.body.appendChild(overlay);
     }
     overlay.innerHTML = `
-      <div style="width: 48px; height: 48px; border: 4px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
-      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Actualizando información...</p>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la nube...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
     overlay.style.display = "flex";
@@ -135,21 +140,42 @@ export class TranslationsView {
   async _fetchSeasons() {
     try {
       const activeTeamId = DataStore.getActiveTeamId();
-      const { data, error } = await supabase.from("seasons").select("*").order("name", { ascending: false });
-      if (!error && data) {
+      const { data, error } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
+      
+      if (!error && data && data.length > 0) {
         this.seasonsList = data;
       } else {
-        this.seasonsList = [
-          { id: "s-1", name: "2026", team_id: activeTeamId, coach_name: "Teo Raichman" }
+        const storedSeasons = localStorage.getItem("iq_seasons");
+        this.seasonsList = storedSeasons ? JSON.parse(storedSeasons) : [
+          { id: "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d", name: "2026", team_id: activeTeamId }
         ];
       }
+      this._saveSeasonsLocal();
     } catch (e) {
-      console.warn("Error leyendo temporadas:", e);
+      console.warn("Error leyendo temporadas de Supabase:", e);
     }
+  }
+
+  _saveSeasonsLocal() {
+    localStorage.setItem("iq_seasons", JSON.stringify(this.seasonsList));
+    const sidebarSeasonSelect = document.getElementById("sidebar-select-season");
+    if (sidebarSeasonSelect) {
+      const activeSeason = localStorage.getItem("iq_active_season") || "2026";
+      sidebarSeasonSelect.innerHTML = this.seasonsList.map(s => `
+        <option value="${s.name}" ${String(s.name) === String(activeSeason) ? 'selected' : ''}>
+          ${s.name}
+        </option>
+      `).join("");
+    }
+  }
+
+  _saveTransfersLocal() {
+    localStorage.setItem("iq_transfers", JSON.stringify(this.transfers));
   }
 
   async _fetchTranslationsForLang(langCode) {
     try {
+      const normLang = langCode === "cat" ? "ca" : langCode;
       const { data, error } = await supabase.from("translations").select("*");
       if (!error && data) {
         const uniqueCodes = [...new Set(data.map(d => d.language_code))];
@@ -159,23 +185,22 @@ export class TranslationsView {
           }
         });
 
-        let filtered = data.filter(d => d.language_code === langCode);
+        let filtered = data.filter(d => d.language_code === normLang || d.language_code === langCode);
 
-        // Si no existen filas para el idioma (por ejemplo FR), creamos la plantilla inicial
         if (filtered.length === 0) {
           const defaultKeys = [
-            { key: "dashboard", translation: langCode === 'fr' ? 'Tableau de bord' : 'Dashboard' },
-            { key: "team", translation: langCode === 'fr' ? 'Équipe' : 'Team' },
-            { key: "ask_ai", translation: langCode === 'fr' ? 'Demandez à vos données' : 'Ask your data' },
-            { key: "games", translation: langCode === 'fr' ? 'Matchs' : 'Games' },
-            { key: "players", translation: langCode === 'fr' ? 'Joueurs' : 'Players' },
-            { key: "stats", translation: langCode === 'fr' ? 'Statistiques' : 'Stats' },
-            { key: "settings", translation: langCode === 'fr' ? 'Paramètres' : 'Settings' }
+            { key: "dashboard", translation: normLang === 'fr' ? 'Tableau de bord' : 'Dashboard' },
+            { key: "team", translation: normLang === 'fr' ? 'Équipe' : 'Team' },
+            { key: "ask_ai", translation: normLang === 'fr' ? 'Demandez à vos données' : 'Ask your data' },
+            { key: "games", translation: normLang === 'fr' ? 'Matchs' : 'Games' },
+            { key: "players", translation: normLang === 'fr' ? 'Joueurs' : 'Players' },
+            { key: "stats", translation: normLang === 'fr' ? 'Statistiques' : 'Stats' },
+            { key: "settings", translation: normLang === 'fr' ? 'Paramètres' : 'Settings' }
           ];
 
           filtered = defaultKeys.map(item => ({
             key: item.key,
-            language_code: langCode,
+            language_code: normLang,
             translation: item.translation
           }));
         }
@@ -183,7 +208,7 @@ export class TranslationsView {
         this.dbTranslations = filtered;
       }
     } catch (e) {
-      console.warn("Error cargando traducciones:", e);
+      console.warn("Error cargando traducciones de Supabase:", e);
     }
   }
 
@@ -208,7 +233,7 @@ export class TranslationsView {
         this.isMarketLoaded = true;
       }
     } catch (e) {
-      console.warn("Error cargando mercado global de jugadores:", e);
+      console.warn("Error cargando mercado global:", e);
     }
   }
 
@@ -216,8 +241,8 @@ export class TranslationsView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    if (this.seasonsList.length === 0) await this._fetchSeasons();
     if (this.activeTab === "users") await this._fetchProfiles();
-    if (this.activeTab === "seasons") await this._fetchSeasons();
     if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
 
     const effectiveRole = this.getEffectiveRole();
@@ -228,6 +253,22 @@ export class TranslationsView {
     const realTeams = DataStore.getTeams() || [];
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
+    const currentActiveSeasonName = localStorage.getItem("iq_active_season") || "2026";
+
+    // Filtrado y paginación del Mercado
+    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.players || []);
+    const filteredPlayers = sourcePlayersList.filter(p => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      const teamName = (p.team_name || '').toLowerCase();
+      const query = this.marketSearchQuery.toLowerCase();
+      return fullName.includes(query) || teamName.includes(query);
+    });
+
+    const totalPages = Math.ceil(filteredPlayers.length / this.marketItemsPerPage) || 1;
+    if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
+
+    const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
+    const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
 
     container.innerHTML = `
       <div class="config-container">
@@ -328,7 +369,7 @@ export class TranslationsView {
                     <div class="form-group"><label>Categoría *</label><input type="text" id="team-new-category" placeholder="Ej. Mini / Alevín" required /></div>
                     <div class="form-group"><label>Competición *</label><input type="text" id="team-new-competition" placeholder="Ej. B1 / Preferente" required /></div>
                     <div class="form-group"><label>Entrenador Principal *</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" required /></div>
-                    <div class="form-group"><label>Color Principal</label><input type="color" id="team-new-color" value="#9d76e5" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
+                    <div class="form-group"><label>Color Principal</label><input type="color" id="team-new-color" value="#ea580c" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
                     <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Equipo Completo</button></div>
                   </form>
                 </div>
@@ -358,17 +399,17 @@ export class TranslationsView {
             ${this.clubSubView === 'edit-team' ? `
               <div class="config-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                  <div class="card-title" style="margin: 0;"><span>🏢</span> DATOS DEL EQUIPO (${this.selectedTeamForEdit?.name || ''})</div>
+                  <div class="card-title" style="margin: 0;"><span>🏆</span> DATOS DEL EQUIPO (${this.selectedTeamForEdit?.name || ''})</div>
                   <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ Volver al Listado</button>
                 </div>
 
                 <form id="form-edit-team" class="grid-2-cols">
                   <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'JMJ Manyanet Sant Andreu'}" disabled /></div>
-                  <div class="form-group"><label>Nombre del Equipo</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
                   <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Entrenador Principal</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#9d76e5'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
                   ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
                 </form>
               </div>
@@ -382,7 +423,7 @@ export class TranslationsView {
                 </div>
 
                 <form id="form-edit-club" class="grid-2-cols">
-                  <div class="form-group"><label>Nombre del Club</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
                   <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Teléfono de Contacto</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
@@ -470,6 +511,42 @@ export class TranslationsView {
                       ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>` : ''}
                     </div>
                   `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla.</p>`}
+                </div>
+              </div>
+
+              <!-- MODAL DE EDICIÓN DE JUGADOR -->
+              <div id="modal-edit-player" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
+                <div class="config-card" style="width: 100%; max-width: 500px; margin: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ Editar Datos del Jugador</h3>
+                    <button type="button" id="btn-close-edit-player-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
+                  </div>
+
+                  <form id="form-edit-player-modal" class="grid-2-cols">
+                    <input type="hidden" id="edit-p-id" />
+                    <div class="form-group"><label>Nombre *</label><input type="text" id="edit-p-name" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group"><label>Apellidos *</label><input type="text" id="edit-p-lastname" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group"><label>Dorsal / Nº *</label><input type="number" id="edit-p-number" min="0" max="99" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group">
+                      <label>Posición Principal *</label>
+                      <select id="edit-p-position" ${isReadOnly ? 'disabled' : ''} required>
+                        <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
+                      </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                      <label>Estado del Jugador</label>
+                      <select id="edit-p-status" ${isReadOnly ? 'disabled' : ''}>
+                        <option value="Activo">Activo</option>
+                        <option value="Lesionado">Lesionado</option>
+                        <option value="Inactivo">Inactivo</option>
+                        <option value="TRASPASADO">Traspasado (Histórico)</option>
+                      </select>
+                    </div>
+                    <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                      <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
+                      ${!isReadOnly ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
+                    </div>
+                  </form>
                 </div>
               </div>
 
@@ -575,7 +652,7 @@ export class TranslationsView {
                 <form id="form-create-season" class="grid-inline" style="margin-bottom: 20px;">
                   <div class="form-group" style="flex: 2;">
                     <label>Nombre de la Nueva Temporada *</label>
-                    <input type="text" id="input-new-season-name" placeholder="Ej. 2026/2027" required />
+                    <input type="text" id="input-new-season-name" placeholder="Ej. 2026 o 2026/2027" required />
                   </div>
                   <div style="align-self: flex-end;">
                     <button type="submit" class="btn-primary">+ Añadir Temporada</button>
@@ -585,10 +662,13 @@ export class TranslationsView {
 
               <div class="seasons-list" style="display: flex; flex-direction: column; gap: 10px;">
                 ${this.seasonsList.length > 0 ? this.seasonsList.map(s => {
-                  const isSeasonActive = String(s.name) === String(localStorage.getItem("iq_active_season") || "2026");
+                  const sNameClean = String(s.name).trim();
+                  const activeClean = String(currentActiveSeasonName).trim();
+                  const isSeasonActive = sNameClean === activeClean || activeClean.includes(sNameClean) || sNameClean.includes(activeClean);
+
                   return `
                     <div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-                      <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 320px;">
+                      <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 380px;">
                         <span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span>
                         <input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" />
                       </div>
@@ -604,52 +684,20 @@ export class TranslationsView {
                         ` : ''}
 
                         ${this._can("DELETE_SEASON") ? `
-                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada (Exclusivo Superadmin)">🗑️</button>
+                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada">🗑️</button>
                         ` : ''}
                       </div>
                     </div>
                   `;
-                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas.</p>`}
+                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas en Supabase.</p>`}
               </div>
             </div>
           ` : ''}
 
           <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES -->
           ${this.activeTab === 'translations' && this._can("VIEW_TAB_TRANSLATIONS") ? `
-            <div class="config-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-                <div>
-                  <div class="card-title" style="margin: 0;"><span>🌐</span> DICCIONARIO GLOBAL E IDIOMAS</div>
-                  <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Personaliza o crea traducciones en Supabase.</p>
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <label style="font-size: 11px; font-weight: 800; color: #475569;">Editar Idioma:</label>
-                    <select id="select-edit-lang" style="padding: 6px 12px; border-radius: 6px; font-weight: 700; border: 1px solid #cbd5e1;">
-                      ${this.availableLangs.map(l => `<option value="${l.code}" ${l.code === this.selectedLangForEdit ? 'selected' : ''}>${l.label}</option>`).join("")}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <form id="form-save-translations">
-                <div class="table-responsive">
-                  <table class="data-table">
-                    <thead><tr><th>Clave (Key)</th><th>Traducción (${this.selectedLangForEdit.toUpperCase()})</th></tr></thead>
-                    <tbody>
-                      ${this.dbTranslations.length > 0 ? this.dbTranslations.map(t => `
-                        <tr>
-                          <td><code>${t.key}</code></td>
-                          <td><input type="text" class="input-translation-item" data-key="${t.key}" value="${t.translation}" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-                        </tr>
-                      `).join("") : `<tr><td colspan="2" style="text-align: center; color: #64748b; padding: 20px;">No hay traducciones registradas para ${this.selectedLangForEdit}.</td></tr>`}
-                    </tbody>
-                  </table>
-                </div>
-                <div style="text-align: right; margin-top: 16px;">
-                  <button type="submit" class="btn-primary">💾 Guardar Cambios de Idioma</button>
-                </div>
-              </form>
+            <div id="translations-subview-container">
+              ${this.languageSettingsView.render()}
             </div>
           ` : ''}
 
@@ -773,58 +821,171 @@ export class TranslationsView {
       });
     });
 
-    // 2. FORMULARIO GUARDAR CAMBIOS DE CLUB
+    // 2. FORMULARIO GUARDAR CAMBIOS DE CLUB (VERIFICANDO RESULTADO EN SUPABASE)
     const formEditClub = container.querySelector("#form-edit-club");
     if (formEditClub) {
       formEditClub.addEventListener("submit", async (e) => {
         e.preventDefault();
         if (!this.selectedClubForEdit) return;
 
-        const name = container.querySelector("#edit-club-name")?.value;
-        const coordinator_name = container.querySelector("#edit-club-coordinator")?.value;
-        const phone = container.querySelector("#edit-club-phone")?.value;
-        const address = container.querySelector("#edit-club-address")?.value;
+        const name = container.querySelector("#edit-club-name")?.value.trim();
+        const coordinator_name = container.querySelector("#edit-club-coordinator")?.value.trim();
+        const phone = container.querySelector("#edit-club-phone")?.value.trim();
+        const address = container.querySelector("#edit-club-address")?.value.trim();
 
-        const payload = { id: this.selectedClubForEdit.id, name, coordinator_name, phone, address };
+        this.showSyncOverlay("💾 Guardando datos del club en Supabase...");
 
-        this.showSyncOverlay("💾 Guardando datos del club...");
-        await DataStore.saveClub(payload);
-        await DataStore.init(DataStore.getActiveTeamId(), true);
-        this.hideSyncOverlay();
+        try {
+          const { data: updatedClub, error } = await supabase
+            .from("clubs")
+            .update({ name, coordinator_name, phone, address })
+            .eq("id", this.selectedClubForEdit.id)
+            .select();
 
-        alert("✅ Datos del club guardados correctamente.");
-        this.clubSubView = "list";
-        await this.render(containerId);
+          if (error) {
+            this.hideSyncOverlay();
+            alert(`❌ Supabase denegó los cambios en el club: ${error.message}`);
+            return;
+          }
+
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+
+          alert("✅ Datos del club actualizados y guardados en Supabase correctamente.");
+          this.clubSubView = "list";
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error al actualizar club:", err);
+          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+        }
       });
     }
 
-    // 3. FORMULARIO GUARDAR CAMBIOS DE EQUIPO
+    // 3. FORMULARIO GUARDAR CAMBIOS DE EQUIPO (VERIFICANDO RESULTADO EN SUPABASE)
     const formEditTeam = container.querySelector("#form-edit-team");
     if (formEditTeam) {
       formEditTeam.addEventListener("submit", async (e) => {
         e.preventDefault();
         if (!this.selectedTeamForEdit) return;
 
-        const name = container.querySelector("#edit-team-name")?.value;
-        const category = container.querySelector("#edit-team-category")?.value;
-        const competition = container.querySelector("#edit-team-competition")?.value;
-        const coach_name = container.querySelector("#edit-team-coach")?.value;
+        const name = container.querySelector("#edit-team-name")?.value.trim();
+        const category = container.querySelector("#edit-team-category")?.value.trim();
+        const competition = container.querySelector("#edit-team-competition")?.value.trim();
+        const coach_name = container.querySelector("#edit-team-coach")?.value.trim();
         const color = container.querySelector("#edit-team-color")?.value;
 
-        const payload = { id: this.selectedTeamForEdit.id, name, category, competition, coach_name, color };
+        this.showSyncOverlay("💾 Guardando cambios del equipo en Supabase...");
 
-        this.showSyncOverlay("💾 Guardando cambios del equipo...");
-        await DataStore.saveTeam(payload);
-        await DataStore.init(DataStore.getActiveTeamId(), true);
-        this.hideSyncOverlay();
+        try {
+          const { data: updatedTeam, error } = await supabase
+            .from("teams")
+            .update({ name, category, competition, coach_name, color })
+            .eq("id", this.selectedTeamForEdit.id)
+            .select();
 
-        alert("✅ Datos del equipo guardados correctamente.");
-        this.clubSubView = "list";
-        await this.render(containerId);
+          if (error) {
+            this.hideSyncOverlay();
+            alert(`❌ Supabase denegó los cambios en el equipo: ${error.message}`);
+            return;
+          }
+
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+
+          alert("✅ Configuración del equipo actualizada en Supabase correctamente.");
+          this.clubSubView = "list";
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error al actualizar equipo:", err);
+          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+        }
       });
     }
 
-    // 4. SUBPANTALLA / MODAL DEL MERCADO GLOBAL
+    // 4. EDICIÓN DE JUGADORES (PLANTILLA ACTIVA)
+    container.querySelectorAll(".btn-edit-player-modal").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const pId = e.currentTarget.getAttribute("data-id");
+        const player = (players || []).find(p => String(p.id) === String(pId)) || 
+                       (this.allMarketPlayers || []).find(p => String(p.id) === String(pId));
+
+        if (!player) {
+          alert("⚠️ No se encontró la información del jugador.");
+          return;
+        }
+
+        const modal = container.querySelector("#modal-edit-player");
+        if (modal) {
+          container.querySelector("#edit-p-id").value = player.id;
+          container.querySelector("#edit-p-name").value = player.first_name || "";
+          container.querySelector("#edit-p-lastname").value = player.last_name || "";
+          container.querySelector("#edit-p-number").value = player.jersey ?? 0;
+          container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
+          container.querySelector("#edit-p-status").value = player.status || "Activo";
+
+          modal.style.display = "flex";
+        }
+      });
+    });
+
+    const closePlayerModal = () => {
+      const modal = container.querySelector("#modal-edit-player");
+      if (modal) modal.style.display = "none";
+    };
+
+    container.querySelector("#btn-close-edit-player-modal")?.addEventListener("click", closePlayerModal);
+    container.querySelector("#btn-cancel-edit-player")?.addEventListener("click", closePlayerModal);
+
+    const formEditPlayer = container.querySelector("#form-edit-player-modal");
+    if (formEditPlayer) {
+      formEditPlayer.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        if (isReadOnly) {
+          alert("ℹ️ Permisos insuficientes para modificar la plantilla en este modo.");
+          return;
+        }
+
+        const pId = container.querySelector("#edit-p-id")?.value;
+        const first_name = container.querySelector("#edit-p-name")?.value.trim();
+        const last_name = container.querySelector("#edit-p-lastname")?.value.trim();
+        const jersey = parseInt(container.querySelector("#edit-p-number")?.value, 10);
+        const primary_position = container.querySelector("#edit-p-position")?.value;
+        const status = container.querySelector("#edit-p-status")?.value;
+
+        const updates = { first_name, last_name, jersey, primary_position, status };
+
+        try {
+          this.showSyncOverlay("💾 Guardando cambios del jugador...");
+
+          const { error } = await supabase
+            .from("players")
+            .update(updates)
+            .eq("id", pId);
+
+          if (error) {
+            this.hideSyncOverlay();
+            alert(`❌ Error al guardar en Supabase: ${error.message}`);
+            return;
+          }
+
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          closePlayerModal();
+
+          alert("✅ Datos del jugador actualizados con éxito.");
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error guardando cambios del jugador:", err);
+        }
+      });
+    }
+
+    // 5. SUBPANTALLA / MODAL DEL MERCADO GLOBAL
     const renderMarketTable = () => {
       const tableContainer = container.querySelector("#market-modal-table-container");
       if (!tableContainer) return;
@@ -951,67 +1112,148 @@ export class TranslationsView {
       if (modal) modal.style.display = "none";
     });
 
-    // 5. EVENTOS IDIOMAS Y DICCIONARIO
-    const selectEditLang = container.querySelector("#select-edit-lang");
-    if (selectEditLang) {
-      selectEditLang.addEventListener("change", async (e) => {
-        this.selectedLangForEdit = e.target.value;
-        this.showSyncOverlay(`⚡ Cargando diccionario (${this.selectedLangForEdit.toUpperCase()})...`);
-        await this._fetchTranslationsForLang(this.selectedLangForEdit);
-        this.hideSyncOverlay();
-        await this.render(containerId);
-      });
+    // 6. EVENTOS IDIOMAS Y DICCIONARIO
+    if (this.activeTab === "translations") {
+      const btnSaveLang = container.querySelector("#btnSaveLanguage");
+      if (btnSaveLang) {
+        btnSaveLang.addEventListener("click", async (e) => {
+          e.preventDefault();
+          await this.languageSettingsView.handleSave();
+        });
+      }
     }
 
-    const formSaveTranslations = container.querySelector("#form-save-translations");
-    if (formSaveTranslations) {
-      formSaveTranslations.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    // 7. GESTIÓN DE TEMPORADAS (GUARDADO Y ACTIVACIÓN PERSISTENTE EN SUPABASE)
+    container.querySelectorAll(".btn-save-season-name").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const seasonId = e.currentTarget.getAttribute("data-id");
+        const inputEl = container.querySelector(`.input-season-edit[data-id="${seasonId}"]`);
+        if (!inputEl) return;
 
-        const inputs = container.querySelectorAll(".input-translation-item");
-        const payload = [];
+        const newName = inputEl.value.trim();
+        if (!newName) {
+          alert("⚠️ El nombre de la temporada no puede estar vacío.");
+          return;
+        }
 
-        inputs.forEach(input => {
-          const key = input.getAttribute("data-key");
-          const translation = input.value.trim();
-          if (key && translation) {
-            payload.push({
-              key,
-              language_code: this.selectedLangForEdit,
-              translation
-            });
-          }
-        });
+        this.showSyncOverlay("💾 Guardando nombre de la temporada en Supabase...");
 
         try {
-          this.showSyncOverlay("💾 Guardando diccionario en Supabase...");
-
           const { error } = await supabase
-            .from("translations")
-            .upsert(payload, { onConflict: "key,language_code" });
-
-          this.hideSyncOverlay();
+            .from("seasons")
+            .update({ name: newName })
+            .eq("id", seasonId);
 
           if (error) {
-            alert(`❌ Error guardando traducción: ${error.message}`);
-          } else {
-            alert(`✅ Diccionario en '${this.selectedLangForEdit.toUpperCase()}' guardado correctamente.`);
-            this.activeTab = "translations";
-            await this.render(containerId);
+            this.hideSyncOverlay();
+            alert(`❌ Supabase rechazó el cambio de nombre: ${error.message}`);
+            return;
           }
+
+          const seasonObj = this.seasonsList.find(s => String(s.id) === String(seasonId));
+          if (seasonObj) {
+            seasonObj.name = newName;
+          }
+
+          localStorage.setItem("iq_active_season", newName);
+          this._saveSeasonsLocal();
+          this.hideSyncOverlay();
+
+          alert(`✅ Temporada actualizada a "${newName}" en Supabase correctamente.`);
+          await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
-          console.error("Error guardando diccionario:", err);
+          console.error("Error actualizando temporada:", err);
+          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-activate-season").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const seasonName = e.currentTarget.getAttribute("data-name");
+        localStorage.setItem("iq_active_season", seasonName);
+        this._saveSeasonsLocal();
+        alert(`🟢 Temporada "${seasonName}" activada en el sistema.`);
+        await this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-delete-season").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const seasonId = e.currentTarget.getAttribute("data-id");
+        if (confirm("⚠️ ¿Estás seguro de eliminar esta temporada de Supabase?")) {
+          this.showSyncOverlay("🗑️ Eliminando temporada en Supabase...");
+          try {
+            const { error } = await supabase.from("seasons").delete().eq("id", seasonId);
+            if (error) {
+              this.hideSyncOverlay();
+              alert(`❌ No se pudo eliminar de Supabase: ${error.message}`);
+              return;
+            }
+            this.seasonsList = this.seasonsList.filter(s => String(s.id) !== String(seasonId));
+            this._saveSeasonsLocal();
+            this.hideSyncOverlay();
+            await this.render(containerId);
+          } catch (err) {
+            this.hideSyncOverlay();
+            console.error("Error borrando temporada:", err);
+          }
+        }
+      });
+    });
+
+    const formCreateSeason = container.querySelector("#form-create-season");
+    if (formCreateSeason) {
+      formCreateSeason.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const inputName = container.querySelector("#input-new-season-name");
+        const seasonName = inputName?.value.trim();
+
+        if (!seasonName) return;
+
+        this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
+
+        const newSeasonPayload = {
+          name: seasonName,
+          team_id: activeTeamId
+        };
+
+        try {
+          const { data, error } = await supabase
+            .from("seasons")
+            .insert([newSeasonPayload])
+            .select()
+            .single();
+
+          if (error) {
+            this.hideSyncOverlay();
+            alert(`❌ Error al insertar temporada en Supabase: ${error.message}`);
+            return;
+          }
+
+          if (data) {
+            this.seasonsList.unshift(data);
+            localStorage.setItem("iq_active_season", seasonName);
+            this._saveSeasonsLocal();
+          }
+
+          this.hideSyncOverlay();
+          alert(`✅ Temporada "${seasonName}" creada con éxito en Supabase.`);
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error creando temporada:", err);
+          alert(`❌ Error inesperado: ${err.message}`);
         }
       });
     }
 
-    // 6. SIMULACIÓN DE ROLES (CON PRESERVACIÓN DE CREDENCIALES SUPERADMIN)
+    // 8. SIMULACIÓN DE ROLES
     container.querySelectorAll(".btn-simulate-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         const roleToSimulate = e.currentTarget.getAttribute("data-role");
         
-        // Guardamos la máscara sin destruir el rol real de SUPERADMIN
         this.simulatedRole = roleToSimulate;
         localStorage.setItem("iq_simulated_role", roleToSimulate);
         localStorage.setItem("iq_user_role", "SUPERADMIN");
@@ -1042,3 +1284,5 @@ export class TranslationsView {
     });
   }
 }
+
+export default TranslationsView;

@@ -1,13 +1,14 @@
 /**
  * @fileoverview Servicio de Gestión de Idiomas y Diccionario Completo (TranslationStore.js).
- * Refactorizado para conectar de forma transparente con I18nService.js sin romper llamadas existentes.
- * Soporta ES, CA (antes cat), EN y FR.
+ * Refactorizado para conectar con Supabase de forma transparente y sincronizarse con I18nService.js.
+ * Soporta ES, CA (alias cat), EN y FR.
  */
 
 import { I18n } from './I18nService.js';
+import { supabase } from '../config/database.config.js';
 
 export class TranslationStore {
-  /** Obtiene el idioma actual o utiliza la migración inteligente */
+  /** Obtiene el idioma actual */
   static get currentLang() {
     return I18n.getLocale();
   }
@@ -18,12 +19,10 @@ export class TranslationStore {
   }
 
   /**
-   * Diccionario multilingüe ampliado con términos de interfaz, partidos y nuevos idiomas (FR).
-   * Mantiene todas las claves planas requeridas por las vistas existentes.
+   * Diccionario por defecto multilingüe (Fallback local en caso de fallo de red)
    */
   static defaultDictionary = {
     es: {
-      // Menú y Navegación
       dashboard: "Dashboard",
       team: "Equipo",
       players: "Jugadores",
@@ -38,8 +37,6 @@ export class TranslationStore {
       settings: "Configuración",
       logout: "Cerrar sesión",
       language: "Idioma",
-
-      // Términos de Partidos, Equipos y Sedes
       local: "Local",
       visitor: "Visitante",
       pending: "Pendiente",
@@ -60,8 +57,6 @@ export class TranslationStore {
       status: "Estado",
       height: "Altura",
       ppg_tooltip: "Puntos Por Partido promedio anotados por el jugador.",
-
-      // Botones e Interfaz General
       save_changes: "Guardar Cambios",
       read_only: "Modo Solo Lectura",
       view_boxscore: "Análisis",
@@ -70,7 +65,6 @@ export class TranslationStore {
       all_positions: "Todas las Posiciones"
     },
     ca: {
-      // Menú y Navegación
       dashboard: "Tauler Principal",
       team: "Equip",
       players: "Jugadors",
@@ -85,8 +79,6 @@ export class TranslationStore {
       settings: "Configuració",
       logout: "Tancar sessió",
       language: "Idioma",
-
-      // Términos de Partidos, Equipos y Sedes
       local: "Local",
       visitor: "Visitant",
       pending: "Pendent",
@@ -107,8 +99,6 @@ export class TranslationStore {
       status: "Estat",
       height: "Alçada",
       ppg_tooltip: "Punts per partit mitjans anotats pel jugador.",
-
-      // Botones e Interfaz General
       save_changes: "Desar Canvis",
       read_only: "Mode Només Lectura",
       view_boxscore: "Anàlisi",
@@ -117,7 +107,6 @@ export class TranslationStore {
       all_positions: "Totes les Posicions"
     },
     en: {
-      // Menú y Navegación
       dashboard: "Dashboard",
       team: "Team",
       players: "Players",
@@ -132,8 +121,6 @@ export class TranslationStore {
       settings: "Settings",
       logout: "Log Out",
       language: "Language",
-
-      // Términos de Partidos, Equipos y Sedes
       local: "Home",
       visitor: "Away",
       pending: "Pending",
@@ -154,8 +141,6 @@ export class TranslationStore {
       status: "Status",
       height: "Height",
       ppg_tooltip: "Average points per game scored by the player.",
-
-      // Botones e Interfaz General
       save_changes: "Save Changes",
       read_only: "Read-Only Mode",
       view_boxscore: "Analysis",
@@ -164,7 +149,6 @@ export class TranslationStore {
       all_positions: "All Positions"
     },
     fr: {
-      // Menú y Navegación
       dashboard: "Tableau de Bord",
       team: "Équipe",
       players: "Joueurs",
@@ -179,8 +163,6 @@ export class TranslationStore {
       settings: "Paramètres",
       logout: "Déconnexion",
       language: "Langue",
-
-      // Términos de Partidos, Equipos y Sedes
       local: "Domicile",
       visitor: "Extérieur",
       pending: "En attente",
@@ -201,9 +183,7 @@ export class TranslationStore {
       status: "Statut",
       height: "Taille",
       ppg_tooltip: "Moyenne de points par match marqués par le joueur.",
-
-      // Botones e Interfaz General
-      save_changes: "Enregistrer los modifications",
+      save_changes: "Enregistrer les modifications",
       read_only: "Mode Lecture Seule",
       view_boxscore: "Analyse",
       edit: "Modifier",
@@ -218,6 +198,39 @@ export class TranslationStore {
       ...TranslationStore.defaultDictionary,
       cat: TranslationStore.defaultDictionary.ca
     };
+  }
+
+  /**
+   * Carga el diccionario desde Supabase para el idioma dado e integra las claves en I18n
+   */
+  static async loadFromSupabase(lang = TranslationStore.currentLang) {
+    const targetLang = lang === 'cat' ? 'ca' : lang;
+    try {
+      const { data, error } = await supabase
+        .from("translations")
+        .select("*")
+        .or(`language_code.eq.${targetLang},language_code.eq.${lang}`);
+
+      if (!error && data && data.length > 0) {
+        const remoteDict = {};
+        data.forEach(item => {
+          remoteDict[item.key] = item.translation;
+        });
+
+        // Guardar en localStorage para acceso inmediato sin retardo
+        localStorage.setItem(`iq_dict_${targetLang}`, JSON.stringify(remoteDict));
+
+        if (I18n.dictionaries[targetLang]) {
+          Object.assign(I18n.dictionaries[targetLang], remoteDict);
+        } else {
+          I18n.dictionaries[targetLang] = { ...TranslationStore.defaultDictionary[targetLang], ...remoteDict };
+        }
+
+        I18n.notify();
+      }
+    } catch (e) {
+      console.warn("Error cargando diccionario de Supabase:", e);
+    }
   }
 
   static getDictionary(lang = TranslationStore.currentLang) {
@@ -238,12 +251,11 @@ export class TranslationStore {
 
   /**
    * Obtiene la traducción dada una clave.
-   * Soporta tanto claves planas directas ("dashboard") como navegadas ("common.actions.save").
    */
   static t(key, fallback = "") {
     if (!key) return "";
 
-    // 1. Intentar resolver mediante el nuevo I18nService
+    // 1. Intentar resolver mediante I18nService
     const translated = I18n.t(key, {}, null);
     if (typeof translated === "string" && !translated.startsWith("[MISSING:")) {
       return translated;
@@ -265,11 +277,13 @@ export class TranslationStore {
     if (I18n.dictionaries[targetLang]) {
       Object.assign(I18n.dictionaries[targetLang], newDict);
     }
+    I18n.notify();
   }
 
-  static setLanguage(lang) {
+  static async setLanguage(lang) {
     const targetLang = lang === 'cat' ? 'ca' : lang;
     I18n.setLocale(targetLang);
+    await TranslationStore.loadFromSupabase(targetLang);
   }
 }
 

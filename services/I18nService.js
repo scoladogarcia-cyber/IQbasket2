@@ -1,7 +1,8 @@
 /**
  * @fileoverview Servicio principal de internacionalización (I18nService.js).
  * @description Soporta namespaces, interpolación de variables {{var}}, pluralización, 
- * formatos nativos Intl (números, fechas, porcentajes) y migración sin pérdida de datos.
+ * formatos nativos Intl (números, fechas, porcentajes), migración sin pérdida de datos
+ * y sincronización bidireccional con Supabase (tabla 'translations') y LocalStorage.
  */
 
 import { I18N_CONFIG } from '../config/i18n.config.js';
@@ -12,9 +13,34 @@ import { fr } from '../locales/fr.js';
 
 class I18nService {
   constructor() {
-    this.dictionaries = { es, ca, en, fr };
+    this.dictionaries = { 
+      es: { ...es }, 
+      ca: { ...ca }, 
+      en: { ...en }, 
+      fr: { ...fr } 
+    };
     this.listeners = new Set();
     this.currentLocale = this._resolveAndMigrateLocale();
+    this._hydrateLocalCustomTranslations();
+  }
+
+  /**
+   * Carga las traducciones personalizadas guardadas previamente en localStorage
+   */
+  _hydrateLocalCustomTranslations() {
+    const locales = ['es', 'ca', 'en', 'fr'];
+    locales.forEach(loc => {
+      const savedDict = localStorage.getItem(`iq_dict_${loc}`);
+      if (savedDict) {
+        try {
+          const parsed = JSON.parse(savedDict);
+          if (!this.dictionaries[loc]) this.dictionaries[loc] = {};
+          Object.assign(this.dictionaries[loc], parsed);
+        } catch (e) {
+          console.warn(`[i18n] Error leyendo iq_dict_${loc} de localStorage`);
+        }
+      }
+    });
   }
 
   /**
@@ -74,12 +100,87 @@ class I18nService {
     return () => this.listeners.delete(listener);
   }
 
-  _notify() {
-    this.listeners.forEach(fn => fn(this.currentLocale));
+  /**
+   * Método público para notificar cambios a todos los suscriptores.
+   */
+  notify() {
+    this._notify();
   }
 
   /**
-   * Traduce una clave semántica (ej. 'dashboard.games.played') con interpolación de parámetros.
+   * Alias para retrocompatibilidad.
+   */
+  notifyListeners() {
+    this._notify();
+  }
+
+  _notify() {
+    this.listeners.forEach(fn => {
+      if (typeof fn === 'function') {
+        fn(this.currentLocale);
+      }
+    });
+  }
+
+  /**
+   * Carga las traducciones personalizadas guardadas en Supabase para el idioma activo
+   * e inyecta los resultados directamente en el diccionario en memoria.
+   */
+  async loadRemoteTranslations(supabaseClient) {
+    if (!supabaseClient) return;
+    try {
+      const currentLocale = this.getLocale();
+      const { data, error } = await supabaseClient
+        .from("translations")
+        .select("*")
+        .eq("language_code", currentLocale);
+
+      if (!error && data && data.length > 0) {
+        if (!this.dictionaries[currentLocale]) {
+          this.dictionaries[currentLocale] = {};
+        }
+        
+        const remoteDict = {};
+        data.forEach(item => {
+          if (item.key && item.translation) {
+            this.dictionaries[currentLocale][item.key] = item.translation;
+            remoteDict[item.key] = item.translation;
+          }
+        });
+
+        // Guardar copia local para disponibilidad offline en 0ms
+        const existingLocal = JSON.parse(localStorage.getItem(`iq_dict_${currentLocale}`) || '{}');
+        localStorage.setItem(`iq_dict_${currentLocale}`, JSON.stringify({ ...existingLocal, ...remoteDict }));
+
+        console.log(`[i18n] Cargadas ${data.length} traducciones personalizadas desde Supabase (${currentLocale}).`);
+        this._notify();
+      }
+    } catch (err) {
+      console.warn("[i18n] No se pudieron cargar las traducciones remotas:", err);
+    }
+  }
+
+  /**
+   * Actualiza e inyecta un objeto de traducciones personalizadas en caliente
+   */
+  addTranslations(locale, translationsObj) {
+    const targetLocale = locale === 'cat' ? 'ca' : locale;
+    if (!this.dictionaries[targetLocale]) {
+      this.dictionaries[targetLocale] = {};
+    }
+    Object.assign(this.dictionaries[targetLocale], translationsObj);
+
+    // Guardar en localStorage
+    const existing = JSON.parse(localStorage.getItem(`iq_dict_${targetLocale}`) || '{}');
+    localStorage.setItem(`iq_dict_${targetLocale}`, JSON.stringify({ ...existing, ...translationsObj }));
+
+    if (targetLocale === this.currentLocale) {
+      this._notify();
+    }
+  }
+
+  /**
+   * Traduce una clave semántica (ej. 'dashboard.games.played' o 'dashboard') con interpolación de parámetros.
    */
   t(key, params = {}, fallbackString = "") {
     if (!key) return "";
@@ -88,20 +189,25 @@ class I18nService {
     let dict = this.dictionaries[this.currentLocale];
     let result = undefined;
 
+    // 1. Búsqueda por ruta anidada (ej. common.actions.save)
     if (dict) {
       result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined) ? acc[curr] : undefined, dict);
     }
 
-    // Intento de fallback al locale por defecto
-    if (result === undefined && this.currentLocale !== I18N_CONFIG.fallbackLocale) {
-      const fallbackDict = this.dictionaries[I18N_CONFIG.fallbackLocale];
-      result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined) ? acc[curr] : undefined, fallbackDict);
+    // 2. Búsqueda directa por clave plana (ej. "dashboard", "record")
+    if (result === undefined && dict && dict[key] !== undefined) {
+      result = dict[key];
     }
 
-    // Si aún no se encuentra, buscar en nivel raíz (soporte para llamadas legacy simples como t("dashboard"))
-    if (result === undefined) {
-      const rootDict = this.dictionaries[this.currentLocale] || this.dictionaries[I18N_CONFIG.fallbackLocale];
-      result = rootDict ? rootDict[key] : undefined;
+    // 3. Intento de fallback al locale por defecto (ES)
+    if (result === undefined && this.currentLocale !== I18N_CONFIG.fallbackLocale) {
+      const fallbackDict = this.dictionaries[I18N_CONFIG.fallbackLocale];
+      if (fallbackDict) {
+        result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined) ? acc[curr] : undefined, fallbackDict);
+        if (result === undefined) {
+          result = fallbackDict[key];
+        }
+      }
     }
 
     if (result === undefined) {
