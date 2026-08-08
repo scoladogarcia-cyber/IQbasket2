@@ -1,10 +1,8 @@
 /**
  * @fileoverview Componente AppLayout.js
- * Genera la estructura Shell responsive de IQ Basket:
- * - Sidebar agrupado semánticamente para Desktop/Tablet (GENERAL, EQUIPO, ANÁLISIS, CUENTA).
- * - Barra de navegación inferior tipo App PWA para Smartphones con Safe Area.
- * - Bottom Sheet deslizable para opciones secundarias ("Más") con auto-cierre táctil y elevación Z aislada.
- * - Soporte de internacionalización dinámico reactivo a I18n.
+ * Genera la estructura Shell responsive de IQ Basket.
+ * Resuelto: Menú "Más" en formato Lista Vertical Táctil, autocierre al hacer clic,
+ * botón X operativo, overlay oscuro funcional y Z-Index correcto.
  */
 
 import { I18n } from '../services/I18nService.js';
@@ -13,10 +11,8 @@ import { APP_CONFIG } from '../config/app.config.js';
 export class AppLayout {
   constructor(router) {
     this.router = router;
-    this.isMoreSheetOpen = false;
     this.activeGame = null;
 
-    // Suscribirse al cambio de idioma para re-renderizar textos sin recargar la página
     I18n.subscribe(() => {
       this.updateTranslations();
     });
@@ -43,7 +39,7 @@ export class AppLayout {
           <div id="contextual-game-badge" class="contextual-game-container"></div>
         </header>
 
-        <!-- 2. NAVEGACIÓN LATERAL (Desktop & Tablet >= 768px) -->
+        <!-- 2. NAVEGACIÓN LATERAL (Desktop & Tablet) -->
         <aside class="app-sidebar desktop-only">
           <div class="sidebar-brand">
             <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -58,7 +54,6 @@ export class AppLayout {
           <div id="desktop-contextual-game" class="sidebar-contextual-box"></div>
 
           <nav class="sidebar-nav">
-            <!-- GRUPO 1: GENERAL -->
             <div class="nav-group">
               <span class="nav-group-title" data-i18n="navigation.groups.general">GENERAL</span>
               <a href="#/dashboard" class="nav-item" data-hash="#/dashboard">
@@ -67,7 +62,6 @@ export class AppLayout {
               </a>
             </div>
 
-            <!-- GRUPO 2: EQUIPO -->
             <div class="nav-group">
               <span class="nav-group-title" data-i18n="navigation.groups.team">EQUIPO</span>
               <a href="#/team" class="nav-item" data-hash="#/team">
@@ -88,7 +82,6 @@ export class AppLayout {
               </a>
             </div>
 
-            <!-- GRUPO 3: ANÁLISIS -->
             <div class="nav-group">
               <span class="nav-group-title" data-i18n="navigation.groups.analysis">ANÁLISIS</span>
               <a href="#/advanced-stats" class="nav-item" data-hash="#/advanced-stats">
@@ -109,7 +102,6 @@ export class AppLayout {
               </a>
             </div>
 
-            <!-- GRUPO 4: CUENTA -->
             <div class="nav-group">
               <span class="nav-group-title" data-i18n="navigation.groups.account">CUENTA</span>
               <a href="#/profile" class="nav-item" data-hash="#/profile">
@@ -129,7 +121,7 @@ export class AppLayout {
           <!-- Las vistas se renderizan AQUÍ -->
         </main>
 
-        <!-- 4. BARRA DE NAVEGACIÓN INFERIOR (Móvil < 768px - 5 Ítems) -->
+        <!-- 4. BARRA DE NAVEGACIÓN INFERIOR (Móvil) -->
         <nav class="mobile-bottom-bar mobile-only" aria-label="Navegación Móvil">
           <a href="#/dashboard" class="mobile-nav-item" data-hash="#/dashboard">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
@@ -147,56 +139,63 @@ export class AppLayout {
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
             <span class="mobile-label" data-i18n="navigation.advancedStats">Stats</span>
           </a>
-          <button type="button" id="btn-mobile-more" class="mobile-nav-item" aria-expanded="false" aria-controls="mobile-more-sheet">
+          <button type="button" id="btn-mobile-more" class="mobile-nav-item">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
             <span class="mobile-label" data-i18n="navigation.more">Más</span>
           </button>
         </nav>
 
-        <!-- 5. BOTTOM SHEET "MÁS" (Móvil con aislamiento Z-index) -->
-        <div id="mobile-more-sheet" class="mobile-sheet-overlay" aria-hidden="true">
-          <div class="mobile-sheet-content">
-            <div class="sheet-header">
-              <span class="sheet-title" data-i18n="navigation.moreOptions">Más Opciones</span>
-              <button type="button" id="btn-close-sheet" class="sheet-close-btn" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="sheet-grid">
-              <a href="#/players" class="sheet-item">
-                <span class="sheet-icon">👤</span>
-                <span data-i18n="navigation.players">Jugadores</span>
-              </a>
-              <a href="#/lineups" class="sheet-item">
-                <span class="sheet-icon">🏀</span>
-                <span data-i18n="navigation.lineups">Quintetos</span>
-              </a>
-              <a href="#/comparator" class="sheet-item">
-                <span class="sheet-icon">⚖️</span>
-                <span data-i18n="navigation.comparator">Comparador</span>
-              </a>
-              <a href="#/reports" class="sheet-item">
-                <span class="sheet-icon">📄</span>
-                <span data-i18n="navigation.reports">Informes</span>
-              </a>
-              <a href="#/ask-ai" class="sheet-item">
-                <span class="sheet-icon">🤖</span>
-                <span data-i18n="navigation.aiAssistant">Asistente IQ</span>
-              </a>
-              <a href="#/profile" class="sheet-item">
-                <span class="sheet-icon">👤</span>
-                <span data-i18n="navigation.profile">Perfil</span>
-              </a>
-              <a href="#/settings" class="sheet-item">
-                <span class="sheet-icon">⚙️</span>
-                <span data-i18n="navigation.settings">Configuración</span>
-              </a>
-            </div>
+        <!-- 5. CAPA OSCURA TRASLÚCIDA (Backdrop) -->
+        <div id="mobile-sheet-overlay" class="mobile-sheet-overlay"></div>
+
+        <!-- 6. MENÚ EMERGENTE "MÁS" EN LISTA TÁCTIL VERTICAL -->
+        <div id="mobile-more-sheet" class="mobile-more-sheet">
+          <div class="sheet-header">
+            <span class="sheet-title" data-i18n="navigation.moreOptions">Más Opciones</span>
+            <button type="button" id="btn-close-sheet" class="sheet-close-btn" aria-label="Cerrar">✕</button>
+          </div>
+          <div class="sheet-list">
+            <a href="#/players" class="sheet-list-item">
+              <span class="sheet-icon">👤</span>
+              <span class="sheet-text" data-i18n="navigation.players">Jugadores</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/lineups" class="sheet-list-item">
+              <span class="sheet-icon">🏀</span>
+              <span class="sheet-text" data-i18n="navigation.lineups">Quintetos</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/comparator" class="sheet-list-item">
+              <span class="sheet-icon">⚖️</span>
+              <span class="sheet-text" data-i18n="navigation.comparator">Comparador</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/reports" class="sheet-list-item">
+              <span class="sheet-icon">📄</span>
+              <span class="sheet-text" data-i18n="navigation.reports">Informes</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/ask-ai" class="sheet-list-item">
+              <span class="sheet-icon">🤖</span>
+              <span class="sheet-text" data-i18n="navigation.aiAssistant">Asistente IQ</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/profile" class="sheet-list-item">
+              <span class="sheet-icon">👤</span>
+              <span class="sheet-text" data-i18n="navigation.profile">Perfil</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/settings" class="sheet-list-item">
+              <span class="sheet-icon">⚙️</span>
+              <span class="sheet-text" data-i18n="navigation.settings">Configuración</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
           </div>
         </div>
 
       </div>
 
       <style>
-        /* Estilos del Shell y Navegación Adaptativa */
         .app-layout-shell {
           display: flex;
           width: 100%;
@@ -212,35 +211,27 @@ export class AppLayout {
         .app-sidebar {
           width: 260px;
           background-color: var(--color-secondary, #0f172a);
-          color: var(--color-text-inverse, #ffffff);
+          color: #ffffff;
           flex-direction: column;
           flex-shrink: 0;
-          padding: var(--space-lg, 20px) var(--space-md, 16px);
+          padding: 20px 16px;
           border-right: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .sidebar-brand {
           display: flex;
           align-items: center;
-          gap: var(--space-xs, 8px);
+          gap: 8px;
           font-weight: 800;
-          font-size: var(--font-size-xl, 20px);
+          font-size: 20px;
           color: var(--color-primary, #f97316);
-          margin-bottom: var(--space-lg, 24px);
-          padding: 0 var(--space-xs, 8px);
+          margin-bottom: 24px;
+          padding: 0 8px;
         }
 
-        .brand-icon {
-          width: 28px;
-          height: 28px;
-          color: var(--color-primary, #f97316);
-        }
+        .brand-icon { width: 28px; height: 28px; color: var(--color-primary, #f97316); }
 
-        .sidebar-nav {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-md, 16px);
-        }
+        .sidebar-nav { display: flex; flex-direction: column; gap: 16px; }
 
         .nav-group-title {
           display: block;
@@ -271,18 +262,12 @@ export class AppLayout {
           color: #ffffff;
         }
 
-        .nav-item.active .nav-svg {
-          color: var(--color-primary, #f97316);
-        }
-
-        .nav-svg {
-          width: 20px;
-          height: 20px;
-        }
+        .nav-item.active .nav-svg { color: var(--color-primary, #f97316); }
+        .nav-svg { width: 20px; height: 20px; }
 
         .app-main-content {
           flex: 1;
-          padding: var(--space-lg, 20px);
+          padding: 20px;
           overflow-y: auto;
           max-width: 100%;
           box-sizing: border-box;
@@ -290,20 +275,18 @@ export class AppLayout {
           z-index: 1;
         }
 
-        /* Responsive Móvil (< 768px) */
+        /* RESPONSIVE MÓVIL (< 768px) */
         @media (max-width: 767px) {
           .desktop-only { display: none !important; }
           .mobile-only { display: flex !important; }
 
-          .app-layout-shell {
-            flex-direction: column;
-          }
+          .app-layout-shell { flex-direction: column; }
 
           .mobile-header {
             position: sticky;
             top: 0;
             z-index: 100;
-            background-color: var(--color-secondary, #0f172a);
+            background-color: #0f172a;
             color: #ffffff;
             height: 56px;
             padding: 0 16px;
@@ -319,10 +302,7 @@ export class AppLayout {
             color: var(--color-primary, #f97316);
           }
 
-          .brand-svg {
-            width: 24px;
-            height: 24px;
-          }
+          .brand-svg { width: 24px; height: 24px; }
 
           .app-main-content {
             padding: 16px;
@@ -337,9 +317,9 @@ export class AppLayout {
             right: 0;
             height: calc(60px + env(safe-area-inset-bottom, 0px));
             padding-bottom: env(safe-area-inset-bottom, 0px);
-            background-color: var(--color-secondary, #0f172a);
+            background-color: #0f172a;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
-            z-index: 1000;
+            z-index: 999;
             justify-content: space-around;
             align-items: center;
           }
@@ -360,59 +340,53 @@ export class AppLayout {
             cursor: pointer;
           }
 
-          .mobile-nav-item.active {
-            color: var(--color-primary, #f97316);
-          }
+          .mobile-nav-item.active { color: var(--color-primary, #f97316); }
+          .mobile-svg { width: 22px; height: 22px; margin-bottom: 2px; }
 
-          .mobile-svg {
-            width: 22px;
-            height: 22px;
-            margin-bottom: 2px;
-          }
-
-          /* Bottom Sheet "Más" ELEVACIÓN Y AISLAMIENTO Z-INDEX */
+          /* CAPA TRASLÚCIDA OSCURA (OVERLAY) */
           .mobile-sheet-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(15, 23, 42, 0.7);
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: rgba(15, 23, 42, 0.75) !important;
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
-            z-index: 99999 !important;
+            z-index: 99998 !important;
             display: none;
-            align-items: flex-end;
             opacity: 0;
             transition: opacity 0.2s ease-in-out;
           }
 
-          .mobile-sheet-overlay.open {
-            display: flex;
-            opacity: 1;
+          .mobile-sheet-overlay.is-visible {
+            display: block !important;
+            opacity: 1 !important;
           }
 
-          .mobile-sheet-content {
-            width: 100%;
-            background-color: #ffffff;
+          /* BOTTOM SHEET "MÁS" (MODAL TIPO LISTA) */
+          .mobile-more-sheet {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            background-color: #ffffff !important;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            padding: 20px;
+            padding: 20px 16px;
             padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
-            max-height: 80vh;
+            max-height: 85vh;
             overflow-y: auto;
             box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.3);
-            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            position: relative;
-            z-index: 100000 !important;
+            z-index: 99999 !important;
             box-sizing: border-box;
+            transform: translateY(100%);
+            transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
           }
 
-          @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
+          .mobile-more-sheet.is-open {
+            transform: translateY(0) !important;
           }
 
           .sheet-header {
@@ -426,50 +400,65 @@ export class AppLayout {
 
           .sheet-title {
             font-weight: 800;
-            font-size: 16px;
+            font-size: 17px;
             color: #0f172a;
           }
 
           .sheet-close-btn {
-            font-size: 20px;
+            font-size: 18px;
             background: #f1f5f9;
             border: none;
             border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            color: #475569;
+            width: 38px;
+            height: 38px;
+            color: #0f172a;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 44px;
-            min-width: 44px;
+            font-weight: 800;
           }
 
-          .sheet-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+          /* FORMATO LISTA TÁCTIL VERTICAL */
+          .sheet-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
           }
 
-          .sheet-item {
+          .sheet-list-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px;
+            justify-content: space-between;
+            padding: 14px 16px;
             background-color: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
             text-decoration: none;
             color: #0f172a;
             font-weight: 700;
-            font-size: 13px;
-            min-height: 48px;
+            font-size: 14px;
+            min-height: 52px;
             box-sizing: border-box;
           }
 
-          .sheet-item:active {
+          .sheet-list-item:active {
             background-color: #e2e8f0;
+          }
+
+          .sheet-icon {
+            font-size: 18px;
+            margin-right: 12px;
+          }
+
+          .sheet-text {
+            flex: 1;
+            text-align: left;
+          }
+
+          .sheet-arrow {
+            color: #94a3b8;
+            font-size: 12px;
           }
         }
       </style>
@@ -483,36 +472,26 @@ export class AppLayout {
   _attachEvents() {
     const btnMore = document.getElementById("btn-mobile-more");
     const btnClose = document.getElementById("btn-close-sheet");
-    const sheetOverlay = document.getElementById("mobile-more-sheet");
+    const sheet = document.getElementById("mobile-more-sheet");
+    const overlay = document.getElementById("mobile-sheet-overlay");
 
     const closeSheet = () => {
-      if (sheetOverlay) {
-        sheetOverlay.classList.remove("open");
-        sheetOverlay.setAttribute("aria-hidden", "true");
-      }
-      if (btnMore) {
-        btnMore.setAttribute("aria-expanded", "false");
-      }
-      document.body.style.overflow = ""; // Restaura el scroll del cuerpo
+      if (sheet) sheet.classList.remove("is-open");
+      if (overlay) overlay.classList.remove("is-visible");
+      document.body.style.overflow = ""; // Reactiva el scroll
     };
 
     const openSheet = () => {
-      if (sheetOverlay) {
-        sheetOverlay.classList.add("open");
-        sheetOverlay.setAttribute("aria-hidden", "false");
-      }
-      if (btnMore) {
-        btnMore.setAttribute("aria-expanded", "true");
-      }
-      document.body.style.overflow = "hidden"; // Bloquea el scroll de fondo
+      if (sheet) sheet.classList.add("is-open");
+      if (overlay) overlay.classList.add("is-visible");
+      document.body.style.overflow = "hidden"; // Congela scroll del fondo
     };
 
-    if (btnMore && sheetOverlay) {
+    if (btnMore) {
       btnMore.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const isOpen = sheetOverlay.classList.contains("open");
-        if (isOpen) {
+        if (sheet?.classList.contains("is-open")) {
           closeSheet();
         } else {
           openSheet();
@@ -528,23 +507,20 @@ export class AppLayout {
       });
     }
 
-    if (sheetOverlay) {
-      sheetOverlay.addEventListener("click", (e) => {
-        // Cierra si se hace clic exactamente sobre la capa de fondo (overlay)
-        if (e.target === sheetOverlay) {
-          closeSheet();
-        }
+    if (overlay) {
+      overlay.addEventListener("click", (e) => {
+        e.preventDefault();
+        closeSheet();
       });
     }
 
-    // 🚀 AUTOCIERRE TÁCTIL AUTOMÁTICO AL PULSAR CUALQUIER OPCIÓN DE NAVEGACIÓN
-    document.querySelectorAll(".sheet-item, .mobile-nav-item").forEach(item => {
+    // AUTOCIERRE TÁCTIL AUTOMÁTICO AL TOCAR CUALQUIER OPCIÓN DEL MENÚ
+    document.querySelectorAll(".sheet-list-item, .mobile-nav-item").forEach(item => {
       item.addEventListener("click", () => {
         closeSheet();
       });
     });
 
-    // Cierre mediante tecla ESC para accesibilidad
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeSheet();
     });
