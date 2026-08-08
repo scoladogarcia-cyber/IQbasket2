@@ -1,7 +1,7 @@
 /**
  * @fileoverview Registro Estadístico Avanzado / BoxScore (GameBoxScoreView.js).
- * Sincronizado con DataStore (0ms), control de permisos por rol y traducción dinámica con TranslationStore.
- * Flujo en 2 Vistas: 
+ * Sincronizado con DataStore (0ms), control de permisos por rol y traducción dinámica con TranslationStore e I18nService.
+ * Flujo en 2 Vistas con renderizado dual Responsive (TableView Desktop / CardView Smartphone):
  * 1) Listado general de partidos con métricas avanzadas del equipo.
  * 2) Ficha detallada por jugador con casillas editables y recálculo en tiempo real.
  */
@@ -9,6 +9,7 @@
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class GameBoxScoreView {
   constructor(supabaseClient, authController) {
@@ -40,7 +41,7 @@ export class GameBoxScoreView {
     this.players = DataStore.getPlayers() || [];
 
     if (this.games.length === 0) {
-      container.innerHTML = `<div style="padding: 20px; color: red;">${TranslationStore.t("no_games_recorded", "No hay partidos registrados.")}</div>`;
+      container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700;">${TranslationStore.t("no_games_recorded", "No hay partidos registrados.")}</div>`;
       return;
     }
 
@@ -98,7 +99,7 @@ export class GameBoxScoreView {
       const opponentText = g.opponent || TranslationStore.t("opponent", "Rival");
 
       return `
-        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
+        <tr class="game-boxscore-row" style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
           <td style="padding: 14px 12px;">
             <div style="font-weight: 800; color: #0f172a;">vs ${opponentText}</div>
             <div style="font-size: 11px; color: #94a3b8; font-weight: 500;">${g.date || '-'} · ${venueText}</div>
@@ -124,7 +125,7 @@ export class GameBoxScoreView {
           <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totTap}</td>
           <td style="padding: 14px 12px; text-align: center; font-weight: 800; color: #dc2626;">${totPer}</td>
           <td style="padding: 14px 12px; text-align: center;">
-            <button class="btn-open-boxscore" data-id="${g.id}" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+            <button class="btn-open-boxscore" data-id="${g.id}" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; min-height: 44px;">
               👁️ Box Score
             </button>
           </td>
@@ -133,7 +134,7 @@ export class GameBoxScoreView {
     }).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         
         <!-- Header -->
         <div style="margin-bottom: 24px;">
@@ -183,7 +184,7 @@ export class GameBoxScoreView {
   }
 
   // =========================================================================
-  // VISTA 2: DETALLE DEL BOXSCORE POR JUGADOR
+  // VISTA 2: DETALLE DEL BOXSCORE POR JUGADOR (TABLEVIEW Y CARDVIEW)
   // =========================================================================
   _renderGameBoxScoreDetail(container, containerId) {
     const currentGame = this.games.find(g => String(g.id) === String(this.selectedGameId)) || this.games[0];
@@ -229,7 +230,7 @@ export class GameBoxScoreView {
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;" data-player-id="${p.id}">
           <td style="padding: 10px; font-weight: 700; color: #0f172a; white-space: nowrap;">#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</td>
           <td style="padding: 10px; text-align: center;"><input type="checkbox" class="chk-starter" ${isStarter ? 'checked' : ''} ${canEdit ? '' : 'disabled'} /></td>
-          <td style="padding: 10px; text-align: center;"><input type="number" class="bs-input" data-field="minutes" value="${st.minutes ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 35px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
+          <td style="padding: 10px; text-align: center;"><input type="number" class="bs-input" data-field="minutes" value="${st.minutes ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 32px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
           <td style="padding: 10px; text-align: center; font-weight: 800;">${computed.points || 0}</td>
           <td style="padding: 10px; text-align: center;"><input type="number" class="bs-input" data-field="fg2_made" value="${st.fg2_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 35px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
           <td style="padding: 10px; text-align: center;"><input type="number" class="bs-input" data-field="fg2_attempted" value="${st.fg2_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 35px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
@@ -255,6 +256,50 @@ export class GameBoxScoreView {
       `;
     }).join("");
 
+    // CARDVIEW PARA DISPOSITIVOS MÓVILES
+    const mobileCardsMarkup = this.players.map(p => {
+      const st = this.gameStats.find(s => String(s.player_id) === String(p.id)) || {};
+      const isStarter = starters.includes(p.id);
+      const computed = StatsEngine.calculatePlayerStats(st);
+      const totalReb = Number(st.off_reb || 0) + Number(st.def_reb || 0);
+
+      return `
+        <div class="mobile-boxscore-card card" data-player-id="${p.id}">
+          <div class="card-player-header">
+            <div>
+              <strong class="player-name">#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+              <span class="player-pos">${p.primary_position || 'Jugador'}</span>
+            </div>
+            <label class="starter-label">
+              <input type="checkbox" class="chk-starter" ${isStarter ? 'checked' : ''} ${canEdit ? '' : 'disabled'} />
+              <span>TIT</span>
+            </label>
+          </div>
+          <div class="card-kpi-summary">
+            <div class="kpi-mini"><span>PTS</span><strong>${computed.points || 0}</strong></div>
+            <div class="kpi-mini"><span>REB</span><strong>${totalReb}</strong></div>
+            <div class="kpi-mini"><span>AST</span><strong>${st.assists || 0}</strong></div>
+            <div class="kpi-mini"><span>VAL</span><strong style="color: #a855f7;">${computed.evaluation ?? 0}</strong></div>
+          </div>
+          <div class="card-inputs-grid">
+            <div class="input-unit"><label>MIN</label><input type="number" class="bs-input" data-field="minutes" value="${st.minutes ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>T2C</label><input type="number" class="bs-input" data-field="fg2_made" value="${st.fg2_made ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>T2I</label><input type="number" class="bs-input" data-field="fg2_attempted" value="${st.fg2_attempted ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>T3C</label><input type="number" class="bs-input" data-field="fg3_made" value="${st.fg3_made ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>T3I</label><input type="number" class="bs-input" data-field="fg3_attempted" value="${st.fg3_attempted ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>TLC</label><input type="number" class="bs-input" data-field="ft_made" value="${st.ft_made ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>TLI</label><input type="number" class="bs-input" data-field="ft_attempted" value="${st.ft_attempted ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>RO</label><input type="number" class="bs-input" data-field="off_reb" value="${st.off_reb ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>RD</label><input type="number" class="bs-input" data-field="def_reb" value="${st.def_reb ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>AST</label><input type="number" class="bs-input" data-field="assists" value="${st.assists ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>ROB</label><input type="number" class="bs-input" data-field="steals" value="${st.steals ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>PER</label><input type="number" class="bs-input" data-field="turnovers" value="${st.turnovers ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+            <div class="input-unit"><label>FC</label><input type="number" class="bs-input" data-field="fouls_committed" value="${st.fouls_committed ?? 0}" ${canEdit ? '' : 'disabled'} /></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
     const totalFga = totFg2a + totFg3a;
     const totalFgm = totFg2m + totFg3m;
     const teamEfg = totalFga > 0 ? (((totalFgm + 0.5 * totFg3m) / totalFga) * 100).toFixed(1) : "0.0";
@@ -268,12 +313,12 @@ export class GameBoxScoreView {
     `).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         
         <!-- Header con Botón de Regreso -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <a href="#/boxscore" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+            <a href="#/boxscore" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
               ← ${TranslationStore.t("back_to_register", "Volver a Registro Estadístico")}
             </a>
             <div>
@@ -285,19 +330,19 @@ export class GameBoxScoreView {
           </div>
 
           ${canEdit ? `
-            <button id="btn-save-boxscore" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
+            <button id="btn-save-boxscore" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">
               💾 ${TranslationStore.t("save_changes", "Guardar Cambios")}
             </button>
           ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
         <!-- Selector de Partido -->
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-          <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
             <span style="font-size: 18px;">🏆</span>
             <div style="flex: 1; max-width: 500px;">
               <label style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">${TranslationStore.t("change_game", "CAMBIAR DE PARTIDO")}:</label>
-              <select id="select-game-bs" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white;">
+              <select id="select-game-bs" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; min-height: 44px;">
                 ${optionsMarkup}
               </select>
             </div>
@@ -308,8 +353,8 @@ export class GameBoxScoreView {
           </span>
         </div>
 
-        <!-- Tabla BoxScore -->
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <!-- RENDERIZADO DUAL: TABLEVIEW (DESKTOP) VS CARDVIEW (MÓVIL) -->
+        <div class="desktop-only" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="border-bottom: 2px solid #e2e8f0; font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; background: #f8fafc;">
@@ -369,7 +414,30 @@ export class GameBoxScoreView {
           </table>
         </div>
 
+        <div class="mobile-only mobile-boxscore-grid">
+          ${mobileCardsMarkup}
+        </div>
+
       </div>
+
+      <style>
+        .mobile-boxscore-grid { display: flex; flex-direction: column; gap: 12px; }
+        .mobile-boxscore-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: white; }
+        .card-player-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+        .player-name { font-size: 14px; color: #0f172a; display: block; }
+        .player-pos { font-size: 11px; color: #64748b; }
+        .starter-label { font-size: 11px; font-weight: 700; color: #1e3a8a; display: flex; align-items: center; gap: 4px; }
+        .card-kpi-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: #f8fafc; padding: 8px; border-radius: 8px; text-align: center; }
+        .kpi-mini span { font-size: 9px; color: #64748b; font-weight: 800; display: block; }
+        .kpi-mini strong { font-size: 14px; color: #0f172a; }
+        .card-inputs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .input-unit label { font-size: 9px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px; }
+        .input-unit input { width: 100%; height: 36px; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; }
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
+        }
+      </style>
     `;
 
     // Listener del Selector de Partido Superior
@@ -380,17 +448,20 @@ export class GameBoxScoreView {
     // Guardado de BoxScore
     if (canEdit) {
       container.querySelector("#btn-save-boxscore")?.addEventListener("click", async () => {
-        const rows = container.querySelectorAll("tbody tr");
+        const rows = container.querySelectorAll("tr[data-player-id], .mobile-boxscore-card[data-player-id]");
         const starterIds = [];
         const statsList = [];
+        const processedPlayerIds = new Set();
 
-        for (const tr of rows) {
-          const playerId = tr.getAttribute("data-player-id");
-          const isStarter = tr.querySelector(".chk-starter")?.checked;
+        for (const item of rows) {
+          const playerId = item.getAttribute("data-player-id");
+          if (!playerId || processedPlayerIds.has(playerId)) continue;
+          processedPlayerIds.add(playerId);
 
+          const isStarter = item.querySelector(".chk-starter")?.checked;
           if (isStarter) starterIds.push(playerId);
 
-          const getInpVal = (field) => Number(tr.querySelector(`.bs-input[data-field="${field}"]`)?.value || 0);
+          const getInpVal = (field) => Number(item.querySelector(`.bs-input[data-field="${field}"]`)?.value || 0);
 
           statsList.push({
             player_id: playerId,
@@ -426,3 +497,5 @@ export class GameBoxScoreView {
     }
   }
 }
+
+export default GameBoxScoreView;

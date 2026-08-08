@@ -3,12 +3,14 @@
  * Permite seleccionar entre 2 y 4 jugadores para comparar sus estadísticas
  * convencionales, avanzadas, selector de métrica para evolución por partido y fortalezas relativas.
  * Gráfico 100% alineado mediante dibujado unificado de Eje X/Y dentro del propio SVG.
- * Totalmente integrado con DataStore y TranslationStore.
+ * Totalmente integrado con DataStore, TranslationStore e I18nService.
+ * Adaptado con diseño responsivo dual (TableView Desktop / CardView Smartphone).
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class ComparatorView {
   constructor(authController) {
@@ -18,7 +20,7 @@ export class ComparatorView {
     this.selectedMetric = "pts"; // 'pts', 'val', 'reb', 'ast', 'stl', 'blk'
     
     // Paleta de colores profesionales para los jugadores comparados
-    this.playerColors = ["#1e3a8a", "#f97316", "#16a34a", "#9333ea"];
+    this.playerColors = ["#1e3a8a", "#ea580c", "#16a34a", "#9333ea"];
   }
 
   /**
@@ -132,7 +134,7 @@ export class ComparatorView {
       const color = this.playerColors[idx % this.playerColors.length];
 
       return `
-        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #334155; background: #f8fafc; padding: 4px 12px; border-radius: 20px; border: 1px solid #e2e8f0;">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #334155; background: #f8fafc; padding: 6px 12px; border-radius: 20px; border: 1px solid #e2e8f0;">
           <span style="width: 10px; height: 10px; background: ${color}; border-radius: 50%;"></span>
           ${name}
         </span>
@@ -251,13 +253,36 @@ export class ComparatorView {
       `;
     }).join("");
 
+    // CARDVIEW PARA TELÉFONOS MÓVILES
+    const mobileCardsMarkup = this.selectedPlayerIds.map((pId, idx) => {
+      const pData = statsMap.get(pId);
+      if (!pData) return "";
+      const color = this.playerColors[idx % this.playerColors.length];
+
+      return `
+        <div class="card" style="padding: 16px; border-top: 4px solid ${color};">
+          <strong style="font-size: 15px; color: #0f172a; display: block; margin-bottom: 12px;">
+            #${pData.player.jersey ?? '-'} ${pData.player.first_name || ''} ${pData.player.last_name || ''}
+          </strong>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+            <div><span style="color: #64748b;">PTS:</span> <strong>${pData.pts}</strong></div>
+            <div><span style="color: #64748b;">REB:</span> <strong>${pData.reb}</strong></div>
+            <div><span style="color: #64748b;">AST:</span> <strong>${pData.ast}</strong></div>
+            <div><span style="color: #64748b;">VAL:</span> <strong style="color: #a855f7;">${pData.val}</strong></div>
+            <div><span style="color: #64748b;">eFG%:</span> <strong>${pData.efg}%</strong></div>
+            <div><span style="color: #64748b;">TS%:</span> <strong>${pData.ts}%</strong></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
     return `
       <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">
           📋 TABLA COMPARATIVA
         </div>
 
-        <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+        <div class="desktop-only" style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="background: #f1f5f9; font-size: 11px; border-bottom: 2px solid #e2e8f0;">
@@ -269,6 +294,10 @@ export class ComparatorView {
               ${rowsMarkup}
             </tbody>
           </table>
+        </div>
+
+        <div class="mobile-only" style="display: flex; flex-direction: column; gap: 12px;">
+          ${mobileCardsMarkup}
         </div>
       </div>
     `;
@@ -422,7 +451,7 @@ export class ComparatorView {
       const color = this.playerColors[idx % this.playerColors.length];
 
       return `
-        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #334155; background: #f8fafc; padding: 4px 12px; border-radius: 20px; border: 1px solid #e2e8f0;">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #334155; background: #f8fafc; padding: 6px 12px; border-radius: 20px; border: 1px solid #e2e8f0;">
           <span style="width: 10px; height: 10px; background: ${color}; border-radius: 50%;"></span>
           ${name}
         </span>
@@ -432,7 +461,7 @@ export class ComparatorView {
     return `
       <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
           <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">
             📈 EVOLUCIÓN DE ${metricTitle} POR PARTIDO (P1 - P${totalGames})
           </div>
@@ -440,7 +469,7 @@ export class ComparatorView {
           <!-- Selector de Métrica -->
           <div style="display: flex; align-items: center; gap: 6px;">
             <label style="font-size: 11px; font-weight: 700; color: #64748b;">Métrica:</label>
-            <select id="select-evolution-metric" style="padding: 4px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; color: #0f172a; outline: none; cursor: pointer;">
+            <select id="select-evolution-metric" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; color: #0f172a; outline: none; cursor: pointer; min-height: 44px;">
               <option value="pts" ${this.selectedMetric === 'pts' ? 'selected' : ''}>Puntos</option>
               <option value="val" ${this.selectedMetric === 'val' ? 'selected' : ''}>Valoración (FIBA)</option>
               <option value="reb" ${this.selectedMetric === 'reb' ? 'selected' : ''}>Rebotes</option>
@@ -481,7 +510,7 @@ export class ComparatorView {
       const worstAttr = TranslationStore.t("blocks", "Tapones");
 
       return `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; flex-wrap: wrap; gap: 8px;">
           <span style="font-weight: 800; font-size: 13px; color: #0f172a;">${name}</span>
           <div style="font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
             <span>Mejor en</span> 
@@ -526,7 +555,7 @@ export class ComparatorView {
         <button type="button" 
                 class="btn-select-player-chip" 
                 data-id="${p.id}" 
-                style="padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; ${chipStyle}">
+                style="padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; ${chipStyle}">
           #${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}
           ${isSelected ? '✕' : ''}
         </button>
@@ -537,10 +566,10 @@ export class ComparatorView {
     const statsMap = hasEnoughPlayers ? this._getPlayerStatsMap() : new Map();
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">
             🔀 ${TranslationStore.t("comparator", "Comparador")}
           </h1>
@@ -548,10 +577,10 @@ export class ComparatorView {
           ${hasEnoughPlayers ? `
             <!-- TOGGLE POR PARTIDO / POR 40 MIN -->
             <div style="background: #e2e8f0; padding: 4px; border-radius: 10px; display: flex; gap: 4px;">
-              <button id="btn-mode-pergame" style="padding: 6px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; background: ${this.modePerGame ? 'white' : 'transparent'}; color: ${this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
+              <button id="btn-mode-pergame" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.modePerGame ? 'white' : 'transparent'}; color: ${this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
                 ${TranslationStore.t("per_game", "Por partido")}
               </button>
-              <button id="btn-mode-per40" style="padding: 6px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; background: ${!this.modePerGame ? 'white' : 'transparent'}; color: ${!this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${!this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
+              <button id="btn-mode-per40" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${!this.modePerGame ? 'white' : 'transparent'}; color: ${!this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${!this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
                 ${TranslationStore.t("per_40_min", "Por 40 min")}
               </button>
             </div>
@@ -591,7 +620,7 @@ export class ComparatorView {
             <!-- 1. Gráfico de Barras Convencionales -->
             ${this._renderHorizontalBarChart(statsMap)}
 
-            <!-- 2. Tabla Comparativa -->
+            <!-- 2. Tabla Comparativa (TableView / CardView Dual) -->
             ${this._renderComparisonTable(statsMap)}
 
             <!-- 3. Evolución por Partido (SVG Unificado con Eje X y Y) -->
@@ -604,6 +633,13 @@ export class ComparatorView {
         `}
 
       </div>
+
+      <style>
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
+        }
+      </style>
     `;
 
     // Eventos Chips de Selección
@@ -641,3 +677,5 @@ export class ComparatorView {
     });
   }
 }
+
+export default ComparatorView;

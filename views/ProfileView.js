@@ -1,11 +1,12 @@
 /**
- * @fileoverview Vista de "Mi Perfil" para IQ Basket.
- * Maquetación idéntica a la especificación con banner de usuario,
- * modificación de datos obligatorios, cambio opcional de contraseña
- * con función ver/ocultar (ojo) y aviso de equipos asignados.
+ * @fileoverview Vista de "Mi Perfil" para IQ Basket (ProfileView.js).
+ * Maquetación con banner de usuario, modificación de datos obligatorios,
+ * cambio opcional de contraseña con función ver/ocultar e indicadores de equipos asignados.
+ * Adaptado para PWA/Móvil con áreas táctiles de 44px e internacionalización i18n completa.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class ProfileView {
   constructor(authController) {
@@ -53,81 +54,81 @@ export class ProfileView {
           <div class="header-info">
             <h2>${userName} ${userLastName}</h2>
             <p>${userEmail}</p>
-            <span class="badge-role-header">PERFIL: ${userRole} (NO CAMBIABLE)</span>
+            <span class="badge-role-header">${TranslationStore.t("profile_role_label", "PERFIL")}: ${userRole} (${TranslationStore.t("not_editable", "NO CAMBIABLE")})</span>
           </div>
         </div>
 
         <!-- 1. DATOS DE PERFIL (OBLIGATORIOS) -->
-        <div class="profile-card">
+        <div class="profile-card card">
           <div class="card-title">
-            <span>👤</span> DATOS DE PERFIL (OBLIGATORIOS)
+            <span>👤</span> ${TranslationStore.t("profile_data_title", "DATOS DE PERFIL (OBLIGATORIOS)").toUpperCase()}
           </div>
           <form id="form-profile-data" class="grid-2-cols">
             <div class="form-group">
-              <label>Nombre</label>
+              <label for="input-profile-name">${TranslationStore.t("first_name", "Nombre")}</label>
               <input type="text" id="input-profile-name" value="${userName}" required />
             </div>
             <div class="form-group">
-              <label>Apellidos</label>
+              <label for="input-profile-lastname">${TranslationStore.t("last_name", "Apellidos")}</label>
               <input type="text" id="input-profile-lastname" value="${userLastName}" required />
             </div>
             <div class="form-group">
-              <label>Teléfono de Contacto</label>
+              <label for="input-profile-phone">${TranslationStore.t("phone", "Teléfono de Contacto")}</label>
               <input type="text" id="input-profile-phone" value="${userPhone}" />
             </div>
             <div class="form-group">
-              <label>Mail de Contacto (Obligatorio)</label>
+              <label for="input-profile-email">${TranslationStore.t("email", "Mail de Contacto (Obligatorio)")}</label>
               <input type="email" id="input-profile-email" value="${userEmail}" required />
             </div>
             <div class="form-group">
-              <label>Login (Obligatorio)</label>
+              <label for="input-profile-login">${TranslationStore.t("login", "Login (Obligatorio)")}</label>
               <input type="text" id="input-profile-login" value="${userLogin}" required />
             </div>
             <div class="form-group">
-              <label>Perfil / Rol (Obligatorio - No Cambiable)</label>
+              <label>${TranslationStore.t("role_disabled_label", "Perfil / Rol (Obligatorio - No Cambiable)")}</label>
               <input type="text" value="${userRole}" disabled class="input-disabled-highlight" />
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
-              <button type="submit" class="btn-primary-blue">💾 Guardar Perfil</button>
+              <button type="submit" class="btn-primary-blue">💾 ${TranslationStore.t("save_profile", "Guardar Perfil")}</button>
             </div>
           </form>
         </div>
 
-        <!-- 2. CAMBIAR CONTRASEÑA (OPCIONAL - SALE EN BLANCO) -->
-        <div class="profile-card">
+        <!-- 2. CAMBIAR CONTRASEÑA (OPCIONAL) -->
+        <div class="profile-card card">
           <div class="card-title">
-            <span>🔑</span> CAMBIAR CONTRASEÑA (OPCIONAL - SALE EN BLANCO)
+            <span>🔑</span> ${TranslationStore.t("change_password_title", "CAMBIAR CONTRASEÑA (OPCIONAL)").toUpperCase()}
           </div>
           <form id="form-change-password" class="grid-2-cols">
             <div class="form-group">
-              <label>Nueva Contraseña (Obligatorio si desea cambiar)</label>
+              <label for="input-new-password">${TranslationStore.t("new_password", "Nueva Contraseña")}</label>
               <div class="input-password-wrapper">
-                <input type="password" id="input-new-password" placeholder="Escribe la nueva contraseña" />
-                <button type="button" class="pwd-toggle-btn" data-target="input-new-password" title="Ver/Ocultar">👁️</button>
+                <input type="password" id="input-new-password" placeholder="${TranslationStore.t("new_password_placeholder", "Escribe la nueva contraseña")}" />
+                <button type="button" class="pwd-toggle-btn" data-target="input-new-password" title="Ver/Ocultar" aria-label="Ver u ocultar contraseña">👁️</button>
               </div>
             </div>
             <div class="form-group">
-              <label>Repetir Nueva Contraseña (Obligatorio si desea cambiar)</label>
+              <label for="input-repeat-password">${TranslationStore.t("repeat_password", "Repetir Nueva Contraseña")}</label>
               <div class="input-password-wrapper">
-                <input type="password" id="input-repeat-password" placeholder="Repite la nueva contraseña" />
-                <button type="button" class="pwd-toggle-btn" data-target="input-repeat-password" title="Ver/Ocultar">👁️</button>
+                <input type="password" id="input-repeat-password" placeholder="${TranslationStore.t("repeat_password_placeholder", "Repite la nueva contraseña")}" />
+                <button type="button" class="pwd-toggle-btn" data-target="input-repeat-password" title="Ver/Ocultar" aria-label="Ver u ocultar contraseña">👁️</button>
               </div>
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
-              <button type="submit" class="btn-secondary-purple">🔒 Cambiar Contraseña</button>
+              <button type="submit" class="btn-secondary-purple">🔒 ${TranslationStore.t("change_password_btn", "Cambiar Contraseña")}</button>
             </div>
           </form>
         </div>
 
         <!-- 3. EQUIPOS ASIGNADOS -->
-        <div class="profile-card">
+        <div class="profile-card card">
           <div class="card-title">
-            <span>🛡️</span> EQUIPOS ASIGNADOS
+            <span>🛡️</span> ${TranslationStore.t("assigned_teams_title", "EQUIPOS ASIGNADOS").toUpperCase()}
           </div>
           <div class="assigned-info-box">
             ${userRole === 'SUPERADMIN' 
-              ? 'Acceso Total Superadministrador a todos los equipos del sistema.' 
-              : 'Acceso asignado al equipo: <strong>JMJ Manyanet Sant Andreu</strong>.'}
+              ? TranslationStore.t("superadmin_access_msg", "Acceso Total Superadministrador a todos los equipos del sistema.") 
+              : `${TranslationStore.t("assigned_team_msg", "Acceso asignado al equipo:")} <strong>JMJ Manyanet Sant Andreu</strong>.`}
           </div>
         </div>
 
@@ -138,16 +139,17 @@ export class ProfileView {
         .profile-container {
           max-width: 950px;
           margin: 0 auto;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-family: var(--font-family-base, system-ui);
           display: flex;
           flex-direction: column;
           gap: 20px;
+          padding-bottom: 40px;
         }
 
         .profile-header-card {
-          background: #1e3a8a;
+          background: var(--color-secondary, #0f172a);
           color: white;
-          border-radius: 12px;
+          border-radius: var(--radius-lg, 12px);
           padding: 24px;
           display: flex;
           align-items: center;
@@ -159,7 +161,7 @@ export class ProfileView {
           width: 64px;
           height: 64px;
           border-radius: 50%;
-          background: #3b82f6;
+          background: var(--color-primary, #ea580c);
           color: white;
           font-weight: 900;
           font-size: 28px;
@@ -167,7 +169,7 @@ export class ProfileView {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          border: 2px solid #60a5fa;
+          border: 2px solid #fdba74;
         }
 
         .header-info h2 {
@@ -195,7 +197,7 @@ export class ProfileView {
         .profile-card {
           background: white;
           border: 1px solid #e2e8f0;
-          border-radius: 12px;
+          border-radius: var(--radius-lg, 12px);
           padding: 20px 24px;
           box-shadow: 0 1px 3px rgba(0,0,0,0.02);
         }
@@ -213,7 +215,7 @@ export class ProfileView {
 
         .grid-2-cols {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
           gap: 16px 20px;
         }
 
@@ -237,6 +239,7 @@ export class ProfileView {
           font-size: 13px;
           outline: none;
           color: #0f172a;
+          min-height: 44px;
           transition: border-color 0.2s;
         }
 
@@ -256,25 +259,30 @@ export class ProfileView {
           position: relative;
           display: flex;
           align-items: center;
+          width: 100%;
         }
 
         .input-password-wrapper input {
           width: 100%;
-          padding-right: 40px;
+          padding-right: 48px;
           background: white;
           border-color: #cbd5e1;
         }
 
         .pwd-toggle-btn {
           position: absolute;
-          right: 10px;
+          right: 4px;
           background: none;
           border: none;
           cursor: pointer;
-          font-size: 14px;
-          padding: 4px;
-          opacity: 0.6;
-          transition: opacity 0.2s;
+          font-size: 16px;
+          padding: 8px;
+          min-width: 44px;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0.7;
         }
 
         .pwd-toggle-btn:hover {
@@ -282,7 +290,7 @@ export class ProfileView {
         }
 
         .btn-primary-blue {
-          background: #172554;
+          background: var(--color-secondary, #0f172a);
           color: white;
           border: none;
           padding: 10px 20px;
@@ -290,6 +298,7 @@ export class ProfileView {
           font-weight: 800;
           font-size: 13px;
           cursor: pointer;
+          min-height: 44px;
           transition: background 0.2s;
         }
 
@@ -306,6 +315,7 @@ export class ProfileView {
           font-weight: 800;
           font-size: 13px;
           cursor: pointer;
+          min-height: 44px;
           transition: background 0.2s;
         }
 
@@ -323,10 +333,7 @@ export class ProfileView {
           font-weight: 600;
         }
 
-        @media (max-width: 868px) {
-          .grid-2-cols {
-            grid-template-columns: 1fr !important;
-          }
+        @media (max-width: 767px) {
           .profile-header-card {
             flex-direction: column;
             text-align: center;
@@ -351,7 +358,7 @@ export class ProfileView {
       localStorage.setItem("iq_user_phone", phone);
       localStorage.setItem("iq_user_email", email);
 
-      alert("✅ Perfil guardado correctamente.");
+      alert("✅ " + TranslationStore.t("profile_saved_msg", "Perfil guardado correctamente."));
       this.render(containerId);
     });
 
@@ -362,18 +369,20 @@ export class ProfileView {
       const pass2 = container.querySelector("#input-repeat-password")?.value;
 
       if (!pass1 || !pass2) {
-        alert("⚠️ Por favor, introduce y repite la nueva contraseña.");
+        alert("⚠️ " + TranslationStore.t("passwords_empty_warning", "Por favor, introduce y repite la nueva contraseña."));
         return;
       }
 
       if (pass1 !== pass2) {
-        alert("❌ Las contraseñas no coinciden. Por favor, verifícalas.");
+        alert("❌ " + TranslationStore.t("passwords_mismatch_error", "Las contraseñas no coinciden. Por favor, verifícalas."));
         return;
       }
 
-      alert("🔑 Contraseña actualizada con éxito.");
+      alert("🔑 " + TranslationStore.t("password_updated_msg", "Contraseña actualizada con éxito."));
       container.querySelector("#input-new-password").value = "";
       container.querySelector("#input-repeat-password").value = "";
     });
   }
 }
+
+export default ProfileView;

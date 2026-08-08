@@ -1,11 +1,12 @@
 /**
  * @fileoverview Vista del Asistente de IA "Pregúntale a tus datos" (AskAIView.js).
- * Utiliza la API Gratuita de Groq Cloud (Llama 3.3 70B / Llama 3.1 8B)
- * ofreciendo un servicio de chat táctico 100% gratuito sin límite práctico de preguntas.
+ * Utiliza la API Gratuita de Groq Cloud con inyección dinámica del idioma activo.
+ * Totalmente internacionalizado y adaptado para dispositivos móviles con áreas táctiles de 44px.
  */
 
-import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
+import { AiPromptBuilder } from "../services/ai/AiPromptBuilder.js";
 
 export class AskAIView {
   constructor(authController) {
@@ -13,50 +14,9 @@ export class AskAIView {
     this.messages = [];
     this.isLoading = false;
     
-    // API Key de Groq (Se guarda en localStorage o se usa la clave global)
+    // Clave de Groq guardada en localStorage o por defecto
     this.apiKey = localStorage.getItem("iq_groq_api_key") || "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";
-    // Modelo por defecto: 'llama-3.3-70b-versatile' o 'llama-3.1-8b-instant'
     this.model = "llama-3.3-70b-versatile"; 
-  }
-
-  /**
-   * Prepara el contexto con todos los datos del equipo para la IA
-   */
-  _buildTeamContext() {
-    const games = DataStore.getGames() || [];
-    const players = DataStore.getPlayers() || [];
-    const playerStats = DataStore.getPlayerGameStats() || [];
-
-    const playersSummary = players.map(p => {
-      const pStats = playerStats.filter(s => String(s.player_id) === String(p.id));
-      let pts = 0, val = 0;
-      pStats.forEach(s => {
-        pts += Number(s.fg2_made || 0) * 2 + Number(s.fg3_made || 0) * 3 + Number(s.ft_made || 0);
-        val += Number(s.evaluation || 0);
-      });
-      const pj = pStats.length || 1;
-      return `#${p.jersey ?? '?'} ${p.first_name || ''} ${p.last_name || ''} (${p.position || 'Jugador'}): ${pj} PJ | Promedio ${(pts / pj).toFixed(1)} PTS/partido | VAL/PJ ${(val / pj).toFixed(1)}.`;
-    }).join("\n");
-
-    const gamesSummary = games.map((g, i) => {
-      return `P${i + 1} (${g.date || ''}): vs ${g.opponent || 'Rival'} (${g.venue || 'Local'}) -> Resultado: ${g.team_score ?? 0} - ${g.opponent_score ?? 0}.`;
-    }).join("\n");
-
-    return `
-Eres el Asistente Analista de Datos Oficial del equipo de baloncesto JMJ Manyanet Sant Andreu (IQ Basket).
-Tu misión es analizar la información del equipo y responder las preguntas del entrenador de forma táctica, concisa, profesional y directa.
-
-=== DATOS DE LA PLANTILLA (TEMPORADA 2026) ===
-${playersSummary || 'Sin datos de jugadores registrados.'}
-
-=== HISTÓRICO DE PARTIDOS REGISTRADOS (P1 - Pn) ===
-${gamesSummary || 'Sin datos de partidos registrados.'}
-
-Instrucciones de respuesta:
-- Sé breve, preciso y profesional como un asistente técnico de baloncesto.
-- Usa viñetas o formato estructurado si te piden listas o análisis comparativos.
-- Basate estrictamente en las cifras y datos facilitados arriba.
-`;
   }
 
   /**
@@ -64,10 +24,10 @@ Instrucciones de respuesta:
    */
   async _queryGroqAI(userPrompt) {
     if (!this.apiKey) {
-      throw new Error("API Key no configurada. Haz clic en 'Configurar API Key' e introduce tu clave gratuita de Groq.");
+      throw new Error(I18n.t("ai.errors.noApiKey", {}, "API Key no configurada. Por favor introduce tu clave de Groq Cloud."));
     }
 
-    const systemPrompt = this._buildTeamContext();
+    const systemPrompt = AiPromptBuilder.buildSystemPrompt();
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     const payload = {
@@ -92,11 +52,11 @@ Instrucciones de respuesta:
 
     if (!response.ok) {
       const errData = await response.json();
-      throw new Error(errData?.error?.message || "Error al conectar con el servidor de Groq AI.");
+      throw new Error(errData?.error?.message || "Error al conectar con la API de Groq AI.");
     }
 
     const data = await response.json();
-    return data?.choices?.[0]?.message?.content || "No se pudo obtener una respuesta válida de la IA.";
+    return data?.choices?.[0]?.message?.content || I18n.t("ai.errors.invalidReply", {}, "No se pudo obtener una respuesta válida.");
   }
 
   async render(containerId = "dashboard-content-area") {
@@ -105,51 +65,51 @@ Instrucciones de respuesta:
 
     const messagesMarkup = this.messages.map(m => `
       <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-direction: ${m.role === 'user' ? 'row-reverse' : 'row'};">
-        <div style="width: 32px; height: 32px; border-radius: 50%; background: ${m.role === 'user' ? '#1e3a8a' : '#f97316'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0;">
+        <div style="width: 36px; height: 36px; border-radius: 50%; background: ${m.role === 'user' ? '#1e3a8a' : 'var(--color-primary, #ea580c)'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0;">
           ${m.role === 'user' ? '👤' : '🤖'}
         </div>
-        <div style="max-width: 78%; background: ${m.role === 'user' ? '#1e3a8a' : 'white'}; color: ${m.role === 'user' ? 'white' : '#0f172a'}; border: 1px solid ${m.role === 'user' ? '#1e3a8a' : '#e2e8f0'}; border-radius: 12px; padding: 12px 16px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+        <div style="max-width: 82%; background: ${m.role === 'user' ? '#1e3a8a' : 'white'}; color: ${m.role === 'user' ? 'white' : '#0f172a'}; border: 1px solid ${m.role === 'user' ? '#1e3a8a' : '#e2e8f0'}; border-radius: 12px; padding: 12px 16px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
           ${m.text}
         </div>
       </div>
     `).join("");
 
     container.innerHTML = `
-      <div style="max-width: 900px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; height: calc(100vh - 110px); display: flex; flex-direction: column;">
+      <div style="max-width: 900px; margin: 0 auto; font-family: var(--font-family-base, system-ui); min-height: calc(100vh - 120px); display: flex; flex-direction: column;">
         
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
           <div>
-            <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">🤖 Pregúntale a tus datos (Asistente IA)</h1>
-            <span style="font-size: 12px; color: #64748b;">Consultas tácticas sobre partidos y jugadores en tiempo real (Groq Cloud)</span>
+            <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">🤖 ${I18n.t("ai.title", {}, "Pregúntale a tus datos (Asistente IA)")}</h1>
+            <span style="font-size: 12px; color: #64748b;">${I18n.t("ai.subtitle", {}, "Consultas tácticas sobre partidos y jugadores en tiempo real")}</span>
           </div>
 
-          <button id="btn-config-key" style="background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer;">
-            ⚙️ ${this.apiKey ? 'API Key Configurada' : 'Configurar API Key Gratis'}
+          <button id="btn-config-key" style="background: white; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer; min-height: 44px;">
+            ⚙️ ${this.apiKey ? I18n.t("ai.status.configured", {}, "API Key Configurada") : I18n.t("ai.status.unconfigured", {}, "Configurar API Key Gratis")}
           </button>
         </div>
 
         <!-- Botones de Sugerencias Tácticas -->
-        <div style="display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px;">
-          <button class="btn-prompt-chip" data-prompt="¿Quién es nuestro máximo anotador y cuál es su promedio de valoración por partido?" style="background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap;">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 6px;">
+          <button class="btn-prompt-chip" data-prompt="${I18n.t("ai.suggestions.topScorers", {}, "¿Quién es nuestro máximo anotador y cuál es su promedio de valoración por partido?")}" style="background: white; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap; min-height: 44px;">
             💡 Líderes de anotación y VAL
           </button>
-          <button class="btn-prompt-chip" data-prompt="Resume el rendimiento del equipo en los partidos como Local vs Visitante." style="background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap;">
+          <button class="btn-prompt-chip" data-prompt="${I18n.t("ai.suggestions.homeAway", {}, "Resume el rendimiento del equipo en los partidos como Local vs Visitante.")}" style="background: white; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap; min-height: 44px;">
             🏟️ Rendimiento Local vs Visitante
           </button>
-          <button class="btn-prompt-chip" data-prompt="¿Qué aspectos defensivos u ofensivos deberíamos mejorar según los resultados obtenidos?" style="background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap;">
+          <button class="btn-prompt-chip" data-prompt="${I18n.t("ai.suggestions.tacticalDiagnosis", {}, "¿Qué aspectos defensivos u ofensivos deberíamos mejorar según los resultados obtenidos?")}" style="background: white; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1e3a8a; cursor: pointer; white-space: nowrap; min-height: 44px;">
             📋 Diagnóstico Táctico Global
           </button>
         </div>
 
         <!-- Área de Mensajes del Chat -->
-        <div id="chat-messages-box" style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; overflow-y: auto; margin-bottom: 16px;">
+        <div id="chat-messages-box" style="flex: 1; min-height: 350px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; overflow-y: auto; margin-bottom: 16px;">
           ${this.messages.length === 0 ? `
-            <div style="text-align: center; color: #94a3b8; margin-top: 90px;">
+            <div style="text-align: center; color: #94a3b8; margin-top: 80px;">
               <span style="font-size: 44px; display: block; margin-bottom: 10px;">🏀</span>
-              <strong style="font-size: 15px; color: #334155; display: block;">¡Hola Entrenador! Soy tu Asistente Táctico de IQ Basket.</strong>
+              <strong style="font-size: 15px; color: #334155; display: block;">${I18n.t("ai.welcome.title", {}, "¡Hola Entrenador! Soy tu Asistente Táctico de IQ Basket.")}</strong>
               <p style="font-size: 12px; margin-top: 6px; color: #64748b; max-width: 450px; margin-left: auto; margin-right: auto;">
-                Tengo acceso en tiempo real a los partidos y estadísticas de tu plantilla. Hazme cualquier pregunta sobre el equipo.
+                ${I18n.t("ai.welcome.message", {}, "Tengo acceso en tiempo real a los partidos y estadísticas de tu plantilla. Hazme cualquier pregunta sobre el equipo.")}
               </p>
             </div>
           ` : messagesMarkup}
@@ -157,9 +117,9 @@ Instrucciones de respuesta:
 
         <!-- Formulario de Entrada de Pregunta -->
         <form id="form-ask-ai" style="display: flex; gap: 8px;">
-          <input type="text" id="input-ai-prompt" placeholder="Escribe tu consulta táctica..." ${this.isLoading ? 'disabled' : ''} style="flex: 1; padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; outline: none; background: white;" />
-          <button type="submit" ${this.isLoading ? 'disabled' : ''} style="background: #1e3a8a; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-            ${this.isLoading ? '⏳ Analizando...' : 'Enviar 🚀'}
+          <input type="text" id="input-ai-prompt" placeholder="${I18n.t("ai.input.placeholder", {}, "Escribe tu consulta táctica...")}" ${this.isLoading ? 'disabled' : ''} style="flex: 1; padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; outline: none; background: white; min-height: 44px;" />
+          <button type="submit" ${this.isLoading ? 'disabled' : ''} style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
+            ${this.isLoading ? '⏳ ...' : TranslationStore.t("send", "Enviar 🚀")}
           </button>
         </form>
 
@@ -172,7 +132,7 @@ Instrucciones de respuesta:
 
     // Listeners
     container.querySelector("#btn-config-key")?.addEventListener("click", () => {
-      const key = prompt("Introduce tu API Key Gratuita de Groq Cloud (consíguela gratis en console.groq.com):", this.apiKey);
+      const key = prompt(I18n.t("ai.promptApiKey", {}, "Introduce tu API Key Gratuita de Groq Cloud (console.groq.com):"), this.apiKey);
       if (key !== null) {
         this.apiKey = key.trim();
         localStorage.setItem("iq_groq_api_key", this.apiKey);
@@ -213,3 +173,5 @@ Instrucciones de respuesta:
     });
   }
 }
+
+export default AskAIView;

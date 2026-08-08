@@ -1,0 +1,37 @@
+/* Media Queries Centralizados para Breakpoints Requeridos */
+
+/* Móvil: 320px - 599px */
+@media (max-width: 599px) {
+  .desktop-only { display: none !important; }
+  .grid-kpi {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+  }
+}
+
+/* Tablet: 600px - 1023px */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .grid-kpi {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+  }
+}
+
+/* Desktop: 1024px+ */
+@media (min-width: 1024px) {
+  .mobile-only { display: none !important; }
+  .grid-kpi {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-lg);
+  }
+}
+
+/* Desktop Grande: 1440px+ */
+@media (min-width: 1440px) {
+  .grid-kpi {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Vista de Partidos y Formulario de Edición (GameLiveEditorView.js).
- * Sincronizado con 'game_period_scores', borrado de prórrogas y traducido con TranslationStore.
+ * Sincronizado con 'game_period_scores', borrado de prórrogas y traducido dinámicamente con I18nService.
  * Incluye validación triple de marcador:
  *  1. Puntos de Jugadores vs Marcador Total.
  *  2. Suma de Cuartos/Prórrogas vs Marcador Total (con indicador de diferencia).
@@ -11,6 +11,7 @@
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -112,10 +113,11 @@ export class GameLiveEditorView {
       const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
       const pCode = pCodeMap.get(String(g.id)) || "P-";
       const opponentText = g.opponent || TranslationStore.t("opponent", "Rival");
+      const formattedDate = g.date ? I18n.formatDate(g.date) : '-';
 
       return `
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
-          <div style="display: flex; align-items: center; gap: 20px;">
+        <div class="game-item-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
             <div style="padding: 10px 14px; border-radius: 10px; font-weight: 900; font-size: 13px; text-align: center; width: 85px; ${resultClass}">
               <div style="font-size: 9px; text-transform: uppercase; opacity: 0.9;">${resultText}</div>
               <div style="font-size: 16px; font-weight: 900; margin-top: 2px;">${g.team_score ?? 0}-${g.opponent_score ?? 0}</div>
@@ -129,7 +131,7 @@ export class GameLiveEditorView {
                 </span>
               </div>
               <div style="font-size: 12px; color: #64748b; margin: 4px 0;">
-                📅 ${g.date || '-'} &nbsp;·&nbsp; 🏆 ${g.competition || 'B1'}
+                📅 ${formattedDate} &nbsp;·&nbsp; 🏆 ${g.competition || 'B1'}
               </div>
               <div style="font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #f1f5f9; display: inline-block;">
                 <b>${TranslationStore.t("quarters", "CUARTOS")}:</b> Q1: ${q1} &nbsp; Q2: ${q2} &nbsp; Q3: ${q3} &nbsp; Q4: ${q4} ${otMarkup ? `&nbsp; ${otMarkup}` : ''}
@@ -137,12 +139,12 @@ export class GameLiveEditorView {
             </div>
           </div>
 
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">👁️ Boxscore</button>
-            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">📊 ${TranslationStore.t("report", "Informe")}</button>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">👁️ Boxscore</button>
+            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 ${TranslationStore.t("report", "Informe")}</button>
             ${canEdit ? `
-              <button class="btn-edit-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #64748b;" title="${TranslationStore.t("edit_game", "Editar partido")}">✏️</button>
-              <button class="btn-delete-game" data-id="${g.id}" style="background: none; border: none; font-size: 16px; cursor: pointer; color: #ef4444;" title="${TranslationStore.t("delete_game", "Eliminar partido")}">🗑️</button>
+              <button class="btn-edit-game" data-id="${g.id}" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b; min-height: 44px; min-width: 44px;" title="${TranslationStore.t("edit_game", "Editar partido")}">✏️</button>
+              <button class="btn-delete-game" data-id="${g.id}" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #ef4444; min-height: 44px; min-width: 44px;" title="${TranslationStore.t("delete_game", "Eliminar partido")}">🗑️</button>
             ` : ''}
           </div>
         </div>
@@ -150,27 +152,27 @@ export class GameLiveEditorView {
     }).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div>
             <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("team_games", "Partidos del Equipo")}</h1>
             <span style="font-size: 13px; color: #64748b;">JMJ Manyanet Sant Andreu · ${this.games.length} ${TranslationStore.t("registered_games", "partidos registrados")}</span>
           </div>
           ${canEdit ? `
-            <button id="btn-create-game" style="background: #1e3a8a; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;">+ ${TranslationStore.t("register_new_game", "Registrar nuevo partido")}</button>
+            <button id="btn-create-game" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">+ ${TranslationStore.t("register_new_game", "Registrar nuevo partido")}</button>
           ` : `<span style="background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; gap: 8px;">
-            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${TranslationStore.t("all", "Todos")} (${this.games.length})</button>
-            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${TranslationStore.t("local", "Local")}</button>
-            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 6px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${TranslationStore.t("visitor", "Visitante")}</button>
+            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${TranslationStore.t("all", "Todos")} (${this.games.length})</button>
+            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${TranslationStore.t("local", "Local")}</button>
+            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${TranslationStore.t("visitor", "Visitante")}</button>
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 12px; font-weight: 700; color: #64748b;">ORDENAR CRONOLÓGICAMENTE:</label>
-            <select id="select-sort-games" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; cursor: pointer;">
+            <select id="select-sort-games" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; cursor: pointer; min-height: 44px;">
               <option value="desc" ${this.sortOrder === 'desc' ? 'selected' : ''}>Pn → P1 (Más recientes primero)</option>
               <option value="asc" ${this.sortOrder === 'asc' ? 'selected' : ''}>P1 → Pn (Antiguos a recientes)</option>
             </select>
@@ -302,14 +304,13 @@ export class GameLiveEditorView {
       qOppSum += Number(p.opponent_score || 0);
     });
 
-    // 3. Puntos Totales declarados manualmente en el formulario (o por defecto los de los cuartos)
+    // 3. Puntos Totales declarados manualmente en el formulario
     const inpTeamScore = container.querySelector('input[name="team_score"]');
     const inpOppScore = container.querySelector('input[name="opponent_score"]');
 
     const totalTeamScore = inpTeamScore ? Number(inpTeamScore.value || 0) : qTeamSum;
     const totalOppScore = inpOppScore ? Number(inpOppScore.value || 0) : qOppSum;
 
-    // Actualizar objeto en memoria
     if (this.currentGame) {
       this.currentGame.team_score = totalTeamScore;
       this.currentGame.opponent_score = totalOppScore;
@@ -409,7 +410,7 @@ export class GameLiveEditorView {
     const startersMarkup = this.players.map(p => {
       const isSelected = starters.includes(p.id);
       return `
-        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" ${canEdit ? '' : 'disabled'} style="padding: 8px 12px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" ${canEdit ? '' : 'disabled'} style="padding: 10px 12px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px;">
           <span>#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</span>
           <span style="font-size: 10px; opacity: 0.8; font-weight: 600;">${p.primary_position || TranslationStore.t("player", "Jugador")}</span>
         </button>
@@ -425,21 +426,21 @@ export class GameLiveEditorView {
       return `
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;" data-player-id="${p.id}">
           <td style="padding: 8px; font-weight: 700; color: #0f172a; white-space: nowrap;">#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="minutes" value="${st.minutes ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 45px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg2_made" value="${st.fg2_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg2_attempted" value="${st.fg2_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg3_made" value="${st.fg3_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg3_attempted" value="${st.fg3_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="ft_made" value="${st.ft_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="ft_attempted" value="${st.ft_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="off_reb" value="${st.off_reb ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="def_reb" value="${st.def_reb ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="assists" value="${st.assists ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="steals" value="${st.steals ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="blocks" value="${st.blocks ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="turnovers" value="${st.turnovers ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fouls_committed" value="${st.fouls_committed ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
-          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fouls_received" value="${st.fouls_received ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="minutes" value="${st.minutes ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 45px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg2_made" value="${st.fg2_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg2_attempted" value="${st.fg2_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg3_made" value="${st.fg3_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fg3_attempted" value="${st.fg3_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="ft_made" value="${st.ft_made ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="ft_attempted" value="${st.ft_attempted ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="off_reb" value="${st.off_reb ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="def_reb" value="${st.def_reb ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="assists" value="${st.assists ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="steals" value="${st.steals ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="blocks" value="${st.blocks ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="turnovers" value="${st.turnovers ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fouls_committed" value="${st.fouls_committed ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+          <td style="padding: 4px;"><input type="number" class="st-input" data-field="fouls_received" value="${st.fouls_received ?? 0}" ${canEdit ? '' : 'disabled'} style="width: 40px; height: 36px; text-align: center; padding: 4px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
           <td style="padding: 8px; text-align: center; font-weight: 800; color: ${pmColor};">${pmText}</td>
         </tr>
       `;
@@ -451,50 +452,50 @@ export class GameLiveEditorView {
     const quartersMarkup = quarters.map((q, i) => `
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 12px; font-weight: 700; color: #64748b;">${i + 1}º ${TranslationStore.t("quarter", "cuarto")}:</span>
-        <input type="number" class="q-input" data-index="${i}" data-side="team" value="${q.team_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" /> -
-        <input type="number" class="q-input" data-index="${i}" data-side="opp" value="${q.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" />
+        <input type="number" class="q-input" data-index="${i}" data-side="team" value="${q.team_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; height: 40px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" /> -
+        <input type="number" class="q-input" data-index="${i}" data-side="opp" value="${q.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 50px; height: 40px; text-align: center; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 800;" />
       </div>
     `).join("");
 
     const overtimesMarkup = overtimes.map((ot, i) => `
       <div style="display: flex; align-items: center; gap: 6px; background: #fff7ed; border: 1px solid #ffedd5; padding: 4px 8px; border-radius: 8px;">
         <span style="font-size: 12px; font-weight: 800; color: #c2410c;">${TranslationStore.t("overtime", "Prórroga")} ${i + 1}:</span>
-        <input type="number" class="ot-input" data-otindex="${i}" data-side="team" value="${ot.team_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
+        <input type="number" class="ot-input" data-otindex="${i}" data-side="team" value="${ot.team_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; height: 36px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
         <span>-</span>
-        <input type="number" class="ot-input" data-otindex="${i}" data-side="opp" value="${ot.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
+        <input type="number" class="ot-input" data-otindex="${i}" data-side="opp" value="${ot.opponent_score}" ${canEdit ? '' : 'disabled'} style="width: 48px; height: 36px; text-align: center; padding: 4px; border: 1px solid #fdba74; border-radius: 6px; font-size: 14px; font-weight: 800;" />
         ${canEdit ? `
-          <button type="button" class="btn-delete-ot" data-otindex="${i}" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #ef4444; margin-left: 4px;" title="${TranslationStore.t("delete_ot", "Eliminar prórroga")}">🗑️</button>
+          <button type="button" class="btn-delete-ot" data-otindex="${i}" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #ef4444; margin-left: 4px; min-height: 44px; min-width: 44px;" title="${TranslationStore.t("delete_ot", "Eliminar prórroga")}">🗑️</button>
         ` : ''}
       </div>
     `).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui);">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("edit_game", "Editar partido")}</h1>
-          <button id="btn-cancel-edit" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">✕ ${TranslationStore.t("cancel", "Cancelar")}</button>
+          <button id="btn-cancel-edit" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">✕ ${TranslationStore.t("cancel", "Cancelar")}</button>
         </div>
 
         <form id="form-game-editor" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
           
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("date", "Fecha")}</label><input type="date" name="date" value="${g.date || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("time", "Hora")}</label><input type="time" name="time" value="${g.time || '18:00'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("opponent", "Rival")} *</label><input type="text" name="opponent" value="${g.opponent || ''}" ${canEdit ? '' : 'disabled'} required style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("competition", "Competición")}</label><input type="text" name="competition" value="${g.competition || 'B1'}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("matchday", "Jornada")}</label><input type="text" name="matchday" value="${g.matchday || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("date", "Fecha")}</label><input type="date" name="date" value="${g.date || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("time", "Hora")}</label><input type="time" name="time" value="${g.time || '18:00'}" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("opponent", "Rival")} *</label><input type="text" name="opponent" value="${g.opponent || ''}" ${canEdit ? '' : 'disabled'} required style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("competition", "Competición")}</label><input type="text" name="competition" value="${g.competition || 'B1'}" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("matchday", "Jornada")}</label><input type="text" name="matchday" value="${g.matchday || ''}" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("venue", "Sede")}</label>
-              <select name="venue" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
+              <select name="venue" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
                 <option value="Local" ${g.venue === 'Local' ? 'selected' : ''}>${TranslationStore.t("local", "Local")}</option>
                 <option value="Visitante" ${g.venue === 'Visitante' ? 'selected' : ''}>${TranslationStore.t("visitor", "Visitante")}</option>
               </select>
             </div>
-            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("arena", "Pabellón / Arena")}</label><input type="text" name="arena" value="${g.arena || ''}" ${canEdit ? '' : 'disabled'} placeholder="Ej: Polideportivo Municipal" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
+            <div><label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("arena", "Pabellón / Arena")}</label><input type="text" name="arena" value="${g.arena || ''}" ${canEdit ? '' : 'disabled'} placeholder="Ej: Polideportivo Municipal" style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px;" /></div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("status", "Estado")}</label>
-              <select name="status" ${canEdit ? '' : 'disabled'} style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
+              <select name="status" ${canEdit ? '' : 'disabled'} style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white;">
                 <option value="Finalizado" ${g.status === 'Finalizado' ? 'selected' : ''}>${TranslationStore.t("completed", "Finalizado")}</option>
                 <option value="Programado" ${g.status === 'Programado' ? 'selected' : ''}>${TranslationStore.t("scheduled", "Programado")}</option>
                 <option value="En juego" ${g.status === 'En juego' ? 'selected' : ''}>${TranslationStore.t("live", "En juego")}</option>
@@ -503,7 +504,7 @@ export class GameLiveEditorView {
           </div>
 
           <!-- BLOQUE DE MARCADOR GLOBAL MANUAL -->
-          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
             <div>
               <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block;">MARCADOR FINAL DECLARADO</span>
               <span style="font-size: 11px; color: #64748b;">Puntos oficiales del partido (A Favor vs En Contra)</span>
@@ -511,12 +512,12 @@ export class GameLiveEditorView {
             <div style="display: flex; align-items: center; gap: 12px;">
               <div style="text-align: center;">
                 <label style="font-size: 10px; font-weight: 800; color: #1e3a8a; display: block;">A FAVOR</label>
-                <input type="number" name="team_score" value="${initTeamScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; text-align: center; padding: 6px; border: 2px solid #1e3a8a; border-radius: 8px; font-size: 16px; font-weight: 900; color: #1e3a8a;" />
+                <input type="number" name="team_score" value="${initTeamScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; height: 44px; text-align: center; padding: 6px; border: 2px solid #1e3a8a; border-radius: 8px; font-size: 16px; font-weight: 900; color: #1e3a8a;" />
               </div>
               <span style="font-size: 20px; font-weight: 900; color: #94a3b8; margin-top: 12px;">-</span>
               <div style="text-align: center;">
                 <label style="font-size: 10px; font-weight: 800; color: #c2410c; display: block;">EN CONTRA</label>
-                <input type="number" name="opponent_score" value="${initOppScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; text-align: center; padding: 6px; border: 2px solid #f97316; border-radius: 8px; font-size: 16px; font-weight: 900; color: #c2410c;" />
+                <input type="number" name="opponent_score" value="${initOppScore}" ${canEdit ? '' : 'disabled'} style="width: 60px; height: 44px; text-align: center; padding: 6px; border: 2px solid #f97316; border-radius: 8px; font-size: 16px; font-weight: 900; color: #c2410c;" />
               </div>
             </div>
           </div>
@@ -525,7 +526,7 @@ export class GameLiveEditorView {
 
           <div>
             <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 12px 0;">${TranslationStore.t("starting_five", "QUINTETO TITULAR")} (${starters.length}/5)</h3>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
               ${startersMarkup}
             </div>
           </div>
@@ -533,7 +534,7 @@ export class GameLiveEditorView {
           <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 4px 0;" />
 
           <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
               <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("player_stats", "Estadísticas de Jugadores")} (${this.players.length})</h3>
               <span id="points-match-badge" style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${badgeClass}">
                 ${badgeText}
@@ -566,15 +567,15 @@ export class GameLiveEditorView {
 
           <!-- RESULTADO POR CUARTOS CON INDICADOR DE DIFERENCIA VS TOTAL -->
           <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <h3 style="font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0;">${TranslationStore.t("quarter_results", "RESULTADO POR CUARTOS")}</h3>
                 <span id="quarters-diff-badge" style="font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 20px; ${qBadgeClass}">
                   ${qBadgeText}
                 </span>
               </div>
               
-              <div style="display: flex; gap: 10px; align-items: center;">
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 <span id="total-score-display" style="background: #f1f5f9; color: #0f172a; font-size: 11px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
                   Suma Cuartos: ${qTeamSum} - ${qOppSum} | Marcador: ${initTeamScore} - ${initOppScore}
                 </span>
@@ -589,7 +590,7 @@ export class GameLiveEditorView {
               ${overtimesMarkup}
 
               ${canEdit ? `
-                <button type="button" id="btn-add-ot" style="background: #f1f5f9; color: #1e3a8a; border: 1px dashed #2563eb; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                <button type="button" id="btn-add-ot" style="background: #f1f5f9; color: #1e3a8a; border: 1px dashed #2563eb; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">
                   + ${TranslationStore.t("add_overtime", "Añadir Prórroga (OT)")}
                 </button>
               ` : ''}
@@ -603,13 +604,13 @@ export class GameLiveEditorView {
 
           <div>
             <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${TranslationStore.t("video_url", "Enlace a vídeo (opcional)")}</label>
-            <input type="text" name="video_url" value="${g.video_url || ''}" ${canEdit ? '' : 'disabled'} placeholder="https://..." style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+            <input type="text" name="video_url" value="${g.video_url || ''}" ${canEdit ? '' : 'disabled'} placeholder="https://..." style="width: 100%; height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
-            <button type="button" id="btn-cancel-edit-form" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">${TranslationStore.t("cancel", "Cancelar")}</button>
+            <button type="button" id="btn-cancel-edit-form" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">${TranslationStore.t("cancel", "Cancelar")}</button>
             ${canEdit ? `
-              <button type="submit" style="background: #1e3a8a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">💾 ${TranslationStore.t("save_changes", "Guardar cambios")}</button>
+              <button type="submit" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${TranslationStore.t("save_changes", "Guardar cambios")}</button>
             ` : ''}
           </div>
 
@@ -779,3 +780,5 @@ export class GameLiveEditorView {
     }
   }
 }
+
+export default GameLiveEditorView;

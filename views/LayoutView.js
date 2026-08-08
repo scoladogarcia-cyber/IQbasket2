@@ -1,14 +1,16 @@
 /**
  * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop.
- * El selector de Idioma, los selectores dinámicos de Equipo y Temporada,
- * y el botón de Cerrar Sesión permanecen siempre visibles.
+ * Implementa la navegación agrupada en desktop, la navegación inferior PWA para móviles,
+ * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) y selectores dinámicos.
  */
 
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
+import { APP_CONFIG } from "../config/app.config.js";
 
 export class LayoutView {
-  static t(key, fallback) {
+  static t(key, fallback = "") {
     return TranslationStore.t(key, fallback);
   }
 
@@ -30,7 +32,7 @@ export class LayoutView {
 
   static updateActiveMenu(route) {
     const activeKey = LayoutView._normalizeRouteKey(route);
-    const links = document.querySelectorAll(".app-sidebar .nav-link");
+    const links = document.querySelectorAll(".nav-link, .mobile-nav-item");
 
     links.forEach(link => {
       const linkKey = link.getAttribute("data-route-key");
@@ -44,7 +46,7 @@ export class LayoutView {
 
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
-    const currentLang = TranslationStore.currentLang;
+    const currentLang = I18n.getLocale();
 
     // Cargar datos dinámicos de equipos y temporadas activas
     const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
@@ -54,45 +56,88 @@ export class LayoutView {
     const storedSeasons = localStorage.getItem("iq_seasons");
     const seasons = storedSeasons ? JSON.parse(storedSeasons) : [{ id: "s-1", name: "2026", isActive: true }];
 
-    const navItems = [
-      { key: "dashboard", label: LayoutView.t("dashboard", "Dashboard"), icon: "📊", route: "dashboard" },
-      { key: "team", label: LayoutView.t("team", "Equipo"), icon: "👥", route: "team" },
-      { key: "players", label: LayoutView.t("players", "Jugadores"), icon: "👤", route: "players" },
-      { key: "games", label: LayoutView.t("games", "Partidos"), icon: "📅", route: "games" },
-      { key: "boxscore", label: LayoutView.t("boxscore", "Registro estadístico"), icon: "📋", route: "boxscore" },
-      { key: "advanced", label: LayoutView.t("advanced_stats", "Estadística avanzada"), icon: "📈", route: "advanced" },
-      { key: "lineups", label: LayoutView.t("lineups", "Quintetos"), icon: "🔥", route: "lineups" },
-      { key: "comparator", label: LayoutView.t("comparator", "Comparador"), icon: "🔀", route: "comparator" },
-      { key: "reports", label: LayoutView.t("reports", "Informes"), icon: "📄", route: "reports" },
-      { key: "ask", label: LayoutView.t("ask_ai", "Pregúntale a tus datos"), icon: "🤖", route: "ask" },
-      { key: "profile", label: LayoutView.t("profile", "Mi Perfil"), icon: "👤", route: "profile" },
-      { key: "settings", label: LayoutView.t("settings", "Configuración"), icon: "⚙️", route: "settings" }
+    // Definición de grupos de navegación para Desktop
+    const navGroups = [
+      {
+        titleKey: "navigation.groups.general",
+        defaultTitle: "GENERAL",
+        items: [
+          { key: "dashboard", labelKey: "navigation.dashboard", fallback: "Inicio", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' }
+        ]
+      },
+      {
+        titleKey: "navigation.groups.team",
+        defaultTitle: "EQUIPO",
+        items: [
+          { key: "team", labelKey: "navigation.team", fallback: "Equipo", route: "team", svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle>' },
+          { key: "players", labelKey: "navigation.players", fallback: "Jugadores", route: "players", svg: '<circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 1 0-16 0"></path>' },
+          { key: "games", labelKey: "navigation.games", fallback: "Partidos", route: "games", svg: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>' },
+          { key: "lineups", labelKey: "navigation.lineups", fallback: "Quintetos", route: "lineups", svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><circle cx="19" cy="11" r="2"></circle>' }
+        ]
+      },
+      {
+        titleKey: "navigation.groups.analysis",
+        defaultTitle: "ANÁLISIS",
+        items: [
+          { key: "advanced", labelKey: "navigation.advancedStats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
+          { key: "comparator", labelKey: "navigation.comparator", fallback: "Comparador", route: "comparator", svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
+          { key: "reports", labelKey: "navigation.reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
+          { key: "ask", labelKey: "navigation.aiAssistant", fallback: "Asistente IQ", route: "ask", svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+        ]
+      },
+      {
+        titleKey: "navigation.groups.account",
+        defaultTitle: "CUENTA",
+        items: [
+          { key: "profile", labelKey: "navigation.profile", fallback: "Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
+          { key: "settings", labelKey: "navigation.settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
+        ]
+      }
     ];
 
-    const navLinksMarkup = navItems.map(item => {
-      const isActive = currentActiveKey === item.key;
-      return `
-        <a href="#/${item.route}" 
-           class="nav-link ${isActive ? 'active' : ''}" 
-           data-route-key="${item.key}">
-          <span class="nav-icon">${item.icon}</span>
-          <span class="nav-label">${item.label}</span>
-        </a>
-      `;
-    }).join("");
+    const desktopNavMarkup = navGroups.map(group => `
+      <div class="nav-group">
+        <span class="nav-group-title">${LayoutView.t(group.titleKey, group.defaultTitle)}</span>
+        ${group.items.map(item => {
+          const isActive = currentActiveKey === item.key;
+          const label = LayoutView.t(item.labelKey, item.fallback);
+          return `
+            <a href="#/${item.route}" 
+               class="nav-link ${isActive ? 'active' : ''}" 
+               data-route-key="${item.key}">
+              <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${item.svg}</svg>
+              <span class="nav-label">${label}</span>
+            </a>
+          `;
+        }).join("")}
+      </div>
+    `).join("");
 
     return `
       <div class="app-layout">
         
-        <!-- BARRA LATERAL AZUL -->
-        <aside class="app-sidebar">
+        <!-- HEADER MÓVIL (< 768px) -->
+        <header class="mobile-header mobile-only">
+          <div class="mobile-brand">
+            <svg class="brand-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M5.6 5.6C9.2 9.2 14.8 9.2 18.4 5.6"></path>
+              <path d="M5.6 18.4C9.2 14.8 14.8 14.8 18.4 18.4"></path>
+              <line x1="12" y1="2" x2="12" y2="22"></line>
+            </svg>
+            <span class="brand-title">${APP_CONFIG.appName}</span>
+          </div>
+        </header>
+
+        <!-- BARRA LATERAL AZUL (DESKTOP >= 768px) -->
+        <aside class="app-sidebar desktop-only">
           
           <div class="sidebar-inner">
             
-            <!-- Logo Header -->
+            <!-- Header Marca Unificada -->
             <div class="sidebar-header">
               <div class="logo-box">IQ</div>
-              <span class="logo-title">BasketIQ</span>
+              <span class="logo-title">${APP_CONFIG.appName}</span>
             </div>
 
             <!-- Selectores Dinámicos de Equipo y Temporada -->
@@ -119,9 +164,9 @@ export class LayoutView {
               </div>
             </div>
 
-            <!-- Navegación Menú -->
+            <!-- Navegación Menú Agrupado -->
             <nav class="sidebar-nav">
-              ${navLinksMarkup}
+              ${desktopNavMarkup}
             </nav>
 
             <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN -->
@@ -129,14 +174,16 @@ export class LayoutView {
               <div class="lang-row">
                 <span class="lang-label">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
                 <select id="select-lang-toggle" class="lang-select">
-                  <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
-                  <option value="cat" ${currentLang === 'cat' ? 'selected' : ''}>CAT</option>
-                  <option value="en" ${currentLang === 'en' ? 'selected' : ''}>EN</option>
+                  <option value="es" ${currentLang === 'es' ? 'selected' : ''}>Español</option>
+                  <option value="ca" ${currentLang === 'ca' || currentLang === 'cat' ? 'selected' : ''}>Català</option>
+                  <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English</option>
+                  <option value="fr" ${currentLang === 'fr' ? 'selected' : ''}>Français</option>
                 </select>
               </div>
 
               <button id="btn-logout" class="btn-logout">
-                🚪 ${LayoutView.t("logout", "Cerrar sesión")}
+                <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                <span>${LayoutView.t("logout", "Cerrar sesión")}</span>
               </button>
             </div>
 
@@ -150,9 +197,73 @@ export class LayoutView {
           </div>
         </main>
 
+        <!-- NAVEGACIÓN INFERIOR MÓVIL (5 ÍTEMS) -->
+        <nav class="mobile-bottom-bar mobile-only" aria-label="Navegación Móvil">
+          <a href="#/dashboard" class="mobile-nav-item ${currentActiveKey === 'dashboard' ? 'active' : ''}" data-route-key="dashboard">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+            <span class="mobile-label">${LayoutView.t("navigation.home", "Inicio")}</span>
+          </a>
+          <a href="#/team" class="mobile-nav-item ${currentActiveKey === 'team' ? 'active' : ''}" data-route-key="team">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+            <span class="mobile-label">${LayoutView.t("navigation.team", "Equipo")}</span>
+          </a>
+          <a href="#/games" class="mobile-nav-item ${currentActiveKey === 'games' ? 'active' : ''}" data-route-key="games">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line></svg>
+            <span class="mobile-label">${LayoutView.t("navigation.games", "Partidos")}</span>
+          </a>
+          <a href="#/advanced" class="mobile-nav-item ${currentActiveKey === 'advanced' ? 'active' : ''}" data-route-key="advanced">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span class="mobile-label">${LayoutView.t("navigation.advancedStats", "Stats")}</span>
+          </a>
+          <button type="button" id="btn-mobile-more-toggle" class="mobile-nav-item" aria-expanded="false">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+            <span class="mobile-label">${LayoutView.t("navigation.more", "Más")}</span>
+          </button>
+        </nav>
+
+        <!-- BOTTOM SHEET MÓVIL PARA "MÁS" -->
+        <div id="mobile-more-drawer" class="mobile-drawer-overlay mobile-only" aria-hidden="true">
+          <div class="mobile-drawer-content">
+            <div class="drawer-header">
+              <span class="drawer-title">${LayoutView.t("navigation.more", "Más Opciones")}</span>
+              <button type="button" id="btn-close-drawer" class="drawer-close">&times;</button>
+            </div>
+            <div class="drawer-grid">
+              <a href="#/players" class="drawer-item">
+                <span class="drawer-icon">👤</span>
+                <span>${LayoutView.t("navigation.players", "Jugadores")}</span>
+              </a>
+              <a href="#/lineups" class="drawer-item">
+                <span class="drawer-icon">🏀</span>
+                <span>${LayoutView.t("navigation.lineups", "Quintetos")}</span>
+              </a>
+              <a href="#/comparator" class="drawer-item">
+                <span class="drawer-icon">⚖️</span>
+                <span>${LayoutView.t("navigation.comparator", "Comparador")}</span>
+              </a>
+              <a href="#/reports" class="drawer-item">
+                <span class="drawer-icon">📄</span>
+                <span>${LayoutView.t("navigation.reports", "Informes")}</span>
+              </a>
+              <a href="#/ask" class="drawer-item">
+                <span class="drawer-icon">🤖</span>
+                <span>${LayoutView.t("navigation.aiAssistant", "Asistente IQ")}</span>
+              </a>
+              <a href="#/profile" class="drawer-item">
+                <span class="drawer-icon">👤</span>
+                <span>${LayoutView.t("navigation.profile", "Perfil")}</span>
+              </a>
+              <a href="#/settings" class="drawer-item">
+                <span class="drawer-icon">⚙️</span>
+                <span>${LayoutView.t("navigation.settings", "Configuración")}</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <!-- ESTILOS Y RESPONSIVE MOBILE FIRST -->
+      <!-- ESTILOS Y RESPONSIVE -->
       <style>
         *, *::before, *::after {
           box-sizing: border-box;
@@ -162,8 +273,8 @@ export class LayoutView {
           margin: 0;
           padding: 0;
           width: 100%;
-          background-color: #f8fafc;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          background-color: var(--color-bg, #f8fafc);
+          font-family: var(--font-family-base, system-ui, -apple-system, sans-serif);
           overflow-x: hidden;
         }
 
@@ -171,8 +282,11 @@ export class LayoutView {
           min-height: 100vh;
           width: 100%;
           display: flex;
-          background-color: #f8fafc;
+          background-color: var(--color-bg, #f8fafc);
         }
+
+        .desktop-only { display: flex; }
+        .mobile-only { display: none; }
 
         /* Sidebar Escritorio */
         .app-sidebar {
@@ -181,7 +295,7 @@ export class LayoutView {
           position: fixed;
           top: 0;
           left: 0;
-          background-color: #172554;
+          background-color: var(--color-secondary, #0f172a);
           color: #ffffff;
           padding: 16px;
           box-sizing: border-box;
@@ -207,12 +321,12 @@ export class LayoutView {
         .logo-box {
           width: 32px;
           height: 32px;
-          background-color: #f59e0b;
+          background-color: var(--color-primary, #ea580c);
           border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #172554;
+          color: #ffffff;
           font-weight: 900;
           font-size: 14px;
           flex-shrink: 0;
@@ -220,8 +334,9 @@ export class LayoutView {
 
         .logo-title {
           font-weight: 900;
-          font-size: 20px;
+          font-size: 18px;
           letter-spacing: -0.02em;
+          color: #ffffff;
         }
 
         .sidebar-selectors {
@@ -235,15 +350,15 @@ export class LayoutView {
           font-size: 10px;
           font-weight: 800;
           text-transform: uppercase;
-          color: #93c5fd;
+          color: var(--color-text-muted, #64748b);
           display: block;
           margin-bottom: 4px;
         }
 
         .sidebar-select {
           width: 100%;
-          background-color: #1e3a8a;
-          border: 1px solid #1d4ed8;
+          background-color: #1e293b;
+          border: 1px solid #334155;
           color: #ffffff;
           border-radius: 8px;
           padding: 8px 10px;
@@ -257,35 +372,56 @@ export class LayoutView {
         .sidebar-nav {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 16px;
+        }
+
+        .nav-group {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .nav-group-title {
+          font-size: 11px;
+          font-weight: 800;
+          color: var(--color-text-muted, #64748b);
+          letter-spacing: 0.05em;
+          padding-left: 10px;
+          margin-bottom: 2px;
         }
 
         .nav-link {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 10px 14px;
+          padding: 10px 12px;
           border-radius: 8px;
           font-size: 13px;
           font-weight: 600;
           text-decoration: none;
           transition: all 0.2s ease;
-          color: #bfdbfe;
+          color: #94a3b8;
+          min-height: 44px;
         }
 
         .nav-link:hover {
-          background-color: #1e3a8a;
+          background-color: #1e293b;
           color: #ffffff;
         }
 
         .nav-link.active {
-          background-color: #1e40af !important;
+          background-color: var(--color-primary, #ea580c) !important;
           color: #ffffff !important;
-          box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .nav-svg {
+          width: 18px;
+          height: 18px;
+          flex-shrink: 0;
         }
 
         .sidebar-footer {
-          border-top: 1px solid #1e3a8a;
+          border-top: 1px solid #1e293b;
           padding-top: 12px;
           margin-top: auto;
           display: flex;
@@ -303,13 +439,12 @@ export class LayoutView {
         .lang-label {
           font-size: 11px;
           font-weight: 800;
-          color: #93c5fd;
-          letter-spacing: 0.05em;
+          color: #94a3b8;
         }
 
         .lang-select {
-          background-color: #1e3a8a;
-          border: 1px solid #1d4ed8;
+          background-color: #1e293b;
+          border: 1px solid #334155;
           color: #ffffff;
           border-radius: 6px;
           padding: 4px 8px;
@@ -327,12 +462,12 @@ export class LayoutView {
           padding: 8px 10px;
           font-size: 13px;
           font-weight: 600;
-          color: #93c5fd;
+          color: #f87171;
           background: none;
           border: none;
           cursor: pointer;
           border-radius: 8px;
-          text-align: left;
+          min-height: 44px;
         }
 
         /* Área Principal Escritorio */
@@ -349,93 +484,164 @@ export class LayoutView {
 
         #dashboard-content-area {
           width: 100%;
-          max-width: 1200px;
+          max-width: 1400px;
           margin: 0 auto;
           box-sizing: border-box;
         }
 
-        /* ========================================================
-           RESPONSIVE MÓVIL (PANTALLAS PEQUEÑAS)
-           ======================================================== */
-        @media (max-width: 868px) {
+        /* RESPONSIVE MÓVIL (< 768px) */
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
+
           .app-layout {
             flex-direction: column;
           }
 
-          .app-sidebar {
-            position: relative;
-            width: 100%;
-            height: auto;
-            border-bottom: 2px solid #1e3a8a;
-            padding: 12px 12px 8px 12px;
-          }
-
-          .sidebar-inner {
-            overflow-y: visible;
-            gap: 12px;
-          }
-
-          .sidebar-selectors {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            padding: 0;
-          }
-
-          /* Cinta de navegación deslizante en móviles */
-          .sidebar-nav {
-            flex-direction: row;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding: 4px 0 8px 0;
-            gap: 6px;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .nav-link {
-            padding: 8px 14px;
-            font-size: 13px;
-            flex-shrink: 0;
-            background-color: #1e3a8a;
-            border-radius: 20px;
-          }
-
-          .sidebar-footer {
-            margin-top: 4px;
-            flex-direction: row;
-            justify-content: space-between;
+          .mobile-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: var(--color-secondary, #0f172a);
+            color: #ffffff;
+            height: 56px;
+            padding: 0 16px;
             align-items: center;
-            padding-top: 8px;
+            justify-content: space-between;
+            border-bottom: 1px solid #1e293b;
           }
 
-          .btn-logout {
-            width: auto;
-            padding: 4px 8px;
+          .mobile-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 800;
+            color: var(--color-primary, #ea580c);
           }
 
-          /* Ajuste del contenido para Móviles */
+          .brand-svg {
+            width: 24px;
+            height: 24px;
+          }
+
           .app-main {
             margin-left: 0;
             width: 100%;
             padding: 16px 12px;
+            padding-bottom: calc(64px + env(safe-area-inset-bottom));
           }
 
-          /* Forzar 1 sola columna vertical para tarjetas */
-          #dashboard-content-area .grid,
-          #dashboard-content-area [class*="grid-cols-"],
-          #dashboard-content-area [style*="grid-template-columns"] {
-            grid-template-columns: 1fr !important;
-            width: 100% !important;
+          /* Bottom Bar Fija */
+          .mobile-bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: calc(60px + env(safe-area-inset-bottom));
+            padding-bottom: env(safe-area-inset-bottom);
+            background-color: var(--color-secondary, #0f172a);
+            border-top: 1px solid #1e293b;
+            z-index: 1000;
+            justify-content: space-around;
+            align-items: center;
           }
 
-          /* Asegurar que las tarjetas e imágenes no se corten */
-          #dashboard-content-area .card,
-          #dashboard-content-area [class*="card"] {
-            width: 100% !important;
-            box-sizing: border-box;
+          .mobile-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 56px;
+            min-height: 44px;
+            background: none;
+            border: none;
+          }
+
+          .mobile-nav-item.active {
+            color: var(--color-primary, #ea580c);
+          }
+
+          .mobile-svg {
+            width: 22px;
+            height: 22px;
+            margin-bottom: 2px;
+          }
+
+          /* Bottom Sheet "Más" */
+          .mobile-drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 1050;
+            display: none;
+            align-items: flex-end;
+          }
+
+          .mobile-drawer-overlay.open {
+            display: flex;
+          }
+
+          .mobile-drawer-content {
+            width: 100%;
+            background-color: #ffffff;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            padding: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+          }
+
+          .drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+          }
+
+          .drawer-title {
+            font-weight: 800;
+            font-size: 16px;
+            color: #0f172a;
+          }
+
+          .drawer-close {
+            font-size: 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #64748b;
+          }
+
+          .drawer-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+          }
+
+          .drawer-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 13px;
+            min-height: 44px;
           }
         }
       </style>
     `;
   }
 }
+
+export default LayoutView;

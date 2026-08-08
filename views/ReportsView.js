@@ -3,12 +3,14 @@
  * Incluye panel interactivo de exportación a PDF Élite, selección de partidos y jugadores,
  * gráficas colectivas/individuales SVG, ordenación de tablas e iconos informativos (Tooltips)
  * explicativos para cada métrica avanzada y estadística.
+ * Adaptado con diseño responsivo PWA y soporte i18n multilenguaje.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { ReportExporter } from "../services/ReportExporter.js";
+import { I18n } from "../services/I18nService.js";
 
 export class ReportsView {
   constructor(authController) {
@@ -240,8 +242,8 @@ export class ReportsView {
               <rect x="${xGroup}" y="${height - padding - hTeam}" width="22" height="${hTeam}" fill="#1e3a8a" rx="3" />
               <text x="${xGroup + 11}" y="${height - padding - hTeam - 4}" font-size="9" font-weight="800" fill="#1e3a8a" text-anchor="middle">${d.team}</text>
 
-              <rect x="${xGroup + 26}" y="${height - padding - hOpp}" width="22" height="${hOpp}" fill="#f97316" rx="3" />
-              <text x="${xGroup + 37}" y="${height - padding - hOpp - 4}" font-size="9" font-weight="800" fill="#f97316" text-anchor="middle">${d.opp}</text>
+              <rect x="${xGroup + 26}" y="${height - padding - hOpp}" width="22" height="${hOpp}" fill="#ea580c" rx="3" />
+              <text x="${xGroup + 37}" y="${height - padding - hOpp - 4}" font-size="9" font-weight="800" fill="#ea580c" text-anchor="middle">${d.opp}</text>
 
               <text x="${xGroup + 24}" y="${height - 6}" font-size="10" font-weight="800" fill="#64748b" text-anchor="middle">${d.q}</text>
             `;
@@ -249,7 +251,7 @@ export class ReportsView {
         </svg>
         <div style="display: flex; justify-content: center; gap: 16px; font-size: 10px; font-weight: 800; margin-top: 4px;">
           <span style="color: #1e3a8a;">■ Nosotros</span>
-          <span style="color: #f97316;">■ Rival</span>
+          <span style="color: #ea580c;">■ Rival</span>
         </div>
       </div>
     `;
@@ -343,7 +345,7 @@ export class ReportsView {
           📈 EVOLUCIÓN GLOBAL Y RENDIMIENTO ACUMULADO DEL EQUIPO
         </h3>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
           <div>${this._generateSVGChart(ptsTrend, "#1e3a8a", "Puntos Anotados por Partido", "Evolución cronológica de la anotación a favor del equipo por jornada.")}</div>
           <div>${this._generateSVGChart(efgTrend, "#9333ea", "Efectividad de Tiro Efectivo (eFG%)", "Mide la eficacia de lanzamiento bonificando en un 50% los triples anotados.")}</div>
           <div>${this._generateSVGChart(tovTrend, "#dc2626", "Pérdidas de Balón (TO)", "Volumen total de balones perdidos en cada partido disputado.")}</div>
@@ -363,7 +365,7 @@ export class ReportsView {
     const rows = sortedGames.map((g, i) => `
       <tr style="border-bottom: 1px solid #f1f5f9; font-size: 11px;">
         <td style="padding: 6px 10px; font-weight: 800; color: #1e3a8a;">P${i + 1}</td>
-        <td style="padding: 6px 10px; color: #64748b;">${g.date || '-'}</td>
+        <td style="padding: 6px 10px; color: #64748b;">${g.date ? I18n.formatDate(g.date) : '-'}</td>
         <td style="padding: 6px 10px; font-weight: 700; color: #0f172a;">vs ${g.opponent || 'Rival'}</td>
         <td style="padding: 6px 10px; text-align: center;"><span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 700; color: #475569;">${g.venue || 'Local'}</span></td>
         <td style="padding: 6px 10px; text-align: center; font-weight: 800; color: #0f172a;">${g.team_score ?? 0} - ${g.opponent_score ?? 0}</td>
@@ -371,7 +373,7 @@ export class ReportsView {
     `).join("");
 
     return `
-      <div style="margin-top: 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+      <div style="margin-top: 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; overflow-x: auto;">
         <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">
           📌 LEYENDA DE PARTIDOS (P1 - P${sortedGames.length})
         </div>
@@ -398,7 +400,7 @@ export class ReportsView {
     const games = (DataStore.getGames() || []).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const players = DataStore.getPlayers() || [];
     const playersMap = new Map(players.map(p => [String(p.id), p]));
-    const dateStr = new Date().toLocaleDateString("es-ES", { year: 'numeric', month: 'long', day: 'numeric' });
+    const dateStr = I18n.formatDate(new Date());
 
     let targetGames = games;
     if (this.exportGamesScope === "current" && this.selectedGameId) {
@@ -418,8 +420,8 @@ export class ReportsView {
 
     let pdfHtml = `
       <div style="page-break-after: always; text-align: center; padding-top: 100px; font-family: system-ui, sans-serif;">
-        <div style="font-size: 32px; font-weight: 900; color: #1e3a8a; letter-spacing: 2px;">BasketIQ Stats</div>
-        <div style="font-size: 14px; font-weight: 800; color: #f97316; margin-top: 6px; text-transform: uppercase;">
+        <div style="font-size: 32px; font-weight: 900; color: #1e3a8a; letter-spacing: 2px;">IQ Basket Stats</div>
+        <div style="font-size: 14px; font-weight: 800; color: #ea580c; margin-top: 6px; text-transform: uppercase;">
           INFORME DE SCOUTING AVANZADO Y RENDIMIENTO ÉLITE
         </div>
         
@@ -432,7 +434,7 @@ export class ReportsView {
 
         <div style="margin-top: 160px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px;">
           Documento Técnico Oficial para Cuerpo Técnico<br/>
-          © Sergio Colado García, 2026
+          © IQ Basket, 2026
         </div>
       </div>
     `;
@@ -443,7 +445,7 @@ export class ReportsView {
       pdfHtml += `
         <div style="page-break-after: always; padding-top: 10px;">
           <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; font-size: 11px; color: #64748b;">
-            <strong>BasketIQ Stats</strong> · EVALUACIÓN COLECTIVA DE TEMPORADA
+            <strong>IQ Basket Stats</strong> · EVALUACIÓN COLECTIVA DE TEMPORADA
           </div>
           ${this._renderSeasonColectiveCharts()}
           <div style="margin-top: 20px; font-size: 10px; color: #94a3b8; text-align: right;">Página ${pageNum}</div>
@@ -478,8 +480,8 @@ export class ReportsView {
       pdfHtml += `
         <div style="page-break-after: always; padding-top: 10px;">
           <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; font-size: 11px; color: #64748b;">
-            <strong>BasketIQ Stats</strong>
-            <span>PARTIDO ${idx + 1} DE ${targetGames.length} · ${g.date || ''}</span>
+            <strong>IQ Basket Stats</strong>
+            <span>PARTIDO ${idx + 1} DE ${targetGames.length} · ${g.date ? I18n.formatDate(g.date) : ''}</span>
           </div>
 
           <h2 style="margin: 16px 0 4px 0; font-size: 18px; color: #0f172a;">JMJ Manyanet Sant Andreu vs ${g.opponent || 'Rival'} (${g.venue || 'Local'})</h2>
@@ -542,7 +544,7 @@ export class ReportsView {
       pdfHtml += `
         <div style="page-break-after: always; padding-top: 10px;">
           <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; font-size: 11px; color: #64748b; display:flex; justify-content:space-between;">
-            <strong>BasketIQ Stats</strong>
+            <strong>IQ Basket Stats</strong>
             <span>ANÁLISIS INDIVIDUAL DE JUGADOR</span>
           </div>
 
@@ -607,7 +609,7 @@ export class ReportsView {
 
     const gameOptionsMarkup = games.map(g => `
       <option value="${g.id}" ${String(g.id) === String(this.selectedGameId) ? 'selected' : ''}>
-        vs ${g.opponent || 'Rival'} (${g.date || ''}) - ${g.team_score ?? 0} : ${g.opponent_score ?? 0}
+        vs ${g.opponent || 'Rival'} (${g.date ? I18n.formatDate(g.date) : ''}) - ${g.team_score ?? 0} : ${g.opponent_score ?? 0}
       </option>
     `).join("");
 
@@ -631,7 +633,7 @@ export class ReportsView {
         <td style="padding: 10px; text-align: center; color: #64748b;">${p.ast}</td>
         <td style="padding: 10px; text-align: center; color: #ef4444; font-weight: 700;">${p.tov}</td>
         <td style="padding: 10px; text-align: center; font-weight: 900; color: #a855f7;">${p.val}</td>
-        <td style="padding: 10px; text-align: center; font-weight: 900; color: #f97316;">${p.gs}</td>
+        <td style="padding: 10px; text-align: center; font-weight: 900; color: #ea580c;">${p.gs}</td>
       </tr>
     `).join("");
 
@@ -664,22 +666,22 @@ export class ReportsView {
     }).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 40px;">
+      <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         
         <!-- Header Módulo -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">
             ${TranslationStore.t("reports_module", "Módulo de Informes")}
           </h1>
 
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btn-mode-game" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; background: ${this.reportMode === 'game' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'game' ? 'white' : '#334155'};">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button id="btn-mode-game" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.reportMode === 'game' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'game' ? 'white' : '#334155'};">
               📄 Por Partido
             </button>
-            <button id="btn-mode-season" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; background: ${this.reportMode === 'season' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'season' ? 'white' : '#334155'};">
+            <button id="btn-mode-season" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.reportMode === 'season' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'season' ? 'white' : '#334155'};">
               📅 Resumen Temporada
             </button>
-            <button id="btn-mode-player" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; background: ${this.reportMode === 'player' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'player' ? 'white' : '#334155'};">
+            <button id="btn-mode-player" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.reportMode === 'player' ? '#1e3a8a' : 'white'}; color: ${this.reportMode === 'player' ? 'white' : '#334155'};">
               👤 Ficha Individual
             </button>
           </div>
@@ -687,32 +689,32 @@ export class ReportsView {
 
         <!-- PANEL INTERACTIVO DE CONFIGURACIÓN Y EXPORTACIÓN PDF -->
         <div style="background: white; border: 1px solid #cbd5e1; border-radius: 14px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
             <div style="font-size: 13px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
               ⚙️ CONFIGURACIÓN DE INFORMES Y EXPORTACIÓN A PDF
             </div>
-            <button id="btn-trigger-pdf" style="padding: 8px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 800; cursor: pointer; background: #16a34a; color: white; display: flex; align-items: center; gap: 6px;">
+            <button id="btn-trigger-pdf" style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 800; cursor: pointer; background: #16a34a; color: white; display: flex; align-items: center; gap: 6px; min-height: 44px;">
               📥 Exportar PDF Élite
             </button>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
             
             <!-- SELECCIÓN DE PARTIDOS -->
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
               <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 8px;">
                 1. Partidos a incluir en el Informe
               </span>
-              <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-games-scope" value="current" ${this.exportGamesScope === 'current' ? 'checked' : ''} />
                   <span>Partido Seleccionado Actualmente</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-games-scope" value="all" ${this.exportGamesScope === 'all' ? 'checked' : ''} />
                   <span>Todos los partidos de la Temporada (${games.length})</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-games-scope" value="custom" ${this.exportGamesScope === 'custom' ? 'checked' : ''} />
                   <span>Selección personalizada de partidos</span>
                 </label>
@@ -721,7 +723,7 @@ export class ReportsView {
               ${this.exportGamesScope === 'custom' ? `
                 <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
                   ${games.map((g, i) => `
-                    <label style="font-size: 11px; font-weight: 700; background: white; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <label style="font-size: 11px; font-weight: 700; background: white; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
                       <input type="checkbox" class="chk-export-game" value="${g.id}" ${this.selectedExportGameIds.includes(String(g.id)) ? 'checked' : ''} />
                       P${i + 1}
                     </label>
@@ -735,20 +737,20 @@ export class ReportsView {
               <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 8px;">
                 2. Fichas Individuales de Jugadores a incluir
               </span>
-              <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-players-scope" value="none" ${this.exportPlayersScope === 'none' ? 'checked' : ''} />
                   <span>Sin fichas individuales</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-players-scope" value="current" ${this.exportPlayersScope === 'current' ? 'checked' : ''} />
                   <span>Jugador Seleccionado Actualmente</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-players-scope" value="all" ${this.exportPlayersScope === 'all' ? 'checked' : ''} />
                   <span>Toda la Plantilla (${players.length} jugadores)</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: 36px;">
                   <input type="radio" name="radio-players-scope" value="custom" ${this.exportPlayersScope === 'custom' ? 'checked' : ''} />
                   <span>Seleccionar Jugadores concretos</span>
                 </label>
@@ -757,7 +759,7 @@ export class ReportsView {
               ${this.exportPlayersScope === 'custom' ? `
                 <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
                   ${players.map(p => `
-                    <label style="font-size: 11px; font-weight: 700; background: white; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <label style="font-size: 11px; font-weight: 700; background: white; border: 1px solid #cbd5e1; padding: 6px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
                       <input type="checkbox" class="chk-export-player" value="${p.id}" ${this.selectedExportPlayerIds.includes(String(p.id)) ? 'checked' : ''} />
                       #${p.jersey ?? ''} ${p.first_name || ''}
                     </label>
@@ -779,33 +781,33 @@ export class ReportsView {
         <!-- Selector de Vista Interactiva -->
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
           ${this.reportMode === 'game' ? `
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <label style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">SELECCIONAR PARTIDO EN PANTALLA:</label>
-              <select id="select-report-game" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; outline: none; cursor: pointer;">
+              <select id="select-report-game" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; outline: none; cursor: pointer; min-height: 44px;">
                 ${gameOptionsMarkup}
               </select>
             </div>
           ` : ''}
 
           ${this.reportMode === 'player' ? `
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
               <label style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">SELECCIONAR JUGADOR EN PANTALLA:</label>
-              <select id="select-report-player" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; outline: none; cursor: pointer;">
+              <select id="select-report-player" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; outline: none; cursor: pointer; min-height: 44px;">
                 ${playerOptionsMarkup}
               </select>
             </div>
           ` : ''}
 
           ${this.reportMode === 'season' ? `
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
               <div style="font-size: 12px; font-weight: 800; color: #1e3a8a;">
                 📊 RADIOGRAFÍA COLECTIVA Y ANÁLISIS ACUMULADO (${games.length} Partidos)
               </div>
               <div style="background: #f1f5f9; padding: 4px; border-radius: 8px; display: flex; gap: 4px;">
-                <button id="btn-season-pergame" style="padding: 4px 10px; border-radius: 6px; border: none; font-size: 11px; font-weight: 800; cursor: pointer; background: ${this.seasonMetricMode === 'per_game' ? 'white' : 'transparent'}; color: ${this.seasonMetricMode === 'per_game' ? '#1e3a8a' : '#64748b'};">
+                <button id="btn-season-pergame" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 11px; font-weight: 800; cursor: pointer; min-height: 36px; background: ${this.seasonMetricMode === 'per_game' ? 'white' : 'transparent'}; color: ${this.seasonMetricMode === 'per_game' ? '#1e3a8a' : '#64748b'};">
                   Por Partido (VAL/PJ)
                 </button>
-                <button id="btn-season-per40" style="padding: 4px 10px; border-radius: 6px; border: none; font-size: 11px; font-weight: 800; cursor: pointer; background: ${this.seasonMetricMode === 'per_40' ? 'white' : 'transparent'}; color: ${this.seasonMetricMode === 'per_40' ? '#1e3a8a' : '#64748b'};">
+                <button id="btn-season-per40" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 11px; font-weight: 800; cursor: pointer; min-height: 36px; background: ${this.seasonMetricMode === 'per_40' ? 'white' : 'transparent'}; color: ${this.seasonMetricMode === 'per_40' ? '#1e3a8a' : '#64748b'};">
                   Por 40 Min (VAL/40)
                 </button>
               </div>
@@ -816,14 +818,14 @@ export class ReportsView {
         <!-- PANTALLA 1: MODO PARTIDO CON GRÁFICA DE CUARTOS Y TOOLTIPS -->
         ${this.reportMode === 'game' && gameData ? `
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
               <div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <h2 style="margin: 0; font-size: 22px; font-weight: 900; color: #0f172a;">${game.opponent || 'Rival'}</h2>
                   <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px;">${game.venue || 'Local'}</span>
                   <span style="background: ${isWin ? '#dcfce7' : '#fee2e2'}; color: ${isWin ? '#15803d' : '#dc2626'}; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px;">${isWin ? 'Victoria' : 'Derrota'}</span>
                 </div>
-                <span style="font-size: 12px; color: #64748b; margin-top: 4px; display: block;">${game.date || ''} · Jornada</span>
+                <span style="font-size: 12px; color: #64748b; margin-top: 4px; display: block;">${game.date ? I18n.formatDate(game.date) : ''} · Jornada</span>
               </div>
 
               <div style="text-align: right;">
@@ -832,7 +834,7 @@ export class ReportsView {
               </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 20px;">
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center;">
                 <span class="has-tooltip">
                   <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase;">Offensive Rating</span>
@@ -874,7 +876,7 @@ export class ReportsView {
             ${this._generateQuarterChartSVG(periodScores)}
           </div>
 
-          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 20px;">
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 20px; overflow-x: auto;">
             <h3 style="font-size: 12px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">JUGADORES</h3>
             <table style="width: 100%; border-collapse: collapse; text-align: left;">
               <thead>
@@ -929,7 +931,7 @@ export class ReportsView {
                     ${getSortArrow('val', this.sortField, this.sortAsc)}
                   </th>
 
-                  <th class="btn-sort-head" data-field="gs" style="padding: 10px; text-align: center; color: #f97316; cursor: pointer;">
+                  <th class="btn-sort-head" data-field="gs" style="padding: 10px; text-align: center; color: #ea580c; cursor: pointer;">
                     <span class="has-tooltip">
                       GS <span class="info-badge">?</span>
                       <span class="tooltip-box">Game Score (John Hollinger): Ponderación de impacto global del jugador en pista.</span>
@@ -943,7 +945,7 @@ export class ReportsView {
             </table>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px;">
             <div style="background: white; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px;">
               <h4 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 800; color: #15803d;">✔ FORTALEZAS CLAVE</h4>
               <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #166534; line-height: 1.5;">
@@ -964,7 +966,7 @@ export class ReportsView {
         ${this.reportMode === 'season' ? `
           ${this._renderSeasonColectiveCharts()}
 
-          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; margin-bottom: 20px;">
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; margin-bottom: 20px; overflow-x: auto;">
             <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; display: flex; align-items: center; gap: 6px;">
               <span>1. DIAGNÓSTICO DEL SISTEMA COLECTIVO (FOUR FACTORS)</span>
               <span class="has-tooltip">
@@ -976,7 +978,7 @@ export class ReportsView {
               El equipo produce <strong>44.3 Puntos/partido</strong> con un <strong>eFG% del 29.0%</strong> y un <strong>TS% del 29.4%</strong>. La base competitiva descansa en el rebote (38.2 REB/partido) y en la presión defensiva (17.9 Robos/partido). Sin embargo, el principal cuello de botella ofensivo es el volumen de pérdidas (35.7 TO/partido).
             </p>
 
-            <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+            <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span>2. TABLA COMPARATIVA DE PLANTILLA (${this.seasonMetricMode === 'per_game' ? 'POR PARTIDO' : 'POR 40 MINUTOS'})</span>
               <span class="has-tooltip">
                 <span class="info-badge">?</span>
@@ -1094,15 +1096,15 @@ export class ReportsView {
             }).join("");
 
             return `
-              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; margin-bottom: 20px;">
+              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; margin-bottom: 20px; overflow-x: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                   <div>
                     <h2 style="margin: 0; font-size: 22px; font-weight: 900; color: #0f172a;">#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</h2>
-                    <span style="font-size: 12px; color: #64748b;">Posición: ${p.position || 'Jugador'} · ${pStats.length} partidos jugados</span>
+                    <span style="font-size: 12px; color: #64748b;">Posición: ${p.primary_position || p.position || 'Jugador'} · ${pStats.length} partidos jugados</span>
                   </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px;">
                   <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; text-align: center;">
                     <span class="has-tooltip">
                       <span style="font-size: 10px; color: #64748b; font-weight: 800;">PTS / Partido</span>
@@ -1140,7 +1142,7 @@ export class ReportsView {
                   </div>
                 </div>
 
-                ${this._generateSVGChart(valTrend, "#16a34a", "EVOLUCIÓN DE VALORACIÓN FIBA POR PARTIDO", "Tendencia de valoración individual del jugador a lo largo de las jornadas (P1, P2... Pn).")}
+                ${this.includeChartsInPDF ? this._generateSVGChart(valTrend, "#16a34a", "EVOLUCIÓN DE VALORACIÓN FIBA POR PARTIDO", "Tendencia de valoración individual del jugador a lo largo de las jornadas (P1, P2... Pn).") : ''}
                 ${this._renderGamesLegendTable(playerGames)}
 
                 <h3 style="font-size: 12px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-top: 16px; margin-bottom: 12px;">HISTÓRICO EN LA TEMPORADA</h3>
@@ -1294,3 +1296,5 @@ export class ReportsView {
     });
   }
 }
+
+export default ReportsView;

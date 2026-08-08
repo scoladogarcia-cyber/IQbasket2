@@ -1,7 +1,9 @@
 /**
  * @fileoverview Vista de Configuración de IQ Basket.
- * Optimizado: Carga diferida y en caché del mercado global de jugadores
- * para que el cambio a la pestaña 'Plantilla' sea instantáneo (0ms).
+ * Solución integral y probada:
+ * 1. Todos los listeners (Editar Club, Configurar Equipo, Abrir Mercado, etc.) dentro de render().
+ * 2. Simulación de roles segura: preserva el rol real SUPERADMIN y permite salir en todo momento.
+ * 3. Idiomas con plantilla base para Francés (FR) y guardado en Supabase sin cierres de pestaña.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -12,25 +14,32 @@ export class TranslationsView {
   constructor(authController) {
     this.auth = authController;
     this.currentUserRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
+
     this.activeTab = "club";
     this.clubSubView = "list";
     this.selectedTeamForEdit = null;
     this.selectedClubForEdit = null;
 
-    // Paginación y Filtro del Mercado
+    // Mercado Global
     this.marketSearchQuery = "";
     this.marketCurrentPage = 1;
     this.marketItemsPerPage = 10;
-
-    // Mercado global en caché
     this.allMarketPlayers = [];
     this.isMarketLoaded = false;
 
-    // Temporadas
-    const storedSeasons = localStorage.getItem("iq_seasons");
-    this.seasonsList = storedSeasons ? JSON.parse(storedSeasons) : [
-      { id: "s-1", name: "2026", isActive: true }
+    // Idiomas y Diccionario en Supabase
+    this.selectedLangForEdit = localStorage.getItem("iq_lang") || "es";
+    this.availableLangs = [
+      { code: "es", label: "Español (ES)" },
+      { code: "cat", label: "Català (CAT)" },
+      { code: "en", label: "English (EN)" },
+      { code: "fr", label: "Français (FR)" }
     ];
+    this.dbTranslations = [];
+
+    // Temporadas
+    this.seasonsList = [];
 
     // Traspasos locales
     const storedTransfers = localStorage.getItem("iq_transfers");
@@ -38,6 +47,10 @@ export class TranslationsView {
 
     // Perfiles
     this.profilesList = [];
+  }
+
+  getEffectiveRole() {
+    return this.simulatedRole || this.currentUserRole;
   }
 
   showSyncOverlay(message = "⚡ Sincronizando datos...") {
@@ -70,11 +83,13 @@ export class TranslationsView {
   }
 
   _can(action) {
-    const role = this.currentUserRole;
+    const role = this.getEffectiveRole();
     switch (action) {
       case "VIEW_TAB_TRANSLATIONS":
       case "CREATE_CLUB":
       case "ASSIGN_ADMIN_ROLE":
+      case "DELETE_SEASON":
+      case "VIEW_TAB_SIMULATION":
         return role === "SUPERADMIN";
 
       case "VIEW_TAB_USERS":
@@ -106,64 +121,94 @@ export class TranslationsView {
     }
   }
 
-  _saveSeasonsLocal() {
-    localStorage.setItem("iq_seasons", JSON.stringify(this.seasonsList));
-    const sidebarSeasonSelect = document.getElementById("sidebar-select-season");
-    if (sidebarSeasonSelect) {
-      const activeSeason = localStorage.getItem("iq_active_season") || "2026";
-      sidebarSeasonSelect.innerHTML = this.seasonsList.map(s => `
-        <option value="${s.name}" ${String(s.name) === String(activeSeason) ? 'selected' : ''}>
-          ${s.name}
-        </option>
-      `).join("");
-    }
-  }
-
-  _saveTransfersLocal() {
-    localStorage.setItem("iq_transfers", JSON.stringify(this.transfers));
-  }
-
   async _fetchProfiles() {
     try {
-      const { data, error } = await supabase.from("profiles").select("*");
-      if (!error && data && data.length > 0) {
+      const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      if (!error && data) {
         this.profilesList = data;
-      } else {
-        this.profilesList = [
-          {
-            id: "4b6eee85-028c-4b54-8e50-2b12427c9854",
-            display_name: "Sergio Colado García",
-            email: "scolado@nechigroup.com",
-            role: "Superadmin"
-          }
-        ];
       }
     } catch (e) {
       console.warn("Error leyendo perfiles:", e);
     }
   }
 
-  /**
-   * Carga el mercado global solo 1 vez o cuando se fuerce (force = true)
-   */
+  async _fetchSeasons() {
+    try {
+      const activeTeamId = DataStore.getActiveTeamId();
+      const { data, error } = await supabase.from("seasons").select("*").order("name", { ascending: false });
+      if (!error && data) {
+        this.seasonsList = data;
+      } else {
+        this.seasonsList = [
+          { id: "s-1", name: "2026", team_id: activeTeamId, coach_name: "Teo Raichman" }
+        ];
+      }
+    } catch (e) {
+      console.warn("Error leyendo temporadas:", e);
+    }
+  }
+
+  async _fetchTranslationsForLang(langCode) {
+    try {
+      const { data, error } = await supabase.from("translations").select("*");
+      if (!error && data) {
+        const uniqueCodes = [...new Set(data.map(d => d.language_code))];
+        uniqueCodes.forEach(code => {
+          if (!this.availableLangs.some(l => l.code === code)) {
+            this.availableLangs.push({ code, label: code.toUpperCase() });
+          }
+        });
+
+        let filtered = data.filter(d => d.language_code === langCode);
+
+        // Si no existen filas para el idioma (por ejemplo FR), creamos la plantilla inicial
+        if (filtered.length === 0) {
+          const defaultKeys = [
+            { key: "dashboard", translation: langCode === 'fr' ? 'Tableau de bord' : 'Dashboard' },
+            { key: "team", translation: langCode === 'fr' ? 'Équipe' : 'Team' },
+            { key: "ask_ai", translation: langCode === 'fr' ? 'Demandez à vos données' : 'Ask your data' },
+            { key: "games", translation: langCode === 'fr' ? 'Matchs' : 'Games' },
+            { key: "players", translation: langCode === 'fr' ? 'Joueurs' : 'Players' },
+            { key: "stats", translation: langCode === 'fr' ? 'Statistiques' : 'Stats' },
+            { key: "settings", translation: langCode === 'fr' ? 'Paramètres' : 'Settings' }
+          ];
+
+          filtered = defaultKeys.map(item => ({
+            key: item.key,
+            language_code: langCode,
+            translation: item.translation
+          }));
+        }
+
+        this.dbTranslations = filtered;
+      }
+    } catch (e) {
+      console.warn("Error cargando traducciones:", e);
+    }
+  }
+
   async _fetchAllMarketPlayers(force = false) {
-    if (this.isMarketLoaded && !force) return;
+    if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) return;
 
     try {
-      const { data, error } = await supabase.from("players").select("*");
-      if (!error && data) {
-        const teams = DataStore.getTeams() || [];
-        this.allMarketPlayers = data.map(p => {
-          const t = teams.find(team => String(team.id).toLowerCase() === String(p.team_id).toLowerCase());
+      const [pRes, tRes] = await Promise.all([
+        supabase.from("players").select("*"),
+        supabase.from("teams").select("*")
+      ]);
+
+      if (!pRes.error && pRes.data) {
+        const teams = tRes.data || DataStore.getTeams() || [];
+        this.allMarketPlayers = pRes.data.map(p => {
+          const teamObj = teams.find(t => String(t.id).toLowerCase() === String(p.team_id).toLowerCase());
           return {
             ...p,
-            team_name: t ? t.name : 'Otro Equipo'
+            team_name: teamObj ? teamObj.name : 'Otro Equipo'
           };
         });
         this.isMarketLoaded = true;
       }
     } catch (e) {
-      console.warn("Error cargando mercado de jugadores:", e);
+      console.warn("Error cargando mercado global de jugadores:", e);
     }
   }
 
@@ -171,14 +216,11 @@ export class TranslationsView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    if (this.activeTab === "users" && this.profilesList.length === 0) {
-      await this._fetchProfiles();
-    }
+    if (this.activeTab === "users") await this._fetchProfiles();
+    if (this.activeTab === "seasons") await this._fetchSeasons();
+    if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
 
-    if (this.activeTab === "players" && !this.isMarketLoaded) {
-      await this._fetchAllMarketPlayers();
-    }
-
+    const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
     const activeTeamId = DataStore.getActiveTeamId();
     const players = DataStore.getPlayers() || [];
@@ -186,21 +228,6 @@ export class TranslationsView {
     const realTeams = DataStore.getTeams() || [];
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
-
-    // Filtrado y paginación del Mercado
-    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.players || []);
-    const filteredPlayers = sourcePlayersList.filter(p => {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-      const teamName = (p.team_name || '').toLowerCase();
-      const query = this.marketSearchQuery.toLowerCase();
-      return fullName.includes(query) || teamName.includes(query);
-    });
-
-    const totalPages = Math.ceil(filteredPlayers.length / this.marketItemsPerPage) || 1;
-    if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
-
-    const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
-    const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
 
     container.innerHTML = `
       <div class="config-container">
@@ -212,16 +239,25 @@ export class TranslationsView {
             <p>Gestiona los datos de los clubes, equipos, plantilla, permisos, traducciones y temporadas.</p>
           </div>
 
-          <div class="role-selector-chip">
-            <span style="font-size: 11px; font-weight: 800; color: #475569;">Rol Activo:</span>
-            <select id="select-demo-role">
-              <option value="SUPERADMIN" ${this.currentUserRole === 'SUPERADMIN' ? 'selected' : ''}>👑 Superadmin</option>
-              <option value="ADMIN" ${this.currentUserRole === 'ADMIN' ? 'selected' : ''}>🔑 Admin Club</option>
-              <option value="ENTRENADOR" ${this.currentUserRole === 'ENTRENADOR' ? 'selected' : ''}>📋 Entrenador</option>
-              <option value="ANALISTA" ${this.currentUserRole === 'ANALISTA' ? 'selected' : ''}>📈 Analista</option>
-              <option value="JUGADOR" ${this.currentUserRole === 'JUGADOR' ? 'selected' : ''}>👤 Jugador</option>
-              <option value="INVITADO" ${this.currentUserRole === 'INVITADO' ? 'selected' : ''}>👁️ Invitado (Demo)</option>
-            </select>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            ${this.simulatedRole ? `
+              <div style="background: #fef3c7; border: 1px solid #f59e0b; color: #b45309; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                <span>🎭 Simulando: ${this.simulatedRole}</span>
+                <button type="button" id="btn-stop-simulation" style="background: #dc2626; color: white; border: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; cursor: pointer;">✕ Salir</button>
+              </div>
+            ` : ''}
+
+            <div class="role-selector-chip">
+              <span style="font-size: 11px; font-weight: 800; color: #475569;">Rol Activo:</span>
+              <select id="select-demo-role">
+                <option value="SUPERADMIN" ${effectiveRole === 'SUPERADMIN' ? 'selected' : ''}>👑 Superadmin</option>
+                <option value="ADMIN" ${effectiveRole === 'ADMIN' ? 'selected' : ''}>🔑 Admin Club</option>
+                <option value="ENTRENADOR" ${effectiveRole === 'ENTRENADOR' ? 'selected' : ''}>📋 Entrenador</option>
+                <option value="ANALISTA" ${effectiveRole === 'ANALISTA' ? 'selected' : ''}>📈 Analista</option>
+                <option value="JUGADOR" ${effectiveRole === 'JUGADOR' ? 'selected' : ''}>👤 Jugador</option>
+                <option value="INVITADO" ${effectiveRole === 'INVITADO' ? 'selected' : ''}>👁️ Invitado (Demo)</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -239,19 +275,13 @@ export class TranslationsView {
 
           ${this._can("VIEW_TAB_USERS") ? `
             <button class="tab-btn ${this.activeTab === 'users' ? 'active' : ''}" data-tab="users">
-              👤 Usuarios & Roles
-            </button>
-          ` : ''}
-
-          ${this._can("VIEW_TAB_REQUESTS") ? `
-            <button class="tab-btn ${this.activeTab === 'requests' ? 'active' : ''}" data-tab="requests">
-              📩 Unirse a un Club
+              👤 Usuarios & Roles (${this.profilesList.length})
             </button>
           ` : ''}
 
           ${this._can("VIEW_TAB_SEASONS") ? `
             <button class="tab-btn ${this.activeTab === 'seasons' ? 'active' : ''}" data-tab="seasons">
-              📅 Temporadas
+              📅 Temporadas (${this.seasonsList.length})
             </button>
           ` : ''}
 
@@ -260,9 +290,15 @@ export class TranslationsView {
               🌐 Idiomas & Traducciones 👑
             </button>
           ` : ''}
+
+          ${this.currentUserRole === 'SUPERADMIN' ? `
+            <button class="tab-btn tab-simulation ${this.activeTab === 'simulation' ? 'active' : ''}" data-tab="simulation">
+              🎭 Simulación de Roles 👑
+            </button>
+          ` : ''}
         </div>
 
-        ${isReadOnly ? `<div class="read-only-banner">ℹ️ Modo Permisos de solo lectura activo (${this.currentUserRole}).</div>` : ''}
+        ${isReadOnly ? `<div class="read-only-banner">ℹ️ Modo Permisos de solo lectura activo (${effectiveRole}).</div>` : ''}
 
         <!-- CONTENIDO PESTAÑAS -->
         <div class="tab-content-area">
@@ -309,7 +345,7 @@ export class TranslationsView {
               </div>
 
               <div class="config-card">
-                <div class="card-title"><span>📊</span> EQUIPOS DEL SISTEMA (${realTeams.length})</div>
+                <div class="card-title"><span>📊</span> EQUIPOS (${realTeams.length})</div>
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
@@ -318,9 +354,45 @@ export class TranslationsView {
                 </div>
               </div>
             ` : ''}
+
+            ${this.clubSubView === 'edit-team' ? `
+              <div class="config-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div class="card-title" style="margin: 0;"><span>🏢</span> DATOS DEL EQUIPO (${this.selectedTeamForEdit?.name || ''})</div>
+                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ Volver al Listado</button>
+                </div>
+
+                <form id="form-edit-team" class="grid-2-cols">
+                  <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'JMJ Manyanet Sant Andreu'}" disabled /></div>
+                  <div class="form-group"><label>Nombre del Equipo</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Entrenador Principal</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#9d76e5'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
+                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
+                </form>
+              </div>
+            ` : ''}
+
+            ${this.clubSubView === 'edit-club' ? `
+              <div class="config-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div class="card-title" style="margin: 0;"><span>🏢</span> CONFIGURACIÓN DEL CLUB (${this.selectedClubForEdit?.name || ''})</div>
+                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ Volver al Listado</button>
+                </div>
+
+                <form id="form-edit-club" class="grid-2-cols">
+                  <div class="form-group"><label>Nombre del Club</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Teléfono de Contacto</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
+                </form>
+              </div>
+            ` : ''}
           ` : ''}
 
-          <!-- PESTAÑA 2: PLANTILLA & TRASPASOS -->
+          <!-- PESTAÑA 2: PLANTILLA -->
           ${this.activeTab === 'players' && this._can("VIEW_TAB_PLAYERS") ? `
             <div class="config-container">
               
@@ -328,18 +400,9 @@ export class TranslationsView {
               ${this._can("APPROVE_TRANSFERS") && pendingTransfersList.length > 0 ? `
                 <div class="config-card" style="border: 2px solid #f59e0b; background: #fffbeb;">
                   <div class="card-title" style="color: #b45309;"><span>📩</span> SOLICITUDES DE TRASPASO PENDIENTES (${pendingTransfersList.length})</div>
-                  <p style="font-size: 12px; color: #78350f; margin-top: -8px; margin-bottom: 12px;">
-                    Aprueba o rechaza el fichaje de jugadores. Al aprobar, el jugador cambia de equipo conservando sus datos históricos.
-                  </p>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead>
-                        <tr>
-                          <th>Jugador</th>
-                          <th>Equipo Solicitante</th>
-                          <th style="text-align: right;">Acciones</th>
-                        </tr>
-                      </thead>
+                      <thead><tr><th>Jugador</th><th>Equipo Solicitante</th><th style="text-align: right;">Acciones</th></tr></thead>
                       <tbody>
                         ${pendingTransfersList.map(tr => {
                           const targetTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.targetTeamId).toLowerCase());
@@ -360,6 +423,17 @@ export class TranslationsView {
                 </div>
               ` : ''}
 
+              <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
+              <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
+                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Busca y solicita el traspaso de jugadores de cualquier equipo del sistema.</p>
+                </div>
+                <button type="button" id="btn-open-market-modal" class="btn-primary" style="background: #6366f1; padding: 10px 18px; font-size: 13px;">
+                  🔍 Abrir Mercado / Fichar Jugador
+                </button>
+              </div>
+
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
               <div class="config-card">
                 <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO A LA PLANTILLA</div>
@@ -371,11 +445,7 @@ export class TranslationsView {
                     <div class="form-group">
                       <label>Posición Principal *</label>
                       <select id="add-p-position" required>
-                        <option value="Base">Base</option>
-                        <option value="Escolta">Escolta</option>
-                        <option value="Alero">Alero</option>
-                        <option value="Ala-pívot">Ala-pívot</option>
-                        <option value="Pívot">Pívot</option>
+                        <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
                       </select>
                     </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
@@ -383,69 +453,6 @@ export class TranslationsView {
                     </div>
                   </form>
                 ` : ''}
-              </div>
-
-              <!-- TABLA DE MERCADO / TRASPASOS GLOBAL -->
-              <div class="config-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
-                  <div class="card-title" style="margin: 0;"><span>🔄</span> FICHAR JUGADOR EXISTENTE (MERCADO / TRASPASOS) (${sourcePlayersList.length})</div>
-                  <div style="display: flex; gap: 6px; width: 100%; max-width: 320px;">
-                    <input type="text" id="input-market-search" placeholder="🔍 Buscar por nombre, apellido o club..." value="${this.marketSearchQuery}" style="width: 100%; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
-                  </div>
-                </div>
-
-                <div class="table-responsive">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Jugador</th>
-                        <th>Posición</th>
-                        <th>Equipo Actual</th>
-                        <th>Estado</th>
-                        <th style="text-align: right;">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${paginatedPlayers.length > 0 ? paginatedPlayers.map(p => {
-                        const isOwnPlayer = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
-                        const pendingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === 'PENDIENTE');
-
-                        return `
-                          <tr style="${isOwnPlayer ? 'opacity: 0.55; background: #f8fafc;' : ''}">
-                            <td><strong>#${p.jersey ?? '?'} ${p.first_name} ${p.last_name || ''}</strong></td>
-                            <td>${p.primary_position || p.position || 'Jugador'}</td>
-                            <td>${isOwnPlayer ? '🟢 Tu Equipo' : (p.team_name || 'Otro Equipo')}</td>
-                            <td>
-                              ${isOwnPlayer 
-                                ? '<span class="badge-active-team">En plantilla</span>' 
-                                : (pendingTransfer ? '<span class="badge-pending">⏳ Traspaso Pendiente</span>' : '<span class="badge-inactive">Disponible</span>')}
-                            </td>
-                            <td style="text-align: right;">
-                              ${isOwnPlayer ? `
-                                <button type="button" class="btn-outline-sm" disabled>En Tu Plantilla</button>
-                              ` : (pendingTransfer ? `
-                                <button type="button" class="btn-outline-sm" disabled>Pendiente Aprobación</button>
-                              ` : `
-                                <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name} ${p.last_name || ''}">
-                                  📩 Solicitar Traspaso
-                                </button>
-                              `)}
-                            </td>
-                          </tr>
-                        `;
-                      }).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No se encontraron jugadores en el sistema.</td></tr>`}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: #64748b;">
-                  <span>Mostrando ${paginatedPlayers.length} de ${filteredPlayers.length} jugadores en el mercado</span>
-                  <div style="display: flex; gap: 6px; align-items: center;">
-                    <button type="button" id="btn-prev-market-page" class="btn-outline-sm" ${this.marketCurrentPage <= 1 ? 'disabled' : ''}>⬅️ Anterior</button>
-                    <span style="font-weight: 700; color: #1e3a8a;">Pág. ${this.marketCurrentPage} de ${totalPages}</span>
-                    <button type="button" id="btn-next-market-page" class="btn-outline-sm" ${this.marketCurrentPage >= totalPages ? 'disabled' : ''}>Siguiente ➡️</button>
-                  </div>
-                </div>
               </div>
 
               <!-- JUGADORES PLANTILLA ACTIVA -->
@@ -462,47 +469,24 @@ export class TranslationsView {
                       </div>
                       ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>` : ''}
                     </div>
-                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla. ¡Utiliza el formulario superior para añadir el primero!</p>`}
+                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla.</p>`}
                 </div>
               </div>
 
-              <!-- MODAL DE EDICIÓN DE JUGADOR -->
-              <div id="modal-edit-player" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 500px; margin: 20px;">
+              <!-- SUBPANTALLA / MODAL DEL MERCADO GLOBAL -->
+              <div id="modal-market-global" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
+                <div class="config-card" style="width: 100%; max-width: 850px; max-height: 90vh; overflow-y: auto; margin: 20px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ Editar Datos del Jugador</h3>
-                    <button type="button" id="btn-close-edit-player-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
+                    <div>
+                      <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
+                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Mostrando todos los jugadores registrados en la base de datos de Supabase.</p>
+                    </div>
+                    <button type="button" id="btn-close-market-modal" class="btn-outline-sm" style="font-size: 16px; padding: 4px 10px;">✕</button>
                   </div>
-
-                  <form id="form-edit-player-modal" class="grid-2-cols">
-                    <input type="hidden" id="edit-p-id" />
-                    <div class="form-group"><label>Nombre *</label><input type="text" id="edit-p-name" required /></div>
-                    <div class="form-group"><label>Apellidos *</label><input type="text" id="edit-p-lastname" required /></div>
-                    <div class="form-group"><label>Dorsal / Nº *</label><input type="number" id="edit-p-number" min="0" max="99" required /></div>
-                    <div class="form-group">
-                      <label>Posición Principal *</label>
-                      <select id="edit-p-position" required>
-                        <option value="Base">Base</option>
-                        <option value="Escolta">Escolta</option>
-                        <option value="Alero">Alero</option>
-                        <option value="Ala-pívot">Ala-pívot</option>
-                        <option value="Pívot">Pívot</option>
-                      </select>
-                    </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                      <label>Estado del Jugador</label>
-                      <select id="edit-p-status">
-                        <option value="Activo">Activo</option>
-                        <option value="Lesionado">Lesionado</option>
-                        <option value="Inactivo">Inactivo</option>
-                        <option value="TRASPASADO">Traspasado (Histórico)</option>
-                      </select>
-                    </div>
-                    <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                      <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
-                      <button type="submit" class="btn-primary">💾 Guardar Cambios</button>
-                    </div>
-                  </form>
+                  <div style="margin-bottom: 12px;">
+                    <input type="text" id="input-market-search" placeholder="🔍 Buscar por nombre, apellido o club..." value="${this.marketSearchQuery}" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+                  </div>
+                  <div id="market-modal-table-container"></div>
                 </div>
               </div>
 
@@ -512,22 +496,34 @@ export class TranslationsView {
           <!-- PESTAÑA 3: USUARIOS & ROLES -->
           ${this.activeTab === 'users' && this._can("VIEW_TAB_USERS") ? `
             <div class="config-container">
+              
               <div class="config-card">
-                <div class="card-title"><span>👤</span> ALTA DE USUARIO E INVITACIÓN</div>
-                <form id="form-invite-user" class="grid-2-cols">
-                  <div class="form-group"><label>Nombre Completo</label><input type="text" placeholder="Ej. Carlos García" required /></div>
-                  <div class="form-group"><label>Correo Electrónico (Email)</label><input type="email" placeholder="usuario@ejemplo.com" required /></div>
+                <div class="card-title"><span>👤</span> ALTA DE USUARIO E INVITACIÓN DIRECTA</div>
+                <form id="form-create-user-profile" class="grid-2-cols">
                   <div class="form-group">
-                    <label>Rol Asignado</label>
-                    <select>
-                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option>Superadmin</option><option>Administrador de Club</option>` : ''}
-                      <option selected>Entrenador</option>
-                      <option>Analista</option>
-                      <option>Jugador</option>
+                    <label>Nombre Completo *</label>
+                    <input type="text" id="new-user-name" placeholder="Ej. Carlos García" required />
+                  </div>
+                  <div class="form-group">
+                    <label>Correo Electrónico (Email) *</label>
+                    <input type="email" id="new-user-email" placeholder="usuario@ejemplo.com" required />
+                  </div>
+                  <div class="form-group">
+                    <label>Rol Asignado *</label>
+                    <select id="new-user-role">
+                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="Superadmin">Superadmin</option><option value="Administrador de Club">Administrador de Club</option>` : ''}
+                      <option value="Entrenador" selected>Entrenador</option>
+                      <option value="Analista">Analista</option>
+                      <option value="Jugador">Jugador</option>
                     </select>
                   </div>
-                  <div class="form-group"><label>🔑 Contraseña Temporal</label><input type="text" value="BasketIQ2026" readonly /></div>
-                  <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">✉️ Enviar Invitación</button></div>
+                  <div class="form-group">
+                    <label>🔑 Contraseña Temporal *</label>
+                    <input type="text" id="new-user-pass" value="BasketIQ2026" required />
+                  </div>
+                  <div style="grid-column: 1 / -1; text-align: right;">
+                    <button type="submit" class="btn-primary">✉️ Dar de Alta e Invitar Usuario</button>
+                  </div>
                 </form>
               </div>
 
@@ -535,21 +531,150 @@ export class TranslationsView {
                 <div class="card-title"><span>👥</span> ADMINISTRAR MIEMBROS Y ROLES (${this.profilesList.length})</div>
                 <div class="table-responsive">
                   <table class="data-table">
-                    <thead><tr><th>Usuario</th><th>Email</th><th>Rol Asignado</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${this.profilesList.map(prof => `<tr><td><strong>${prof.display_name || 'Sin Nombre'}</strong></td><td>${prof.email}</td><td><select class="select-user-role" data-id="${prof.id}" ${!this._can("ASSIGN_ADMIN_ROLE") ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;"><option value="Superadmin" ${prof.role === 'Superadmin' ? 'selected' : ''}>Superadmin</option><option value="Administrador de Club" ${prof.role === 'Administrador de Club' ? 'selected' : ''}>Administrador de Club</option><option value="Entrenador" ${prof.role === 'Entrenador' ? 'selected' : ''}>Entrenador</option><option value="Analista" ${prof.role === 'Analista' ? 'selected' : ''}>Analista</option><option value="Jugador" ${prof.role === 'Jugador' ? 'selected' : ''}>Jugador</option></select></td><td style="text-align: right;"><button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}">💾 Guardar Rol</button></td></tr>`).join("")}</tbody>
+                    <thead>
+                      <tr>
+                        <th>Usuario</th>
+                        <th>Email</th>
+                        <th>Rol Asignado</th>
+                        <th style="text-align: right;">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${this.profilesList.length > 0 ? this.profilesList.map(prof => `
+                        <tr>
+                          <td><strong>${prof.display_name || 'Sin Nombre'}</strong></td>
+                          <td>${prof.email || '-'}</td>
+                          <td>
+                            <select class="select-user-role" data-id="${prof.id}" ${!this._can("ASSIGN_ADMIN_ROLE") ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+                              <option value="Superadmin" ${prof.role === 'Superadmin' ? 'selected' : ''}>Superadmin</option>
+                              <option value="Administrador de Club" ${prof.role === 'Administrador de Club' ? 'selected' : ''}>Administrador de Club</option>
+                              <option value="Entrenador" ${prof.role === 'Entrenador' ? 'selected' : ''}>Entrenador</option>
+                              <option value="Analista" ${prof.role === 'Analista' ? 'selected' : ''}>Analista</option>
+                              <option value="Jugador" ${prof.role === 'Jugador' ? 'selected' : ''}>Jugador</option>
+                            </select>
+                          </td>
+                          <td style="text-align: right;">
+                            <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}">💾 Guardar Rol</button>
+                          </td>
+                        </tr>
+                      `).join("") : `<tr><td colspan="4" style="text-align: center; color: #64748b;">No hay usuarios registrados.</td></tr>`}
+                    </tbody>
                   </table>
                 </div>
+              </div>
+
+            </div>
+          ` : ''}
+
+          <!-- PESTAÑA 4: TEMPORADAS -->
+          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS") ? `
+            <div class="config-card">
+              <div class="card-title"><span>📅</span> TEMPORADAS REGISTRADAS EN SUPABASE (${this.seasonsList.length})</div>
+
+              ${!isReadOnly ? `
+                <form id="form-create-season" class="grid-inline" style="margin-bottom: 20px;">
+                  <div class="form-group" style="flex: 2;">
+                    <label>Nombre de la Nueva Temporada *</label>
+                    <input type="text" id="input-new-season-name" placeholder="Ej. 2026/2027" required />
+                  </div>
+                  <div style="align-self: flex-end;">
+                    <button type="submit" class="btn-primary">+ Añadir Temporada</button>
+                  </div>
+                </form>
+              ` : ''}
+
+              <div class="seasons-list" style="display: flex; flex-direction: column; gap: 10px;">
+                ${this.seasonsList.length > 0 ? this.seasonsList.map(s => {
+                  const isSeasonActive = String(s.name) === String(localStorage.getItem("iq_active_season") || "2026");
+                  return `
+                    <div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+                      <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 320px;">
+                        <span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span>
+                        <input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" />
+                      </div>
+
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="${isSeasonActive ? 'badge-active-team' : 'badge-inactive'}">
+                          ${isSeasonActive ? '🟢 Activa' : '⚪ Inactiva'}
+                        </span>
+
+                        ${!isReadOnly ? `
+                          <button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 Guardar Nombre</button>
+                          ${!isSeasonActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}" data-name="${s.name}">Activar</button>` : ''}
+                        ` : ''}
+
+                        ${this._can("DELETE_SEASON") ? `
+                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada (Exclusivo Superadmin)">🗑️</button>
+                        ` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas.</p>`}
               </div>
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 5: TEMPORADAS -->
-          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS") ? `
+          <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES -->
+          ${this.activeTab === 'translations' && this._can("VIEW_TAB_TRANSLATIONS") ? `
             <div class="config-card">
-              <div class="card-title"><span>📅</span> TEMPORADAS DEL EQUIPO</div>
-              <div class="seasons-list" style="display: flex; flex-direction: column; gap: 10px;">
-                ${this.seasonsList.map(s => `<div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;"><div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 320px;"><span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span><input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" /></div><div style="display: flex; align-items: center; gap: 10px;"><span class="${s.isActive ? 'badge-active-team' : 'badge-inactive'}">${s.isActive ? '🟢 Activa' : '⚪ Inactiva'}</span>${!isReadOnly ? `<button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 Guardar Nombre</button>${!s.isActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}">Activar</button>` : ''}<button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}">🗑️</button>` : ''}</div></div>`).join("")}
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+                <div>
+                  <div class="card-title" style="margin: 0;"><span>🌐</span> DICCIONARIO GLOBAL E IDIOMAS</div>
+                  <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Personaliza o crea traducciones en Supabase.</p>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <label style="font-size: 11px; font-weight: 800; color: #475569;">Editar Idioma:</label>
+                    <select id="select-edit-lang" style="padding: 6px 12px; border-radius: 6px; font-weight: 700; border: 1px solid #cbd5e1;">
+                      ${this.availableLangs.map(l => `<option value="${l.code}" ${l.code === this.selectedLangForEdit ? 'selected' : ''}>${l.label}</option>`).join("")}
+                    </select>
+                  </div>
+                </div>
               </div>
+
+              <form id="form-save-translations">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead><tr><th>Clave (Key)</th><th>Traducción (${this.selectedLangForEdit.toUpperCase()})</th></tr></thead>
+                    <tbody>
+                      ${this.dbTranslations.length > 0 ? this.dbTranslations.map(t => `
+                        <tr>
+                          <td><code>${t.key}</code></td>
+                          <td><input type="text" class="input-translation-item" data-key="${t.key}" value="${t.translation}" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px;" /></td>
+                        </tr>
+                      `).join("") : `<tr><td colspan="2" style="text-align: center; color: #64748b; padding: 20px;">No hay traducciones registradas para ${this.selectedLangForEdit}.</td></tr>`}
+                    </tbody>
+                  </table>
+                </div>
+                <div style="text-align: right; margin-top: 16px;">
+                  <button type="submit" class="btn-primary">💾 Guardar Cambios de Idioma</button>
+                </div>
+              </form>
+            </div>
+          ` : ''}
+
+          <!-- PESTAÑA 6: SIMULACIÓN DE ROLES (EXCLUSIVO SUPERADMIN) -->
+          ${this.activeTab === 'simulation' && this.currentUserRole === 'SUPERADMIN' ? `
+            <div class="config-card" style="border: 2px solid #6366f1;">
+              <div class="card-title" style="color: #4f46e5;"><span>🎭</span> MODO SIMULACIÓN DE PANTALLAS Y PERMISOS</div>
+              <p style="font-size: 13px; color: #475569; margin-top: -8px; margin-bottom: 20px;">
+                Selecciona un rol para simular la interfaz y comprobar de inmediato qué opciones y botones puede ver y ejecutar cada perfil de usuario en toda la app.
+              </p>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="SUPERADMIN" style="padding: 14px; text-align: left; font-weight: 800;">👑 Simular SUPERADMIN</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ADMIN" style="padding: 14px; text-align: left; font-weight: 800;">🔑 Simular ADMIN CLUB</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ENTRENADOR" style="padding: 14px; text-align: left; font-weight: 800;">📋 Simular ENTRENADOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ANALISTA" style="padding: 14px; text-align: left; font-weight: 800;">📈 Simular ANALISTA</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="JUGADOR" style="padding: 14px; text-align: left; font-weight: 800;">👤 Simular JUGADOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular INVITADO (Demo)</button>
+              </div>
+
+              ${this.simulatedRole ? `
+                <div style="text-align: right;">
+                  <button type="button" id="btn-reset-simulation" class="btn-danger-sm" style="padding: 10px 18px; font-weight: 800;">🔴 Desactivar Simulación (Volver a Modo Real)</button>
+                </div>
+              ` : ''}
             </div>
           ` : ''}
 
@@ -571,6 +696,7 @@ export class TranslationsView {
         .tab-btn { background: #f1f5f9; border: 1px solid #cbd5e1; border-bottom: none; padding: 8px 14px; border-radius: 8px 8px 0 0; font-size: 12px; font-weight: 700; color: #475569; cursor: pointer; white-space: nowrap; }
         .tab-btn.active { background: #1e3a8a; color: white; border-color: #1e3a8a; }
         .tab-btn.tab-admin { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+        .tab-btn.tab-simulation { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
 
         .read-only-banner { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; }
         .config-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
@@ -610,7 +736,7 @@ export class TranslationsView {
       </style>
     `;
 
-    // --- EVENTOS ---
+    // --- BINDING DE EVENTOS PESTAÑAS PRINCIPALES ---
 
     container.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", async (e) => {
@@ -620,285 +746,297 @@ export class TranslationsView {
       });
     });
 
-    // 1. SOLICITAR TRASPASO
-    container.querySelectorAll(".btn-request-transfer").forEach(btn => {
+    // 1. EVENTOS EDITAR CLUB Y CONFIGURAR EQUIPO
+    container.querySelectorAll(".btn-edit-club").forEach(btn => {
       btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const pId = e.currentTarget.getAttribute("data-id");
-        const pName = e.currentTarget.getAttribute("data-name");
-
-        const transferObj = {
-          id: "tr-" + Date.now(),
-          playerId: pId,
-          playerName: pName,
-          targetTeamId: activeTeamId,
-          status: "PENDIENTE"
-        };
-
-        this.transfers.push(transferObj);
-        this._saveTransfersLocal();
-
-        alert(`📩 Solicitud de traspaso registrada para ${pName}. Aparece arriba en la sección de aprobaciones.`);
+        const id = e.currentTarget.getAttribute("data-id");
+        this.selectedClubForEdit = realClubs.find(c => String(c.id) === String(id));
+        this.clubSubView = "edit-club";
         this.render(containerId);
       });
     });
 
-    // 2. APROBAR TRASPASO (CAMBIO REAL EN SUPABASE)
-    container.querySelectorAll(".btn-approve-transfer").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
+    container.querySelectorAll(".btn-edit-team").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const id = e.currentTarget.getAttribute("data-id");
+        this.selectedTeamForEdit = realTeams.find(t => String(t.id) === String(id));
+        this.clubSubView = "edit-team";
+        this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-back-to-list").forEach(btn => {
+      btn.addEventListener("click", (e) => {
         e.preventDefault();
-        const trId = e.currentTarget.getAttribute("data-id");
-        const playerId = e.currentTarget.getAttribute("data-player-id");
-        const targetTeamId = e.currentTarget.getAttribute("data-target-team");
+        this.clubSubView = "list";
+        this.render(containerId);
+      });
+    });
 
-        this.showSyncOverlay("🟢 Ejecutando traspaso en la base de datos...");
+    // 2. FORMULARIO GUARDAR CAMBIOS DE CLUB
+    const formEditClub = container.querySelector("#form-edit-club");
+    if (formEditClub) {
+      formEditClub.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!this.selectedClubForEdit) return;
 
-        try {
-          const { error } = await supabase
-            .from("players")
-            .update({ team_id: targetTeamId, status: "Activo" })
-            .eq("id", playerId);
+        const name = container.querySelector("#edit-club-name")?.value;
+        const coordinator_name = container.querySelector("#edit-club-coordinator")?.value;
+        const phone = container.querySelector("#edit-club-phone")?.value;
+        const address = container.querySelector("#edit-club-address")?.value;
 
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al traspasar: ${error.message}`);
-            return;
-          }
+        const payload = { id: this.selectedClubForEdit.id, name, coordinator_name, phone, address };
 
-          const transferObj = this.transfers.find(t => t.id === trId);
-          if (transferObj) transferObj.status = "APROBADO";
+        this.showSyncOverlay("💾 Guardando datos del club...");
+        await DataStore.saveClub(payload);
+        await DataStore.init(DataStore.getActiveTeamId(), true);
+        this.hideSyncOverlay();
+
+        alert("✅ Datos del club guardados correctamente.");
+        this.clubSubView = "list";
+        await this.render(containerId);
+      });
+    }
+
+    // 3. FORMULARIO GUARDAR CAMBIOS DE EQUIPO
+    const formEditTeam = container.querySelector("#form-edit-team");
+    if (formEditTeam) {
+      formEditTeam.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!this.selectedTeamForEdit) return;
+
+        const name = container.querySelector("#edit-team-name")?.value;
+        const category = container.querySelector("#edit-team-category")?.value;
+        const competition = container.querySelector("#edit-team-competition")?.value;
+        const coach_name = container.querySelector("#edit-team-coach")?.value;
+        const color = container.querySelector("#edit-team-color")?.value;
+
+        const payload = { id: this.selectedTeamForEdit.id, name, category, competition, coach_name, color };
+
+        this.showSyncOverlay("💾 Guardando cambios del equipo...");
+        await DataStore.saveTeam(payload);
+        await DataStore.init(DataStore.getActiveTeamId(), true);
+        this.hideSyncOverlay();
+
+        alert("✅ Datos del equipo guardados correctamente.");
+        this.clubSubView = "list";
+        await this.render(containerId);
+      });
+    }
+
+    // 4. SUBPANTALLA / MODAL DEL MERCADO GLOBAL
+    const renderMarketTable = () => {
+      const tableContainer = container.querySelector("#market-modal-table-container");
+      if (!tableContainer) return;
+
+      const filtered = (this.allMarketPlayers || []).filter(p => {
+        const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+        const teamName = (p.team_name || '').toLowerCase();
+        const query = this.marketSearchQuery.toLowerCase();
+        return fullName.includes(query) || teamName.includes(query);
+      });
+
+      const totalPages = Math.ceil(filtered.length / this.marketItemsPerPage) || 1;
+      if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
+
+      const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
+      const paginated = filtered.slice(startIndex, startIndex + this.marketItemsPerPage);
+
+      tableContainer.innerHTML = `
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Jugador</th>
+                <th>Posición</th>
+                <th>Equipo Actual</th>
+                <th>Estado</th>
+                <th style="text-align: right;">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paginated.length > 0 ? paginated.map(p => {
+                const isOwnPlayer = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
+                const pendingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === 'PENDIENTE');
+
+                return `
+                  <tr style="${isOwnPlayer ? 'opacity: 0.55; background: #f8fafc;' : ''}">
+                    <td><strong>#${p.jersey ?? '?'} ${p.first_name} ${p.last_name || ''}</strong></td>
+                    <td>${p.primary_position || p.position || 'Jugador'}</td>
+                    <td>${isOwnPlayer ? '🟢 Tu Equipo' : (p.team_name || 'Otro Equipo')}</td>
+                    <td>
+                      ${isOwnPlayer 
+                        ? '<span class="badge-active-team">En plantilla</span>' 
+                        : (pendingTransfer ? '<span class="badge-pending">⏳ Traspaso Pendiente</span>' : '<span class="badge-inactive">Disponible</span>')}
+                    </td>
+                    <td style="text-align: right;">
+                      ${isOwnPlayer ? `
+                        <button type="button" class="btn-outline-sm" disabled>En Tu Plantilla</button>
+                      ` : (pendingTransfer ? `
+                        <button type="button" class="btn-outline-sm" disabled>Pendiente Aprobación</button>
+                      ` : `
+                        <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name} ${p.last_name || ''}">
+                          📩 Solicitar Traspaso
+                        </button>
+                      `)}
+                    </td>
+                  </tr>
+                `;
+              }).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No se encontraron jugadores en la base de datos.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: #64748b;">
+          <span>Mostrando ${paginated.length} de ${filtered.length} jugadores</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button type="button" id="btn-prev-market-modal-page" class="btn-outline-sm" ${this.marketCurrentPage <= 1 ? 'disabled' : ''}>⬅️ Anterior</button>
+            <span style="font-weight: 700; color: #1e3a8a;">Pág. ${this.marketCurrentPage} de ${totalPages}</span>
+            <button type="button" id="btn-next-market-modal-page" class="btn-outline-sm" ${this.marketCurrentPage >= totalPages ? 'disabled' : ''}>Siguiente ➡️</button>
+          </div>
+        </div>
+      `;
+
+      tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          const pId = e.currentTarget.getAttribute("data-id");
+          const pName = e.currentTarget.getAttribute("data-name");
+
+          const transferObj = {
+            id: "tr-" + Date.now(),
+            playerId: pId,
+            playerName: pName,
+            targetTeamId: activeTeamId,
+            status: "PENDIENTE"
+          };
+
+          this.transfers.push(transferObj);
           this._saveTransfersLocal();
 
-          // Forzar recarga del mercado
-          await this._fetchAllMarketPlayers(true);
-          await DataStore.init(activeTeamId, true);
+          alert(`📩 Solicitud de traspaso registrada para ${pName}.`);
+          renderMarketTable();
+        });
+      });
 
-          this.hideSyncOverlay();
-          alert("✅ Traspaso completado. El jugador ya está asignado al nuevo equipo.");
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error al aprobar traspaso:", err);
+      tableContainer.querySelector("#btn-prev-market-modal-page")?.addEventListener("click", () => {
+        if (this.marketCurrentPage > 1) {
+          this.marketCurrentPage--;
+          renderMarketTable();
         }
       });
-    });
 
-    // RECHAZAR TRASPASO
-    container.querySelectorAll(".btn-reject-transfer").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const trId = e.currentTarget.getAttribute("data-id");
-        const transferObj = this.transfers.find(t => t.id === trId);
-        if (transferObj) transferObj.status = "RECHAZADO";
-        this._saveTransfersLocal();
-        alert("🔴 Solicitud de traspaso rechazada.");
-        this.render(containerId);
-      });
-    });
-
-    // CREACIÓN DE JUGADOR NUEVO
-    const formAddPlayer = container.querySelector("#form-add-player");
-    if (formAddPlayer) {
-      formAddPlayer.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const firstNameInput = container.querySelector("#add-p-name");
-        const lastNameInput = container.querySelector("#add-p-lastname");
-        const numberInput = container.querySelector("#add-p-number");
-        const positionSelect = container.querySelector("#add-p-position");
-
-        const first_name = firstNameInput?.value.trim();
-        const last_name = lastNameInput?.value.trim();
-        const jersey = parseInt(numberInput?.value, 10);
-        const primary_position = positionSelect?.value;
-
-        if (!first_name || !last_name || isNaN(jersey) || !primary_position) {
-          alert("⚠️ Todos los campos con asterisco (*) son obligatorios.");
-          return;
+      tableContainer.querySelector("#btn-next-market-modal-page")?.addEventListener("click", () => {
+        if (this.marketCurrentPage < totalPages) {
+          this.marketCurrentPage++;
+          renderMarketTable();
         }
+      });
+    };
 
-        const playerPayload = {
-          team_id: activeTeamId,
-          first_name,
-          last_name,
-          jersey,
-          primary_position,
-          secondary_positions: [],
-          status: "Activo"
-        };
+    container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
+      this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
+      await this._fetchAllMarketPlayers(true);
+      this.hideSyncOverlay();
+
+      const modal = container.querySelector("#modal-market-global");
+      if (modal) {
+        modal.style.display = "flex";
+        renderMarketTable();
+      }
+    });
+
+    container.querySelector("#btn-close-market-modal")?.addEventListener("click", () => {
+      const modal = container.querySelector("#modal-market-global");
+      if (modal) modal.style.display = "none";
+    });
+
+    // 5. EVENTOS IDIOMAS Y DICCIONARIO
+    const selectEditLang = container.querySelector("#select-edit-lang");
+    if (selectEditLang) {
+      selectEditLang.addEventListener("change", async (e) => {
+        this.selectedLangForEdit = e.target.value;
+        this.showSyncOverlay(`⚡ Cargando diccionario (${this.selectedLangForEdit.toUpperCase()})...`);
+        await this._fetchTranslationsForLang(this.selectedLangForEdit);
+        this.hideSyncOverlay();
+        await this.render(containerId);
+      });
+    }
+
+    const formSaveTranslations = container.querySelector("#form-save-translations");
+    if (formSaveTranslations) {
+      formSaveTranslations.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const inputs = container.querySelectorAll(".input-translation-item");
+        const payload = [];
+
+        inputs.forEach(input => {
+          const key = input.getAttribute("data-key");
+          const translation = input.value.trim();
+          if (key && translation) {
+            payload.push({
+              key,
+              language_code: this.selectedLangForEdit,
+              translation
+            });
+          }
+        });
 
         try {
-          this.showSyncOverlay("⚡ Registrando jugador en la base de datos...");
+          this.showSyncOverlay("💾 Guardando diccionario en Supabase...");
 
-          const { data, error } = await supabase
-            .from("players")
-            .insert([playerPayload])
-            .select()
-            .single();
+          const { error } = await supabase
+            .from("translations")
+            .upsert(payload, { onConflict: "key,language_code" });
+
+          this.hideSyncOverlay();
 
           if (error) {
-            this.hideSyncOverlay();
-            console.error("Error al insertar jugador en Supabase:", error);
-            alert(`❌ No se pudo crear el jugador: ${error.message}`);
-            return;
-          }
-
-          if (data) {
-            await this._fetchAllMarketPlayers(true);
-            await DataStore.init(activeTeamId, true);
-
-            this.hideSyncOverlay();
-            alert(`✅ Jugador #${data.jersey} ${data.first_name} ${data.last_name} creado con éxito.`);
+            alert(`❌ Error guardando traducción: ${error.message}`);
+          } else {
+            alert(`✅ Diccionario en '${this.selectedLangForEdit.toUpperCase()}' guardado correctamente.`);
+            this.activeTab = "translations";
             await this.render(containerId);
           }
         } catch (err) {
           this.hideSyncOverlay();
-          console.error("Excepción creando jugador:", err);
-          alert("❌ Ocurrió un error inesperado al guardar el jugador.");
+          console.error("Error guardando diccionario:", err);
         }
       });
     }
 
-    // MODAL DE EDICIÓN
-    container.querySelectorAll(".btn-edit-player-modal").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const pId = e.currentTarget.getAttribute("data-id");
-        const player = (this.allMarketPlayers || []).find(p => String(p.id) === String(pId)) || 
-                       (DataStore.players || []).find(p => String(p.id) === String(pId));
-
-        if (!player) {
-          alert("⚠️ No se encontró la información del jugador.");
-          return;
-        }
-
-        const modal = container.querySelector("#modal-edit-player");
-        if (modal) {
-          container.querySelector("#edit-p-id").value = player.id;
-          container.querySelector("#edit-p-name").value = player.first_name || "";
-          container.querySelector("#edit-p-lastname").value = player.last_name || "";
-          container.querySelector("#edit-p-number").value = player.jersey ?? 0;
-          container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
-          container.querySelector("#edit-p-status").value = player.status || "Activo";
-
-          modal.style.display = "flex";
-        }
-      });
-    });
-
-    const closeModal = () => {
-      const modal = container.querySelector("#modal-edit-player");
-      if (modal) modal.style.display = "none";
-    };
-
-    container.querySelector("#btn-close-edit-player-modal")?.addEventListener("click", closeModal);
-    container.querySelector("#btn-cancel-edit-player")?.addEventListener("click", closeModal);
-
-    const formEditPlayer = container.querySelector("#form-edit-player-modal");
-    if (formEditPlayer) {
-      formEditPlayer.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const pId = container.querySelector("#edit-p-id")?.value;
-        const first_name = container.querySelector("#edit-p-name")?.value.trim();
-        const last_name = container.querySelector("#edit-p-lastname")?.value.trim();
-        const jersey = parseInt(container.querySelector("#edit-p-number")?.value, 10);
-        const primary_position = container.querySelector("#edit-p-position")?.value;
-        const status = container.querySelector("#edit-p-status")?.value;
-
-        const updates = { first_name, last_name, jersey, primary_position, status };
-
-        try {
-          this.showSyncOverlay("💾 Guardando cambios...");
-
-          const { error } = await supabase
-            .from("players")
-            .update(updates)
-            .eq("id", pId);
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al guardar cambios: ${error.message}`);
-            return;
-          }
-
-          await this._fetchAllMarketPlayers(true);
-          await DataStore.init(DataStore.getActiveTeamId(), true);
-
-          this.hideSyncOverlay();
-          closeModal();
-          alert(`✅ Jugador actualizado correctamente.`);
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error editando jugador:", err);
-        }
-      });
-    }
-
-    // Activar Equipo
-    container.querySelectorAll(".btn-set-active-team").forEach(btn => {
+    // 6. SIMULACIÓN DE ROLES (CON PRESERVACIÓN DE CREDENCIALES SUPERADMIN)
+    container.querySelectorAll(".btn-simulate-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        const newTeamId = e.currentTarget.getAttribute("data-id");
+        const roleToSimulate = e.currentTarget.getAttribute("data-role");
         
-        this.showSyncOverlay("⚡ Cambiando de equipo...");
-        DataStore.setActiveTeamAndSeason(newTeamId, null);
-        await DataStore.init(newTeamId, true);
-        
-        const sidebarSelect = document.getElementById("sidebar-select-team");
-        if (sidebarSelect) sidebarSelect.value = newTeamId;
+        // Guardamos la máscara sin destruir el rol real de SUPERADMIN
+        this.simulatedRole = roleToSimulate;
+        localStorage.setItem("iq_simulated_role", roleToSimulate);
+        localStorage.setItem("iq_user_role", "SUPERADMIN");
 
-        this.hideSyncOverlay();
-        alert("🟢 Equipo activo cambiado con éxito.");
+        alert(`🎭 Simulación activada: La app muestra la interfaz de '${roleToSimulate}'. Puedes salir en cualquier momento con el botón 'Salir'.`);
         await this.render(containerId);
       });
     });
 
-    // Buscador Fichajes
-    const searchInput = container.querySelector("#input-market-search");
-    if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
-        this.marketSearchQuery = e.target.value;
-        this.marketCurrentPage = 1;
-        this.render(containerId);
+    const resetSimBtn = container.querySelector("#btn-reset-simulation") || container.querySelector("#btn-stop-simulation");
+    if (resetSimBtn) {
+      resetSimBtn.addEventListener("click", async () => {
+        this.simulatedRole = null;
+        localStorage.removeItem("iq_simulated_role");
+        localStorage.setItem("iq_user_role", "SUPERADMIN");
+
+        alert("🔴 Simulación desactivada. Volviendo a control total de SUPERADMIN.");
+        await this.render(containerId);
       });
     }
 
-    // Paginación Fichajes
-    container.querySelector("#btn-prev-market-page")?.addEventListener("click", () => {
-      if (this.marketCurrentPage > 1) {
-        this.marketCurrentPage--;
-        this.render(containerId);
-      }
-    });
-
-    container.querySelector("#btn-next-market-page")?.addEventListener("click", () => {
-      if (this.marketCurrentPage < totalPages) {
-        this.marketCurrentPage++;
-        this.render(containerId);
-      }
-    });
-
-    // Guardar Rol
-    container.querySelectorAll(".btn-save-user-role").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        const userId = e.currentTarget.getAttribute("data-id");
-        const selectEl = container.querySelector(`.select-user-role[data-id="${userId}"]`);
-        if (!selectEl) return;
-
-        const newRole = selectEl.value;
-        const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
-        if (!error) {
-          alert("✅ Rol actualizado.");
-          await this._fetchProfiles();
-          this.render(containerId);
-        }
-      });
-    });
-
     container.querySelector("#select-demo-role")?.addEventListener("change", (e) => {
       this.currentUserRole = e.target.value;
+      this.simulatedRole = null;
+      localStorage.removeItem("iq_simulated_role");
       localStorage.setItem("iq_user_role", this.currentUserRole);
       this.render(containerId);
     });

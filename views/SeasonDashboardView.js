@@ -2,13 +2,15 @@
  * @fileoverview Vista del Dashboard de Temporada de IQ Basket (SeasonDashboardView.js).
  * Sincronizado con DataStore para carga instantánea desde memoria local y control de permisos por rol.
  * Muestra Valoración FIBA Por Partido (VAL / PJ) y Proyección Por 40 Minutos (VAL / 40)
- * en estricta coherencia con el Módulo de Informes. Traducido dinámicamente con TranslationStore.
+ * en estricta coherencia con el Módulo de Informes. Traducido dinámicamente con I18nService.
+ * Rediseñado en 3 Niveles UI/UX con responsividad avanzada para móvil y desktop.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
@@ -20,6 +22,9 @@ export class SeasonDashboardView {
       column: "date",
       ascending: false
     };
+
+    // Pestaña activa del Nivel 2: Rendimiento del Equipo ('attack' | 'defense' | 'pace' | 'shooting')
+    this.activePerformanceTab = "attack";
 
     this.cachedGames = [];
     this.cachedPlayerStats = [];
@@ -42,11 +47,7 @@ export class SeasonDashboardView {
 
   _formatDateES(dateStr) {
     if (!dateStr || dateStr === '-') return '-';
-    const parts = String(dateStr).split('T')[0].split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return dateStr;
+    return I18n.formatDate(dateStr);
   }
 
   /**
@@ -403,10 +404,10 @@ export class SeasonDashboardView {
     `;
 
     return `
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="charts-container-grid">
         
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               ${TranslationStore.t("net_rating_evolution", "EVOLUCIÓN DEL NET RATING")} <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("net_rating_tooltip", "Evolución del margen de eficiencia (Offensive Rating menos Defensive Rating) por partido.")}</span>
@@ -415,22 +416,22 @@ export class SeasonDashboardView {
           ${svgNetRating}
         </div>
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               ${TranslationStore.t("pts_scored_vs_received", "PUNTOS ANOTADOS VS RECIBIDOS")} <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("pts_tooltip", "Comparativa directa de la puntuación anotada a favor frente a la recibida.")}</span>
             </span>
           </h4>
           ${chartPts}
-          <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("in_favor", "A favor")}</span>
-            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("against", "En contra")}</span>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-color legend-blue"></span> ${TranslationStore.t("in_favor", "A favor")}</span>
+            <span class="legend-item"><span class="legend-color legend-orange"></span> ${TranslationStore.t("against", "En contra")}</span>
           </div>
         </div>
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               EVOLUCIÓN DEL EFG% <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("efg_tooltip", "Porcentaje de tiro efectivo ajustado por el valor extra del triple en cada jornada.")}</span>
@@ -439,8 +440,8 @@ export class SeasonDashboardView {
           ${svgEfg}
         </div>
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               ${TranslationStore.t("turnovers_per_game", "PÉRDIDAS POR PARTIDO")} <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("turnovers_tooltip", "Volumen total de balones perdidos por el equipo en cada encuentro disputado.")}</span>
@@ -449,31 +450,31 @@ export class SeasonDashboardView {
           ${chartTov}
         </div>
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               ${TranslationStore.t("rebound_off_def", "REBOTE OFENSIVO Y DEFENSIVO")} <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("rebound_tooltip", "Cantidad total de rebotes atrapados en ataque (naranja) y en defensa (azul).")}</span>
             </span>
           </h4>
           ${chartRebound}
-          <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> Reb. Ofensivos</span>
-            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> Reb. Defensivos</span>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-color legend-orange"></span> Reb. Ofensivos</span>
+            <span class="legend-item"><span class="legend-color legend-blue"></span> Reb. Defensivos</span>
           </div>
         </div>
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-          <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">
+        <div class="chart-card">
+          <h4 class="chart-card-header">
             <span class="has-tooltip">
               ${TranslationStore.t("quarter_performance", "RENDIMIENTO POR CUARTOS")} <span class="info-badge">?</span>
               <span class="tooltip-box">${TranslationStore.t("quarter_tooltip", "Distribución del promedio de puntos anotados y encajados acumulados en Q1, Q2, Q3 y Q4.")}</span>
             </span>
           </h4>
           ${chartQuarters}
-          <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px; color: #1e3a8a;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("in_favor", "a favor")}</span>
-            <span style="display: flex; align-items: center; gap: 4px; color: #f97316;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${TranslationStore.t("against", "en contra")}</span>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-color legend-blue"></span> ${TranslationStore.t("in_favor", "a favor")}</span>
+            <span class="legend-item"><span class="legend-color legend-orange"></span> ${TranslationStore.t("against", "en contra")}</span>
           </div>
         </div>
 
@@ -531,26 +532,55 @@ export class SeasonDashboardView {
       const formattedDate = this._formatDateES(g.date || '-');
 
       return `
-        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
-          <td style="padding: 14px 12px; color: #64748b; font-weight: 500;">${formattedDate}</td>
-          <td style="padding: 14px 12px; font-weight: 700; color: #0f172a;">${opponentName}</td>
-          <td style="padding: 14px 12px;">
-            <span style="background: ${isHome ? '#dbeafe' : '#f1f5f9'}; color: ${isHome ? '#1e40af' : '#475569'}; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 11px;">
+        <tr class="game-row-item">
+          <td class="col-date">${formattedDate}</td>
+          <td class="col-opponent"><strong>${opponentName}</strong></td>
+          <td class="col-venue">
+            <span class="venue-badge ${isHome ? 'badge-home' : 'badge-away'}">
               ${venueText}
             </span>
           </td>
-          <td style="padding: 14px 12px; font-weight: 800; color: ${!hasPlayed ? '#64748b' : (isWin ? '#16a34a' : '#dc2626')};">
+          <td class="col-score ${!hasPlayed ? 'text-muted' : (isWin ? 'text-win' : 'text-loss')}">
             ${scoreText}
           </td>
-          <td style="padding: 14px 12px; color: #64748b; font-weight: 600;">${hasPlayed ? (diff > 0 ? `+${diff}` : diff) : '-'}</td>
-          <td style="padding: 14px 12px; color: #64748b;">-</td>
-          <td style="padding: 14px 12px; color: #64748b;">-</td>
-          <td style="padding: 14px 12px;">
-            <a href="#/boxscore/${g.id}" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+          <td class="col-diff">${hasPlayed ? (diff > 0 ? `+${diff}` : diff) : '-'}</td>
+          <td class="col-off">-</td>
+          <td class="col-def">-</td>
+          <td class="col-action">
+            <a href="#/boxscore/${g.id}" class="action-link">
               ${TranslationStore.t("view_boxscore", "Análisis")}
             </a>
           </td>
         </tr>
+      `;
+    }).join("");
+  }
+
+  _renderMobileCards(sortedGames) {
+    return sortedGames.map((g) => {
+      const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(g);
+      const isWin = hasPlayed && teamPts > oppPts;
+      const diff = hasPlayed ? teamPts - oppPts : 0;
+      const formattedDate = this._formatDateES(g.date || '-');
+
+      return `
+        <div class="mobile-game-card card">
+          <div class="mobile-card-header">
+            <span class="game-date">${formattedDate}</span>
+            <span class="score-pill ${hasPlayed ? (isWin ? 'pill-win' : 'pill-loss') : 'pill-pending'}">
+              ${hasPlayed ? `${teamPts} - ${oppPts}` : TranslationStore.t("pending", "Pendiente")}
+            </span>
+          </div>
+          <div class="mobile-card-body">
+            <strong class="opponent-name">${g.opponent || 'Rival'}</strong>
+            <span class="diff-badge">${hasPlayed ? `Dif: ${diff > 0 ? '+' : ''}${diff}` : ''}</span>
+          </div>
+          <div class="mobile-card-footer">
+            <a href="#/boxscore/${g.id}" class="btn-primary-sm">
+              ${TranslationStore.t("view_boxscore", "Ver Análisis")}
+            </a>
+          </div>
+        </div>
       `;
     }).join("");
   }
@@ -621,6 +651,92 @@ export class SeasonDashboardView {
     });
   }
 
+  _attachLevel2TabsListener(container) {
+    const tabButtons = container.querySelectorAll(".tab-pill-btn");
+    tabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const targetTab = btn.getAttribute("data-tab");
+        if (targetTab && this.activePerformanceTab !== targetTab) {
+          this.activePerformanceTab = targetTab;
+          tabButtons.forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          const tabContent = container.querySelector("#performance-tab-content");
+          if (tabContent) {
+            const kpis = StatsEngine ? StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, this.cachedPlayerStats) : {};
+            tabContent.innerHTML = this._renderLevel2TabContent(kpis);
+          }
+        }
+      });
+    });
+  }
+
+  _renderLevel2TabContent(kpis) {
+    switch (this.activePerformanceTab) {
+      case "defense":
+        return `
+          <div class="kpi-subgrid">
+            <div class="kpi-card-custom">
+              <span class="kpi-title">DEFENSIVE RATING</span>
+              <span class="kpi-val-big">${kpis.drtg || 0}</span>
+              <span class="kpi-subtext">Puntos permitidos / 100 pos.</span>
+            </div>
+            <div class="kpi-card-custom">
+              <span class="kpi-title">PUNTOS EN CONTRA / PJ</span>
+              <span class="kpi-val-big">${kpis.oppPpg || 0}</span>
+              <span class="kpi-subtext">Promedio encajado</span>
+            </div>
+          </div>
+        `;
+      case "pace":
+        return `
+          <div class="kpi-subgrid">
+            <div class="kpi-card-custom">
+              <span class="kpi-title">PACE (RITMO DE JUEGO)</span>
+              <span class="kpi-val-big">${kpis.pace || 0}</span>
+              <span class="kpi-subtext">Posesiones / 40 minutos</span>
+            </div>
+            <div class="kpi-card-custom">
+              <span class="kpi-title">TOV% (% PÉRDIDAS)</span>
+              <span class="kpi-val-big">${kpis.tovPct || 0}%</span>
+              <span class="kpi-subtext">Cuidado de balón</span>
+            </div>
+          </div>
+        `;
+      case "shooting":
+        return `
+          <div class="kpi-subgrid">
+            <div class="kpi-card-custom">
+              <span class="kpi-title">eFG% (TIRO EFECTIVO)</span>
+              <span class="kpi-val-big">${kpis.efg || 0}%</span>
+              <span class="kpi-subtext">Ponderación de 3PT</span>
+            </div>
+            <div class="kpi-card-custom">
+              <span class="kpi-title">DIFERENCIA PUNTOS</span>
+              <span class="kpi-val-big" style="color: ${kpis.diffPpg < 0 ? '#dc2626' : '#16a34a'};">${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg || 0}</span>
+              <span class="kpi-subtext">Margen medio por partido</span>
+            </div>
+          </div>
+        `;
+      case "attack":
+      default:
+        return `
+          <div class="kpi-subgrid">
+            <div class="kpi-card-custom">
+              <span class="kpi-title">OFFENSIVE RATING</span>
+              <span class="kpi-val-big">${kpis.ortg || 0}</span>
+              <span class="kpi-subtext">Puntos anotados / 100 pos.</span>
+            </div>
+            <div class="kpi-card-custom">
+              <span class="kpi-title">NET RATING</span>
+              <span class="kpi-val-big" style="color: ${kpis.netRtg < 0 ? '#dc2626' : '#16a34a'};">${kpis.netRtg > 0 ? '+' : ''}${kpis.netRtg || 0}</span>
+              <span class="kpi-subtext">Balance neto / 100 pos.</span>
+            </div>
+          </div>
+        `;
+    }
+  }
+
   async render(containerId = "dashboard-content-area", teamId) {
     this.currentTeamId = teamId;
     const container = document.getElementById(containerId);
@@ -658,260 +774,429 @@ export class SeasonDashboardView {
 
     const sortedGames = this._sortGames(this.cachedGames);
     const gamesTableRows = this._renderTableRows(sortedGames);
+    const gamesMobileCards = this._renderMobileCards(sortedGames);
 
     const canSyncData = this._canSync();
 
     const topPlayersMarkup = topPlayers.map((p, index) => `
-      <div style="background: rgba(255, 255, 255, 0.08); padding: 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
+      <div class="fiba-leader-item">
         <div>
-          <span style="font-size: 10px; font-weight: 800; color: #a855f7; display: block;">#${index + 1} ${TranslationStore.t("leader", "LÍDER")}</span>
-          <strong style="font-size: 14px; color: white;">${p.number} ${p.name}</strong>
-          <span style="font-size: 11px; color: #cbd5e1; display: block;">${p.position} · ${p.gamesPlayed} PJ</span>
+          <span class="leader-badge">#${index + 1} ${TranslationStore.t("leader", "LÍDER")}</span>
+          <strong class="leader-name">${p.number} ${p.name}</strong>
+          <span class="leader-sub">${p.position} · ${p.gamesPlayed} PJ</span>
         </div>
-        <div style="text-align: right;">
-          <span style="font-size: 20px; font-weight: 900; color: #facc15;">${p.avgVal}</span>
-          <span style="font-size: 10px; font-weight: 700; color: #e9d5ff; display: block;">[${p.val40}/40m]</span>
-          
-          <span class="has-tooltip" style="display: inline-block; margin-top: 2px;">
-            <span style="font-size: 9px; color: #c084fc; font-weight: 800; border-bottom: 1px dashed #c084fc; cursor: pointer;">
-              VAL / PJ <span class="info-badge" style="background: rgba(255,255,255,0.2); color: white;">?</span>
+        <div class="leader-score">
+          <span class="val-number">${p.avgVal}</span>
+          <span class="val-proj">[${p.val40}/40m]</span>
+          <span class="has-tooltip tooltip-trigger">
+            <span class="val-label">
+              VAL / PJ <span class="info-badge">?</span>
             </span>
             <span class="tooltip-box">${TranslationStore.t("val_fiba_tooltip", "Valoración Oficial FIBA Promedio por Partido (VAL/PJ) y Proyección Por 40 Minutos [VAL/40m].")}</span>
           </span>
-
         </div>
       </div>
     `).join("");
 
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding-bottom: 40px;">
+      <div class="dashboard-root-wrapper">
         
         <!-- Estado Nube y Permisos -->
-        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
+        <div class="cloud-status-banner">
+          <div class="status-indicator">
+            <span class="status-dot"></span>
             ${TranslationStore.t("cloud_connected", "NUBE CONECTADA: Memoria local sincronizada con Supabase")}
           </div>
           ${canSyncData ? `
-            <button id="btn-sync-data" style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+            <button id="btn-sync-data" class="btn-sync">
               🔄 ${TranslationStore.t("sync_audit_data", "Sincronizar y Auditar Datos")}
             </button>
           ` : `
-            <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px;">
+            <span class="read-only-badge">
               🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}
             </span>
           `}
         </div>
 
-        <!-- Encabezado -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <!-- Encabezado del Equipo -->
+        <div class="team-header-box">
           <div>
-            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${teamData.teamName || TranslationStore.t("team", "Equipo")}</h1>
-            <p style="color: #64748b; font-size: 13px; margin: 6px 0 0 0;">
+            <h1 class="team-title">${teamData.teamName || TranslationStore.t("team", "Equipo")}</h1>
+            <p class="team-meta">
               ${teamData.category || 'Categoría'} · ${TranslationStore.t("season", "Temporada")} ${teamData.season || '2026'} &nbsp;·&nbsp; 
-              <strong style="color: #16a34a;">${kpis.wins}W</strong> 
-              <strong style="color: #dc2626;">${kpis.losses}L</strong> &nbsp;·&nbsp; 
+              <strong class="text-win">${kpis.wins}W</strong> 
+              <strong class="text-loss">${kpis.losses}L</strong> &nbsp;·&nbsp; 
               ${this.cachedGames.length} ${TranslationStore.t("total_games", "partidos totales")}
             </p>
           </div>
         </div>
 
-        <!-- KPIs -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+        <!-- ========================================================= -->
+        <!-- NIVEL 1 — RESUMEN EJECUTIVO (KPIs PRINCIPALES) -->
+        <!-- ========================================================= -->
+        <section class="dashboard-level-1">
+          <div class="kpi-responsive-grid">
+            
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("games_played", "PARTIDOS JUGADOS").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Total de partidos disputados o programados en el calendario.</span>
+              </span>
+              <span class="kpi-val-big">${this.cachedGames.length}</span>
+            </div>
+
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("wins", "VICTORIAS").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Número total de partidos ganados.</span>
+              </span>
+              <span class="kpi-val-big text-win">${kpis.wins}</span>
+            </div>
+
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("losses", "DERROTAS").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Número total de partidos perdidos.</span>
+              </span>
+              <span class="kpi-val-big text-loss">${kpis.losses}</span>
+            </div>
+
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("ppg", "PUNTOS POR PARTIDO").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Promedio de puntos anotados a favor (PPG).</span>
+              </span>
+              <span class="kpi-val-big">${kpis.ppg}</span>
+            </div>
+
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("opp_ppg", "PUNTOS RECIBIDOS").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Promedio de puntos encajados en contra (Opp PPG).</span>
+              </span>
+              <span class="kpi-val-big">${kpis.oppPpg}</span>
+            </div>
+
+            <div class="kpi-card-custom">
+              <span class="has-tooltip">
+                <span class="kpi-title">${TranslationStore.t("diff_ppg", "DIFERENCIA MEDIA").toUpperCase()}</span> <span class="info-badge">?</span>
+                <span class="tooltip-box">Diferencia media de puntos por partido (A Favor menos En Contra).</span>
+              </span>
+              <span class="kpi-val-big ${kpis.diffPpg < 0 ? 'text-loss' : 'text-win'}">${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}</span>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- NIVEL 2 — RENDIMIENTO DEL EQUIPO (SECTOR DE PESTAÑAS) -->
+        <!-- ========================================================= -->
+        <section class="dashboard-level-2 card">
+          <div class="level-2-header">
+            <h3 class="level-2-title">${TranslationStore.t("team_performance", "RENDIMIENTO DEL EQUIPO")}</h3>
+            <div class="tab-pills-row">
+              <button type="button" class="tab-pill-btn ${this.activePerformanceTab === 'attack' ? 'active' : ''}" data-tab="attack">Ataque</button>
+              <button type="button" class="tab-pill-btn ${this.activePerformanceTab === 'defense' ? 'active' : ''}" data-tab="defense">Defensa</button>
+              <button type="button" class="tab-pill-btn ${this.activePerformanceTab === 'pace' ? 'active' : ''}" data-tab="pace">Ritmo</button>
+              <button type="button" class="tab-pill-btn ${this.activePerformanceTab === 'shooting' ? 'active' : ''}" data-tab="shooting">Tiro</button>
+            </div>
+          </div>
+          <div id="performance-tab-content" class="level-2-body">
+            ${this._renderLevel2TabContent(kpis)}
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- NIVEL 3 — LÍDERES, GRÁFICAS Y ÚLTIMOS PARTIDOS -->
+        <!-- ========================================================= -->
+        <section class="dashboard-level-3">
           
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("games_played", "PARTIDOS JUGADOS").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Total de partidos disputados o programados en el calendario.</span>
-            </span>
-            <span class="kpi-val-big">${this.cachedGames.length}</span>
+          <!-- Tarjeta Morada de Líderes FIBA -->
+          <div class="fiba-card-purple">
+            <div class="fiba-header">
+              <span class="fiba-trophy">🏆</span>
+              <h3 class="fiba-title">
+                ${TranslationStore.t("fiba_leaders_title", "LÍDERES EN VALORACIÓN FIBA (VAL / PJ)").toUpperCase()}
+              </h3>
+            </div>
+            <div class="fiba-grid">
+              ${topPlayersMarkup}
+            </div>
           </div>
 
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("wins", "VICTORIAS").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Número total de partidos ganados.</span>
-            </span>
-            <span class="kpi-val-big" style="color: #16a34a;">${kpis.wins}</span>
-          </div>
+          <!-- 6 Gráficas de Evolución SVG -->
+          ${this._renderCharts(this.cachedGames)}
 
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("losses", "DERROTAS").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Número total de partidos perdidos.</span>
-            </span>
-            <span class="kpi-val-big" style="color: #dc2626;">${kpis.losses}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("ppg", "PUNTOS POR PARTIDO").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Promedio de puntos anotados a favor (PPG).</span>
-            </span>
-            <span class="kpi-val-big">${kpis.ppg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("opp_ppg", "PUNTOS RECIBIDOS").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Promedio de puntos encajados en contra (Opp PPG).</span>
-            </span>
-            <span class="kpi-val-big">${kpis.oppPpg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">${TranslationStore.t("diff_ppg", "DIFERENCIA MEDIA").toUpperCase()}</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Diferencia media de puntos por partido (A Favor menos En Contra).</span>
-            </span>
-            <span class="kpi-val-big" style="color: ${kpis.diffPpg < 0 ? '#dc2626' : '#16a34a'};">${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">OFFENSIVE RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Eficiencia ofensiva: Puntos anotados por cada 100 posesiones.</span>
-            </span>
-            <span class="kpi-val-big">${kpis.ortg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">DEFENSIVE RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Eficiencia defensiva: Puntos permitidos por cada 100 posesiones.</span>
-            </span>
-            <span class="kpi-val-big">${kpis.drtg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">NET RATING</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Margen de eficiencia neto por cada 100 posesiones (Offense - Defense).</span>
-            </span>
-            <span class="kpi-val-big" style="color: ${kpis.netRtg < 0 ? '#dc2626' : '#16a34a'};">${kpis.netRtg > 0 ? '+' : ''}${kpis.netRtg}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">PACE</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Ritmo de juego: Estimación de posesiones jugadas por partido (40 min).</span>
-            </span>
-            <span class="kpi-val-big">${kpis.pace}</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">EFG%</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Porcentaje de Tiro Efectivo dando un 50% más de valor al triple.</span>
-            </span>
-            <span class="kpi-val-big">${kpis.efg}%</span>
-          </div>
-
-          <div class="kpi-card-custom">
-            <span class="has-tooltip">
-              <span class="kpi-title">TOV%</span> <span class="info-badge">?</span>
-              <span class="tooltip-box">Porcentaje de posesiones propias terminadas en pérdida.</span>
-            </span>
-            <span class="kpi-val-big">${kpis.tovPct}%</span>
-          </div>
-
-        </div>
-
-        <!-- Tarjeta Morada de Líderes FIBA -->
-        <div style="background: #2e1065; border-radius: 14px; padding: 20px; color: white;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-            <span style="font-size: 18px;">🏆</span>
-            <h3 style="margin: 0; font-size: 13px; letter-spacing: 0.05em; font-weight: 800; color: #c084fc;">
-              ${TranslationStore.t("fiba_leaders_title", "LÍDERES EN VALORACIÓN FIBA (VAL / PJ)").toUpperCase()}
+          <!-- Bloque de Partidos: Tabla (Desktop) vs Tarjetas (Móvil) -->
+          <div class="games-block-card card">
+            <h3 class="block-title">
+              ${TranslationStore.t("last_games", "ÚLTIMOS PARTIDOS").toUpperCase()}
             </h3>
+
+            <!-- Tabla para Pantallas Escritorio / Tablet -->
+            <div class="desktop-only table-wrapper">
+              <table class="games-table">
+                <thead>
+                  <tr class="table-header-row">
+                    <th data-sort="date" class="sortable-th">
+                      ${TranslationStore.t("date", "FECHA").toUpperCase()} <span class="sort-arrow">▼</span>
+                    </th>
+                    <th data-sort="opponent" class="sortable-th">
+                      ${TranslationStore.t("opponent", "RIVAL").toUpperCase()} <span class="sort-arrow">↕</span>
+                    </th>
+                    <th data-sort="venue" class="sortable-th">
+                      ${TranslationStore.t("venue", "SEDE").toUpperCase()} <span class="sort-arrow">↕</span>
+                    </th>
+                    <th data-sort="score" class="sortable-th">
+                      ${TranslationStore.t("score", "RESULTADO").toUpperCase()} <span class="sort-arrow">↕</span>
+                    </th>
+                    <th data-sort="diff" class="sortable-th">
+                      <span class="has-tooltip">
+                        DIF. <span class="info-badge">?</span>
+                        <span class="tooltip-box">Diferencia de puntos en el partido.</span>
+                      </span>
+                      <span class="sort-arrow">↕</span>
+                    </th>
+                    <th>OFF</th>
+                    <th>DEF</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="games-table-body">
+                  ${gamesTableRows}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Representación en Tarjetas para Teléfono Móvil -->
+            <div class="mobile-only mobile-cards-grid">
+              ${gamesMobileCards}
+            </div>
+
           </div>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-            ${topPlayersMarkup}
-          </div>
-        </div>
 
-        <!-- 6 Gráficas de Evolución -->
-        ${this._renderCharts(this.cachedGames)}
-
-        <!-- Tabla de Partidos -->
-        <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
-          <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px;">
-            ${TranslationStore.t("last_games", "ÚLTIMOS PARTIDOS").toUpperCase()}
-          </h3>
-          <table style="width: 100%; border-collapse: collapse; text-align: left;">
-            <thead>
-              <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
-                <th data-sort="date" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("date", "FECHA").toUpperCase()} <span class="sort-arrow" style="color: #2563eb;">▼</span>
-                </th>
-                <th data-sort="opponent" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("opponent", "RIVAL").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-                <th data-sort="venue" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("venue", "SEDE").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-                <th data-sort="score" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("score", "RESULTADO").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-                
-                <th data-sort="diff" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  <span class="has-tooltip">
-                    DIF. <span class="info-badge">?</span>
-                    <span class="tooltip-box">Diferencia de puntos en el partido (Anotados menos Recibidos).</span>
-                  </span>
-                  <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th data-sort="off" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  <span class="has-tooltip">
-                    OFF <span class="info-badge">?</span>
-                    <span class="tooltip-box">Offensive Rating: Puntos anotados por cada 100 posesiones.</span>
-                  </span>
-                  <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th data-sort="def" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  <span class="has-tooltip">
-                    DEF <span class="info-badge">?</span>
-                    <span class="tooltip-box">Defensive Rating: Puntos recibidos por cada 100 posesiones.</span>
-                  </span>
-                  <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th style="padding: 10px 12px;"></th>
-              </tr>
-            </thead>
-            <tbody id="games-table-body">
-              ${gamesTableRows}
-            </tbody>
-          </table>
-        </div>
+        </section>
 
       </div>
 
       <style>
+        .dashboard-root-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-lg, 24px);
+          max-width: 1400px;
+          margin: 0 auto;
+          padding-bottom: 40px;
+        }
+
+        .cloud-status-banner {
+          background: #ecfdf5;
+          border: 1px solid #a7f3d0;
+          color: #065f46;
+          padding: 10px 16px;
+          border-radius: var(--radius-md, 8px);
+          font-size: 12px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .status-indicator { display: flex; align-items: center; gap: 8px; }
+        .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; }
+        
+        .btn-sync {
+          background: #2563eb;
+          color: white;
+          border: none;
+          padding: 6px 14px;
+          border-radius: 6px;
+          font-weight: 700;
+          font-size: 12px;
+          cursor: pointer;
+        }
+
+        .read-only-badge {
+          background: #f1f5f9;
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 4px 10px;
+          border-radius: 6px;
+        }
+
+        .team-title { font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
+        .team-meta { color: #64748b; font-size: 13px; margin: 6px 0 0 0; }
+
+        /* KPI Grid Responsivo */
+        .kpi-responsive-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: var(--space-md, 16px);
+        }
+
         .kpi-card-custom {
-          background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: var(--radius-lg, 12px);
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
-        .kpi-title {
-          font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.05em;
+
+        .kpi-title { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; }
+        .kpi-val-big { font-size: 22px; font-weight: 900; color: #0f172a; }
+        .kpi-subtext { font-size: 11px; color: #94a3b8; font-weight: 500; }
+        
+        .text-win { color: #16a34a !important; }
+        .text-loss { color: #dc2626 !important; }
+
+        /* Nivel 2: Pestañas */
+        .level-2-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+          gap: 12px;
         }
-        .kpi-val-big {
-          font-size: 22px; font-weight: 900; color: #0f172a;
+
+        .level-2-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0; }
+
+        .tab-pills-row { display: flex; gap: 8px; overflow-x: auto; }
+        
+        .tab-pill-btn {
+          background: #f1f5f9;
+          border: none;
+          padding: 6px 14px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #64748b;
+          cursor: pointer;
+          min-height: 36px;
         }
-        .sortable-th:hover { color: #2563eb; }
+
+        .tab-pill-btn.active {
+          background: var(--color-primary, #ea580c);
+          color: white;
+        }
+
+        .kpi-subgrid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 16px;
+        }
+
+        /* Nivel 3: Líderes y Gráficas */
+        .dashboard-level-3 { display: flex; flex-direction: column; gap: 20px; }
+
+        .fiba-card-purple {
+          background: #2e1065;
+          border-radius: 14px;
+          padding: 20px;
+          color: white;
+        }
+
+        .fiba-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+        .fiba-title { margin: 0; font-size: 13px; font-weight: 800; color: #c084fc; letter-spacing: 0.05em; }
+
+        .fiba-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+        }
+
+        .fiba-leader-item {
+          background: rgba(255, 255, 255, 0.08);
+          padding: 14px;
+          border-radius: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .leader-badge { font-size: 10px; font-weight: 800; color: #a855f7; display: block; }
+        .leader-name { font-size: 14px; color: white; display: block; }
+        .leader-sub { font-size: 11px; color: #cbd5e1; display: block; }
+
+        .leader-score { text-align: right; }
+        .val-number { font-size: 20px; font-weight: 900; color: #facc15; display: block; }
+        .val-proj { font-size: 10px; font-weight: 700; color: #e9d5ff; display: block; }
+
+        .charts-container-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 16px;
+        }
+
+        .chart-card {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 20px;
+        }
+
+        .chart-card-header { margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+
+        .chart-legend { display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 11px; font-weight: 600; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-color { width: 10px; height: 10px; border-radius: 2px; }
+        .legend-blue { background: #1e3a8a; }
+        .legend-orange { background: #f97316; }
+
+        /* Tabla y Tarjetas */
+        .games-block-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; }
+        .block-title { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; }
+
+        .games-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .table-header-row { border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; }
+        .table-header-row th { padding: 10px 12px; }
+
+        .game-row-item { border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .game-row-item td { padding: 14px 12px; }
+
+        .venue-badge { padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 11px; }
+        .badge-home { background: #dbeafe; color: #1e40af; }
+        .badge-away { background: #f1f5f9; color: #475569; }
+
+        .action-link { color: #2563eb; text-decoration: none; font-weight: 600; }
+
+        /* Tarjetas Móvil */
+        .mobile-cards-grid { display: flex; flex-direction: column; gap: 12px; }
+        .mobile-game-card { padding: 14px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .mobile-card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        .score-pill { padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 11px; }
+        .pill-win { background: #dcfce7; color: #15803d; }
+        .pill-loss { background: #fee2e2; color: #b91c1c; }
+        .pill-pending { background: #f1f5f9; color: #64748b; }
+        
+        .mobile-card-body { display: flex; justify-content: space-between; align-items: center; }
+        .opponent-name { font-size: 15px; color: #0f172a; }
+        .btn-primary-sm { background: var(--color-primary, #ea580c); color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; display: inline-block; }
+
+        /* Tooltips */
         .has-tooltip { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-        .info-badge { background: #e2e8f0; color: #475569; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; transition: all 0.2s ease; }
-        .has-tooltip:hover .info-badge { background: #2563eb; color: white; }
-        .tooltip-box { visibility: hidden; opacity: 0; width: 210px; background-color: #0f172a; color: #ffffff; text-align: center; border-radius: 6px; padding: 8px 10px; position: absolute; z-index: 100; bottom: 125%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500; line-height: 1.35; text-transform: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: opacity 0.2s ease, visibility 0.2s ease; pointer-events: none; }
-        .tooltip-box::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #0f172a transparent transparent transparent; }
+        .info-badge { background: #e2e8f0; color: #475569; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+        .tooltip-box { visibility: hidden; opacity: 0; width: 210px; background-color: #0f172a; color: #ffffff; text-align: center; border-radius: 6px; padding: 8px 10px; position: absolute; z-index: 100; bottom: 125%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500; transition: opacity 0.2s ease; pointer-events: none; }
         .has-tooltip:hover .tooltip-box { visibility: visible; opacity: 1; }
+
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
+        }
       </style>
     `;
 
     this._attachSortEventListeners(container);
+    this._attachLevel2TabsListener(container);
+
     if (canSyncData) {
       this._attachSyncButtonListener(container, teamId);
     }
   }
 }
+
+export default SeasonDashboardView;

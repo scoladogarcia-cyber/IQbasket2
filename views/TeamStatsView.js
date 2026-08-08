@@ -1,13 +1,13 @@
 /**
  * @fileoverview Vista de Presentación: Informe de Equipo y Plantilla (TeamStatsView.js).
  * Sincronizado con DataStore para carga instantánea desde memoria local y preparado para control de permisos.
- * Ignora el ppg precalculado en BD para garantizar el cálculo 100% real de player_game_stats.
- * Traducido dinámicamente mediante TranslationStore.
+ * Garantiza la renderización limpia sin errores de contenedor ni propiedades nulas.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
+import { I18n } from "../services/I18nService.js";
 
 export class TeamStatsView {
   constructor(supabaseClient, authController) {
@@ -24,12 +24,11 @@ export class TeamStatsView {
 
   _fetchTeamData(teamId) {
     try {
-      // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
-      const games = DataStore.getGames() || [];
-      const players = DataStore.getPlayers() || [];
+      const activeTeamId = teamId || DataStore.getActiveTeamId();
+      const games = DataStore.getGames(activeTeamId) || DataStore.getGames() || [];
+      const players = DataStore.getPlayers(activeTeamId) || DataStore.getPlayers() || [];
       const playerStats = DataStore.getPlayerGameStats() || [];
 
-      // Datos por defecto del equipo o extraídos de la lista de partidos/jugadores
       const team = {
         name: "JMJ Manyanet Sant Andreu",
         category: "Sénior Masculino",
@@ -40,21 +39,22 @@ export class TeamStatsView {
         color: "#1e3a8a"
       };
 
-      // Balance Real (Victorias / Derrotas)
-      const playedGames = StatsEngine ? StatsEngine.filterPlayedGames(games) : games;
+      const playedGames = StatsEngine && typeof StatsEngine.filterPlayedGames === 'function' 
+        ? StatsEngine.filterPlayedGames(games) 
+        : games.filter(g => g.status === 'COMPLETED' || g.status === 'Finalizado' || (g.team_score !== null && g.team_score !== undefined));
+
       let wins = 0;
       let losses = 0;
 
       playedGames.forEach((g) => {
-        const teamPts = g.team_score ?? g.our_score ?? 0;
-        const oppPts = g.opponent_score ?? g.opp_score ?? 0;
+        const teamPts = Number(g.team_score ?? g.our_score ?? 0);
+        const oppPts = Number(g.opponent_score ?? g.opp_score ?? 0);
         if (teamPts > oppPts) wins++;
         else if (teamPts < oppPts) losses++;
       });
 
-      // Mapeo dinámico y real de puntos por partido
       const statsMap = {};
-      playerStats.forEach((r) => {
+      (playerStats || []).forEach((r) => {
         const pId = r.player_id;
         if (!pId) return;
 
@@ -67,8 +67,6 @@ export class TeamStatsView {
           pts = Number(r.points);
         } else if (r.pts !== undefined && r.pts !== null && Number(r.pts) > 0) {
           pts = Number(r.pts);
-        } else if (r.points_scored !== undefined && r.points_scored !== null && Number(r.points_scored) > 0) {
-          pts = Number(r.points_scored);
         } else {
           pts = (fg2m * 2) + (fg3m * 3) + ftm;
         }
@@ -80,8 +78,7 @@ export class TeamStatsView {
         statsMap[pId].gamesPlayed += 1;
       });
 
-      // Formatear jugadores calculando el PPG 100% dinámico
-      const formattedPlayers = players.map((p) => {
+      const formattedPlayers = (players || []).map((p) => {
         const pSt = statsMap[p.id];
         let realPpg = 0.0;
 
@@ -92,7 +89,7 @@ export class TeamStatsView {
         return {
           ...p,
           fullName: `${p.first_name || ''} ${p.last_name || ''}`.trim() || TranslationStore.t("player", "Jugador"),
-          jerseyNum: p.jersey !== undefined && p.jersey !== null ? p.jersey : 99,
+          jerseyNum: (p.jersey !== undefined && p.jersey !== null) ? p.jersey : 99,
           position: p.primary_position || "—",
           statusTxt: String(p.status || "Activo").trim(),
           heightCm: p.height_cm ? Number(p.height_cm) : null,
@@ -101,7 +98,7 @@ export class TeamStatsView {
       });
 
       return {
-        team: team || {},
+        team,
         wins,
         losses,
         totalGames: games.length,
@@ -109,8 +106,8 @@ export class TeamStatsView {
         isSuccess: true
       };
     } catch (err) {
-      console.error("Error cargando equipo desde DataStore:", err);
-      return { isSuccess: false, error: err.message, team: {}, wins: 0, losses: 0, totalGames: 0, players: [] };
+      console.error("[TeamStatsView] Error leyendo datos:", err);
+      return { isSuccess: false, team: {}, wins: 0, losses: 0, totalGames: 0, players: [] };
     }
   }
 
@@ -146,20 +143,61 @@ export class TeamStatsView {
     return players.map((p) => {
       const heightStr = p.heightCm ? `${p.heightCm} cm` : "—";
       const isActivo = p.statusTxt.toLowerCase() === "activo" || p.statusTxt.toLowerCase() === "active";
+      const photo = p.photo_url || "";
+
+      const avatarMarkup = photo
+        ? `<img src="${photo}" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 1px solid #cbd5e1; flex-shrink: 0;" />`
+        : `<div style="width: 42px; height: 42px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; flex-shrink: 0;">#${p.jerseyNum}</div>`;
 
       return `
-        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;">
-          <td style="padding: 14px 12px; font-weight: 800; color: #0f172a;">#${p.jerseyNum}</td>
-          <td style="padding: 14px 12px; font-weight: 700; color: #0f172a;">${p.fullName}</td>
-          <td style="padding: 14px 12px; color: #475569;">${p.position}</td>
-          <td style="padding: 14px 12px;">
+        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px; cursor: pointer;" onclick="window.location.hash='#/player/${p.id}'">
+          <td style="padding: 12px; font-weight: 800; color: #0f172a;">#${p.jerseyNum}</td>
+          <td style="padding: 12px; font-weight: 700; color: #0f172a;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${avatarMarkup}
+              <span>${p.fullName}</span>
+            </div>
+          </td>
+          <td style="padding: 12px; color: #475569;">${p.position}</td>
+          <td style="padding: 12px;">
             <span style="background: ${isActivo ? '#dcfce7' : '#f1f5f9'}; color: ${isActivo ? '#15803d' : '#64748b'}; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 11px;">
               ${p.statusTxt}
             </span>
           </td>
-          <td style="padding: 14px 12px; color: #64748b;">${heightStr}</td>
-          <td style="padding: 14px 12px; font-weight: 800; color: #1e3a8a;">${p.ppg.toFixed(1)}</td>
+          <td style="padding: 12px; color: #64748b;">${heightStr}</td>
+          <td style="padding: 12px; font-weight: 800; color: var(--color-primary, #ea580c);">${p.ppg.toFixed(1)}</td>
         </tr>
+      `;
+    }).join("");
+  }
+
+  _renderPlayerCardsMobile(players) {
+    if (!players || players.length === 0) {
+      return `<div style="padding: 20px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px dashed #cbd5e1;">${TranslationStore.t("no_players_loaded", "No hay jugadores cargados en la plantilla.")}</div>`;
+    }
+
+    return players.map((p) => {
+      const isActivo = p.statusTxt.toLowerCase() === "activo" || p.statusTxt.toLowerCase() === "active";
+      const photo = p.photo_url || "";
+
+      const avatarMarkup = photo
+        ? `<img src="${photo}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; flex-shrink: 0;" />`
+        : `<div style="width: 56px; height: 56px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; flex-shrink: 0;">#${p.jerseyNum}</div>`;
+
+      return `
+        <div class="team-player-mobile-card card" onclick="window.location.hash='#/player/${p.id}'" style="padding: 16px; border-radius: 12px; background: white; border: 1px solid #e2e8f0; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            ${avatarMarkup}
+            <div>
+              <strong style="font-size: 15px; color: #0f172a; display: block;">${p.fullName}</strong>
+              <span style="font-size: 12px; color: #64748b; font-weight: 500;">#${p.jerseyNum} · ${p.position}</span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 18px; font-weight: 900; color: var(--color-primary, #ea580c); display: block;">${p.ppg.toFixed(1)} <span style="font-size: 10px; color: #64748b;">PPG</span></span>
+            <span style="background: ${isActivo ? '#dcfce7' : '#f1f5f9'}; color: ${isActivo ? '#15803d' : '#64748b'}; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;">${p.statusTxt}</span>
+          </div>
+        </div>
       `;
     }).join("");
   }
@@ -178,29 +216,16 @@ export class TeamStatsView {
 
         const sorted = this._sortPlayers(this.cachedPlayers);
         const tbody = container.querySelector("#roster-table-body");
-        if (tbody) {
-          tbody.innerHTML = this._renderPlayerRows(sorted);
-        }
+        if (tbody) tbody.innerHTML = this._renderPlayerRows(sorted);
 
-        sortHeaders.forEach((header) => {
-          const arrowSpan = header.querySelector(".sort-arrow");
-          if (arrowSpan) {
-            const hCol = header.getAttribute("data-sort-player");
-            if (hCol === this.sortState.column) {
-              arrowSpan.textContent = this.sortState.ascending ? " ▲" : " ▼";
-              arrowSpan.style.color = "#2563eb";
-            } else {
-              arrowSpan.textContent = " ↕";
-              arrowSpan.style.color = "#cbd5e1";
-            }
-          }
-        });
+        const mobileContainer = container.querySelector("#roster-mobile-container");
+        if (mobileContainer) mobileContainer.innerHTML = this._renderPlayerCardsMobile(sorted);
       });
     });
   }
 
-  async render(param1 = "main-content", param2) {
-    let containerId = "main-content";
+  async render(param1 = "dashboard-content-area", param2) {
+    let containerId = "dashboard-content-area";
     let teamId = param2;
 
     if (typeof param1 === "string") {
@@ -209,7 +234,8 @@ export class TeamStatsView {
       teamId = param1.id || param1.teamId;
     }
 
-    const container = document.getElementById(containerId) || document.querySelector(".main-content") || document.body;
+    const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
+    if (!container) return;
 
     const data = this._fetchTeamData(teamId);
     const team = data.team || {};
@@ -221,6 +247,7 @@ export class TeamStatsView {
 
     const sortedPlayers = this._sortPlayers(this.cachedPlayers);
     const tableRowsMarkup = this._renderPlayerRows(sortedPlayers);
+    const mobileCardsMarkup = this._renderPlayerCardsMobile(sortedPlayers);
 
     const teamName = team.name || TranslationStore.t("team", "Equipo");
     const teamCategory = team.category || "—";
@@ -229,20 +256,20 @@ export class TeamStatsView {
     const teamPeriods = team.periods_count ? `${team.periods_count} × ${team.period_minutes || 10} min` : "—";
     const teamColor = team.color || "#1e3a8a";
 
-    const htmlContent = `
-      <div style="display: flex; flex-direction: column; gap: 24px; font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding-bottom: 40px;">
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 24px; font-family: var(--font-family-base, system-ui); max-width: 1400px; margin: 0 auto; padding-bottom: 40px;">
         
-        <h1 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("team", "Equipo")}</h1>
+        <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("team", "Equipo")}</h1>
 
         <!-- Tarjeta Principal del Equipo -->
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; display: flex; align-items: center; gap: 16px;">
-          <div style="width: 56px; height: 56px; background: ${teamColor}; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
-            🏆
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <div style="width: 64px; height: 64px; background: ${teamColor}; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: white; font-size: 28px; flex-shrink: 0;">
+            🏀
           </div>
           <div>
             <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a;">${teamName}</h2>
             <p style="margin: 4px 0 8px 0; font-size: 12px; color: #64748b;">${teamName}</p>
-            <div style="display: flex; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <span style="background: #dbeafe; color: #1e40af; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">${teamCategory}</span>
               <span style="background: #ffedd5; color: #c2410c; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">${teamCompetition}</span>
             </div>
@@ -250,27 +277,27 @@ export class TeamStatsView {
         </div>
 
         <!-- Rejilla de Métricas Rápidas -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px;">
           
-          <div class="team-stat-card">
-            <span class="team-stat-title">🏆 ${TranslationStore.t("record", "BALANCE").toUpperCase()}</span>
+          <div class="team-stat-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10px; font-weight: 800; color: #64748b;">🏆 ${TranslationStore.t("record", "BALANCE").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; margin-top: 4px;">
               <strong style="color: #16a34a;">${data.wins}W</strong> - <strong style="color: #dc2626;">${data.losses}L</strong>
             </span>
           </div>
 
-          <div class="team-stat-card">
-            <span class="team-stat-title">📅 ${TranslationStore.t("games", "PARTIDOS").toUpperCase()}</span>
+          <div class="team-stat-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10px; font-weight: 800; color: #64748b;">📅 ${TranslationStore.t("games", "PARTIDOS").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">${data.totalGames}</span>
           </div>
 
-          <div class="team-stat-card">
-            <span class="team-stat-title">👥 ${TranslationStore.t("active_players", "JUGADORES ACTIVOS").toUpperCase()}</span>
+          <div class="team-stat-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10px; font-weight: 800; color: #64748b;">👥 ${TranslationStore.t("active_players", "JUGADORES ACTIVOS").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">${activePlayersCount}</span>
           </div>
 
-          <div class="team-stat-card">
-            <span class="team-stat-title">📍 ${TranslationStore.t("season", "TEMPORADA").toUpperCase()}</span>
+          <div class="team-stat-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10px; font-weight: 800; color: #64748b;">📍 ${TranslationStore.t("season", "TEMPORADA").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 4px;">2026</span>
           </div>
 
@@ -281,7 +308,7 @@ export class TeamStatsView {
           <h3 style="font-size: 12px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">
             ${TranslationStore.t("team_info", "INFORMACIÓN DEL EQUIPO").toUpperCase()}
           </h3>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8fafc; border-radius: 6px;">
               <span style="color: #64748b;">${TranslationStore.t("club", "Club")}</span>
               <strong style="color: #0f172a;">${teamName}</strong>
@@ -309,137 +336,47 @@ export class TeamStatsView {
           </div>
         </div>
 
-        <!-- Tabla de Plantilla con Encabezados Ordenables -->
+        <!-- Tabla de Plantilla con Encabezados Ordenables (Desktop) / Tarjetas (Móvil) -->
         <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;">
           <h3 style="font-size: 12px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">
             ${TranslationStore.t("roster", "PLANTILLA").toUpperCase()}
           </h3>
-          <table style="width: 100%; border-collapse: collapse; text-align: left;">
-            <thead>
-              <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
-                
-                <th data-sort-player="jersey" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("jersey", "DORSAL").toUpperCase()} <span class="sort-arrow" style="color: #2563eb;">▲</span>
-                </th>
 
-                <th data-sort-player="name" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("player", "JUGADOR").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
+          <div class="desktop-only" style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">
+                  <th data-sort-player="jersey" style="padding: 10px 12px; cursor: pointer;">${TranslationStore.t("jersey", "DORSAL").toUpperCase()} <span class="sort-arrow" style="color: #2563eb;">▲</span></th>
+                  <th data-sort-player="name" style="padding: 10px 12px; cursor: pointer;">${TranslationStore.t("player", "JUGADOR").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span></th>
+                  <th data-sort-player="position" style="padding: 10px 12px; cursor: pointer;">${TranslationStore.t("position", "POSICIÓN").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span></th>
+                  <th data-sort-player="status" style="padding: 10px 12px; cursor: pointer;">${TranslationStore.t("status", "ESTADO").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span></th>
+                  <th data-sort-player="height" style="padding: 10px 12px; cursor: pointer;">${TranslationStore.t("height", "ALTURA").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span></th>
+                  <th data-sort-player="ppg" style="padding: 10px 12px; cursor: pointer;">PPG <span class="sort-arrow" style="color: #cbd5e1;">↕</span></th>
+                </tr>
+              </thead>
+              <tbody id="roster-table-body">
+                ${tableRowsMarkup}
+              </tbody>
+            </table>
+          </div>
 
-                <th data-sort-player="position" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("position", "POSICIÓN").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th data-sort-player="status" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("status", "ESTADO").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th data-sort-player="height" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  ${TranslationStore.t("height", "ALTURA").toUpperCase()} <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-                <th data-sort-player="ppg" class="sortable-th" style="padding: 10px 12px; cursor: pointer;">
-                  <span class="has-tooltip">
-                    PPG <span class="info-badge">?</span>
-                    <span class="tooltip-box">${TranslationStore.t("ppg_tooltip", "Puntos Por Partido promedio anotados por el jugador.")}</span>
-                  </span>
-                  <span class="sort-arrow" style="color: #cbd5e1;">↕</span>
-                </th>
-
-              </tr>
-            </thead>
-            <tbody id="roster-table-body">
-              ${tableRowsMarkup}
-            </tbody>
-          </table>
+          <div id="roster-mobile-container" class="mobile-only" style="display: flex; flex-direction: column; gap: 12px;">
+            ${mobileCardsMarkup}
+          </div>
         </div>
 
       </div>
 
       <style>
-        .team-stat-card {
-          background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;
-        }
-        .team-stat-title {
-          font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.05em;
-        }
-        .sortable-th:hover {
-          color: #2563eb;
-        }
-
-        .has-tooltip {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          cursor: pointer;
-        }
-
-        .info-badge {
-          background: #e2e8f0;
-          color: #475569;
-          border-radius: 50%;
-          width: 14px;
-          height: 14px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 9px;
-          font-weight: 800;
-          transition: all 0.2s ease;
-        }
-
-        .has-tooltip:hover .info-badge {
-          background: #2563eb;
-          color: white;
-        }
-
-        .tooltip-box {
-          visibility: hidden;
-          opacity: 0;
-          width: 180px;
-          background-color: #0f172a;
-          color: #ffffff;
-          text-align: center;
-          border-radius: 6px;
-          padding: 8px 10px;
-          position: absolute;
-          z-index: 100;
-          bottom: 125%;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 11px;
-          font-weight: 500;
-          line-height: 1.35;
-          text-transform: none;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          transition: opacity 0.2s ease, visibility 0.2s ease;
-          pointer-events: none;
-        }
-
-        .tooltip-box::after {
-          content: "";
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          margin-left: -5px;
-          border-width: 5px;
-          border-style: solid;
-          border-color: #0f172a transparent transparent transparent;
-        }
-
-        .has-tooltip:hover .tooltip-box {
-          visibility: visible;
-          opacity: 1;
+        @media (max-width: 767px) {
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
         }
       </style>
     `;
 
-    if (container.innerHTML !== undefined) {
-      container.innerHTML = htmlContent;
-      this._attachSortEventListeners(container);
-    }
-
-    return htmlContent;
+    this._attachSortEventListeners(container);
   }
 }
+
+export default TeamStatsView;

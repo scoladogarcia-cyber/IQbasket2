@@ -1,0 +1,23 @@
+/* App Shell Responsive */
+.app-shell {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  padding: var(--space-md);
+  padding-bottom: calc(var(--touch-target-min) + var(--space-xl) + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* En Desktop se elimina el padding inferior excesivo para el bottom bar */
+@media (min-width: 1024px) {
+  .main-content {
+    padding: var(--space-xl);
+    padding-bottom: var(--space-xl);
+  }
+}

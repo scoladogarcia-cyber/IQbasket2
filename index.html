@@ -1,32 +1,27 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" dir="ltr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#ea580c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="IQ Basket - Plataforma de analítica avanzada, estadísticas y gestión para baloncesto">
+
   <title>IQ Basket - Basketball Stats Studio Pro</title>
-  
+
   <!-- Parche para evitar el error 'process is not defined' en el navegador -->
   <script>
     window.process = window.process || { env: { NODE_ENV: 'development' } };
   </script>
 
-  <style>
-    /* Reset total para permitir que la barra lateral ocupe el 100% de la altura y pegue al borde */
-    html, body { 
-      font-family: system-ui, -apple-system, sans-serif; 
-      margin: 0; 
-      padding: 0; 
-      background: #f8fafc; 
-      color: #0f172a; 
-      width: 100%;
-      height: 100%;
-      overflow-x: hidden;
-    }
-    #app { 
-      width: 100%; 
-      min-height: 100vh; 
-    }
-  </style>
+  <!-- Design System & Estilos Modulares -->
+  <link rel="stylesheet" href="./styles/tokens.css">
+  <link rel="stylesheet" href="./styles/global.css">
+  <link rel="stylesheet" href="./styles/layout.css">
+  <link rel="stylesheet" href="./styles/components.css">
+  <link rel="stylesheet" href="./styles/responsive.css">
 </head>
 <body>
 
