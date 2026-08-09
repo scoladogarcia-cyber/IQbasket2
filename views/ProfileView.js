@@ -1,23 +1,83 @@
 /**
  * @fileoverview Vista de "Mi Perfil" para IQ Basket (ProfileView.js).
- * Maquetación con banner de usuario, modificación de datos obligatorios,
- * cambio opcional de contraseña con función ver/ocultar e indicadores de equipos asignados.
- * Adaptado para PWA/Móvil con áreas táctiles de 44px e internacionalización i18n completa.
+ * Sincronizado en tiempo real con la tabla 'user_profiles' de Supabase y Supabase Auth.
+ * Carga los datos reales del usuario (first_name, last_name, phone, role) desde Supabase,
+ * los guarda en la base de datos y actualiza la contraseña de la cuenta en Supabase Auth.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { supabase } from "../config/database.config.js";
 
 export class ProfileView {
   constructor(authController) {
     this.auth = authController;
+    this.userProfile = null;
+    this.isFetching = false;
   }
 
   /**
-   * Helper para obtener traducciones limpias desde TranslationStore / Supabase
+   * Helper para obtener traducciones limpias asegurando que NUNCA aparezca la clave desnuda
    */
   t(key, fallback = "") {
-    return TranslationStore.t(key, fallback);
+    const text = TranslationStore.t(key, "");
+    if (!text || text === key) {
+      return fallback;
+    }
+    return text;
+  }
+
+  showSyncOverlay(message = "⚡ Sincronizando con Supabase...") {
+    let overlay = document.getElementById("sync-loading-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "sync-loading-overlay";
+      overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 9999; color: white; font-family: system-ui, sans-serif;
+      `;
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos IQB...</p>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    `;
+    overlay.style.display = "flex";
+  }
+
+  hideSyncOverlay() {
+    const overlay = document.getElementById("sync-loading-overlay");
+    if (overlay) overlay.style.display = "none";
+  }
+
+  /**
+   * Consulta en tiempo real el perfil del usuario activo en la tabla `user_profiles`
+   */
+  async _fetchUserProfile(email) {
+    try {
+      this.isFetching = true;
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (!error && data) {
+        this.userProfile = data;
+        if (data.first_name) localStorage.setItem("iq_user_name", data.first_name);
+        if (data.last_name) localStorage.setItem("iq_user_lastname", data.last_name);
+        if (data.phone) localStorage.setItem("iq_user_phone", data.phone);
+        if (data.role) localStorage.setItem("iq_user_role", data.role);
+      }
+    } catch (err) {
+      console.warn("Nota leyendo perfil desde user_profiles:", err);
+    } finally {
+      this.isFetching = false;
+    }
   }
 
   /**
@@ -42,13 +102,19 @@ export class ProfileView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Obtener datos del usuario guardados o valores por defecto
-    const userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    const userName = localStorage.getItem("iq_user_name") || "Sergio";
-    const userLastName = localStorage.getItem("iq_user_lastname") || "Colado";
+    // 1. Obtener email del usuario activo en la sesión
     const userEmail = localStorage.getItem("iq_user_email") || "scolado@nechigroup.com";
-    const userPhone = localStorage.getItem("iq_user_phone") || "+34607835406";
-    const userLogin = localStorage.getItem("iq_user_login") || "scolado";
+
+    // Cargar perfil desde la tabla `user_profiles` de Supabase si aún no se ha obtenido
+    if (!this.userProfile && !this.isFetching) {
+      await this._fetchUserProfile(userEmail);
+    }
+
+    const userRole = (this.userProfile?.role || localStorage.getItem("iq_user_role") || "SUPERADMIN").toUpperCase();
+    const userName = this.userProfile?.first_name || localStorage.getItem("iq_user_name") || "Sergio";
+    const userLastName = this.userProfile?.last_name || localStorage.getItem("iq_user_lastname") || "Colado";
+    const userPhone = this.userProfile?.phone || localStorage.getItem("iq_user_phone") || "";
+    const userLogin = userEmail.split("@")[0];
 
     const initial = userName.charAt(0).toUpperCase() || "S";
 
@@ -65,34 +131,34 @@ export class ProfileView {
           </div>
         </div>
 
-        <!-- 1. DATOS DE PERFIL (OBLIGATORIOS) -->
+        <!-- 1. DATOS DE PERFIL -->
         <div class="profile-card card">
           <div class="card-title">
-            <span>👤</span> ${this.t("profile_data_title", "DATOS DE PERFIL (OBLIGATORIOS)").toUpperCase()}
+            <span>👤</span> ${this.t("profile_data_title", "DATOS DEL PERFIL").toUpperCase()}
           </div>
           <form id="form-profile-data" class="grid-2-cols">
             <div class="form-group">
-              <label for="input-profile-name">${this.t("first_name", "Nombre")}</label>
+              <label for="input-profile-name">${this.t("first_name", "Nombre")} *</label>
               <input type="text" id="input-profile-name" value="${userName}" required />
             </div>
             <div class="form-group">
-              <label for="input-profile-lastname">${this.t("last_name", "Apellidos")}</label>
+              <label for="input-profile-lastname">${this.t("last_name", "Apellidos")} *</label>
               <input type="text" id="input-profile-lastname" value="${userLastName}" required />
             </div>
             <div class="form-group">
               <label for="input-profile-phone">${this.t("phone", "Teléfono de Contacto")}</label>
-              <input type="text" id="input-profile-phone" value="${userPhone}" />
+              <input type="text" id="input-profile-phone" value="${userPhone}" placeholder="Ej. +34 600 000 000" />
             </div>
             <div class="form-group">
-              <label for="input-profile-email">${this.t("email", "Mail de Contacto (Obligatorio)")}</label>
-              <input type="email" id="input-profile-email" value="${userEmail}" required />
+              <label for="input-profile-email">${this.t("email", "Correo Electrónico")}</label>
+              <input type="email" id="input-profile-email" value="${userEmail}" required disabled class="input-disabled-highlight" />
             </div>
             <div class="form-group">
-              <label for="input-profile-login">${this.t("login", "Login (Obligatorio)")}</label>
-              <input type="text" id="input-profile-login" value="${userLogin}" required />
+              <label for="input-profile-login">${this.t("login", "Usuario / Login")}</label>
+              <input type="text" id="input-profile-login" value="${userLogin}" disabled class="input-disabled-highlight" />
             </div>
             <div class="form-group">
-              <label>${this.t("role_disabled_label", "Perfil / Rol (Obligatorio - No Cambiable)")}</label>
+              <label>${this.t("role_disabled_label", "Rol en el Sistema")}</label>
               <input type="text" value="${userRole}" disabled class="input-disabled-highlight" />
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
@@ -101,10 +167,10 @@ export class ProfileView {
           </form>
         </div>
 
-        <!-- 2. CAMBIAR CONTRASEÑA (OPCIONAL) -->
+        <!-- 2. CAMBIAR CONTRASEÑA -->
         <div class="profile-card card">
           <div class="card-title">
-            <span>🔑</span> ${this.t("change_password_title", "CAMBIAR CONTRASEÑA (OPCIONAL)").toUpperCase()}
+            <span>🔑</span> ${this.t("change_password_title", "CAMBIAR CONTRASEÑA").toUpperCase()}
           </div>
           <form id="form-change-password" class="grid-2-cols">
             <div class="form-group">
@@ -122,7 +188,7 @@ export class ProfileView {
               </div>
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
-              <button type="submit" class="btn-secondary-purple">🔒 ${this.t("change_password_btn", "Cambiar Contraseña")}</button>
+              <button type="submit" class="btn-secondary-purple">🔒 ${this.t("change_password_btn", "Actualizar Contraseña")}</button>
             </div>
           </form>
         </div>
@@ -134,8 +200,10 @@ export class ProfileView {
           </div>
           <div class="assigned-info-box">
             ${userRole === 'SUPERADMIN' 
-              ? this.t("superadmin_access_msg", "Acceso Total Superadministrador a todos los equipos del sistema.") 
-              : `${this.t("assigned_team_msg", "Acceso asignado al equipo:")} <strong>JMJ Manyanet Sant Andreu</strong>.`}
+              ? 'Como SUPERADMIN tienes acceso global a todos los equipos del club.' 
+              : (userRole === 'INVITADO'
+                  ? 'Acceso en modo INVITADO (Solo Lectura para Demostración).'
+                  : 'Acceso asignado al equipo activo actual.')}
           </div>
         </div>
 
@@ -352,42 +420,99 @@ export class ProfileView {
     // Vincular los toggles ver/ocultar contraseña
     this._bindPasswordToggles(container);
 
-    // Evento de guardar perfil
-    container.querySelector("#form-profile-data")?.addEventListener("submit", (e) => {
+    // Evento de guardar perfil en la tabla `user_profiles` de Supabase
+    container.querySelector("#form-profile-data")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = container.querySelector("#input-profile-name")?.value;
-      const lastname = container.querySelector("#input-profile-lastname")?.value;
-      const phone = container.querySelector("#input-profile-phone")?.value;
-      const email = container.querySelector("#input-profile-email")?.value;
+      const name = container.querySelector("#input-profile-name")?.value.trim();
+      const lastname = container.querySelector("#input-profile-lastname")?.value.trim();
+      const phone = container.querySelector("#input-profile-phone")?.value.trim();
 
-      localStorage.setItem("iq_user_name", name);
-      localStorage.setItem("iq_user_lastname", lastname);
-      localStorage.setItem("iq_user_phone", phone);
-      localStorage.setItem("iq_user_email", email);
+      if (!name || !lastname) {
+        alert("⚠️ El nombre y los apellidos son obligatorios.");
+        return;
+      }
 
-      alert("✅ " + this.t("profile_saved_msg", "Perfil guardado correctamente."));
-      this.render(containerId);
+      this.showSyncOverlay("💾 Guardando perfil en Supabase user_profiles...");
+
+      try {
+        const { data, error } = await supabase
+          .from("user_profiles")
+          .update({
+            first_name: name,
+            last_name: lastname,
+            phone: phone
+          })
+          .eq("email", userEmail)
+          .select();
+
+        if (error) {
+          this.hideSyncOverlay();
+          alert(`❌ Error al actualizar perfil en Supabase: ${error.message}`);
+          return;
+        }
+
+        // Actualizar almacenamiento local para sincronía inmediata
+        localStorage.setItem("iq_user_name", name);
+        localStorage.setItem("iq_user_lastname", lastname);
+        localStorage.setItem("iq_user_phone", phone);
+
+        if (data && data.length > 0) {
+          this.userProfile = data[0];
+        }
+
+        this.hideSyncOverlay();
+        alert("✅ Perfil guardado e integrado con éxito en la tabla 'user_profiles' de Supabase.");
+        await this.render(containerId);
+      } catch (err) {
+        this.hideSyncOverlay();
+        console.error("Error guardando perfil en Supabase:", err);
+        alert(`❌ Error al conectar con Supabase: ${err.message}`);
+      }
     });
 
-    // Evento de cambiar contraseña
-    container.querySelector("#form-change-password")?.addEventListener("submit", (e) => {
+    // Evento de cambiar contraseña en Supabase Auth
+    container.querySelector("#form-change-password")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const pass1 = container.querySelector("#input-new-password")?.value;
       const pass2 = container.querySelector("#input-repeat-password")?.value;
 
       if (!pass1 || !pass2) {
-        alert("⚠️ " + this.t("passwords_empty_warning", "Por favor, introduce y repite la nueva contraseña."));
+        alert("⚠️ Por favor, introduce y repite la nueva contraseña.");
         return;
       }
 
       if (pass1 !== pass2) {
-        alert("❌ " + this.t("passwords_mismatch_error", "Las contraseñas no coinciden. Por favor, verifícalas."));
+        alert("❌ Las contraseñas no coinciden. Por favor, verifícalas.");
         return;
       }
 
-      alert("🔑 " + this.t("password_updated_msg", "Contraseña actualizada con éxito."));
-      container.querySelector("#input-new-password").value = "";
-      container.querySelector("#input-repeat-password").value = "";
+      if (pass1.length < 6) {
+        alert("⚠️ La contraseña debe tener al menos 6 caracteres.");
+        return;
+      }
+
+      this.showSyncOverlay("🔒 Actualizando contraseña en Supabase Auth...");
+
+      try {
+        const { data, error } = await supabase.auth.updateUser({
+          password: pass1
+        });
+
+        if (error) {
+          this.hideSyncOverlay();
+          alert(`❌ Error al cambiar la contraseña en Supabase Auth: ${error.message}`);
+          return;
+        }
+
+        this.hideSyncOverlay();
+        alert("🔑 Contraseña actualizada con éxito en tu cuenta de Supabase Auth.");
+        container.querySelector("#input-new-password").value = "";
+        container.querySelector("#input-repeat-password").value = "";
+      } catch (err) {
+        this.hideSyncOverlay();
+        console.error("Error actualizando contraseña:", err);
+        alert(`❌ Error al conectar con Supabase Auth: ${err.message}`);
+      }
     });
   }
 }

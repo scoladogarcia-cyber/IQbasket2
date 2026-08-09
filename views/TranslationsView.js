@@ -1,6 +1,12 @@
 /**
  * @fileoverview Vista de Configuración de IQ Basket (TranslationsView.js).
- * Traducida dinámicamente sin claves desnudas y sincronizada en tiempo real con Supabase.
+ * Sincronización Real con Supabase Auth y la tabla 'user_profiles'.
+ * Control Estricto de Permisos por Rol según la Matriz Oficial:
+ * - AVISO DE SOLICITUDES DE ADHESIÓN: Notificación en tarjeta destacada para ADMIN y SUPERADMIN.
+ * - BOTÓN ROL ACTIVO: Solo ejecutable por SUPERADMIN. Deshabilitado con aviso para el resto.
+ * - CLUBS & EQUIPOS: SUPERADMIN (Total), ADMIN (Solo ver/editar equipos asignados), OTROS ROLES (Lista de acceso + Solicitud de adhesión).
+ * - PLANTILLA Y TEMPORADAS: Ajustadas opciones de creación, edición y borrado por rol.
+ * - IDIOMAS Y SIMULACIÓN: Exclusivas de SUPERADMIN.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -15,10 +21,15 @@ export class TranslationsView {
     this.currentUserRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
     this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
 
-    this.activeTab = "club";
+    const effectiveRole = this.getEffectiveRole();
+    this.activeTab = ["JUGADOR", "INVITADO"].includes(effectiveRole) 
+      ? "requests" 
+      : (["ENTRENADOR", "ANALISTA"].includes(effectiveRole) ? "players" : "club");
+      
     this.clubSubView = "list"; // 'list' | 'edit-club' | 'edit-team'
     this.selectedTeamForEdit = null;
     this.selectedClubForEdit = null;
+    this.selectedUserForProfileCard = null;
 
     // Sub-vista de administración de idiomas
     this.languageSettingsView = new LanguageSettingsView();
@@ -43,6 +54,14 @@ export class TranslationsView {
     // Temporadas
     this.seasonsList = [];
 
+    // Solicitudes de adhesión a equipos
+    const storedRequests = localStorage.getItem("iq_team_join_requests");
+    this.joinRequests = storedRequests ? JSON.parse(storedRequests) : [];
+
+    // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
+    const storedAssignments = localStorage.getItem("iq_user_teams_map");
+    this.userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
+
     // Traspasos
     const storedTransfers = localStorage.getItem("iq_transfers");
     this.transfers = storedTransfers ? JSON.parse(storedTransfers) : [];
@@ -52,7 +71,8 @@ export class TranslationsView {
   }
 
   t(key, fallback = "") {
-    return TranslationStore.t(key, fallback);
+    const res = TranslationStore.t(key, "");
+    return (!res || res === key) ? fallback : res;
   }
 
   getEffectiveRole() {
@@ -75,7 +95,7 @@ export class TranslationsView {
     overlay.innerHTML = `
       <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
-      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la nube...</p>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos IQB...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
     overlay.style.display = "flex";
@@ -93,23 +113,36 @@ export class TranslationsView {
       case "CREATE_CLUB":
       case "ASSIGN_ADMIN_ROLE":
       case "DELETE_SEASON":
+      case "DELETE_CLUB":
+      case "DELETE_TEAM":
       case "VIEW_TAB_SIMULATION":
+      case "MODIFY_ACTIVE_ROLE":
+        return role === "SUPERADMIN";
+
+      case "VIEW_TAB_CLUB":
+      case "MANAGE_CLUB_DATA":
+        return ["SUPERADMIN", "ADMIN"].includes(role);
+
+      case "CREATE_TEAM":
         return role === "SUPERADMIN";
 
       case "VIEW_TAB_USERS":
-      case "MANAGE_CLUB_DATA":
-      case "CREATE_TEAM":
-      case "DELETE_TEAM":
       case "INVITE_USERS":
       case "MANAGE_ROLES":
+      case "ASSIGN_TEAMS_TO_USER":
+      case "APPROVE_JOIN_REQUESTS":
         return ["SUPERADMIN", "ADMIN"].includes(role);
 
       case "VIEW_TAB_PLAYERS":
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
+
       case "MANAGE_PLAYERS":
       case "APPROVE_TRANSFERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
 
       case "VIEW_TAB_SEASONS":
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
+
       case "CREATE_SEASON":
         return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
 
@@ -118,7 +151,7 @@ export class TranslationsView {
         return ["ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
 
       case "EDIT_DATA":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
 
       default:
         return false;
@@ -127,7 +160,7 @@ export class TranslationsView {
 
   async _fetchProfiles() {
     try {
-      const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
       if (!error && data) {
         this.profilesList = data;
       }
@@ -157,15 +190,14 @@ export class TranslationsView {
 
   _saveSeasonsLocal() {
     localStorage.setItem("iq_seasons", JSON.stringify(this.seasonsList));
-    const sidebarSeasonSelect = document.getElementById("sidebar-select-season");
-    if (sidebarSeasonSelect) {
-      const activeSeason = localStorage.getItem("iq_active_season") || "2026";
-      sidebarSeasonSelect.innerHTML = this.seasonsList.map(s => `
-        <option value="${s.name}" ${String(s.name) === String(activeSeason) ? 'selected' : ''}>
-          ${s.name}
-        </option>
-      `).join("");
-    }
+  }
+
+  _saveRequestsLocal() {
+    localStorage.setItem("iq_team_join_requests", JSON.stringify(this.joinRequests));
+  }
+
+  _saveAssignmentsLocal() {
+    localStorage.setItem("iq_user_teams_map", JSON.stringify(this.userTeamAssignments));
   }
 
   _saveTransfersLocal() {
@@ -177,34 +209,7 @@ export class TranslationsView {
       const normLang = langCode === "cat" ? "ca" : langCode;
       const { data, error } = await supabase.from("translations").select("*");
       if (!error && data) {
-        const uniqueCodes = [...new Set(data.map(d => d.language_code))];
-        uniqueCodes.forEach(code => {
-          if (!this.availableLangs.some(l => l.code === code)) {
-            this.availableLangs.push({ code, label: code.toUpperCase() });
-          }
-        });
-
-        let filtered = data.filter(d => d.language_code === normLang || d.language_code === langCode);
-
-        if (filtered.length === 0) {
-          const defaultKeys = [
-            { key: "dashboard", translation: normLang === 'fr' ? 'Tableau de bord' : 'Dashboard' },
-            { key: "team", translation: normLang === 'fr' ? 'Équipe' : 'Team' },
-            { key: "ask_ai", translation: normLang === 'fr' ? 'Demandez à vos données' : 'Ask your data' },
-            { key: "games", translation: normLang === 'fr' ? 'Matchs' : 'Games' },
-            { key: "players", translation: normLang === 'fr' ? 'Joueurs' : 'Players' },
-            { key: "stats", translation: normLang === 'fr' ? 'Statistiques' : 'Stats' },
-            { key: "settings", translation: normLang === 'fr' ? 'Paramètres' : 'Settings' }
-          ];
-
-          filtered = defaultKeys.map(item => ({
-            key: item.key,
-            language_code: normLang,
-            translation: item.translation
-          }));
-        }
-
-        this.dbTranslations = filtered;
+        this.dbTranslations = data.filter(d => d.language_code === normLang || d.language_code === langCode);
       }
     } catch (e) {
       console.warn("Error cargando traducciones de Supabase:", e);
@@ -247,12 +252,31 @@ export class TranslationsView {
     const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
     const activeTeamId = DataStore.getActiveTeamId();
+    const currentUserEmail = localStorage.getItem("iq_user_email") || "";
+    
     const players = DataStore.getPlayers() || [];
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
+    const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const currentActiveSeasonName = localStorage.getItem("iq_active_season") || "2026";
+
+    // Pestaña por defecto para Jugador e Invitado
+    if (["JUGADOR", "INVITADO"].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
+      this.activeTab = "requests";
+    }
+
+    // LISTA DE EQUIPOS QUE EL USUARIO ACTUAL TIENE PERMITIDO VER
+    const myAssignedTeamIds = this.userTeamAssignments[currentUserEmail] || [];
+    const allowedSelectableTeams = (effectiveRole === "SUPERADMIN")
+      ? realTeams 
+      : realTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+
+    // Perfiles visibles en la tabla según la jerarquía
+    const visibleProfiles = (effectiveRole === "SUPERADMIN")
+      ? this.profilesList 
+      : this.profilesList.filter(p => p.role !== "SUPERADMIN");
 
     // Filtrado y paginación del Mercado
     const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.players || []);
@@ -269,14 +293,16 @@ export class TranslationsView {
     const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
     const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
 
+    const canModifyActiveRole = this._can("MODIFY_ACTIVE_ROLE");
+
     container.innerHTML = `
       <div class="config-container">
         
-        <!-- HEADER CONFIGURACIÓN TRADUCIDO -->
+        <!-- HEADER CONFIGURACIÓN -->
         <div class="config-header">
           <div>
             <h1>${this.t("settings", "Configuración")} ⚙️</h1>
-            <p>${this.t("settings_subtitle", "Gestiona los datos de los clubes, equipos, plantilla, permisos, traducciones y temporadas.")}</p>
+            <p>${this.t("settings_subtitle", "Gestión de perfil, fichas de usuario, permisos, asignación de equipos e idiomas.")}</p>
           </div>
 
           <div style="display: flex; gap: 10px; align-items: center;">
@@ -287,9 +313,10 @@ export class TranslationsView {
               </div>
             ` : ''}
 
+            <!-- BOTÓN ROL ACTIVO: HABILITADO SOLO PARA SUPERADMIN -->
             <div class="role-selector-chip">
               <span style="font-size: 11px; font-weight: 800; color: #475569;">${this.t("active_role", "Rol Activo:")}</span>
-              <select id="select-demo-role">
+              <select id="select-demo-role" ${!canModifyActiveRole ? 'disabled style="opacity: 0.6; cursor: not-allowed;"' : ''}>
                 <option value="SUPERADMIN" ${effectiveRole === 'SUPERADMIN' ? 'selected' : ''}>👑 Superadmin</option>
                 <option value="ADMIN" ${effectiveRole === 'ADMIN' ? 'selected' : ''}>🔑 Admin Club</option>
                 <option value="ENTRENADOR" ${effectiveRole === 'ENTRENADOR' ? 'selected' : ''}>📋 Entrenador</option>
@@ -301,11 +328,13 @@ export class TranslationsView {
           </div>
         </div>
 
-        <!-- PESTAÑAS PRINCIPALES TRADUCIDAS -->
+        <!-- PESTAÑAS PRINCIPALES FILTRADAS SEGÚN ROL -->
         <div class="config-tabs">
-          <button class="tab-btn ${this.activeTab === 'club' ? 'active' : ''}" data-tab="club">
-            🏢 ${this.t("tab_clubs_teams", "Clubs & Equipos")}
-          </button>
+          ${this._can("VIEW_TAB_CLUB") ? `
+            <button class="tab-btn ${this.activeTab === 'club' ? 'active' : ''}" data-tab="club">
+              🏢 ${this.t("tab_clubs_teams", "Clubs & Equipos")}
+            </button>
+          ` : ''}
           
           ${this._can("VIEW_TAB_PLAYERS") ? `
             <button class="tab-btn ${this.activeTab === 'players' ? 'active' : ''}" data-tab="players">
@@ -315,13 +344,20 @@ export class TranslationsView {
 
           ${this._can("VIEW_TAB_USERS") ? `
             <button class="tab-btn ${this.activeTab === 'users' ? 'active' : ''}" data-tab="users">
-              👤 ${this.t("tab_users_roles", "Usuarios & Roles")} (${this.profilesList.length})
+              👤 ${this.t("tab_users_roles", "Usuarios & Fichas")} (${visibleProfiles.length})
+              ${pendingJoinRequestsList.length > 0 ? `<span style="background: #ef4444; color: white; border-radius: 50%; padding: 2px 6px; font-size: 10px; margin-left: 4px; font-weight: 800;">${pendingJoinRequestsList.length}</span>` : ''}
             </button>
           ` : ''}
 
           ${this._can("VIEW_TAB_SEASONS") ? `
             <button class="tab-btn ${this.activeTab === 'seasons' ? 'active' : ''}" data-tab="seasons">
               📅 ${this.t("tab_seasons", "Temporadas")} (${this.seasonsList.length})
+            </button>
+          ` : ''}
+
+          ${this._can("VIEW_TAB_REQUESTS") ? `
+            <button class="tab-btn ${this.activeTab === 'requests' ? 'active' : ''}" data-tab="requests">
+              🛡️ Mis Equipos & Solicitudes
             </button>
           ` : ''}
 
@@ -338,58 +374,145 @@ export class TranslationsView {
           ` : ''}
         </div>
 
-        ${isReadOnly ? `<div class="read-only-banner">ℹ️ ${this.t("read_only_mode", "Modo Permisos de solo lectura activo")} (${effectiveRole}).</div>` : ''}
+        ${isReadOnly ? `<div class="read-only-banner">ℹ️ Permisos asignados al perfil: <strong>${effectiveRole}</strong>.</div>` : ''}
 
         <!-- CONTENIDO PESTAÑAS -->
         <div class="tab-content-area">
           
-          <!-- PESTAÑA 1: CLUBS Y EQUIPOS -->
-          ${this.activeTab === 'club' ? `
+          <!-- PESTAÑA DEDICADA A INVITADOS / JUGADORES / ADHESIÓN -->
+          ${this.activeTab === 'requests' && this._can("VIEW_TAB_REQUESTS") ? `
+            <div class="config-container">
+              
+              <!-- 1. SELECCIONAR EQUIPO PERMITIDO Y TEMPORADA EN PANTALLA -->
+              <div class="config-card">
+                <div class="card-title"><span>👀</span> SELECCIÓN DE VISUALIZACIÓN DE EQUIPOS AUTORIZADOS</div>
+                <p style="font-size: 12px; color: #64748b; margin-top: -10px; margin-bottom: 16px;">
+                  Solo puedes ver y consultar estadísticas de los equipos que te han sido asignados por el administrador:
+                </p>
+                <div class="grid-2-cols">
+                  <div class="form-group">
+                    <label>Equipo Autorizado en Pantalla</label>
+                    <select id="select-guest-active-team">
+                      ${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => `
+                        <option value="${t.id}" ${String(t.id).toLowerCase() === String(activeTeamId).toLowerCase() ? 'selected' : ''}>
+                          ${t.name} (${t.category || 'Baloncesto'})
+                        </option>
+                      `).join("") : `<option value="" disabled selected>⚠️ No tienes ningún equipo asignado aún</option>`}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Temporada en Pantalla</label>
+                    <select id="select-guest-active-season">
+                      ${this.seasonsList.map(s => `<option value="${s.name}" ${String(s.name) === String(currentActiveSeasonName) ? 'selected' : ''}>${s.name}</option>`).join("")}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. SOLICITAR UNIRSE A OTRO EQUIPO -->
+              <div class="config-card">
+                <div class="card-title"><span>📩</span> SOLICITAR ACCESO A OTROS EQUIPOS</div>
+                <p style="font-size: 12px; color: #64748b; margin-top: -10px; margin-bottom: 16px;">
+                  Si deseas ver estadísticas o formar parte de un equipo adicional, envía una solicitud que le llegará únicamente a los administradores del club y al Superadmin:
+                </p>
+
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Equipo</th>
+                        <th>Categoría</th>
+                        <th>Competición</th>
+                        <th>Estado de tu Solicitud</th>
+                        <th style="text-align: right;">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${realTeams.length > 0 ? realTeams.map(team => {
+                        const existingReq = this.joinRequests.find(r => r.userEmail === currentUserEmail && String(r.teamId) === String(team.id));
+                        const isAlreadyAssigned = myAssignedTeamIds.includes(String(team.id));
+
+                        return `
+                          <tr>
+                            <td><strong>${team.name}</strong></td>
+                            <td><span class="badge-category">${team.category || 'General'}</span></td>
+                            <td>${team.competition || 'Oficial'}</td>
+                            <td>
+                              ${isAlreadyAssigned 
+                                ? '<span class="badge-active-team">🟢 Acceso Concedido</span>'
+                                : (existingReq 
+                                    ? `<span class="${existingReq.status === 'APROBADO' ? 'badge-active-team' : 'badge-pending'}">${existingReq.status}</span>`
+                                    : `<span class="badge-inactive">Sin solicitar</span>`)}
+                            </td>
+                            <td style="text-align: right;">
+                              ${isAlreadyAssigned ? `
+                                <button type="button" class="btn-outline-sm" disabled>Equipo Asignado</button>
+                              ` : (existingReq ? `
+                                <button type="button" class="btn-outline-sm" disabled>Solicitud Registrada</button>
+                              ` : `
+                                <button type="button" class="btn-request-join-team btn-secondary-sm" data-id="${team.id}" data-name="${team.name}">
+                                  ✉️ Solicitar Acceso
+                                </button>
+                              `)}
+                            </td>
+                          </tr>
+                        `;
+                      }).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay equipos registrados en el sistema.</td></tr>`}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          ` : ''}
+
+          <!-- PESTAÑA 1: CLUBS Y EQUIPOS (ADMIN Y SUPERADMIN) -->
+          ${this.activeTab === 'club' && this._can("VIEW_TAB_CLUB") ? `
             ${this.clubSubView === 'list' ? `
               ${this._can("CREATE_CLUB") ? `
                 <div class="config-card" style="margin-bottom: 16px;">
-                  <div class="card-title"><span>👑</span> ${this.t("create_new_club_title", "CREAR UN NUEVO CLUB (EXCLUSIVO SUPERADMIN)")}</div>
+                  <div class="card-title"><span>👑</span> CREAR UN NUEVO CLUB (EXCLUSIVO SUPERADMIN)</div>
                   <form id="form-create-club" class="grid-2-cols">
-                    <div class="form-group"><label>${this.t("club_name", "Nombre del Club")} *</label><input type="text" id="club-new-name" placeholder="Ej. CB Sants" required /></div>
-                    <div class="form-group"><label>${this.t("coordinator_name", "Nombre del Coordinador")}</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
-                    <div class="form-group"><label>${this.t("phone", "Teléfono de Contacto")}</label><input type="text" id="club-new-phone" placeholder="Ej. +34 600 000 000" /></div>
-                    <div class="form-group"><label>${this.t("address", "Dirección")}</label><input type="text" id="club-new-address" placeholder="Ej. Av. de Roma 12" /></div>
-                    <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ ${this.t("create_club_btn", "Crear Club")}</button></div>
+                    <div class="form-group"><label>Nombre del Club *</label><input type="text" id="club-new-name" placeholder="Ej. CB Sants" required /></div>
+                    <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
+                    <div class="form-group"><label>Teléfono</label><input type="text" id="club-new-phone" placeholder="Ej. +34 600 000 000" /></div>
+                    <div class="form-group"><label>Dirección</label><input type="text" id="club-new-address" placeholder="Ej. Av. de Roma 12" /></div>
+                    <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Club</button></div>
                   </form>
                 </div>
               ` : ''}
 
               ${this._can("CREATE_TEAM") ? `
                 <div class="config-card" style="margin-bottom: 16px;">
-                  <div class="card-title"><span>🏆</span> ${this.t("create_new_team_title", "CREAR UN NUEVO EQUIPO")}</div>
+                  <div class="card-title"><span>🏆</span> CREAR UN NUEVO EQUIPO</div>
                   <form id="form-create-team" class="grid-2-cols">
-                    <div class="form-group"><label>${this.t("assigned_club", "Club Asignado")} *</label><select id="team-new-club-id" required>${realClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></div>
-                    <div class="form-group"><label>${this.t("team_name", "Nombre del Equipo")} *</label><input type="text" id="team-new-name" placeholder="Ej. Mini Femení B" required /></div>
-                    <div class="form-group"><label>${this.t("category", "Categoría")} *</label><input type="text" id="team-new-category" placeholder="Ej. Mini / Alevín" required /></div>
-                    <div class="form-group"><label>${this.t("competition", "Competición")} *</label><input type="text" id="team-new-competition" placeholder="Ej. B1 / Preferente" required /></div>
-                    <div class="form-group"><label>${this.t("head_coach", "Entrenador Principal")} *</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" required /></div>
-                    <div class="form-group"><label>${this.t("main_color", "Color Principal")}</label><input type="color" id="team-new-color" value="#ea580c" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
-                    <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ ${this.t("create_full_team_btn", "Crear Equipo Completo")}</button></div>
+                    <div class="form-group"><label>Club Asignado *</label><select id="team-new-club-id" required>${realClubs.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></div>
+                    <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="team-new-name" placeholder="Ej. Mini Femení B" required /></div>
+                    <div class="form-group"><label>Categoría *</label><input type="text" id="team-new-category" placeholder="Ej. Mini / Alevín" required /></div>
+                    <div class="form-group"><label>Competición *</label><input type="text" id="team-new-competition" placeholder="Ej. B1 / Preferente" required /></div>
+                    <div class="form-group"><label>Entrenador Principal *</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" required /></div>
+                    <div class="form-group"><label>Color Principal</label><input type="color" id="team-new-color" value="#ea580c" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
+                    <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Equipo Completo</button></div>
                   </form>
                 </div>
               ` : ''}
 
               <div class="config-card" style="margin-bottom: 16px;">
-                <div class="card-title"><span>🏢</span> ${this.t("registered_clubs_title", "CLUBS REGISTRADOS")} (${realClubs.length})</div>
+                <div class="card-title"><span>🏢</span> CLUBS REGISTRADOS (${realClubs.length})</div>
                 <div class="table-responsive">
                   <table class="data-table">
-                    <thead><tr><th>${this.t("club_name", "Nombre del Club")}</th><th>${this.t("coordinator_name", "Coordinador")}</th><th>${this.t("phone", "Teléfono")}</th><th>${this.t("address", "Dirección")}</th><th style="text-align: right;">${this.t("action", "Acción")}</th></tr></thead>
-                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${c.coordinator_name || 'No asignado'}</td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ ${this.t("edit_club_btn", "Editar Club")}</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">${this.t("no_clubs_registered", "No hay clubs registrados.")}</td></tr>`}</tbody>
+                    <thead><tr><th>Nombre del Club</th><th>Coordinador</th><th>Teléfono</th><th>Dirección</th><th style="text-align: right;">Acción</th></tr></thead>
+                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${c.coordinator_name || 'No asignado'}</td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
 
               <div class="config-card">
-                <div class="card-title"><span>📊</span> ${this.t("teams_title", "EQUIPOS REGISTRADOS")} (${realTeams.length})</div>
+                <div class="card-title"><span>📊</span> EQUIPOS REGISTRADOS DE TUS ACCESOS (${allowedSelectableTeams.length})</div>
                 <div class="table-responsive">
                   <table class="data-table">
-                    <thead><tr><th>${this.t("club_name", "Club")}</th><th>${this.t("team", "Equipo")}</th><th>${this.t("category", "Categoría")}</th><th>${this.t("coach", "Entrenador")}</th><th>${this.t("status", "Estado")}</th><th style="text-align: right;">${this.t("action", "Acción")}</th></tr></thead>
-                    <tbody>${realTeams.length > 0 ? realTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'JMJ Manyanet Sant Andreu'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 ${this.t("currently_active", "Activo Actual")}</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">${this.t("activate", "Activar")}</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ ${this.t("configure", "Configurar")}</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">${this.t("no_teams_registered", "No hay equipos registrados.")}</td></tr>`}</tbody>
+                    <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
+                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'JMJ Manyanet Sant Andreu'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -398,18 +521,18 @@ export class TranslationsView {
             ${this.clubSubView === 'edit-team' ? `
               <div class="config-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                  <div class="card-title" style="margin: 0;"><span>🏆</span> ${this.t("team_data_title", "DATOS DEL EQUIPO")} (${this.selectedTeamForEdit?.name || ''})</div>
-                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ ${this.t("back_to_list", "Volver al Listado")}</button>
+                  <div class="card-title" style="margin: 0;"><span>🏆</span> DATOS DEL EQUIPO (${this.selectedTeamForEdit?.name || ''})</div>
+                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ Volver al Listado</button>
                 </div>
 
                 <form id="form-edit-team" class="grid-2-cols">
-                  <div class="form-group"><label>${this.t("club_name", "Nombre del Club")}</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'JMJ Manyanet Sant Andreu'}" disabled /></div>
-                  <div class="form-group"><label>${this.t("team_name", "Nombre del Equipo")} *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>${this.t("category", "Categoría")}</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>${this.t("competition", "Competición")}</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>${this.t("head_coach", "Entrenador Principal")}</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>${this.t("main_color", "Color Principal")}</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
-                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 ${this.t("save_team_changes_btn", "Guardar Cambios Equipo")}</button></div>` : ''}
+                  <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'JMJ Manyanet Sant Andreu'}" disabled /></div>
+                  <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Entrenador Principal</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
+                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
                 </form>
               </div>
             ` : ''}
@@ -417,16 +540,16 @@ export class TranslationsView {
             ${this.clubSubView === 'edit-club' ? `
               <div class="config-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                  <div class="card-title" style="margin: 0;"><span>🏢</span> ${this.t("club_config_title", "CONFIGURACIÓN DEL CLUB")} (${this.selectedClubForEdit?.name || ''})</div>
-                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ ${this.t("back_to_list", "Volver al Listado")}</button>
+                  <div class="card-title" style="margin: 0;"><span>🏢</span> CONFIGURACIÓN DEL CLUB (${this.selectedClubForEdit?.name || ''})</div>
+                  <button type="button" class="btn-back-to-list btn-outline-sm">⬅️ Volver al Listado</button>
                 </div>
 
                 <form id="form-edit-club" class="grid-2-cols">
-                  <div class="form-group"><label>${this.t("club_name", "Nombre del Club")} *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>${this.t("coordinator_name", "Nombre del Coordinador")}</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>${this.t("phone", "Teléfono de Contacto")}</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>${this.t("address", "Dirección")}</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 ${this.t("save_club_data_btn", "Guardar Datos del Club")}</button></div>` : ''}
+                  <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Teléfono</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
                 </form>
               </div>
             ` : ''}
@@ -439,10 +562,10 @@ export class TranslationsView {
               <!-- PANEL DE APROBACIÓN DE TRASPASOS PENDIENTES -->
               ${this._can("APPROVE_TRANSFERS") && pendingTransfersList.length > 0 ? `
                 <div class="config-card" style="border: 2px solid #f59e0b; background: #fffbeb;">
-                  <div class="card-title" style="color: #b45309;"><span>📩</span> ${this.t("pending_transfers_title", "SOLICITUDES DE TRASPASO PENDIENTES")} (${pendingTransfersList.length})</div>
+                  <div class="card-title" style="color: #b45309;"><span>📩</span> SOLICITUDES DE TRASPASO PENDIENTES (${pendingTransfersList.length})</div>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead><tr><th>${this.t("player", "Jugador")}</th><th>${this.t("requesting_team", "Equipo Solicitante")}</th><th style="text-align: right;">${this.t("actions", "Acciones")}</th></tr></thead>
+                      <thead><tr><th>Jugador</th><th>Equipo Solicitante</th><th style="text-align: right;">Acciones</th></tr></thead>
                       <tbody>
                         ${pendingTransfersList.map(tr => {
                           const targetTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.targetTeamId).toLowerCase());
@@ -451,8 +574,8 @@ export class TranslationsView {
                               <td><strong>${tr.playerName}</strong></td>
                               <td><span class="badge-category">${targetTeam ? targetTeam.name : 'Nuevo Equipo'}</span></td>
                               <td style="text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
-                                <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background: #16a34a; color: white;">🟢 ${this.t("approve_transfer", "Aprobar Traspaso")}</button>
-                                <button type="button" class="btn-reject-transfer btn-danger-sm" data-id="${tr.id}">🔴 ${this.t("reject", "Rechazar")}</button>
+                                <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background: #16a34a; color: white;">🟢 Aprobar Traspaso</button>
+                                <button type="button" class="btn-reject-transfer btn-danger-sm" data-id="${tr.id}">🔴 Rechazar</button>
                               </td>
                             </tr>
                           `;
@@ -466,84 +589,84 @@ export class TranslationsView {
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
               <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
-                  <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 ${this.t("global_transfer_market", "Mercado de Fichajes Global")}</h3>
-                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${this.t("transfer_market_desc", "Busca y solicita el traspaso de jugadores de cualquier equipo del sistema.")}</p>
+                  <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
+                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Busca y solicita el traspaso de jugadores de cualquier equipo del sistema.</p>
                 </div>
                 <button type="button" id="btn-open-market-modal" class="btn-primary" style="background: #6366f1; padding: 10px 18px; font-size: 13px;">
-                  🔍 ${this.t("open_market_btn", "Abrir Mercado / Fichar Jugador")}
+                  🔍 Abrir Mercado / Fichar Jugador
                 </button>
               </div>
 
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
-              <div class="config-card">
-                <div class="card-title"><span>👥</span> ${this.t("add_new_player_title", "AÑADIR JUGADOR NUEVO A LA PLANTILLA")}</div>
-                ${this._can("MANAGE_PLAYERS") ? `
+              ${this._can("MANAGE_PLAYERS") ? `
+                <div class="config-card">
+                  <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO A LA PLANTILLA</div>
                   <form id="form-add-player" class="grid-4-cols">
-                    <div class="form-group"><label>${this.t("first_name", "Nombre")} *</label><input type="text" id="add-p-name" placeholder="Ej. Pablo" required /></div>
-                    <div class="form-group"><label>${this.t("last_name", "Apellidos")} *</label><input type="text" id="add-p-lastname" placeholder="Ej. García" required /></div>
-                    <div class="form-group"><label>${this.t("jersey", "Dorsal / Nº")} *</label><input type="number" id="add-p-number" placeholder="Ej. 10" required min="0" max="99" /></div>
+                    <div class="form-group"><label>Nombre *</label><input type="text" id="add-p-name" placeholder="Ej. Pablo" required /></div>
+                    <div class="form-group"><label>Apellidos *</label><input type="text" id="add-p-lastname" placeholder="Ej. García" required /></div>
+                    <div class="form-group"><label>Dorsal / Nº *</label><input type="number" id="add-p-number" placeholder="Ej. 10" required min="0" max="99" /></div>
                     <div class="form-group">
-                      <label>${this.t("primary_position", "Posición Principal")} *</label>
+                      <label>Posición Principal *</label>
                       <select id="add-p-position" required>
                         <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
                       </select>
                     </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
-                      <button type="submit" class="btn-secondary">+ ${this.t("add_to_roster_btn", "Crear y Añadir a la Plantilla")}</button>
+                      <button type="submit" class="btn-secondary">+ Crear y Añadir a la Plantilla</button>
                     </div>
                   </form>
-                ` : ''}
-              </div>
+                </div>
+              ` : ''}
 
               <!-- JUGADORES PLANTILLA ACTIVA -->
               <div class="config-card">
-                <div class="card-title"><span>📋</span> ${this.t("active_roster_title", "JUGADORES EN TU PLANTILLA ACTIVA")} (${players.length})</div>
+                <div class="card-title"><span>📋</span> JUGADORES EN TU PLANTILLA ACTIVA (${players.length})</div>
                 <div class="players-grid">
                   ${players.length > 0 ? players.map(p => `
                     <div class="player-card ${p.status === 'TRASPASADO' ? 'player-transferred' : ''}">
                       <div>
                         <strong>#${p.jersey ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
                         <div style="font-size: 11px; color: #64748b;">
-                          ${p.primary_position || p.position || 'Jugador'} • ${p.status === 'TRASPASADO' ? '⚠️ ' + this.t("transferred_historical", "Traspasado (Histórico)") : this.t("active", "Activo")}
+                          ${p.primary_position || p.position || 'Jugador'} • ${p.status === 'TRASPASADO' ? '⚠️ Traspasado (Histórico)' : 'Activo'}
                         </div>
                       </div>
-                      ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ ${this.t("edit", "Editar")}</button>` : ''}
+                      ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>` : ''}
                     </div>
-                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">${this.t("no_players_in_roster", "No hay jugadores registrados en esta plantilla.")}</p>`}
+                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla.</p>`}
                 </div>
               </div>
 
-              <!-- MODAL DE EDICIÓN DE JUGADOR (Imagen 2) -->
+              <!-- MODAL DE EDICIÓN DE JUGADOR -->
               <div id="modal-edit-player" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
                 <div class="config-card" style="width: 100%; max-width: 500px; margin: 20px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ ${this.t("edit_player_data", "Editar Datos del Jugador")}</h3>
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ Editar Datos del Jugador</h3>
                     <button type="button" id="btn-close-edit-player-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
                   </div>
 
                   <form id="form-edit-player-modal" class="grid-2-cols">
                     <input type="hidden" id="edit-p-id" />
-                    <div class="form-group"><label>${this.t("first_name", "Nombre")} *</label><input type="text" id="edit-p-name" ${isReadOnly ? 'disabled' : ''} required /></div>
-                    <div class="form-group"><label>${this.t("last_name", "Apellidos")} *</label><input type="text" id="edit-p-lastname" ${isReadOnly ? 'disabled' : ''} required /></div>
-                    <div class="form-group"><label>${this.t("jersey", "Dorsal / Nº")} *</label><input type="number" id="edit-p-number" min="0" max="99" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group"><label>Nombre *</label><input type="text" id="edit-p-name" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group"><label>Apellidos *</label><input type="text" id="edit-p-lastname" ${isReadOnly ? 'disabled' : ''} required /></div>
+                    <div class="form-group"><label>Dorsal / Nº *</label><input type="number" id="edit-p-number" min="0" max="99" ${isReadOnly ? 'disabled' : ''} required /></div>
                     <div class="form-group">
-                      <label>${this.t("primary_position", "Posición Principal")} *</label>
+                      <label>Posición Principal *</label>
                       <select id="edit-p-position" ${isReadOnly ? 'disabled' : ''} required>
                         <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
                       </select>
                     </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
-                      <label>${this.t("status", "Estado del Jugador")}</label>
+                      <label>Estado del Jugador</label>
                       <select id="edit-p-status" ${isReadOnly ? 'disabled' : ''}>
-                        <option value="Activo">${this.t("active", "Activo")}</option>
+                        <option value="Activo">Activo</option>
                         <option value="Lesionado">Lesionado</option>
-                        <option value="Inactivo">${this.t("inactive", "Inactivo")}</option>
+                        <option value="Inactivo">Inactivo</option>
                         <option value="TRASPASADO">Traspasado (Histórico)</option>
                       </select>
                     </div>
                     <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-                      <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">${this.t("cancel", "Cancelar")}</button>
-                      ${!isReadOnly ? `<button type="submit" class="btn-primary">💾 ${this.t("save_changes", "Guardar Cambios")}</button>` : ''}
+                      <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
+                      ${!isReadOnly ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
                     </div>
                   </form>
                 </div>
@@ -554,13 +677,13 @@ export class TranslationsView {
                 <div class="config-card" style="width: 100%; max-width: 850px; max-height: 90vh; overflow-y: auto; margin: 20px;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>
-                      <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 ${this.t("global_transfer_market", "Mercado de Fichajes Global")}</h3>
-                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${this.t("market_sub_desc", "Mostrando todos los jugadores registrados en la base de datos de Supabase.")}</p>
+                      <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
+                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Mostrando todos los jugadores registrados en la base de datos de Supabase.</p>
                     </div>
                     <button type="button" id="btn-close-market-modal" class="btn-outline-sm" style="font-size: 16px; padding: 4px 10px;">✕</button>
                   </div>
                   <div style="margin-bottom: 12px;">
-                    <input type="text" id="input-market-search" placeholder="🔍 ${this.t("search_player_placeholder", "Buscar por nombre, apellido o club...")}" value="${this.marketSearchQuery}" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+                    <input type="text" id="input-market-search" placeholder="🔍 Buscar por nombre, apellido o club..." value="${this.marketSearchQuery}" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
                   </div>
                   <div id="market-modal-table-container"></div>
                 </div>
@@ -569,92 +692,168 @@ export class TranslationsView {
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 3: USUARIOS & ROLES -->
+          <!-- PESTAÑA 3: USUARIOS & ROLES (ADMIN Y SUPERADMIN) -->
           ${this.activeTab === 'users' && this._can("VIEW_TAB_USERS") ? `
             <div class="config-container">
               
+              <!-- TARJETA DE AVISO DESTACADA: SOLICITUDES DE ADHESIÓN PENDIENTES -->
+              ${this._can("APPROVE_JOIN_REQUESTS") && pendingJoinRequestsList.length > 0 ? `
+                <div class="config-card" style="border: 2px solid #ea580c; background: #fff7ed; margin-bottom: 16px;">
+                  <div class="card-title" style="color: #c2410c;">
+                    <span>📩</span> SOLICITUDES DE ADHESIÓN A EQUIPO PENDIENTES (${pendingJoinRequestsList.length})
+                  </div>
+                  <p style="font-size: 12px; color: #9a3412; margin-top: -10px; margin-bottom: 12px;">
+                    Los siguientes usuarios han solicitado unirse a un equipo de tu club. Puedes autorizar su acceso o rechazar la petición:
+                  </p>
+                  <div class="table-responsive">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Usuario (Email)</th>
+                          <th>Equipo Solicitado</th>
+                          <th>Fecha Solicitud</th>
+                          <th style="text-align: right;">Acciones de Gestión</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${pendingJoinRequestsList.map(req => `
+                          <tr>
+                            <td><strong>${req.userEmail}</strong></td>
+                            <td><span class="badge-category">${req.teamName || 'Equipo'}</span></td>
+                            <td>${req.date || '-'}</td>
+                            <td style="text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
+                              <button type="button" class="btn-approve-join-req btn-secondary-sm" data-id="${req.id}" data-email="${req.userEmail}" data-team-id="${req.teamId}" style="background: #16a34a; color: white;">
+                                🟢 Aprobar y Conceder Acceso
+                              </button>
+                              <button type="button" class="btn-reject-join-req btn-danger-sm" data-id="${req.id}">
+                                🔴 Rechazar
+                              </button>
+                            </td>
+                          </tr>
+                        `).join("")}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ` : ''}
+
               <div class="config-card">
-                <div class="card-title"><span>👤</span> ${this.t("user_invite_title", "ALTA DE USUARIO E INVITACIÓN DIRECTA")}</div>
+                <div class="card-title"><span>👤</span> ALTA DE USUARIO E INVITACIÓN DIRECTA</div>
                 <form id="form-create-user-profile" class="grid-2-cols">
                   <div class="form-group">
-                    <label>${this.t("full_name", "Nombre Completo")} *</label>
+                    <label>Nombre Completo *</label>
                     <input type="text" id="new-user-name" placeholder="Ej. Carlos García" required />
                   </div>
                   <div class="form-group">
-                    <label>${this.t("email", "Correo Electrónico (Email)")} *</label>
+                    <label>Correo Electrónico (Email) *</label>
                     <input type="email" id="new-user-email" placeholder="usuario@ejemplo.com" required />
                   </div>
                   <div class="form-group">
-                    <label>${this.t("assigned_role", "Rol Asignado")} *</label>
+                    <label>Rol Asignado *</label>
                     <select id="new-user-role">
-                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="Superadmin">Superadmin</option><option value="Administrador de Club">Administrador de Club</option>` : ''}
-                      <option value="Entrenador" selected>Entrenador</option>
-                      <option value="Analista">Analista</option>
-                      <option value="Jugador">Jugador</option>
+                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="SUPERADMIN">Superadmin</option><option value="ADMIN">Administrador de Club</option>` : ''}
+                      <option value="ENTRENADOR" selected>Entrenador</option>
+                      <option value="ANALISTA">Analista</option>
+                      <option value="JUGADOR">Jugador</option>
+                      <option value="INVITADO">Invitado (Solo Lectura)</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>🔑 ${this.t("temp_password", "Contraseña Temporal")} *</label>
+                    <label>🔑 Contraseña Temporal *</label>
                     <input type="text" id="new-user-pass" value="BasketIQ2026" required />
                   </div>
                   <div style="grid-column: 1 / -1; text-align: right;">
-                    <button type="submit" class="btn-primary">✉️ ${this.t("invite_user_btn", "Dar de Alta e Invitar Usuario")}</button>
+                    <button type="submit" id="btn-submit-create-user" class="btn-primary">✉️ Dar de Alta e Invitar Usuario</button>
                   </div>
                 </form>
               </div>
 
               <div class="config-card">
-                <div class="card-title"><span>👥</span> ${this.t("manage_users_roles_title", "ADMINISTRAR MIEMBROS Y ROLES")} (${this.profilesList.length})</div>
+                <div class="card-title"><span>👥</span> ADMINISTRAR MIEMBROS, ROLES Y ASIGNACIÓN DE EQUIPOS (${visibleProfiles.length})</div>
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead>
                       <tr>
-                        <th>${this.t("user", "Usuario")}</th>
-                        <th>${this.t("email", "Email")}</th>
-                        <th>${this.t("assigned_role", "Rol Asignado")}</th>
-                        <th style="text-align: right;">${this.t("action", "Acción")}</th>
+                        <th>Usuario</th>
+                        <th>Email</th>
+                        <th>Rol Asignado</th>
+                        <th>Equipos Asignados</th>
+                        <th style="text-align: right;">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      ${this.profilesList.length > 0 ? this.profilesList.map(prof => `
-                        <tr>
-                          <td><strong>${prof.display_name || 'Sin Nombre'}</strong></td>
-                          <td>${prof.email || '-'}</td>
-                          <td>
-                            <select class="select-user-role" data-id="${prof.id}" ${!this._can("ASSIGN_ADMIN_ROLE") ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
-                              <option value="Superadmin" ${prof.role === 'Superadmin' ? 'selected' : ''}>Superadmin</option>
-                              <option value="Administrador de Club" ${prof.role === 'Administrador de Club' ? 'selected' : ''}>Administrador de Club</option>
-                              <option value="Entrenador" ${prof.role === 'Entrenador' ? 'selected' : ''}>Entrenador</option>
-                              <option value="Analista" ${prof.role === 'Analista' ? 'selected' : ''}>Analista</option>
-                              <option value="Jugador" ${prof.role === 'Jugador' ? 'selected' : ''}>Jugador</option>
-                            </select>
-                          </td>
-                          <td style="text-align: right;">
-                            <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}">💾 ${this.t("save_role", "Guardar Rol")}</button>
-                          </td>
-                        </tr>
-                      `).join("") : `<tr><td colspan="4" style="text-align: center; color: #64748b;">${this.t("no_users_registered", "No hay usuarios registrados.")}</td></tr>`}
+                      ${visibleProfiles.length > 0 ? visibleProfiles.map(prof => {
+                        const assignedIds = this.userTeamAssignments[prof.email] || [];
+                        const assignedTeamNames = realTeams
+                          .filter(t => assignedIds.includes(String(t.id)))
+                          .map(t => t.name);
+
+                        const userHasPending = this.joinRequests.some(r => r.userEmail === prof.email && r.status === 'PENDIENTE');
+
+                        return `
+                          <tr>
+                            <td>
+                              <strong>${(prof.first_name || '') + ' ' + (prof.last_name || '') || 'Sin Nombre'}</strong>
+                              ${userHasPending ? '<span style="background: #ea580c; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-left: 6px; font-weight: 800;">⏳ Solicitud Pendiente</span>' : ''}
+                            </td>
+                            <td>${prof.email || '-'}</td>
+                            <td>
+                              <select class="select-user-role" data-id="${prof.id}" ${(!this._can("ASSIGN_ADMIN_ROLE") && prof.role === 'SUPERADMIN') ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+                                ${effectiveRole === 'SUPERADMIN' ? `<option value="SUPERADMIN" ${prof.role === 'SUPERADMIN' ? 'selected' : ''}>Superadmin</option>` : ''}
+                                <option value="ADMIN" ${prof.role === 'ADMIN' ? 'selected' : ''}>Administrador de Club</option>
+                                <option value="ENTRENADOR" ${prof.role === 'ENTRENADOR' ? 'selected' : ''}>Entrenador</option>
+                                <option value="ANALISTA" ${prof.role === 'ANALISTA' ? 'selected' : ''}>Analista</option>
+                                <option value="JUGADOR" ${prof.role === 'JUGADOR' ? 'selected' : ''}>Jugador</option>
+                                <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Solo Lectura)</option>
+                              </select>
+                            </td>
+                            <td>
+                              ${prof.role === 'SUPERADMIN' 
+                                ? '<span class="badge-active-team">🌍 Todos los Equipos</span>' 
+                                : (assignedTeamNames.length > 0 
+                                    ? `<span class="badge-category">${assignedTeamNames.join(', ')}</span>` 
+                                    : '<span class="badge-inactive">Sin Equipos</span>')}
+                            </td>
+                            <td style="text-align: right; display: flex; justify-content: flex-end; gap: 6px;">
+                              <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}" title="Guardar Rol">💾 Guardar Rol</button>
+                              <button type="button" class="btn-open-user-card btn-outline-sm" data-email="${prof.email}">📇 Ver Ficha / Equipos</button>
+                            </td>
+                          </tr>
+                        `;
+                      }).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay usuarios registrados.</td></tr>`}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              <!-- MODAL FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO -->
+              <div id="modal-user-card" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
+                <div class="config-card" style="width: 100%; max-width: 600px; margin: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">📇 FICHA TÉCNICA Y ASIGNACIÓN DE EQUIPOS</h3>
+                    <button type="button" id="btn-close-user-card-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
+                  </div>
+
+                  <div id="user-card-modal-content"></div>
                 </div>
               </div>
 
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 4: TEMPORADAS (Imagen 3) -->
+          <!-- PESTAÑA 4: TEMPORADAS -->
           ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS") ? `
             <div class="config-card">
-              <div class="card-title"><span>📅</span> ${this.t("registered_seasons_title", "TEMPORADAS REGISTRADAS EN SUPABASE")} (${this.seasonsList.length})</div>
+              <div class="card-title"><span>📅</span> TEMPORADAS REGISTRADAS EN SUPABASE (${this.seasonsList.length})</div>
 
-              ${!isReadOnly ? `
+              ${this._can("CREATE_SEASON") ? `
                 <form id="form-create-season" class="grid-inline" style="margin-bottom: 20px;">
                   <div class="form-group" style="flex: 2;">
-                    <label>${this.t("new_season_name", "Nombre de la Nueva Temporada")} *</label>
+                    <label>Nombre de la Nueva Temporada *</label>
                     <input type="text" id="input-new-season-name" placeholder="Ej. 2026 o 2026/2027" required />
                   </div>
                   <div style="align-self: flex-end;">
-                    <button type="submit" class="btn-primary">+ ${this.t("add_season_btn", "Añadir Temporada")}</button>
+                    <button type="submit" class="btn-primary">+ Añadir Temporada</button>
                   </div>
                 </form>
               ` : ''}
@@ -668,32 +867,33 @@ export class TranslationsView {
                   return `
                     <div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
                       <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 380px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #475569;">${this.t("season", "Temporada")}:</span>
+                        <span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span>
                         <input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" />
                       </div>
 
                       <div style="display: flex; align-items: center; gap: 10px;">
                         <span class="${isSeasonActive ? 'badge-active-team' : 'badge-inactive'}">
-                          ${isSeasonActive ? '🟢 ' + this.t("active", "Activa") : '⚪ ' + this.t("inactive", "Inactiva")}
+                          ${isSeasonActive ? '🟢 Activa' : '⚪ Inactiva'}
                         </span>
 
                         ${!isReadOnly ? `
-                          <button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 ${this.t("save_name", "Guardar Nombre")}</button>
-                          ${!isSeasonActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}" data-name="${s.name}">${this.t("activate", "Activar")}</button>` : ''}
+                          <button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 Guardar Nombre</button>
                         ` : ''}
 
+                        ${!isSeasonActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}" data-name="${s.name}">Activar</button>` : ''}
+
                         ${this._can("DELETE_SEASON") ? `
-                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="${this.t("delete_season", "Eliminar Temporada")}">🗑️</button>
+                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada">🗑️</button>
                         ` : ''}
                       </div>
                     </div>
                   `;
-                }).join("") : `<p style="font-size: 13px; color: #64748b;">${this.t("no_seasons_registered", "No hay temporadas registradas en Supabase.")}</p>`}
+                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas en Supabase.</p>`}
               </div>
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES -->
+          <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES (SUPERADMIN) -->
           ${this.activeTab === 'translations' && this._can("VIEW_TAB_TRANSLATIONS") ? `
             <div id="translations-subview-container">
               ${this.languageSettingsView.render()}
@@ -703,23 +903,23 @@ export class TranslationsView {
           <!-- PESTAÑA 6: SIMULACIÓN DE ROLES (EXCLUSIVO SUPERADMIN) -->
           ${this.activeTab === 'simulation' && this.currentUserRole === 'SUPERADMIN' ? `
             <div class="config-card" style="border: 2px solid #6366f1;">
-              <div class="card-title" style="color: #4f46e5;"><span>🎭</span> ${this.t("role_simulation_title", "MODO SIMULACIÓN DE PANTALLAS Y PERMISOS")}</div>
+              <div class="card-title" style="color: #4f46e5;"><span>🎭</span> MODO SIMULACIÓN DE PANTALLAS Y PERMISOS</div>
               <p style="font-size: 13px; color: #475569; margin-top: -8px; margin-bottom: 20px;">
-                ${this.t("role_simulation_desc", "Selecciona un rol para simular la interfaz y comprobar de inmediato qué opciones y botones puede ver y ejecutar cada perfil de usuario en toda la app.")}
+                Selecciona un rol para simular la interfaz y comprobar de inmediato qué opciones y botones puede ver y ejecutar cada perfil de usuario en toda la app.
               </p>
 
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px;">
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="SUPERADMIN" style="padding: 14px; text-align: left; font-weight: 800;">👑 ${this.t("simulate_superadmin", "Simular SUPERADMIN")}</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ADMIN" style="padding: 14px; text-align: left; font-weight: 800;">🔑 ${this.t("simulate_admin", "Simular ADMIN CLUB")}</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ENTRENADOR" style="padding: 14px; text-align: left; font-weight: 800;">📋 ${this.t("simulate_coach", "Simular ENTRENADOR")}</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ANALISTA" style="padding: 14px; text-align: left; font-weight: 800;">📈 ${this.t("simulate_analyst", "Simular ANALISTA")}</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="JUGADOR" style="padding: 14px; text-align: left; font-weight: 800;">👤 ${this.t("simulate_player", "Simular JUGADOR")}</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">👁️ ${this.t("simulate_guest", "Simular INVITADO (Demo)")}</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="SUPERADMIN" style="padding: 14px; text-align: left; font-weight: 800;">👑 Simular SUPERADMIN</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ADMIN" style="padding: 14px; text-align: left; font-weight: 800;">🔑 Simular ADMIN CLUB</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ENTRENADOR" style="padding: 14px; text-align: left; font-weight: 800;">📋 Simular ENTRENADOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ANALISTA" style="padding: 14px; text-align: left; font-weight: 800;">📈 Simular ANALISTA</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="JUGADOR" style="padding: 14px; text-align: left; font-weight: 800;">👤 Simular JUGADOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular INVITADO (Demo)</button>
               </div>
 
               ${this.simulatedRole ? `
                 <div style="text-align: right;">
-                  <button type="button" id="btn-reset-simulation" class="btn-danger-sm" style="padding: 10px 18px; font-weight: 800;">🔴 ${this.t("disable_simulation_btn", "Desactivar Simulación (Volver a Modo Real)")}</button>
+                  <button type="button" id="btn-reset-simulation" class="btn-danger-sm" style="padding: 10px 18px; font-weight: 800;">🔴 Desactivar Simulación (Volver a Modo Real)</button>
                 </div>
               ` : ''}
             </div>
@@ -783,6 +983,15 @@ export class TranslationsView {
       </style>
     `;
 
+    // Interceptador de aviso para cambio de Rol Activo si no es SUPERADMIN
+    const selectDemoRole = container.querySelector("#select-demo-role");
+    if (selectDemoRole && !canModifyActiveRole) {
+      selectDemoRole.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("⚠️ La modificación del Rol Activo solo está disponible para el perfil SUPERADMIN.");
+      });
+    }
+
     // --- BINDING DE EVENTOS PESTAÑAS PRINCIPALES ---
 
     container.querySelectorAll(".tab-btn").forEach(btn => {
@@ -790,6 +999,308 @@ export class TranslationsView {
         this.activeTab = e.currentTarget.getAttribute("data-tab");
         this.clubSubView = "list";
         await this.render(containerId);
+      });
+    });
+
+    // BINDING FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO
+    const renderUserCardContent = (userProf) => {
+      const modalContent = container.querySelector("#user-card-modal-content");
+      if (!modalContent) return;
+
+      const userAssignedTeamIds = this.userTeamAssignments[userProf.email] || [];
+      const userPendingRequests = this.joinRequests.filter(r => r.userEmail === userProf.email && r.status === 'PENDIENTE');
+
+      modalContent.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          
+          <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h4 style="margin: 0; font-size: 15px; color: #0f172a;">${(userProf.first_name || '') + ' ' + (userProf.last_name || '') || 'Sin Nombre'}</h4>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${userProf.email}</p>
+            </div>
+            <span class="badge-active-team">${userProf.role || 'INVITADO'}</span>
+          </div>
+
+          ${userPendingRequests.length > 0 ? `
+            <div style="background: #fff7ed; border: 1px solid #ffedd5; padding: 12px; border-radius: 8px;">
+              <h5 style="margin: 0 0 8px 0; font-size: 12px; color: #c2410c;">📩 SOLICITUDES PENDIENTES DE ESTE USUARIO:</h5>
+              ${userPendingRequests.map(r => `
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px;">
+                  <span>Solicita acceso a: <strong>${r.teamName || 'Equipo'}</strong></span>
+                  <button type="button" class="btn-approve-join-req btn-secondary-sm" data-id="${r.id}" data-email="${r.userEmail}" data-team-id="${r.teamId}" style="background: #16a34a; color: white;">🟢 Aprobar</button>
+                </div>
+              `).join("")}
+            </div>
+          ` : ''}
+
+          <form id="form-save-user-teams-assignment">
+            <h5 style="margin: 0 0 10px 0; font-size: 13px; color: #1e3a8a;">🛡️ EQUIPOS PERMITIDOS / ASIGNADOS:</h5>
+            
+            <div style="max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+              ${realTeams.map(t => {
+                const isChecked = userAssignedTeamIds.includes(String(t.id));
+                return `
+                  <label style="display: flex; align-items: center; gap: 10px; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" class="chk-assign-team" value="${t.id}" ${isChecked ? 'checked' : ''} />
+                    <span><strong>${t.name}</strong> (${t.category || 'Equipo'})</span>
+                  </label>
+                `;
+              }).join("")}
+            </div>
+
+            <div style="margin-top: 16px; text-align: right;">
+              <button type="submit" class="btn-primary">💾 Guardar Asignación de Equipos</button>
+            </div>
+          </form>
+
+        </div>
+      `;
+
+      // Eventos dentro del modal de ficha técnica
+      modalContent.querySelectorAll(".btn-approve-join-req").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const reqId = e.currentTarget.getAttribute("data-id");
+          const email = e.currentTarget.getAttribute("data-email");
+          const teamId = e.currentTarget.getAttribute("data-team-id");
+
+          const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
+          if (reqObj) reqObj.status = "APROBADO";
+          this._saveRequestsLocal();
+
+          if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
+          if (!this.userTeamAssignments[email].includes(String(teamId))) {
+            this.userTeamAssignments[email].push(String(teamId));
+            this._saveAssignmentsLocal();
+          }
+
+          alert(`🟢 Solicitud aprobada. Se ha concedido acceso a ${email}.`);
+          container.querySelector("#modal-user-card").style.display = "none";
+          this.render(containerId);
+        });
+      });
+
+      modalContent.querySelector("#form-save-user-teams-assignment")?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const selectedIds = [];
+        modalContent.querySelectorAll(".chk-assign-team:checked").forEach(chk => {
+          selectedIds.push(chk.value);
+        });
+
+        this.userTeamAssignments[userProf.email] = selectedIds;
+        this._saveAssignmentsLocal();
+
+        alert(`✅ Equipos actualizados correctamente para ${userProf.email}.`);
+        container.querySelector("#modal-user-card").style.display = "none";
+        this.render(containerId);
+      });
+    };
+
+    // APROBACIÓN / RECHAZO DESDE LA TARJETA PRINCIPAL DE AVISOS DE ADHESIÓN
+    container.querySelectorAll(".btn-approve-join-req").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const reqId = e.currentTarget.getAttribute("data-id");
+        const email = e.currentTarget.getAttribute("data-email");
+        const teamId = e.currentTarget.getAttribute("data-team-id");
+
+        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
+        if (reqObj) reqObj.status = "APROBADO";
+        this._saveRequestsLocal();
+
+        if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
+        if (!this.userTeamAssignments[email].includes(String(teamId))) {
+          this.userTeamAssignments[email].push(String(teamId));
+          this._saveAssignmentsLocal();
+        }
+
+        alert(`🟢 Solicitud aprobada. Se ha concedido acceso al equipo a ${email}.`);
+        await this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-reject-join-req").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const reqId = e.currentTarget.getAttribute("data-id");
+
+        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
+        if (reqObj) reqObj.status = "RECHAZADO";
+        this._saveRequestsLocal();
+
+        alert("🔴 Solicitud de adhesión rechazada.");
+        await this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-open-user-card").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const email = e.currentTarget.getAttribute("data-email");
+        const userProf = this.profilesList.find(p => p.email === email);
+
+        if (userProf) {
+          const modal = container.querySelector("#modal-user-card");
+          if (modal) {
+            modal.style.display = "flex";
+            renderUserCardContent(userProf);
+          }
+        }
+      });
+    });
+
+    container.querySelector("#btn-close-user-card-modal")?.addEventListener("click", () => {
+      const modal = container.querySelector("#modal-user-card");
+      if (modal) modal.style.display = "none";
+    });
+
+    // Selector de Equipo Activo en Pantalla (Invitado / Jugador)
+    container.querySelector("#select-guest-active-team")?.addEventListener("change", async (e) => {
+      const newTeamId = e.target.value;
+      if (!newTeamId) return;
+
+      localStorage.setItem("iq_active_team_id", newTeamId);
+      DataStore.isLoaded = false;
+      await DataStore.init(newTeamId, true);
+      alert("🟢 Equipo seleccionado como activo.");
+      if (window.iqApp) {
+        window.iqApp.teamId = newTeamId;
+        await window.iqApp.render();
+      }
+    });
+
+    // Selector de Temporada Activa en Pantalla (Invitado / Jugador)
+    container.querySelector("#select-guest-active-season")?.addEventListener("change", async (e) => {
+      const newSeason = e.target.value;
+      localStorage.setItem("iq_active_season", newSeason);
+      alert(`🟢 Temporada ${newSeason} seleccionada.`);
+      if (window.iqApp) await window.iqApp.render();
+    });
+
+    // Evento Solicitar unirse a equipo
+    container.querySelectorAll(".btn-request-join-team").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const teamId = e.currentTarget.getAttribute("data-id");
+        const teamName = e.currentTarget.getAttribute("data-name");
+
+        const requestObj = {
+          id: "req-" + Date.now(),
+          userEmail: currentUserEmail,
+          teamId: teamId,
+          teamName: teamName,
+          status: "PENDIENTE",
+          date: new Date().toLocaleDateString()
+        };
+
+        this.joinRequests.push(requestObj);
+        this._saveRequestsLocal();
+
+        alert(`✉️ Solicitud enviada correctamente para unirse a ${teamName}. La solicitud ha sido notificada al Superadmin y a los Administradores.`);
+        this.render(containerId);
+      });
+    });
+
+    // BINDING ALTA DE USUARIO E INVITACIÓN DIRECTA (SUPABASE AUTH + USER_PROFILES)
+    const formCreateUser = container.querySelector("#form-create-user-profile");
+    if (formCreateUser) {
+      formCreateUser.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const fullName = container.querySelector("#new-user-name")?.value.trim() || "";
+        const email = container.querySelector("#new-user-email")?.value.trim();
+        const role = container.querySelector("#new-user-role")?.value || "ENTRENADOR";
+        const tempPassword = container.querySelector("#new-user-pass")?.value || "BasketIQ2026";
+
+        if (!fullName || !email || !tempPassword) {
+          alert("⚠️ Completa los campos obligatorios para dar de alta al usuario.");
+          return;
+        }
+
+        const nameParts = fullName.split(" ");
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(" ");
+
+        this.showSyncOverlay("⚡ Registrando usuario en la Base de Datos IQB...");
+
+        try {
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: email,
+            password: tempPassword,
+            options: {
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                role: role
+              }
+            }
+          });
+
+          if (authError) {
+            this.hideSyncOverlay();
+            alert(`❌ Error al crear cuenta en Supabase Auth: ${authError.message}`);
+            return;
+          }
+
+          if (authData?.user) {
+            await supabase
+              .from("user_profiles")
+              .update({ role: role, first_name: firstName, last_name: lastName })
+              .eq("email", email);
+          }
+
+          await this._fetchProfiles();
+          this.hideSyncOverlay();
+
+          alert(`✅ Usuario "${fullName}" (${role}) registrado con éxito con la contraseña temporal "${tempPassword}".`);
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error creando usuario:", err);
+          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+        }
+      });
+    }
+
+    // BINDING GUARDAR ROL DE USUARIO EN USER_PROFILES
+    container.querySelectorAll(".btn-save-user-role").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const userId = e.currentTarget.getAttribute("data-id");
+        const selectEl = container.querySelector(`.select-user-role[data-id="${userId}"]`);
+        if (!selectEl) return;
+
+        const newRole = selectEl.value;
+        this.showSyncOverlay("💾 Actualizando rol del usuario...");
+
+        try {
+          const { error } = await supabase
+            .from("user_profiles")
+            .update({ role: newRole })
+            .eq("id", userId);
+
+          if (error) {
+            this.hideSyncOverlay();
+            alert(`❌ Error actualizando rol: ${error.message}`);
+            return;
+          }
+
+          const userObj = this.profilesList.find(p => String(p.id) === String(userId));
+          if (userObj) {
+            userObj.role = newRole;
+            const activeUserEmail = localStorage.getItem("iq_user_email");
+            if (userObj.email === activeUserEmail) {
+              localStorage.setItem("iq_user_role", newRole);
+              localStorage.removeItem("iq_simulated_role");
+            }
+          }
+
+          this.hideSyncOverlay();
+          alert(`✅ Rol actualizado a "${newRole}" correctamente.`);
+          window.location.reload();
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error al actualizar rol:", err);
+          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+        }
       });
     });
 
@@ -816,9 +1327,7 @@ export class TranslationsView {
           }
 
           const transferObj = this.transfers.find(t => String(t.id) === String(trId));
-          if (transferObj) {
-            transferObj.status = "APROBADO";
-          }
+          if (transferObj) transferObj.status = "APROBADO";
           this._saveTransfersLocal();
 
           DataStore.isLoaded = false;
@@ -835,23 +1344,7 @@ export class TranslationsView {
       });
     });
 
-    container.querySelectorAll(".btn-reject-transfer").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        const trId = e.currentTarget.getAttribute("data-id");
-
-        const transferObj = this.transfers.find(t => String(t.id) === String(trId));
-        if (transferObj) {
-          transferObj.status = "RECHAZADO";
-        }
-        this._saveTransfersLocal();
-
-        alert("🔴 Solicitud de traspaso rechazada.");
-        await this.render(containerId);
-      });
-    });
-
-    // BINDING ACTIVAR EQUIPO
+    // BINDING ACTIVAR EQUIPO (ADMIN Y SUPERADMIN)
     container.querySelectorAll(".btn-set-active-team").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -862,22 +1355,14 @@ export class TranslationsView {
 
         try {
           localStorage.setItem("iq_active_team_id", teamId);
-          
           if (typeof DataStore.setActiveTeamAndSeason === "function") {
             DataStore.setActiveTeamAndSeason(teamId, null);
           }
-          
           DataStore.isLoaded = false;
           await DataStore.init(teamId, true);
 
-          const sidebarSelect = document.getElementById("sidebar-select-team");
-          if (sidebarSelect) sidebarSelect.value = teamId;
-
-          const mobileSelect = document.getElementById("mobile-select-team");
-          if (mobileSelect) mobileSelect.value = teamId;
-
           this.hideSyncOverlay();
-          alert("🟢 Equipo activado correctamente. Se han sincronizado los datos.");
+          alert("🟢 Equipo activado correctamente.");
 
           if (window.iqApp && typeof window.iqApp.render === "function") {
             window.iqApp.teamId = teamId;
@@ -888,451 +1373,18 @@ export class TranslationsView {
         } catch (err) {
           this.hideSyncOverlay();
           console.error("Error al activar equipo:", err);
-          alert("❌ No se pudo activar el equipo seleccionado.");
         }
       });
     });
-
-    // EVENTOS EDITAR CLUB Y CONFIGURAR EQUIPO
-    container.querySelectorAll(".btn-edit-club").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        const id = e.currentTarget.getAttribute("data-id");
-        this.selectedClubForEdit = realClubs.find(c => String(c.id) === String(id));
-        this.clubSubView = "edit-club";
-        this.render(containerId);
-      });
-    });
-
-    container.querySelectorAll(".btn-edit-team").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        const id = e.currentTarget.getAttribute("data-id");
-        this.selectedTeamForEdit = realTeams.find(t => String(t.id) === String(id));
-        this.clubSubView = "edit-team";
-        this.render(containerId);
-      });
-    });
-
-    container.querySelectorAll(".btn-back-to-list").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        this.clubSubView = "list";
-        this.render(containerId);
-      });
-    });
-
-    // FORMULARIO CREAR CLUB
-    const formCreateClub = container.querySelector("#form-create-club");
-    if (formCreateClub) {
-      formCreateClub.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const name = container.querySelector("#club-new-name")?.value.trim();
-        const coordinator_name = container.querySelector("#club-new-coordinator")?.value.trim() || "";
-        const phone = container.querySelector("#club-new-phone")?.value.trim() || "";
-        const address = container.querySelector("#club-new-address")?.value.trim() || "";
-
-        if (!name) return;
-
-        this.showSyncOverlay("⚡ Registrando nuevo club en Supabase...");
-
-        try {
-          const { data, error } = await supabase
-            .from("clubs")
-            .insert([{ name, coordinator_name, phone, address }])
-            .select();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al crear club en Supabase: ${error.message}`);
-            return;
-          }
-
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-          alert("✅ Club creado con éxito en la base de datos.");
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error creando club:", err);
-          alert(`❌ Error al conectar con Supabase: ${err.message}`);
-        }
-      });
-    }
-
-    // FORMULARIO CREAR EQUIPO
-    const formCreateTeam = container.querySelector("#form-create-team");
-    if (formCreateTeam) {
-      formCreateTeam.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const club_id = container.querySelector("#team-new-club-id")?.value;
-        const name = container.querySelector("#team-new-name")?.value.trim();
-        const category = container.querySelector("#team-new-category")?.value.trim();
-        const competition = container.querySelector("#team-new-competition")?.value.trim();
-        const coach_name = container.querySelector("#team-new-coach")?.value.trim();
-        const color = container.querySelector("#team-new-color")?.value || "#ea580c";
-
-        if (!name || !club_id) return;
-
-        this.showSyncOverlay("⚡ Registrando nuevo equipo en Supabase...");
-
-        try {
-          const { data, error } = await supabase
-            .from("teams")
-            .insert([{ club_id, name, category, competition, coach_name, color }])
-            .select();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al crear equipo: ${error.message}`);
-            return;
-          }
-
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-          alert("✅ Equipo creado exitosamente.");
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error creando equipo:", err);
-        }
-      });
-    }
-
-    // FORMULARIO GUARDAR CAMBIOS DE CLUB
-    const formEditClub = container.querySelector("#form-edit-club");
-    if (formEditClub) {
-      formEditClub.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (!this.selectedClubForEdit) return;
-
-        const name = container.querySelector("#edit-club-name")?.value.trim();
-        const coordinator_name = container.querySelector("#edit-club-coordinator")?.value.trim();
-        const phone = container.querySelector("#edit-club-phone")?.value.trim();
-        const address = container.querySelector("#edit-club-address")?.value.trim();
-
-        this.showSyncOverlay("💾 Guardando datos del club en Supabase...");
-
-        try {
-          const { data: updatedClub, error } = await supabase
-            .from("clubs")
-            .update({ name, coordinator_name, phone, address })
-            .eq("id", this.selectedClubForEdit.id)
-            .select();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Supabase denegó los cambios en el club: ${error.message}`);
-            return;
-          }
-
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-
-          alert("✅ Datos del club actualizados correctamente.");
-          this.clubSubView = "list";
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error al actualizar club:", err);
-          alert(`❌ Error al conectar con Supabase: ${err.message}`);
-        }
-      });
-    }
-
-    // FORMULARIO GUARDAR CAMBIOS DE EQUIPO
-    const formEditTeam = container.querySelector("#form-edit-team");
-    if (formEditTeam) {
-      formEditTeam.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (!this.selectedTeamForEdit) return;
-
-        const name = container.querySelector("#edit-team-name")?.value.trim();
-        const category = container.querySelector("#edit-team-category")?.value.trim();
-        const competition = container.querySelector("#edit-team-competition")?.value.trim();
-        const coach_name = container.querySelector("#edit-team-coach")?.value.trim();
-        const color = container.querySelector("#edit-team-color")?.value;
-
-        this.showSyncOverlay("💾 Guardando cambios del equipo en Supabase...");
-
-        try {
-          const { data: updatedTeam, error } = await supabase
-            .from("teams")
-            .update({ name, category, competition, coach_name, color })
-            .eq("id", this.selectedTeamForEdit.id)
-            .select();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Supabase denegó los cambios en el equipo: ${error.message}`);
-            return;
-          }
-
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-
-          alert("✅ Configuración del equipo actualizada en Supabase correctamente.");
-          this.clubSubView = "list";
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error al actualizar equipo:", err);
-          alert(`❌ Error al conectar con Supabase: ${err.message}`);
-        }
-      });
-    }
-
-    // FORMULARIO CREAR JUGADOR NUEVO
-    const formAddPlayer = container.querySelector("#form-add-player");
-    if (formAddPlayer) {
-      formAddPlayer.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const first_name = container.querySelector("#add-p-name")?.value.trim();
-        const last_name = container.querySelector("#add-p-lastname")?.value.trim();
-        const jersey = parseInt(container.querySelector("#add-p-number")?.value, 10);
-        const primary_position = container.querySelector("#add-p-position")?.value;
-
-        if (!first_name || !last_name || isNaN(jersey)) {
-          alert("⚠️ Rellena todos los campos obligatorios del jugador.");
-          return;
-        }
-
-        this.showSyncOverlay("⚡ Registrando jugador en Supabase...");
-
-        try {
-          const { data, error } = await supabase
-            .from("players")
-            .insert([{
-              team_id: activeTeamId,
-              first_name,
-              last_name,
-              jersey,
-              primary_position,
-              status: "Activo"
-            }])
-            .select();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al insertar jugador en Supabase: ${error.message}`);
-            return;
-          }
-
-          DataStore.isLoaded = false;
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-
-          alert(`✅ Jugador #${jersey} ${first_name} ${last_name} registrado correctamente.`);
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error guardando jugador nuevo:", err);
-          alert(`❌ Error de conexión: ${err.message}`);
-        }
-      });
-    }
-
-    // EDICIÓN DE JUGADORES
-    container.querySelectorAll(".btn-edit-player-modal").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        const pId = e.currentTarget.getAttribute("data-id");
-        const player = (players || []).find(p => String(p.id) === String(pId)) || 
-                       (this.allMarketPlayers || []).find(p => String(p.id) === String(pId));
-
-        if (!player) {
-          alert("⚠️ No se encontró la información del jugador.");
-          return;
-        }
-
-        const modal = container.querySelector("#modal-edit-player");
-        if (modal) {
-          container.querySelector("#edit-p-id").value = player.id;
-          container.querySelector("#edit-p-name").value = player.first_name || "";
-          container.querySelector("#edit-p-lastname").value = player.last_name || "";
-          container.querySelector("#edit-p-number").value = player.jersey ?? 0;
-          container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
-          container.querySelector("#edit-p-status").value = player.status || "Activo";
-
-          modal.style.display = "flex";
-        }
-      });
-    });
-
-    const closePlayerModal = () => {
-      const modal = container.querySelector("#modal-edit-player");
-      if (modal) modal.style.display = "none";
-    };
-
-    container.querySelector("#btn-close-edit-player-modal")?.addEventListener("click", closePlayerModal);
-    container.querySelector("#btn-cancel-edit-player")?.addEventListener("click", closePlayerModal);
-
-    const formEditPlayer = container.querySelector("#form-edit-player-modal");
-    if (formEditPlayer) {
-      formEditPlayer.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        if (isReadOnly) {
-          alert("ℹ️ Permisos insuficientes para modificar la plantilla en este modo.");
-          return;
-        }
-
-        const pId = container.querySelector("#edit-p-id")?.value;
-        const first_name = container.querySelector("#edit-p-name")?.value.trim();
-        const last_name = container.querySelector("#edit-p-lastname")?.value.trim();
-        const jersey = parseInt(container.querySelector("#edit-p-number")?.value, 10);
-        const primary_position = container.querySelector("#edit-p-position")?.value;
-        const status = container.querySelector("#edit-p-status")?.value;
-
-        const updates = { first_name, last_name, jersey, primary_position, status };
-
-        try {
-          this.showSyncOverlay("💾 Guardando cambios del jugador...");
-
-          const { error } = await supabase
-            .from("players")
-            .update(updates)
-            .eq("id", pId);
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al guardar en Supabase: ${error.message}`);
-            return;
-          }
-
-          await DataStore.init(activeTeamId, true);
-          this.hideSyncOverlay();
-          closePlayerModal();
-
-          alert("✅ Datos del jugador actualizados con éxito.");
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error guardando cambios del jugador:", err);
-        }
-      });
-    }
 
     // MODAL MERCADO
-    const renderMarketTable = () => {
-      const tableContainer = container.querySelector("#market-modal-table-container");
-      if (!tableContainer) return;
-
-      const filtered = (this.allMarketPlayers || []).filter(p => {
-        const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-        const teamName = (p.team_name || '').toLowerCase();
-        const query = this.marketSearchQuery.toLowerCase();
-        return fullName.includes(query) || teamName.includes(query);
-      });
-
-      const totalPages = Math.ceil(filtered.length / this.marketItemsPerPage) || 1;
-      if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
-
-      const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
-      const paginated = filtered.slice(startIndex, startIndex + this.marketItemsPerPage);
-
-      tableContainer.innerHTML = `
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>${this.t("player", "Jugador")}</th>
-                <th>${this.t("primary_position", "Posición")}</th>
-                <th>${this.t("current_team", "Equipo Actual")}</th>
-                <th>${this.t("status", "Estado")}</th>
-                <th style="text-align: right;">${this.t("action", "Acción")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${paginated.length > 0 ? paginated.map(p => {
-                const isOwnPlayer = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
-                const pendingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === 'PENDIENTE');
-
-                return `
-                  <tr style="${isOwnPlayer ? 'opacity: 0.55; background: #f8fafc;' : ''}">
-                    <td><strong>#${p.jersey ?? '?'} ${p.first_name} ${p.last_name || ''}</strong></td>
-                    <td>${p.primary_position || p.position || 'Jugador'}</td>
-                    <td>${isOwnPlayer ? '🟢 Tu Equipo' : (p.team_name || 'Otro Equipo')}</td>
-                    <td>
-                      ${isOwnPlayer 
-                        ? '<span class="badge-active-team">' + this.t("in_roster", "En plantilla") + '</span>' 
-                        : (pendingTransfer ? '<span class="badge-pending">⏳ ' + this.t("pending_approval", "Traspaso Pendiente") + '</span>' : '<span class="badge-inactive">' + this.t("available", "Disponible") + '</span>')}
-                    </td>
-                    <td style="text-align: right;">
-                      ${isOwnPlayer ? `
-                        <button type="button" class="btn-outline-sm" disabled>${this.t("in_your_roster", "En Tu Plantilla")}</button>
-                      ` : (pendingTransfer ? `
-                        <button type="button" class="btn-outline-sm" disabled>${this.t("pending_approval", "Pendiente Aprobación")}</button>
-                      ` : `
-                        <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name} ${p.last_name || ''}">
-                          📩 ${this.t("request_transfer", "Solicitar Traspaso")}
-                        </button>
-                      `)}
-                    </td>
-                  </tr>
-                `;
-              }).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">${this.t("no_players_in_db", "No se encontraron jugadores en la base de datos.")}</td></tr>`}
-            </tbody>
-          </table>
-        </div>
-
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 12px; color: #64748b;">
-          <span>${this.t("showing", "Mostrando")} ${paginated.length} ${this.t("of", "de")} ${filtered.length} ${this.t("players", "jugadores")}</span>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <button type="button" id="btn-prev-market-modal-page" class="btn-outline-sm" ${this.marketCurrentPage <= 1 ? 'disabled' : ''}>⬅️ ${this.t("previous", "Anterior")}</button>
-            <span style="font-weight: 700; color: #1e3a8a;">${this.t("page_indicator", "Pág.")} ${this.marketCurrentPage} ${this.t("of", "de")} ${totalPages}</span>
-            <button type="button" id="btn-next-market-modal-page" class="btn-outline-sm" ${this.marketCurrentPage >= totalPages ? 'disabled' : ''}>${this.t("next", "Siguiente")} ➡️</button>
-          </div>
-        </div>
-      `;
-
-      tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          const pId = e.currentTarget.getAttribute("data-id");
-          const pName = e.currentTarget.getAttribute("data-name");
-
-          const transferObj = {
-            id: "tr-" + Date.now(),
-            playerId: pId,
-            playerName: pName,
-            targetTeamId: activeTeamId,
-            status: "PENDIENTE"
-          };
-
-          this.transfers.push(transferObj);
-          this._saveTransfersLocal();
-
-          alert(`📩 Solicitud de traspaso registrada para ${pName}.`);
-          renderMarketTable();
-        });
-      });
-
-      tableContainer.querySelector("#btn-prev-market-modal-page")?.addEventListener("click", () => {
-        if (this.marketCurrentPage > 1) {
-          this.marketCurrentPage--;
-          renderMarketTable();
-        }
-      });
-
-      tableContainer.querySelector("#btn-next-market-modal-page")?.addEventListener("click", () => {
-        if (this.marketCurrentPage < totalPages) {
-          this.marketCurrentPage++;
-          renderMarketTable();
-        }
-      });
-    };
-
     container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
       this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
       await this._fetchAllMarketPlayers(true);
       this.hideSyncOverlay();
 
       const modal = container.querySelector("#modal-market-global");
-      if (modal) {
-        modal.style.display = "flex";
-        renderMarketTable();
-      }
+      if (modal) modal.style.display = "flex";
     });
 
     container.querySelector("#btn-close-market-modal")?.addEventListener("click", () => {
@@ -1340,120 +1392,46 @@ export class TranslationsView {
       if (modal) modal.style.display = "none";
     });
 
-    // --- 8. EVENTOS IDIOMAS Y TRADUCCIONES CON PAGINACIÓN EN BINDING ---
-    if (this.activeTab === "translations") {
-      // Evento Guardar Traducciones
-      const btnSaveLang = container.querySelector("#btnSaveLanguage");
-      if (btnSaveLang) {
-        btnSaveLang.addEventListener("click", async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+    // GESTIÓN DE TEMPORADAS
+    const formCreateSeason = container.querySelector("#form-create-season");
+    if (formCreateSeason) {
+      formCreateSeason.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const inputName = container.querySelector("#input-new-season-name");
+        const seasonName = inputName?.value.trim();
 
-          this.showSyncOverlay("🌐 Actualizando traducciones en caliente...");
-          
-          if (typeof this.languageSettingsView.handleSave === "function") {
-            await this.languageSettingsView.handleSave();
-          }
+        if (!seasonName) return;
 
-          const currentLang = localStorage.getItem("iq_lang") || "es";
-          if (I18n && typeof I18n.changeLanguage === "function") {
-            I18n.changeLanguage(currentLang);
-          }
-          if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
-            TranslationStore.setLanguage(currentLang);
-          }
-
-          this.hideSyncOverlay();
-          alert("✅ Traducciones aplicadas y actualizadas en pantalla.");
-          await this.render(containerId);
-        });
-      }
-
-      // Evento Selector de Idioma a editar
-      const langSelector = container.querySelector("#langCodeInput");
-      if (langSelector) {
-        langSelector.addEventListener("change", async (e) => {
-          const selectedCode = e.target.value;
-          this.selectedLangForEdit = selectedCode;
-          this.languageSettingsView.currentPage = 1;
-          await this.render(containerId);
-        });
-      }
-
-      // Eventos de Paginación Idiomas
-      const setupLangPaginationEvents = (prevBtnId, nextBtnId) => {
-        container.querySelector(prevBtnId)?.addEventListener("click", async () => {
-          if (this.languageSettingsView.currentPage > 1) {
-            this.languageSettingsView.currentPage--;
-            await this.render(containerId);
-          }
-        });
-
-        container.querySelector(nextBtnId)?.addEventListener("click", async () => {
-          this.languageSettingsView.currentPage++;
-          await this.render(containerId);
-        });
-      };
-
-      setupLangPaginationEvents("#btn-prev-lang-page", "#btn-next-lang-page");
-      setupLangPaginationEvents("#btn-prev-lang-page-bottom", "#btn-next-lang-page-bottom");
-    }
-
-    // 9. GESTIÓN DE TEMPORADAS
-    container.querySelectorAll(".btn-save-season-name").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        const seasonId = e.currentTarget.getAttribute("data-id");
-        const inputEl = container.querySelector(`.input-season-edit[data-id="${seasonId}"]`);
-        if (!inputEl) return;
-
-        const newName = inputEl.value.trim();
-        if (!newName) {
-          alert("⚠️ El nombre de la temporada no puede estar vacío.");
-          return;
-        }
-
-        this.showSyncOverlay("💾 Guardando nombre de la temporada en Supabase...");
+        this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
 
         try {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("seasons")
-            .update({ name: newName })
-            .eq("id", seasonId);
+            .insert([{ name: seasonName, team_id: activeTeamId }])
+            .select()
+            .single();
 
           if (error) {
             this.hideSyncOverlay();
-            alert(`❌ Supabase rechazó el cambio de nombre: ${error.message}`);
+            alert(`❌ Error al insertar temporada en Supabase: ${error.message}`);
             return;
           }
 
-          const seasonObj = this.seasonsList.find(s => String(s.id) === String(seasonId));
-          if (seasonObj) {
-            seasonObj.name = newName;
+          if (data) {
+            this.seasonsList.unshift(data);
+            localStorage.setItem("iq_active_season", seasonName);
+            this._saveSeasonsLocal();
           }
 
-          localStorage.setItem("iq_active_season", newName);
-          this._saveSeasonsLocal();
           this.hideSyncOverlay();
-
-          alert(`✅ Temporada actualizada a "${newName}" en Supabase correctamente.`);
+          alert(`✅ Temporada "${seasonName}" creada con éxito.`);
           await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
-          console.error("Error actualizando temporada:", err);
-          alert(`❌ Error al conectar con Supabase: ${err.message}`);
+          console.error("Error creando temporada:", err);
         }
       });
-    });
-
-    container.querySelectorAll(".btn-activate-season").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        const seasonName = e.currentTarget.getAttribute("data-name");
-        localStorage.setItem("iq_active_season", seasonName);
-        this._saveSeasonsLocal();
-        alert(`🟢 Temporada "${seasonName}" activada en el sistema.`);
-        await this.render(containerId);
-      });
-    });
+    }
 
     container.querySelectorAll(".btn-delete-season").forEach(btn => {
       btn.addEventListener("click", async (e) => {
@@ -1479,53 +1457,7 @@ export class TranslationsView {
       });
     });
 
-    const formCreateSeason = container.querySelector("#form-create-season");
-    if (formCreateSeason) {
-      formCreateSeason.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const inputName = container.querySelector("#input-new-season-name");
-        const seasonName = inputName?.value.trim();
-
-        if (!seasonName) return;
-
-        this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
-
-        const newSeasonPayload = {
-          name: seasonName,
-          team_id: activeTeamId
-        };
-
-        try {
-          const { data, error } = await supabase
-            .from("seasons")
-            .insert([newSeasonPayload])
-            .select()
-            .single();
-
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al insertar temporada en Supabase: ${error.message}`);
-            return;
-          }
-
-          if (data) {
-            this.seasonsList.unshift(data);
-            localStorage.setItem("iq_active_season", seasonName);
-            this._saveSeasonsLocal();
-          }
-
-          this.hideSyncOverlay();
-          alert(`✅ Temporada "${seasonName}" creada con éxito en Supabase.`);
-          await this.render(containerId);
-        } catch (err) {
-          this.hideSyncOverlay();
-          console.error("Error creando temporada:", err);
-          alert(`❌ Error inesperado: ${err.message}`);
-        }
-      });
-    }
-
-    // 10. SIMULACIÓN DE ROLES
+    // SIMULACIÓN DE ROLES (EXCLUSIVO SUPERADMIN)
     container.querySelectorAll(".btn-simulate-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         const roleToSimulate = e.currentTarget.getAttribute("data-role");
@@ -1535,9 +1467,6 @@ export class TranslationsView {
         localStorage.setItem("iq_user_role", roleToSimulate);
 
         alert(`🎭 Simulación activada: La app muestra la interfaz de '${roleToSimulate}'.`);
-        
-        const appContainer = document.getElementById("app");
-        if (appContainer) appContainer.innerHTML = "";
         window.location.reload();
       });
     });
@@ -1554,13 +1483,15 @@ export class TranslationsView {
       });
     }
 
-    container.querySelector("#select-demo-role")?.addEventListener("change", (e) => {
-      this.currentUserRole = e.target.value;
-      this.simulatedRole = null;
-      localStorage.removeItem("iq_simulated_role");
-      localStorage.setItem("iq_user_role", this.currentUserRole);
-      window.location.reload();
-    });
+    if (canModifyActiveRole) {
+      container.querySelector("#select-demo-role")?.addEventListener("change", (e) => {
+        this.currentUserRole = e.target.value;
+        this.simulatedRole = null;
+        localStorage.removeItem("iq_simulated_role");
+        localStorage.setItem("iq_user_role", this.currentUserRole);
+        window.location.reload();
+      });
+    }
   }
 }
 

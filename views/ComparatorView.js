@@ -5,6 +5,7 @@
  * Gráfico 100% alineado mediante dibujado unificado de Eje X/Y dentro del propio SVG.
  * Totalmente integrado con DataStore, TranslationStore e I18nService.
  * Adaptado con diseño responsivo dual (TableView Desktop / CardView Smartphone).
+ * Restricción de acceso para el rol JUGADOR y conteo de partidos disputados con minutos > 0.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -23,6 +24,12 @@ export class ComparatorView {
     this.playerColors = ["#1e3a8a", "#ea580c", "#16a34a", "#9333ea"];
   }
 
+  _canAccess() {
+    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
+    const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    return role !== "JUGADOR";
+  }
+
   /**
    * Calcula promedios e indicadores para los jugadores seleccionados
    */
@@ -33,7 +40,9 @@ export class ComparatorView {
       const p = DataStore.getPlayerById(pId);
       if (!p) return;
 
-      const pStats = DataStore.getPlayerGameStats(pId) || [];
+      // 💡 FILTRADO ESTRICTO: Solo contar partidos donde los minutos disputados sean mayores a 0
+      const rawStats = DataStore.getPlayerGameStats(pId) || [];
+      const pStats = rawStats.filter(st => Number(st.minutes || 0) > 0);
       const gamesCount = pStats.length;
 
       let totMin = 0, totPts = 0, totOffReb = 0, totDefReb = 0, totAst = 0, totStl = 0, totBlk = 0;
@@ -200,7 +209,7 @@ export class ComparatorView {
     }).join("");
 
     const rows = [
-      { label: TranslationStore.t("games_played", "Partidos"), key: "gamesCount" },
+      { label: TranslationStore.t("games_played", "Partidos Jugados"), key: "gamesCount" },
       { label: TranslationStore.t("minutes", "Minutos"), key: "avgMin" },
       { label: TranslationStore.t("points", "Puntos"), key: "pts" },
       { label: TranslationStore.t("rebounds", "Rebotes"), key: "reb" },
@@ -265,6 +274,7 @@ export class ComparatorView {
             #${pData.player.jersey ?? '-'} ${pData.player.first_name || ''} ${pData.player.last_name || ''}
           </strong>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+            <div><span style="color: #64748b;">${TranslationStore.t("games_played", "PJ")}:</span> <strong>${pData.gamesCount}</strong></div>
             <div><span style="color: #64748b;">PTS:</span> <strong>${pData.pts}</strong></div>
             <div><span style="color: #64748b;">REB:</span> <strong>${pData.reb}</strong></div>
             <div><span style="color: #64748b;">AST:</span> <strong>${pData.ast}</strong></div>
@@ -318,12 +328,10 @@ export class ComparatorView {
     const chartW = viewBoxWidth - paddingLeft - paddingRight;
     const chartH = viewBoxHeight - paddingTop - paddingBottom;
 
-    // 1. Obtener partidos de la temporada
     const rawGames = DataStore.getGames() || [];
     const allGames = [...rawGames].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const totalGames = Math.max(1, allGames.length);
 
-    // 2. Título de la métrica seleccionada
     const metricLabels = {
       pts: TranslationStore.t("points", "PUNTOS"),
       val: TranslationStore.t("valuation", "VALORACIÓN FIBA"),
@@ -334,7 +342,6 @@ export class ComparatorView {
     };
     const metricTitle = metricLabels[this.selectedMetric] || TranslationStore.t("points", "PUNTOS");
 
-    // 3. Mínimo y Máximo para el Eje Y
     let minVal = 0;
     let maxVal = 10;
 
@@ -360,7 +367,6 @@ export class ComparatorView {
     maxVal = Math.ceil(maxVal / 4) * 4 || 8;
     const rangeY = (maxVal - minVal) || 1;
 
-    // Generar marcadores del Eje Y + Cuadrícula
     const ySteps = 4;
     let gridLinesMarkup = "";
     let yLabelsMarkup = "";
@@ -378,7 +384,6 @@ export class ComparatorView {
       `;
     }
 
-    // Dibujar curvas de los jugadores
     const linesMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
       if (!pData) return "";
@@ -431,7 +436,6 @@ export class ComparatorView {
       `;
     }).join("");
 
-    // Líneas verticales e indicadores P1...Pn dentro del SVG
     let xGridLinesMarkup = "";
     let xLabelsMarkup = "";
 
@@ -537,6 +541,19 @@ export class ComparatorView {
   async render(containerId = "dashboard-content-area") {
     const container = document.getElementById(containerId);
     if (!container) return;
+
+    // 🔒 RESTRICCIÓN DE PERMISOS: Bloqueo para JUGADOR
+    if (!this._canAccess()) {
+      container.innerHTML = `
+        <div style="padding: 40px; text-align: center; background: white; border-radius: 14px; border: 1px solid #fecaca; max-width: 600px; margin: 40px auto;">
+          <div style="font-size: 40px; margin-bottom: 12px;">🔒</div>
+          <h2 style="margin: 0 0 8px 0; color: #991b1b; font-size: 18px; font-weight: 800;">Acceso no permitido</h2>
+          <p style="color: #7f1d1d; font-size: 13px; margin: 0 0 20px 0;">Tu rol de usuario de JUGADOR no tiene acceso a la pantalla del Comparador.</p>
+          <a href="#/dashboard" style="background: #1e3a8a; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 13px; display: inline-block;">Volver al Dashboard</a>
+        </div>
+      `;
+      return;
+    }
 
     const allPlayers = DataStore.getPlayers() || [];
 

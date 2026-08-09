@@ -6,6 +6,7 @@
  *  2. Suma de Cuartos/Prórrogas vs Marcador Total (con indicador de diferencia).
  *  3. Campos de Marcador Global manuales A Favor / En Contra.
  * Mantiene la posición de scroll al teclear estadísticas o cuartos.
+ * Restricciones de permisos para JUGADOR e INVITADO con aviso emergente.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -142,10 +143,14 @@ export class GameLiveEditorView {
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">👁️ Boxscore</button>
             <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 ${TranslationStore.t("report", "Informe")}</button>
+            
             ${canEdit ? `
               <button class="btn-edit-game" data-id="${g.id}" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b; min-height: 44px; min-width: 44px;" title="${TranslationStore.t("edit_game", "Editar partido")}">✏️</button>
               <button class="btn-delete-game" data-id="${g.id}" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #ef4444; min-height: 44px; min-width: 44px;" title="${TranslationStore.t("delete_game", "Eliminar partido")}">🗑️</button>
-            ` : ''}
+            ` : `
+              <button class="btn-edit-game-disabled" style="background: none; border: none; font-size: 18px; cursor: not-allowed; color: #cbd5e1; opacity: 0.5; min-height: 44px; min-width: 44px;" title="🔒 No permitido">✏️</button>
+              <button class="btn-delete-game-disabled" style="background: none; border: none; font-size: 18px; cursor: not-allowed; color: #cbd5e1; opacity: 0.5; min-height: 44px; min-width: 44px;" title="🔒 No permitido">🗑️</button>
+            `}
           </div>
         </div>
       `;
@@ -160,7 +165,9 @@ export class GameLiveEditorView {
           </div>
           ${canEdit ? `
             <button id="btn-create-game" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">+ ${TranslationStore.t("register_new_game", "Registrar nuevo partido")}</button>
-          ` : `<span style="background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">🔒 ${TranslationStore.t("read_only", "Modo Solo Lectura")}</span>`}
+          ` : `
+            <button id="btn-create-game-disabled" style="background: #cbd5e1; color: #64748b; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: not-allowed; min-height: 44px;" aria-disabled="true">🔒 + ${TranslationStore.t("register_new_game", "Registrar nuevo partido")}</button>
+          `}
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
@@ -183,6 +190,29 @@ export class GameLiveEditorView {
       </div>
     `;
 
+    // Interceptadores de permisos para roles deshabilitados
+    const disabledCreateBtn = container.querySelector("#btn-create-game-disabled");
+    if (disabledCreateBtn) {
+      disabledCreateBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("⚠️ Esta función no está disponible para tu rol de usuario.");
+      });
+    }
+
+    container.querySelectorAll(".btn-edit-game-disabled").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("⚠️ Tu rol de usuario no tiene permisos para editar partidos.");
+      });
+    });
+
+    container.querySelectorAll(".btn-delete-game-disabled").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("⚠️ Tu rol de usuario no tiene permisos para eliminar partidos.");
+      });
+    });
+
     if (canEdit) {
       container.querySelector("#btn-create-game")?.addEventListener("click", () => {
         this.currentGame = {
@@ -204,6 +234,26 @@ export class GameLiveEditorView {
         this.isEditing = true;
         this._renderEditForm(container);
       });
+
+      container.querySelectorAll(".btn-edit-game").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const id = e.target.getAttribute("data-id");
+          this._openEditForm(id, container);
+        });
+      });
+
+      container.querySelectorAll(".btn-delete-game").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          const id = e.target.getAttribute("data-id");
+          if (confirm(TranslationStore.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido?"))) {
+            await this.supabase.from("game_period_scores").delete().eq("game_id", id);
+            await this.supabase.from("player_game_stats").delete().eq("game_id", id);
+            await this.supabase.from("games").delete().eq("id", id);
+            await DataStore.init(teamId, true);
+            this._renderGamesList(container, teamId);
+          }
+        });
+      });
     }
 
     container.querySelectorAll(".filter-btn").forEach(btn => {
@@ -216,26 +266,6 @@ export class GameLiveEditorView {
     container.querySelector("#select-sort-games")?.addEventListener("change", (e) => {
       this.sortOrder = e.target.value;
       this._renderGamesList(container, teamId);
-    });
-
-    container.querySelectorAll(".btn-edit-game").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        const id = e.target.getAttribute("data-id");
-        this._openEditForm(id, container);
-      });
-    });
-
-    container.querySelectorAll(".btn-delete-game").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        const id = e.target.getAttribute("data-id");
-        if (confirm(TranslationStore.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido?"))) {
-          await this.supabase.from("game_period_scores").delete().eq("game_id", id);
-          await this.supabase.from("player_game_stats").delete().eq("game_id", id);
-          await this.supabase.from("games").delete().eq("id", id);
-          await DataStore.init(teamId, true);
-          this._renderGamesList(container, teamId);
-        }
-      });
     });
   }
 
@@ -410,7 +440,7 @@ export class GameLiveEditorView {
     const startersMarkup = this.players.map(p => {
       const isSelected = starters.includes(p.id);
       return `
-        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" ${canEdit ? '' : 'disabled'} style="padding: 10px 12px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px;">
+        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" ${canEdit ? '' : 'disabled'} style="padding: 10px 12px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 12px; font-weight: 700; cursor: ${canEdit ? 'pointer' : 'not-allowed'}; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px;">
           <span>#${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</span>
           <span style="font-size: 10px; opacity: 0.8; font-weight: 600;">${p.primary_position || TranslationStore.t("player", "Jugador")}</span>
         </button>

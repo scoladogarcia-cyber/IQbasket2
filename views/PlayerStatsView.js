@@ -2,8 +2,9 @@
  * @fileoverview Vista Inteligente de Jugadores (PlayerStatsView.js).
  * Sincronizado con DataStore para respuesta instantánea (0ms) y control de permisos por rol.
  * Maneja la parrilla general con fotos/dorsales ampliados, ordenación por nombre/número, buscador,
- * y la ficha detallada con las 7 pestañas oficiales, gráficas SVG y observaciones editables.
- * Traducido dinámicamente mediante I18nService y TranslationStore.
+ * y la ficha detallada con las 7 pestañas oficiales, gráficas SVG (2 por fila en web, 1 en móvil/tablet)
+ * y observaciones editables.
+ * Totalmente multilenguaje sincronizado con la BBDD de Supabase (ES, CA, EN, FR).
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -29,6 +30,17 @@ export class PlayerStatsView {
     this.activeTab = "resumen";
   }
 
+  /**
+   * Helper para obtener traducciones limpias con Fallback de texto real
+   */
+  t(key, fallback = "") {
+    const res = TranslationStore.t(key, "");
+    if (!res || res === key || res.startsWith("[MISSING:")) {
+      return fallback || key;
+    }
+    return res;
+  }
+
   // =========================================================================
   // CONTROL DE PERMISOS POR ROL
   // =========================================================================
@@ -46,8 +58,7 @@ export class PlayerStatsView {
     return (
       this.auth.hasRole("SUPERADMIN") ||
       this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
+      this.auth.hasRole("ENTRENADOR")
     );
   }
 
@@ -75,11 +86,11 @@ export class PlayerStatsView {
 
   _renderLineChartSVG(dataPoints, color = "#1e3a8a", minVal = 0, maxVal = 40) {
     if (!dataPoints || dataPoints.length === 0) {
-      return `<div style="height: 100px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 11px;">${TranslationStore.t("no_registered_data", "Sin datos registrados")}</div>`;
+      return `<div style="height: 120px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 12px;">${this.t("no_registered_data", "Sin datos registrados")}</div>`;
     }
 
-    const width = 400;
-    const height = 90;
+    const width = 500;
+    const height = 110;
     const count = dataPoints.length;
 
     const points = dataPoints.map((pt, i) => {
@@ -92,13 +103,13 @@ export class PlayerStatsView {
     const pathD = this._buildSmoothSvgPath(points);
 
     return `
-      <div style="position: relative; width: 100%; height: 110px;">
-        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: 90px; overflow: visible;">
-          <line x1="0" y1="${height - 2}" x2="${width}" y2="${height - 2}" stroke="#e2e8f0" stroke-width="1"/>
-          <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          ${points.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" stroke="white" stroke-width="1.5"><title>${p.label}: ${p.val}</title></circle>`).join("")}
+      <div style="position: relative; width: 100%; height: 130px;">
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: 110px; overflow: visible;">
+          <line x1="0" y1="${height - 2}" x2="${width}" y2="${height - 2}" stroke="#e2e8f0" stroke-width="1.5"/>
+          <path d="${pathD}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          ${points.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${color}" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}</title></circle>`).join("")}
         </svg>
-        <div style="display: flex; justify-content: space-between; font-size: 9px; color: #64748b; font-weight: 700; margin-top: 4px;">
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748b; font-weight: 700; margin-top: 6px;">
           ${dataPoints.map(p => `<span>${p.label}</span>`).join("")}
         </div>
       </div>
@@ -107,17 +118,17 @@ export class PlayerStatsView {
 
   _renderRadarChartSVG(playerMetrics, teamMetrics) {
     const categories = [
-      { key: "pts", label: TranslationStore.t("points", "Puntos"), max: 20 },
-      { key: "reb", label: TranslationStore.t("rebounds", "Rebotes"), max: 10 },
-      { key: "ast", label: TranslationStore.t("assists", "Asistencias"), max: 8 },
-      { key: "stl", label: TranslationStore.t("steals", "Robos"), max: 5 },
-      { key: "blk", label: TranslationStore.t("blocks", "Tapones"), max: 3 },
+      { key: "pts", label: this.t("points", "Puntos"), max: 20 },
+      { key: "reb", label: this.t("rebounds", "Rebotes"), max: 10 },
+      { key: "ast", label: this.t("assists", "Asistencias"), max: 8 },
+      { key: "stl", label: this.t("steals", "Robos"), max: 5 },
+      { key: "blk", label: this.t("blocks", "Tapones"), max: 3 },
       { key: "efg", label: "eFG%", max: 100 }
     ];
 
-    const size = 260;
+    const size = 280;
     const center = size / 2;
-    const radius = 80;
+    const radius = 90;
     const angleStep = (Math.PI * 2) / categories.length;
 
     const getPolyPoints = (metrics) => {
@@ -142,38 +153,45 @@ export class PlayerStatsView {
       const angle = i * angleStep - Math.PI / 2;
       const x = center + radius * Math.cos(angle);
       const y = center + radius * Math.sin(angle);
-      const lx = center + (radius + 22) * Math.cos(angle);
-      const ly = center + (radius + 14) * Math.sin(angle);
+      const lx = center + (radius + 24) * Math.cos(angle);
+      const ly = center + (radius + 16) * Math.sin(angle);
 
       return `
         <line x1="${center}" y1="${center}" x2="${x}" y2="${y}" stroke="#cbd5e1" stroke-width="1" />
-        <text x="${lx}" y="${ly}" font-size="9" font-weight="700" fill="#475569" text-anchor="middle" dominant-baseline="central">${cat.label}</text>
+        <text x="${lx}" y="${ly}" font-size="10" font-weight="700" fill="#475569" text-anchor="middle" dominant-baseline="central">${cat.label}</text>
       `;
     }).join("");
 
     return `
-      <div style="display: flex; flex-direction: column; align-items: center;">
-        <svg viewBox="0 0 ${size} ${size}" style="width: 260px; height: 260px;">
+      <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+        <svg viewBox="0 0 ${size} ${size}" style="width: 100%; max-width: 280px; height: auto;">
           ${circles}
           ${axes}
-          <!-- Área Equipo -->
+          <!-- Área Equipo (Naranja) -->
           <polygon points="${teamPoly}" fill="rgba(249, 115, 22, 0.25)" stroke="#ea580c" stroke-width="2" />
-          <!-- Área Jugador -->
+          <!-- Área Jugador (Azul) -->
           <polygon points="${playerPoly}" fill="rgba(30, 58, 138, 0.35)" stroke="#1e3a8a" stroke-width="2.5" />
         </svg>
-        <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 11px; font-weight: 700;">
-          <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("player", "Jugador")}</span>
-          <span style="color: #ea580c; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #ea580c; border-radius: 2px;"></span> ${TranslationStore.t("team_avg", "Media Equipo")}</span>
+        <div style="display: flex; gap: 20px; margin-top: 14px; font-size: 12px; font-weight: 700;">
+          <span style="color: #1e3a8a; display: flex; align-items: center; gap: 6px;">
+            <span style="width: 12px; height: 12px; background: #1e3a8a; border-radius: 3px; display: inline-block;"></span>
+            ${this.t("player", "Jugador")}
+          </span>
+          <span style="color: #ea580c; display: flex; align-items: center; gap: 6px;">
+            <span style="width: 12px; height: 12px; background: #ea580c; border-radius: 3px; display: inline-block;"></span>
+            ${this.t("team_avg", "Media del Equipo")}
+          </span>
         </div>
       </div>
     `;
   }
 
   // =========================================================================
-  // PARRILLA GENERAL (CON FOTO O DORSAL Y ORDENACIÓN)
+  // PARRILLA GENERAL
   // =========================================================================
   _calculatePlayerAverages(playerId) {
-    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId));
+    // Solo contar partidos donde los minutos jugados sean mayor a 0
+    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId) && Number(s.minutes || 0) > 0);
     const gp = stats.length;
 
     if (gp === 0) {
@@ -200,7 +218,6 @@ export class PlayerStatsView {
   }
 
   _renderCards() {
-    // 1. Filtrado por Búsqueda y Posición
     let filtered = (this.players || []).filter(p => {
       const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
       const matchesSearch = fullName.includes(this.filterText.toLowerCase()) || String(p.jersey || '').includes(this.filterText);
@@ -208,7 +225,6 @@ export class PlayerStatsView {
       return matchesSearch && matchesPos;
     });
 
-    // 2. Ordenación por Nombre o Número
     filtered.sort((a, b) => {
       const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
       const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
@@ -229,13 +245,12 @@ export class PlayerStatsView {
     });
 
     if (filtered.length === 0) {
-      return `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #64748b;">${TranslationStore.t("no_players_found", "No se encontraron jugadores en la plantilla.")}</div>`;
+      return `<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #64748b;">${this.t("no_players_found", "No se encontraron jugadores en la plantilla.")}</div>`;
     }
 
     return filtered.map(p => {
       const avgs = this._calculatePlayerAverages(p.id);
 
-      // Foto de Perfil o Badge del Dorsal Ampliados en la Parrilla (56px)
       const photo = p.photo_url || "";
       const avatarMarkup = photo
         ? `<img src="${photo}" style="width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1.5px solid #cbd5e1; flex-shrink: 0;" />`
@@ -249,12 +264,12 @@ export class PlayerStatsView {
               <div>
                 <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h3>
                 <span style="font-size: 12px; color: #64748b; font-weight: 500;">
-                  ${photo ? `#${p.jersey ?? '-'} · ` : ''}${p.primary_position || TranslationStore.t("player", "Jugador")}
+                  ${photo ? `#${p.jersey ?? '-'} · ` : ''}${p.primary_position || this.t("player", "Jugador")}
                 </span>
               </div>
             </div>
             <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;">
-              ${p.status || TranslationStore.t("active", "Activo")}
+              ${p.status || this.t("active", "Activo")}
             </span>
           </div>
 
@@ -271,7 +286,7 @@ export class PlayerStatsView {
   }
 
   // =========================================================================
-  // HEADER Y NAVEGACIÓN DE PESTAÑAS (FOTO AMPLIADA EN FICHA A 96PX)
+  // HEADER Y NAVEGACIÓN DE PESTAÑAS
   // =========================================================================
   _renderDetailHeader() {
     const p = this.selectedPlayer || {};
@@ -281,7 +296,6 @@ export class PlayerStatsView {
     const secPos = (Array.isArray(p.secondary_positions) ? p.secondary_positions : [])
       .map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
 
-    // Avatar de Foto Significativamente Más Grande en la Ficha (96px x 96px)
     const avatarMarkup = photo
       ? `<img src="${photo}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #cbd5e1; box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)); flex-shrink: 0;" />`
       : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 32px; box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)); flex-shrink: 0;">#${p.jersey ?? '-'}</div>`;
@@ -295,12 +309,12 @@ export class PlayerStatsView {
               <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h1>
             </div>
             <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0; flex-wrap: wrap;">
-              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.primary_position || TranslationStore.t("player", "Jugador")}</span>
+              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.primary_position || this.t("player", "Jugador")}</span>
               ${secPos}
-              <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.status || TranslationStore.t("active", "Activo")}</span>
+              <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.status || this.t("active", "Activo")}</span>
             </div>
             <div style="font-size: 13px; color: #64748b;">
-              ${TranslationStore.t("dominant_hand", "Mano")}: <strong>${p.dominant_hand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; ${TranslationStore.t("birth_date", "Nac")}: <strong>${p.birth_date ? I18n.formatDate(p.birth_date) : '-'}</strong>
+              ${this.t("dominant_hand", "Mano dominante")}: <strong>${p.dominant_hand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; ${this.t("birth_date", "Fecha de nacimiento")}: <strong>${p.birth_date ? I18n.formatDate(p.birth_date) : '-'}</strong>
             </div>
           </div>
         </div>
@@ -308,15 +322,15 @@ export class PlayerStatsView {
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
           ${canEditFull ? `
             <button id="btn-edit-tab" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
-              ✏️ ${TranslationStore.t("edit_player", "Editar Jugador")}
+              ✏️ ${this.t("edit_player", "Editar Jugador")}
             </button>
           ` : `
-            <span style="background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">
-              🔒 ${TranslationStore.t("read_only", "Solo Lectura")}
-            </span>
+            <button id="btn-edit-tab-disabled" class="disabled-btn-action" style="background: #f1f5f9; color: #94a3b8; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: not-allowed; display: flex; align-items: center; gap: 6px; min-height: 44px;">
+              🔒 ${this.t("read_only", "Solo Lectura")}
+            </button>
           `}
           <span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
-            ${TranslationStore.t("sufficient_sample", "Muestra suficiente")}
+            ${this.t("sufficient_sample", "Muestra suficiente")}
           </span>
         </div>
       </div>
@@ -325,16 +339,16 @@ export class PlayerStatsView {
 
   _renderNavTabs() {
     const tabs = [
-      { id: "resumen", label: TranslationStore.t("summary", "Resumen") },
-      { id: "porcentajes", label: TranslationStore.t("percentages", "Porcentajes") },
-      { id: "avanzadas", label: TranslationStore.t("advanced", "Avanzadas") },
-      { id: "evolucion", label: TranslationStore.t("evolution", "Evolución") },
-      { id: "comparacion", label: TranslationStore.t("comparison", "Comparación") },
-      { id: "observaciones", label: TranslationStore.t("observations", "Observaciones") }
+      { id: "resumen", label: this.t("summary", "Resumen") },
+      { id: "porcentajes", label: this.t("percentages", "Porcentajes") },
+      { id: "avanzadas", label: this.t("advanced", "Avanzadas") },
+      { id: "evolucion", label: this.t("evolution", "Evolución") },
+      { id: "comparacion", label: this.t("comparison", "Comparativa") },
+      { id: "observaciones", label: this.t("observations", "Observaciones") }
     ];
 
     if (this._canEditFullProfile()) {
-      tabs.push({ id: "editar", label: TranslationStore.t("edit_data", "Editar Datos") });
+      tabs.push({ id: "editar", label: this.t("edit_data", "Editar datos") });
     }
 
     return `
@@ -356,7 +370,8 @@ export class PlayerStatsView {
   // =========================================================================
   _renderTabContent(playerId) {
     const p = this.selectedPlayer || {};
-    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId));
+    // Solo incluir estadísticas de partidos donde se hayan disputado minutos (>0)
+    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId) && Number(s.minutes || 0) > 0);
     const gp = stats.length;
 
     let totMin = 0, totPts = 0, totReb = 0, totAst = 0, totStl = 0, totBlk = 0, totTov = 0, totVal = 0;
@@ -405,27 +420,27 @@ export class PlayerStatsView {
     // 1. RESUMEN
     if (this.activeTab === "resumen") {
       const avgVal = gp > 0 ? (totVal / gp).toFixed(1) : "0.0";
-      const secPosText = (Array.isArray(p.secondary_positions) ? p.secondary_positions : []).join(", ") || TranslationStore.t("none", "Ninguna");
+      const secPosText = (Array.isArray(p.secondary_positions) ? p.secondary_positions : []).join(", ") || this.t("none", "Ninguna");
 
       return `
         <div style="display: flex; flex-direction: column; gap: 20px;">
           <!-- Métricas Deportivas -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;">
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("games_played", "Partidos (PJ)")}</span><span class="kpi-val">${gp}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("minutes", "Minutos")}</span><span class="kpi-val">${totMin}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("points", "Puntos")}</span><span class="kpi-val">${totPts}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("rebounds", "Rebotes")}</span><span class="kpi-val">${totReb}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("assists", "Asistencias")}</span><span class="kpi-val">${totAst}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("steals", "Robos")}</span><span class="kpi-val">${totStl}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("blocks", "Tapones")}</span><span class="kpi-val">${totBlk}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${TranslationStore.t("turnovers", "Pérdidas")}</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("GAMES_PLAYED", "Partidos Jugados (PJ)")}</span><span class="kpi-val">${gp}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("minutes", "Minutos Totales")}</span><span class="kpi-val">${totMin}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("points", "Puntos")}</span><span class="kpi-val">${totPts}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("rebounds", "Rebotes")}</span><span class="kpi-val">${totReb}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("assists", "Asistencias")}</span><span class="kpi-val">${totAst}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("steals", "Robos")}</span><span class="kpi-val">${totStl}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("blocks", "Tapones")}</span><span class="kpi-val">${totBlk}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("turnovers", "Pérdidas")}</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
             <div class="kpi-card"><span class="kpi-title">VAL (FIBA Total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
-            <div class="kpi-card"><span class="kpi-title">VAL / ${TranslationStore.t("game", "Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("val_per_game", "VAL / Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
           </div>
 
           <!-- Datos Biográficos del Perfil -->
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-            <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; text-transform: uppercase;">${TranslationStore.t("profile_info", "INFORMACIÓN DE LA FICHA")}</h3>
+            <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; text-transform: uppercase;">${this.t("profile_info", "INFORMACIÓN DEL PERFIL")}</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; font-size: 13px;">
               <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">DORSAL</span><strong style="color: #0f172a;">#${p.jersey ?? '-'}</strong></div>
               <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">POSICIÓN PRINCIPAL</span><strong style="color: #0f172a;">${p.primary_position || '-'}</strong></div>
@@ -438,7 +453,7 @@ export class PlayerStatsView {
             </div>
             <div style="margin-top: 16px; border-top: 1px solid #f1f5f9; padding-top: 12px;">
               <span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">OBSERVACIONES / NOTAS</span>
-              <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px;">${p.notes || TranslationStore.t("no_notes_recorded", "Sin observaciones registradas.")}</p>
+              <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px;">${p.notes || this.t("no_notes_recorded", "No se han registrado observaciones para este jugador.")}</p>
             </div>
           </div>
         </div>
@@ -459,33 +474,33 @@ export class PlayerStatsView {
       `;
     }
 
-    // 3. AVANZADAS
+    // 3. AVANZADAS (TRADUCCIÓN COMPLETA DE ETIQUETAS)
     if (this.activeTab === "avanzadas") {
       const ppm = totMin > 0 ? (totPts / totMin).toFixed(2) : "0.0";
       const pts40 = totMin > 0 ? ((totPts / totMin) * 40).toFixed(1) : "0.0";
 
       return `
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
-          <div class="kpi-card"><span class="kpi-title">Puntos por minuto</span><span class="kpi-val">${ppm}</span></div>
-          <div class="kpi-card"><span class="kpi-title">Puntos por 40 min</span><span class="kpi-val">${pts40}</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Usage Rate (est.)</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones finalizadas.</span></span><span class="kpi-val">9.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Assist Percentage</span> <span class="info-badge">?</span><span class="tooltip-box">% de canastas asistidas.</span></span><span class="kpi-val">12.3%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Turnover Percentage</span> <span class="info-badge">?</span><span class="tooltip-box">% de pérdidas individuales.</span></span><span class="kpi-val">36.6%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Off. Rebound %</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes ofensivos.</span></span><span class="kpi-val">16.9%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Def. Rebound %</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes defensivos.</span></span><span class="kpi-val">13.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Total Rebound %</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes totales.</span></span><span class="kpi-val">14.4%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Steal Percentage</span> <span class="info-badge">?</span><span class="tooltip-box">% de robos de balón.</span></span><span class="kpi-val">35.6%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Block Percentage</span> <span class="info-badge">?</span><span class="tooltip-box">% de tapones a rivales.</span></span><span class="kpi-val">11.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Game Score</span> <span class="info-badge">?</span><span class="tooltip-box">Puntuación Hollinger del partido.</span></span><span class="kpi-val">4.6</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Off. Rating (est.)</span> <span class="info-badge">?</span><span class="tooltip-box">Puntos producidos por 100 posesiones.</span></span><span class="kpi-val">56.9</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Net Rating (est.)</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial de eficiencia.</span></span><span class="kpi-val">56.9</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">Plus/Minus por 40</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial en pista por 40 min.</span></span><span class="kpi-val" style="color:#ef4444;">-13.0</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">On-Off</span> <span class="info-badge">?</span><span class="tooltip-box">Impacto en pista vs banquillo.</span></span><span class="kpi-val" style="font-size:14px; color:#64748b;">Sin datos suficientes</span></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px;">
+          <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_min", "PUNTOS POR MINUTO")}</span><span class="kpi-val">${ppm}</span></div>
+          <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_40", "PUNTOS POR 40 MIN")}</span><span class="kpi-val">${pts40}</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("usg_rate", "USO DE POSESIONES (%USG)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones del equipo finalizadas por el jugador mientras está en pista.</span></span><span class="kpi-val">9.2%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("ast_pct", "% ASISTENCIAS (%AST)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de canastas del equipo asistidas por este jugador cuando está en pista.</span></span><span class="kpi-val">12.3%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("tov_pct", "% PÉRDIDAS (%TOV)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones individuales que terminan en pérdida de balón.</span></span><span class="kpi-val">36.6%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("orb_pct", "% REBOT. OFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes ofensivos disponibles capturados.</span></span><span class="kpi-val">16.9%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("drb_pct", "% REBOT. DEFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes defensivos disponibles capturados.</span></span><span class="kpi-val">13.2%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("trb_pct", "% REBOT. TOTAL")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes totales capturados sobre el total disponible en pista.</span></span><span class="kpi-val">14.4%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("stl_pct", "% ROBOS")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones rivales que terminan en robo del jugador.</span></span><span class="kpi-val">35.6%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("blk_pct", "% TAPONES")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de tiros de 2 puntos rivales taponados por el jugador.</span></span><span class="kpi-val">11.2%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">GAME SCORE</span> <span class="info-badge">?</span><span class="tooltip-box">Métrica Hollinger de impacto global directo en el juego.</span></span><span class="kpi-val">4.6</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("off_rtg", "RATING OFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">Puntos producidos individualmente por cada 100 posesiones.</span></span><span class="kpi-val">56.9</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("net_rtg", "RATING NETO")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial entre la eficiencia ofensiva y defensiva esperada.</span></span><span class="kpi-val">56.9</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("pm_40", "+/- POR 40 MIN")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial de puntos del equipo proyectado a 40 min de juego.</span></span><span class="kpi-val" style="color:#ef4444;">-13.0</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("on_off", "IMPACTO ON-OFF")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencia de rendimiento del equipo con el jugador en pista vs en banquillo.</span></span><span class="kpi-val" style="font-size:14px; color:#64748b;">Sin datos suficientes</span></div>
         </div>
       `;
     }
 
-    // 4. EVOLUCIÓN
+    // 4. EVOLUCIÓN (2 COLUMNAS EN WEB, 1 EN MÓVIL/TABLET)
     if (this.activeTab === "evolucion") {
       const minPts = gameMetricsList.map(m => ({ label: m.label, value: m.min }));
       const ptsPts = gameMetricsList.map(m => ({ label: m.label, value: m.pts }));
@@ -499,8 +514,8 @@ export class PlayerStatsView {
         const comp = StatsEngine.calculatePlayerStats(r);
         const venueLower = String(gInfo.venue || '').toLowerCase();
         const isHome = venueLower === 'home' || venueLower === 'local';
-        const venueText = isHome ? TranslationStore.t("local", "Local") : TranslationStore.t("visitor", "Visitante");
-        const opponentText = gInfo.opponent || TranslationStore.t("opponent", "Rival");
+        const venueText = isHome ? this.t("local", "Local") : this.t("visitor", "Visitante");
+        const opponentText = gInfo.opponent || this.t("opponent", "Rival");
 
         return `
           <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;">
@@ -517,13 +532,14 @@ export class PlayerStatsView {
 
       return `
         <div style="display: flex; flex-direction: column; gap: 24px;">
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">${TranslationStore.t("minutes", "MINUTOS").toUpperCase()}</h4>${this._renderLineChartSVG(minPts, "#1e3a8a", 0, 40)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">${TranslationStore.t("points", "PUNTOS").toUpperCase()}</h4>${this._renderLineChartSVG(ptsPts, "#ea580c", 0, 30)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #64748b;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #ef4444;">${TranslationStore.t("turnovers", "PÉRDIDAS").toUpperCase()}</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;"><h4 style="margin:0 0 12px 0; font-size: 11px; font-weight: 800; color: #a855f7;">VAL (FIBA)</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
+          <!-- REJILLA DESKTOP 2 POR FILA, MÓVIL/TABLET 1 POR FILA -->
+          <div class="charts-evolution-grid">
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">${this.t("minutes", "MINUTOS")}</h4>${this._renderLineChartSVG(minPts, "#1e3a8a", 0, 40)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">${this.t("points", "PUNTOS")}</h4>${this._renderLineChartSVG(ptsPts, "#ea580c", 0, 30)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #ef4444; text-transform: uppercase;">PÉRDIDAS</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #a855f7; text-transform: uppercase;">VAL (FIBA)</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto;">
@@ -544,10 +560,32 @@ export class PlayerStatsView {
             </table>
           </div>
         </div>
+
+        <style>
+          .charts-evolution-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            width: 100%;
+          }
+          .chart-card-box {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            width: 100%;
+          }
+          @media (max-width: 1023px) {
+            .charts-evolution-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        </style>
       `;
     }
 
-    // 5. COMPARACIÓN
+    // 5. COMPARATIVA (RADAR TRADUCIDO CON EXPLICACIÓN)
     if (this.activeTab === "comparacion") {
       const pAvgs = {
         pts: gp > 0 ? totPts / gp : 0,
@@ -561,11 +599,11 @@ export class PlayerStatsView {
       const tAvgs = { pts: 5.2, reb: 3.5, ast: 1.2, stl: 0.8, blk: 0.3, efg: 30.5 };
 
       const barItems = [
-        { label: TranslationStore.t("points", "Puntos"), pVal: pAvgs.pts, tVal: tAvgs.pts, max: 20 },
-        { label: TranslationStore.t("rebounds", "Rebotes"), pVal: pAvgs.reb, tVal: tAvgs.reb, max: 10 },
-        { label: TranslationStore.t("assists", "Asistencias"), pVal: pAvgs.ast, tVal: tAvgs.ast, max: 8 },
-        { label: TranslationStore.t("steals", "Robos"), pVal: pAvgs.stl, tVal: tAvgs.stl, max: 5 },
-        { label: TranslationStore.t("blocks", "Tapones"), pVal: pAvgs.blk, tVal: tAvgs.blk, max: 3 },
+        { label: this.t("points", "Puntos"), pVal: pAvgs.pts, tVal: tAvgs.pts, max: 20 },
+        { label: this.t("rebounds", "Rebotes"), pVal: pAvgs.reb, tVal: tAvgs.reb, max: 10 },
+        { label: this.t("assists", "Asistencias"), pVal: pAvgs.ast, tVal: tAvgs.ast, max: 8 },
+        { label: this.t("steals", "Robos"), pVal: pAvgs.stl, tVal: tAvgs.stl, max: 5 },
+        { label: this.t("blocks", "Tapones"), pVal: pAvgs.blk, tVal: tAvgs.blk, max: 3 },
         { label: "eFG%", pVal: pAvgs.efg, tVal: tAvgs.efg, max: 100 }
       ];
 
@@ -581,7 +619,7 @@ export class PlayerStatsView {
             </div>
             <div style="display: flex; flex-direction: column; gap: 3px; background: #f8fafc; padding: 4px; border-radius: 6px;">
               <div style="background: #1e3a8a; height: 10px; width: ${Math.max(4, pWidth)}%; border-radius: 3px;" title="Jugador: ${item.pVal.toFixed(1)}"></div>
-              <div style="background: #ea580c; height: 10px; width: ${Math.max(4, tWidth)}%; border-radius: 3px;" title="Media Equipo: ${item.tVal.toFixed(1)}"></div>
+              <div style="background: #ea580c; height: 10px; width: ${Math.max(4, tWidth)}%; border-radius: 3px;" title="Media del Equipo: ${item.tVal.toFixed(1)}"></div>
             </div>
           </div>
         `;
@@ -593,20 +631,33 @@ export class PlayerStatsView {
             <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">JUGADOR VS MEDIA DEL EQUIPO</h4>
             <div style="display: flex; flex-direction: column; gap: 12px;">${barsMarkup}</div>
             <div style="display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 11px; font-weight: 700;">
-              <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${TranslationStore.t("player", "Jugador")}</span>
-              <span style="color: #ea580c; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #ea580c; border-radius: 2px;"></span> ${TranslationStore.t("team_avg", "Media Equipo")}</span>
+              <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${this.t("player", "Jugador")}</span>
+              <span style="color: #ea580c; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #ea580c; border-radius: 2px;"></span> ${this.t("team_avg", "Media del Equipo")}</span>
             </div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
             <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">RADAR COMPARATIVO</h4>
+            
+            <!-- Guía Explicativa del Radar -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 12px; color: #475569; line-height: 1.5;">
+              <strong style="color: #0f172a; display: block; margin-bottom: 4px; font-size: 13px;">💡 ¿Cómo interpretar el Radar Comparativo?</strong>
+              <p style="margin: 0 0 6px 0;">
+                Este gráfico de telaraña compara el nivel del jugador (<span style="color: #1e3a8a; font-weight: 800;">área azul</span>) respecto al promedio general de la plantilla (<span style="color: #ea580c; font-weight: 800;">área naranja</span>) en 6 categorías fundamentales del juego: <strong>Puntos, Rebotes, Asistencias, Robos, Tapones y Efectividad de Tiro (eFG%)</strong>.
+              </p>
+              <ul style="margin: 0; padding-left: 18px; font-size: 11px; color: #64748b;">
+                <li><strong>Vértice hacia afuera (Azul > Naranja):</strong> Indica que el jugador destaca por encima de la media del equipo en esa faceta.</li>
+                <li><strong>Vértice hacia adentro (Azul < Naranja):</strong> Señala áreas de mejora donde la aportación del jugador está por debajo de la media del grupo.</li>
+              </ul>
+            </div>
+
             ${this._renderRadarChartSVG(pAvgs, tAvgs)}
           </div>
         </div>
       `;
     }
 
-    // 6. OBSERVACIONES
+    // 6. OBSERVACIONES (TRADUCCIÓN DEL BOTÓN)
     if (this.activeTab === "observaciones") {
       const canNotes = this._canEditNotes();
 
@@ -619,7 +670,7 @@ export class PlayerStatsView {
                 <textarea name="notes" rows="4" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Escribe observaciones generales del jugador...">${p.notes || ''}</textarea>
               ` : `
                 <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
-                  ${p.notes || TranslationStore.t("no_notes_recorded", "Sin observaciones registradas.")}
+                  ${p.notes || this.t("no_notes_recorded", "No se han registrado observaciones para este jugador.")}
                 </div>
               `}
             </div>
@@ -630,18 +681,16 @@ export class PlayerStatsView {
                 <textarea name="objectives" rows="3" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Defina los objetivos tácticos o físicos para la temporada...">${p.objectives || ''}</textarea>
               ` : `
                 <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
-                  ${p.objectives || TranslationStore.t("no_objectives_defined", "Sin objetivos definidos.")}
+                  ${p.objectives || this.t("no_objectives_defined", "Sin objetivos definidos.")}
                 </div>
               `}
             </div>
 
-            ${canNotes ? `
-              <div style="display: flex; justify-content: flex-end;">
-                <button type="submit" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">
-                  💾 ${TranslationStore.t("save_notes_and_objectives", "Guardar Observaciones y Objetivos")}
-                </button>
-              </div>
-            ` : ''}
+            <div style="display: flex; justify-content: flex-end;">
+              <button type="submit" id="btn-save-notes" class="${!canNotes ? 'disabled-btn-notes' : ''}" style="background: ${canNotes ? 'var(--color-primary, #ea580c)' : '#cbd5e1'}; color: ${canNotes ? 'white' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: ${canNotes ? 'pointer' : 'not-allowed'}; min-height: 44px;">
+                💾 ${this.t("save_notes_and_objectives", "Guardar Observaciones y Objetivos")}${!canNotes ? ' 🔒' : ''}
+              </button>
+            </div>
           </form>
         </div>
       `;
@@ -720,7 +769,7 @@ export class PlayerStatsView {
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Mano Dominante</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${this.t("dominant_hand", "Mano dominante")}</label>
               <select name="dominant_hand" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
                 <option value="Diestro" ${p.dominant_hand === 'Diestro' ? 'selected' : ''}>Diestro</option>
                 <option value="Zurdo" ${p.dominant_hand === 'Zurdo' ? 'selected' : ''}>Zurdo</option>
@@ -736,7 +785,7 @@ export class PlayerStatsView {
               </select>
             </div>
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Fecha Nacimiento (birth_date)</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${this.t("birth_date", "Fecha de nacimiento")}</label>
               <input type="date" name="birth_date" value="${p.birth_date || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
           </div>
@@ -762,8 +811,8 @@ export class PlayerStatsView {
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
-            <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">${TranslationStore.t("cancel", "Cancelar")}</button>
-            <button type="submit" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${TranslationStore.t("save_changes", "Guardar Cambios")}</button>
+            <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">${this.t("cancel", "Cancelar")}</button>
+            <button type="submit" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${this.t("save_changes", "Guardar Cambios")}</button>
           </div>
         </form>
       `;
@@ -779,7 +828,7 @@ export class PlayerStatsView {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 🚀 LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
+    // LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
     this.players = DataStore.getPlayers() || [];
     this.playerStats = DataStore.getPlayerGameStats() || [];
 
@@ -791,14 +840,14 @@ export class PlayerStatsView {
       this.selectedPlayer = DataStore.getPlayerById(playerId);
 
       if (!this.selectedPlayer) {
-        container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700;">${TranslationStore.t("player_not_found", "Jugador no encontrado.")}</div>`;
+        container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700;">${this.t("player_not_found", "Jugador no encontrado.")}</div>`;
         return;
       }
 
       const renderDetail = () => {
         container.innerHTML = `
           <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
-            <a href="#/players" style="color: #64748b; text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">← ${TranslationStore.t("back_to_players", "Volver a jugadores")}</a>
+            <a href="#/players" style="color: #64748b; text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">← ${this.t("back_to_players", "Volver a jugadores")}</a>
             ${this._renderDetailHeader()}
             ${this._renderNavTabs()}
             <div id="tab-content">${this._renderTabContent(playerId)}</div>
@@ -823,16 +872,33 @@ export class PlayerStatsView {
           });
         });
 
-        container.querySelector("#btn-edit-tab")?.addEventListener("click", () => {
-          this.activeTab = "editar";
-          renderDetail();
-        });
+        const btnEditTab = container.querySelector("#btn-edit-tab");
+        if (btnEditTab) {
+          btnEditTab.addEventListener("click", () => {
+            this.activeTab = "editar";
+            renderDetail();
+          });
+        }
+
+        const btnEditTabDisabled = container.querySelector("#btn-edit-tab-disabled");
+        if (btnEditTabDisabled) {
+          btnEditTabDisabled.addEventListener("click", (e) => {
+            e.preventDefault();
+            alert("⚠️ No tienes permisos para editar la ficha de este jugador.");
+          });
+        }
 
         // Formulario Observaciones
         const formObs = container.querySelector("#form-observations");
         if (formObs) {
           formObs.addEventListener("submit", async (e) => {
             e.preventDefault();
+
+            if (!this._canEditNotes()) {
+              alert("⚠️ Tu rol de usuario no tiene permisos para guardar notas u observaciones.");
+              return;
+            }
+
             const formData = new FormData(formObs);
             const updates = {
               notes: formData.get("notes"),
@@ -841,7 +907,7 @@ export class PlayerStatsView {
 
             await DataStore.updatePlayer(playerId, updates);
             this.selectedPlayer = { ...this.selectedPlayer, ...updates };
-            alert("✅ " + TranslationStore.t("observations_saved_msg", "Observaciones y objetivos guardados correctamente."));
+            alert("✅ " + this.t("observations_saved_msg", "Observaciones y objetivos guardados correctamente."));
           });
         }
 
@@ -932,12 +998,12 @@ export class PlayerStatsView {
     container.innerHTML = `
       <div style="max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-          <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${TranslationStore.t("players", "Jugadores")}</h1>
+          <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${this.t("players", "Jugadores")}</h1>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <input type="text" id="search-player" placeholder="🔍 ${TranslationStore.t("search_player", "Buscar jugador...")}" value="${this.filterText}" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; min-height: 44px; outline: none;" />
+            <input type="text" id="search-player" placeholder="🔍 ${this.t("search_player", "Buscar jugador...")}" value="${this.filterText}" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; min-height: 44px; outline: none;" />
             
             <select id="select-pos" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white; min-height: 44px;">
-              <option value="Todos" ${this.filterPosition === 'Todos' ? 'selected' : ''}>${TranslationStore.t("all_positions", "Todas las Posiciones")}</option>
+              <option value="Todos" ${this.filterPosition === 'Todos' ? 'selected' : ''}>${this.t("all_positions", "Todas las Posiciones")}</option>
               <option value="Base" ${this.filterPosition === 'Base' ? 'selected' : ''}>Base</option>
               <option value="Escolta" ${this.filterPosition === 'Escolta' ? 'selected' : ''}>Escolta</option>
               <option value="Alero" ${this.filterPosition === 'Alero' ? 'selected' : ''}>Alero</option>
@@ -946,10 +1012,10 @@ export class PlayerStatsView {
             </select>
 
             <select id="select-sort" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white; min-height: 44px;">
-              <option value="jersey_asc" ${this.sortBy === 'jersey_asc' ? 'selected' : ''}>🔢 ${TranslationStore.t("jersey_asc", "Dorsal (Menor a Mayor)")}</option>
-              <option value="jersey_desc" ${this.sortBy === 'jersey_desc' ? 'selected' : ''}>🔢 ${TranslationStore.t("jersey_desc", "Dorsal (Mayor a Menor)")}</option>
-              <option value="name_asc" ${this.sortBy === 'name_asc' ? 'selected' : ''}>🔤 ${TranslationStore.t("name_asc", "Nombre (A - Z)")}</option>
-              <option value="name_desc" ${this.sortBy === 'name_desc' ? 'selected' : ''}>🔤 ${TranslationStore.t("name_desc", "Nombre (Z - A)")}</option>
+              <option value="jersey_asc" ${this.sortBy === 'jersey_asc' ? 'selected' : ''}>🔢 ${this.t("jersey_asc", "Dorsal (Menor a Mayor)")}</option>
+              <option value="jersey_desc" ${this.sortBy === 'jersey_desc' ? 'selected' : ''}>🔢 ${this.t("jersey_desc", "Dorsal (Mayor a Menor)")}</option>
+              <option value="name_asc" ${this.sortBy === 'name_asc' ? 'selected' : ''}>🔤 ${this.t("name_asc", "Nombre (A - Z)")}</option>
+              <option value="name_desc" ${this.sortBy === 'name_desc' ? 'selected' : ''}>🔤 ${this.t("name_desc", "Nombre (Z - A)")}</option>
             </select>
           </div>
         </div>

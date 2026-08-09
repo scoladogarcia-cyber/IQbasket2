@@ -1,13 +1,15 @@
 /**
- * @fileoverview Orquestador Principal de IQ Basket.
- * Sincronizado con Auth, Layout, Dashboard, TeamStats, GameLiveEditorView,
- * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
- * ReportsView, TranslationsView, AskAIView, ProfileView y DataStore.
- * 
- * Corrección de Pantalla de Carga:
- * - Evita mostrar las claves 'preload_title' y 'preload_subtitle' antes de descargar el diccionario.
- * - Soporta fallbacks inteligentes e inmediatos en el idioma activo guardado (ES, CA, EN, FR).
- * - Sustitución total de marca externa por 'Base de Datos IQB'.
+ * @fileoverview Orquestador Principal de IQ Basket (index.js).
+ * - Autenticación Nativa Estricta con Supabase Auth (supabase.auth.signInWithPassword / signUp).
+ * - Sincronizado con la tabla 'user_profiles' de la Base de Datos IQB.
+ * - Sincronización en tiempo real de cambio de idioma tanto en Desktop como en Header Móvil.
+ * - Guarda de seguridad de rutas para redirigir al Dashboard si un rol restringido (ej. JUGADOR) intenta acceder por hash a Comparador o Asistente IA.
+ * - Validación estricta de equipos autorizados por usuario para evitar cargas no permitidas.
+ * - Bloqueo absoluto de acceso ante contraseñas o correos no válidos.
+ * - Registro público asignando de forma permanente el rol INVITADO.
+ * - Preserva a scolado@nechigroup.com como SUPERADMIN.
+ * - Control global de cambios no guardados (window.hasUnsavedChanges).
+ * - Exposición de la instancia global (window.iqApp) para refrescos en tiempo real.
  */
 
 import { supabase } from "./config/database.config.js";
@@ -35,10 +37,12 @@ import { ProfileView } from "./views/ProfileView.js";
 export class IQBasketApp {
   constructor() {
     this.isAuthenticated = false;
+    this.userEmail = localStorage.getItem("iq_user_email") || "scolado@nechigroup.com";
     this.userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
     this.currentRoute = "dashboard";
     this.routeParams = {};
     this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    this.translationsLoaded = false;
 
     this.gameController = new GameController(
       null, 
@@ -125,13 +129,12 @@ export class IQBasketApp {
   }
 
   /**
-   * Muestra la pantalla de carga sin exponer claves desnudas tipo 'preload_title'
+   * Muestra la pantalla de carga sin exponer claves desnudas
    */
   showLoadingOverlay(messageKey = "preload_title") {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
-    // Intentar leer de TranslationStore o recurrir al mapa de idiomas guardado
     let title = TranslationStore.t(messageKey, "");
     if (!title || title === messageKey) {
       title = this._getPreloadFallbackTexts(messageKey);
@@ -154,46 +157,13 @@ export class IQBasketApp {
     `;
   }
 
+  /**
+   * Vincula eventos de la pantalla Auth (Login Nativo Estricto, Registro, Selector de Idioma, Pestañas)
+   */
   bindAuthEvents() {
-    const toggleBtn = document.getElementById("toggle-password-btn");
-    const passwordInput = document.getElementById("login-password");
-
-    if (toggleBtn && passwordInput) {
-      toggleBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const isPassword = passwordInput.type === "password";
-        passwordInput.type = isPassword ? "text" : "password";
-      });
-    }
-
-    const loginForm = document.getElementById("login-form");
-    if (loginForm) {
-      loginForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        this.isAuthenticated = true;
-        this.render();
-      });
-    }
-  }
-
-  bindLayoutEvents() {
-    const logoutBtn = document.getElementById("btn-logout");
-    if (logoutBtn && !logoutBtn.dataset.bound) {
-      logoutBtn.dataset.bound = "true";
-      logoutBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        this.isAuthenticated = false;
-        DataStore.isLoaded = false;
-        this.render();
-      });
-    }
-
-    // Selector de Idioma Global
-    const langSelect = document.getElementById("select-lang-toggle");
-    if (langSelect && !langSelect.dataset.bound) {
-      langSelect.dataset.bound = "true";
-      langSelect.addEventListener("change", async (e) => {
+    const authLangSelect = document.getElementById("auth-lang-toggle");
+    if (authLangSelect) {
+      authLangSelect.addEventListener("change", async (e) => {
         const lang = e.target.value;
 
         if (i18n && typeof i18n.changeLanguage === "function") {
@@ -205,19 +175,227 @@ export class IQBasketApp {
           localStorage.setItem("iq_lang", lang);
         }
 
-        this.showLoadingOverlay("changing_language");
-
         if (TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
           await TranslationStore.initAllTranslations();
         }
 
-        const appContainer = document.getElementById("app");
-        if (appContainer) appContainer.innerHTML = "";
         this.render();
       });
     }
 
-    // Selector Dinámico de Equipo Activo
+    document.querySelectorAll(".pwd-toggle-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetId = btn.getAttribute("data-target");
+        const input = document.getElementById(targetId);
+        if (input) {
+          const isPassword = input.type === "password";
+          input.type = isPassword ? "text" : "password";
+        }
+      });
+    });
+
+    const tabLogin = document.getElementById("tab-btn-login");
+    const tabRegister = document.getElementById("tab-btn-register");
+    const btnSwitchReg = document.getElementById("btn-switch-to-register");
+    const btnSwitchLog = document.getElementById("btn-switch-to-login");
+
+    if (tabLogin) tabLogin.addEventListener("click", () => { this.views.auth.activeTab = "login"; this.render(); });
+    if (tabRegister) tabRegister.addEventListener("click", () => { this.views.auth.activeTab = "register"; this.render(); });
+    if (btnSwitchReg) btnSwitchReg.addEventListener("click", () => { this.views.auth.activeTab = "register"; this.render(); });
+    if (btnSwitchLog) btnSwitchLog.addEventListener("click", () => { this.views.auth.activeTab = "login"; this.render(); });
+
+    const loginForm = document.getElementById("login-form");
+    if (loginForm) {
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const emailInput = document.getElementById("login-email")?.value.trim();
+        const passwordInput = document.getElementById("login-password")?.value;
+
+        if (!emailInput || !passwordInput) {
+          alert("⚠️ " + TranslationStore.t("fill_required_fields", "Por favor, completa el correo y la contraseña."));
+          return;
+        }
+
+        this.showLoadingOverlay("preload_title");
+
+        try {
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: emailInput,
+            password: passwordInput
+          });
+
+          if (authError || !authData?.user) {
+            this.isAuthenticated = false;
+            
+            const errorMsg = authError?.message.includes("Invalid login credentials")
+              ? "Credenciales incorrectas: Correo electrónico o contraseña no válidos."
+              : (authError?.message || "Error al autenticar usuario.");
+
+            const appContainer = document.getElementById("app");
+            if (appContainer) {
+              appContainer.innerHTML = this.views.auth.render({ errorMessage: errorMsg });
+              this.bindAuthEvents();
+            }
+            
+            alert(`❌ Error de acceso: ${errorMsg}`);
+            return;
+          }
+
+          const { data: profileData } = await supabase
+            .from("user_profiles")
+            .select("*")
+            .eq("email", emailInput)
+            .maybeSingle();
+
+          let roleToAssign = "INVITADO";
+          let firstName = emailInput.split("@")[0];
+          let lastName = "";
+
+          if (profileData && profileData.role) {
+            roleToAssign = String(profileData.role).toUpperCase();
+            firstName = profileData.first_name || firstName;
+            lastName = profileData.last_name || "";
+          } else if (emailInput.toLowerCase() === "scolado@nechigroup.com") {
+            roleToAssign = "SUPERADMIN";
+          }
+
+          localStorage.setItem("iq_user_email", emailInput);
+          localStorage.setItem("iq_user_role", roleToAssign);
+          localStorage.setItem("iq_user_name", firstName);
+          localStorage.setItem("iq_user_lastname", lastName);
+          localStorage.removeItem("iq_simulated_role");
+
+          this.userEmail = emailInput;
+          this.userRole = roleToAssign;
+          this.isAuthenticated = true;
+
+          await DataStore.init(this.teamId, true);
+          this.render();
+        } catch (err) {
+          console.error("Excepción en inicio de sesión:", err);
+          this.isAuthenticated = false;
+          alert("❌ Ocurrió un error inesperado al validar las credenciales.");
+          this.render();
+        }
+      });
+    }
+
+    const registerForm = document.getElementById("register-form");
+    if (registerForm) {
+      registerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const firstName = document.getElementById("reg-firstname")?.value.trim();
+        const lastName = document.getElementById("reg-lastname")?.value.trim();
+        const email = document.getElementById("reg-email")?.value.trim();
+        const password = document.getElementById("reg-password")?.value;
+        const assignedRole = "INVITADO";
+
+        if (!firstName || !lastName || !email || !password) {
+          alert("⚠️ " + TranslationStore.t("fill_required_fields", "Por favor, completa todos los campos obligatorios."));
+          return;
+        }
+
+        this.showLoadingOverlay("preload_title");
+
+        try {
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                role: assignedRole
+              }
+            }
+          });
+
+          if (authError) {
+            this.render();
+            alert(`❌ No se pudo completar el registro: ${authError.message}`);
+            return;
+          }
+
+          localStorage.setItem("iq_user_name", firstName);
+          localStorage.setItem("iq_user_lastname", lastName);
+          localStorage.setItem("iq_user_email", email);
+          localStorage.setItem("iq_user_role", assignedRole);
+          localStorage.removeItem("iq_simulated_role");
+
+          this.userEmail = email;
+          this.userRole = assignedRole;
+          this.isAuthenticated = true;
+
+          alert(`✅ ¡Bienvenido ${firstName}! Tu cuenta ha sido creada en la Base de Datos IQB con perfil INVITADO (Solo Lectura).`);
+
+          await DataStore.init(this.teamId, true);
+          this.render();
+        } catch (err) {
+          console.error("Excepción en registro:", err);
+          alert(`❌ Error durante el registro: ${err.message}`);
+          this.render();
+        }
+      });
+    }
+  }
+
+  bindLayoutEvents() {
+    const logoutBtn = document.getElementById("btn-logout");
+    if (logoutBtn && !logoutBtn.dataset.bound) {
+      logoutBtn.dataset.bound = "true";
+      logoutBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          await supabase.auth.signOut();
+        } catch (err) {
+          console.warn("Nota al cerrar sesión en Supabase:", err);
+        }
+        this.isAuthenticated = false;
+        DataStore.isLoaded = false;
+        localStorage.removeItem("iq_simulated_role");
+        this.render();
+      });
+    }
+
+    // Selector de Idioma Global (Desktop y Móvil)
+    const handleLanguageChange = async (e) => {
+      const lang = e.target.value;
+
+      if (i18n && typeof i18n.changeLanguage === "function") {
+        i18n.changeLanguage(lang);
+      }
+      if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
+        await TranslationStore.setLanguage(lang);
+      } else {
+        localStorage.setItem("iq_lang", lang);
+      }
+
+      this.showLoadingOverlay("changing_language");
+
+      if (TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
+        await TranslationStore.initAllTranslations();
+      }
+
+      const appContainer = document.getElementById("app");
+      if (appContainer) appContainer.innerHTML = "";
+      this.render();
+    };
+
+    const langSelectDesktop = document.getElementById("select-lang-toggle");
+    const langSelectMobile = document.getElementById("mobile-select-lang-toggle");
+
+    if (langSelectDesktop && !langSelectDesktop.dataset.bound) {
+      langSelectDesktop.dataset.bound = "true";
+      langSelectDesktop.addEventListener("change", handleLanguageChange);
+    }
+    if (langSelectMobile && !langSelectMobile.dataset.bound) {
+      langSelectMobile.dataset.bound = "true";
+      langSelectMobile.addEventListener("change", handleLanguageChange);
+    }
+
     const handleTeamChange = async (e) => {
       const newTeamId = e.target.value;
       this.teamId = newTeamId;
@@ -246,7 +424,6 @@ export class IQBasketApp {
       teamSelectMobile.addEventListener("change", handleTeamChange);
     }
 
-    // Selector Dinámico de Temporada Activa
     const handleSeasonChange = async (e) => {
       const newSeason = e.target.value;
       localStorage.setItem("iq_active_season", newSeason);
@@ -301,7 +478,20 @@ export class IQBasketApp {
     }
 
     const parts = rawHash.split("/");
-    this.currentRoute = parts[0].toLowerCase();
+    const targetRoute = parts[0].toLowerCase();
+    
+    // GUARDA DE SEGURIDAD POR ROL: Bloquear acceso por hash a Comparador y Asistente IA para JUGADOR
+    const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    
+    if (activeRole === "JUGADOR" && ["comparator", "comparador", "ask", "ask-ai", "pregunta", "preguntale", "ai", "ia"].includes(targetRoute)) {
+      alert("⚠️ Tu rol de JUGADOR no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
+      window.location.hash = "#/dashboard";
+      this.currentRoute = "dashboard";
+      this.routeParams = {};
+      return;
+    }
+
+    this.currentRoute = targetRoute;
     this.routeParams = {
       id: parts[1] || null
     };
@@ -325,25 +515,50 @@ export class IQBasketApp {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
+    if (!this.translationsLoaded && TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
+      await TranslationStore.initAllTranslations();
+      this.translationsLoaded = true;
+    }
+
     if (!this.isAuthenticated) {
       appContainer.innerHTML = this.views.auth.render();
       this.bindAuthEvents();
       return;
     }
 
-    this.teamId = localStorage.getItem("iq_active_team_id") || this.teamId;
+    // 1. DETERMINAR ROL Y EMAIL DEL USUARIO ACTUAL
+    const simulated = localStorage.getItem("iq_simulated_role");
+    this.userRole = simulated || localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    const userEmail = localStorage.getItem("iq_user_email") || "";
 
-    if (!DataStore.isLoaded) {
-      this.showLoadingOverlay("preload_title");
+    // 2. OBTENER Y VALIDAR EQUIPOS PERMITIDOS SEGÚN EL ROL
+    const storedAssignments = localStorage.getItem("iq_user_teams_map");
+    const userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
+    const myAssignedTeamIds = userTeamAssignments[userEmail] || [];
 
-      if (TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
-        await TranslationStore.initAllTranslations();
+    const allTeams = DataStore.getTeams() || [];
+    const allowedTeams = (this.userRole === "SUPERADMIN")
+      ? allTeams
+      : allTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+
+    // 3. SI EL EQUIPO GUARDADO NO ESTÁ AUTORIZADO, FORZAR EL PRIMERO PERMITIDO
+    let storedActiveTeamId = localStorage.getItem("iq_active_team_id");
+    
+    if (this.userRole !== "SUPERADMIN" && allowedTeams.length > 0) {
+      const isAuthorized = allowedTeams.some(t => String(t.id) === String(storedActiveTeamId));
+      if (!isAuthorized) {
+        storedActiveTeamId = allowedTeams[0].id;
+        localStorage.setItem("iq_active_team_id", storedActiveTeamId);
       }
-
-      await DataStore.init(this.teamId, true);
     }
 
-    this.userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    this.teamId = storedActiveTeamId || this.teamId;
+
+    // 4. INICIALIZAR DATASTORE CON EL EQUIPO REALMENTE AUTORIZADO
+    if (!DataStore.isLoaded || DataStore.getActiveTeamId() !== this.teamId) {
+      this.showLoadingOverlay("preload_title");
+      await DataStore.init(this.teamId, true);
+    }
 
     appContainer.innerHTML = LayoutView.wrap(
       `<div id="dashboard-content-area"></div>`, 
