@@ -14,6 +14,13 @@ export class ProfileView {
   }
 
   /**
+   * Helper para obtener traducciones limpias desde TranslationStore / Supabase
+   */
+  t(key, fallback = "") {
+    return TranslationStore.t(key, fallback);
+  }
+
+  /**
    * Vincula la funcionalidad de ver/ocultar contraseña en las cajas de texto
    */
   _bindPasswordToggles(container) {
@@ -54,42 +61,42 @@ export class ProfileView {
           <div class="header-info">
             <h2>${userName} ${userLastName}</h2>
             <p>${userEmail}</p>
-            <span class="badge-role-header">${TranslationStore.t("profile_role_label", "PERFIL")}: ${userRole} (${TranslationStore.t("not_editable", "NO CAMBIABLE")})</span>
+            <span class="badge-role-header">${this.t("profile_role_label", "ROL ASIGNADO:")} ${userRole} (${this.t("not_editable", "NO CAMBIABLE")})</span>
           </div>
         </div>
 
         <!-- 1. DATOS DE PERFIL (OBLIGATORIOS) -->
         <div class="profile-card card">
           <div class="card-title">
-            <span>👤</span> ${TranslationStore.t("profile_data_title", "DATOS DE PERFIL (OBLIGATORIOS)").toUpperCase()}
+            <span>👤</span> ${this.t("profile_data_title", "DATOS DE PERFIL (OBLIGATORIOS)").toUpperCase()}
           </div>
           <form id="form-profile-data" class="grid-2-cols">
             <div class="form-group">
-              <label for="input-profile-name">${TranslationStore.t("first_name", "Nombre")}</label>
+              <label for="input-profile-name">${this.t("first_name", "Nombre")}</label>
               <input type="text" id="input-profile-name" value="${userName}" required />
             </div>
             <div class="form-group">
-              <label for="input-profile-lastname">${TranslationStore.t("last_name", "Apellidos")}</label>
+              <label for="input-profile-lastname">${this.t("last_name", "Apellidos")}</label>
               <input type="text" id="input-profile-lastname" value="${userLastName}" required />
             </div>
             <div class="form-group">
-              <label for="input-profile-phone">${TranslationStore.t("phone", "Teléfono de Contacto")}</label>
+              <label for="input-profile-phone">${this.t("phone", "Teléfono de Contacto")}</label>
               <input type="text" id="input-profile-phone" value="${userPhone}" />
             </div>
             <div class="form-group">
-              <label for="input-profile-email">${TranslationStore.t("email", "Mail de Contacto (Obligatorio)")}</label>
+              <label for="input-profile-email">${this.t("email", "Mail de Contacto (Obligatorio)")}</label>
               <input type="email" id="input-profile-email" value="${userEmail}" required />
             </div>
             <div class="form-group">
-              <label for="input-profile-login">${TranslationStore.t("login", "Login (Obligatorio)")}</label>
+              <label for="input-profile-login">${this.t("login", "Login (Obligatorio)")}</label>
               <input type="text" id="input-profile-login" value="${userLogin}" required />
             </div>
             <div class="form-group">
-              <label>${TranslationStore.t("role_disabled_label", "Perfil / Rol (Obligatorio - No Cambiable)")}</label>
+              <label>${this.t("role_disabled_label", "Perfil / Rol (Obligatorio - No Cambiable)")}</label>
               <input type="text" value="${userRole}" disabled class="input-disabled-highlight" />
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
-              <button type="submit" class="btn-primary-blue">💾 ${TranslationStore.t("save_profile", "Guardar Perfil")}</button>
+              <button type="submit" class="btn-primary-blue">💾 ${this.t("save_profile", "Guardar Perfil")}</button>
             </div>
           </form>
         </div>
@@ -97,25 +104,25 @@ export class ProfileView {
         <!-- 2. CAMBIAR CONTRASEÑA (OPCIONAL) -->
         <div class="profile-card card">
           <div class="card-title">
-            <span>🔑</span> ${TranslationStore.t("change_password_title", "CAMBIAR CONTRASEÑA (OPCIONAL)").toUpperCase()}
+            <span>🔑</span> ${this.t("change_password_title", "CAMBIAR CONTRASEÑA (OPCIONAL)").toUpperCase()}
           </div>
           <form id="form-change-password" class="grid-2-cols">
             <div class="form-group">
-              <label for="input-new-password">${TranslationStore.t("new_password", "Nueva Contraseña")}</label>
+              <label for="input-new-password">${this.t("new_password", "Nueva Contraseña")}</label>
               <div class="input-password-wrapper">
-                <input type="password" id="input-new-password" placeholder="${TranslationStore.t("new_password_placeholder", "Escribe la nueva contraseña")}" />
+                <input type="password" id="input-new-password" placeholder="${this.t("new_password_placeholder", "Escribe la nueva contraseña")}" />
                 <button type="button" class="pwd-toggle-btn" data-target="input-new-password" title="Ver/Ocultar" aria-label="Ver u ocultar contraseña">👁️</button>
               </div>
             </div>
             <div class="form-group">
-              <label for="input-repeat-password">${TranslationStore.t("repeat_password", "Repetir Nueva Contraseña")}</label>
+              <label for="input-repeat-password">${this.t("repeat_password", "Repetir Nueva Contraseña")}</label>
               <div class="input-password-wrapper">
-                <input type="password" id="input-repeat-password" placeholder="${TranslationStore.t("repeat_password_placeholder", "Repite la nueva contraseña")}" />
+                <input type="password" id="input-repeat-password" placeholder="${this.t("repeat_password_placeholder", "Repite la nueva contraseña")}" />
                 <button type="button" class="pwd-toggle-btn" data-target="input-repeat-password" title="Ver/Ocultar" aria-label="Ver u ocultar contraseña">👁️</button>
               </div>
             </div>
             <div style="grid-column: 1 / -1; text-align: right; margin-top: 10px;">
-              <button type="submit" class="btn-secondary-purple">🔒 ${TranslationStore.t("change_password_btn", "Cambiar Contraseña")}</button>
+              <button type="submit" class="btn-secondary-purple">🔒 ${this.t("change_password_btn", "Cambiar Contraseña")}</button>
             </div>
           </form>
         </div>
@@ -123,12 +130,12 @@ export class ProfileView {
         <!-- 3. EQUIPOS ASIGNADOS -->
         <div class="profile-card card">
           <div class="card-title">
-            <span>🛡️</span> ${TranslationStore.t("assigned_teams_title", "EQUIPOS ASIGNADOS").toUpperCase()}
+            <span>🛡️</span> ${this.t("assigned_teams_title", "EQUIPOS ASIGNADOS").toUpperCase()}
           </div>
           <div class="assigned-info-box">
             ${userRole === 'SUPERADMIN' 
-              ? TranslationStore.t("superadmin_access_msg", "Acceso Total Superadministrador a todos los equipos del sistema.") 
-              : `${TranslationStore.t("assigned_team_msg", "Acceso asignado al equipo:")} <strong>JMJ Manyanet Sant Andreu</strong>.`}
+              ? this.t("superadmin_access_msg", "Acceso Total Superadministrador a todos los equipos del sistema.") 
+              : `${this.t("assigned_team_msg", "Acceso asignado al equipo:")} <strong>JMJ Manyanet Sant Andreu</strong>.`}
           </div>
         </div>
 
@@ -358,7 +365,7 @@ export class ProfileView {
       localStorage.setItem("iq_user_phone", phone);
       localStorage.setItem("iq_user_email", email);
 
-      alert("✅ " + TranslationStore.t("profile_saved_msg", "Perfil guardado correctamente."));
+      alert("✅ " + this.t("profile_saved_msg", "Perfil guardado correctamente."));
       this.render(containerId);
     });
 
@@ -369,16 +376,16 @@ export class ProfileView {
       const pass2 = container.querySelector("#input-repeat-password")?.value;
 
       if (!pass1 || !pass2) {
-        alert("⚠️ " + TranslationStore.t("passwords_empty_warning", "Por favor, introduce y repite la nueva contraseña."));
+        alert("⚠️ " + this.t("passwords_empty_warning", "Por favor, introduce y repite la nueva contraseña."));
         return;
       }
 
       if (pass1 !== pass2) {
-        alert("❌ " + TranslationStore.t("passwords_mismatch_error", "Las contraseñas no coinciden. Por favor, verifícalas."));
+        alert("❌ " + this.t("passwords_mismatch_error", "Las contraseñas no coinciden. Por favor, verifícalas."));
         return;
       }
 
-      alert("🔑 " + TranslationStore.t("password_updated_msg", "Contraseña actualizada con éxito."));
+      alert("🔑 " + this.t("password_updated_msg", "Contraseña actualizada con éxito."));
       container.querySelector("#input-new-password").value = "";
       container.querySelector("#input-repeat-password").value = "";
     });

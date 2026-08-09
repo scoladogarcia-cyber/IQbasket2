@@ -1,7 +1,7 @@
 /**
  * @fileoverview Servicio de Gestión de Idiomas y Diccionario Completo (TranslationStore.js).
  * Refactorizado para conectar con Supabase de forma transparente y sincronizarse con I18nService.js.
- * Soporta ES, CA (alias cat), EN y FR.
+ * Soporta ES, CA (alias cat), EN y FR con sincronización bidireccional en caliente.
  */
 
 import { I18n } from './I18nService.js';
@@ -206,6 +206,7 @@ export class TranslationStore {
   static async loadFromSupabase(lang = TranslationStore.currentLang) {
     const targetLang = lang === 'cat' ? 'ca' : lang;
     try {
+      // Consulta buscando tanto por 'ca' como por el alias 'cat' si aplica
       const { data, error } = await supabase
         .from("translations")
         .select("*")
@@ -214,25 +215,36 @@ export class TranslationStore {
       if (!error && data && data.length > 0) {
         const remoteDict = {};
         data.forEach(item => {
-          remoteDict[item.key] = item.translation;
+          if (item.key && item.translation) {
+            remoteDict[item.key] = item.translation;
+          }
         });
 
-        // Guardar en localStorage para acceso inmediato sin retardo
+        // 1. Guardar copia local para acceso inmediato offline (0ms)
         localStorage.setItem(`iq_dict_${targetLang}`, JSON.stringify(remoteDict));
 
-        if (I18n.dictionaries[targetLang]) {
-          Object.assign(I18n.dictionaries[targetLang], remoteDict);
-        } else {
-          I18n.dictionaries[targetLang] = { ...TranslationStore.defaultDictionary[targetLang], ...remoteDict };
-        }
+        // 2. Inyectar sobreescribiendo en I18n
+        I18n.addTranslations(targetLang, remoteDict);
 
+        // 3. Notificar cambios a la vista
         I18n.notify();
       }
     } catch (e) {
-      console.warn("Error cargando diccionario de Supabase:", e);
+      console.warn("⚠️ [TranslationStore] Error cargando diccionario de Supabase:", e);
     }
   }
 
+  /**
+   * Inicialización masiva al arrancar la aplicación
+   */
+  static async initAllTranslations() {
+    const activeLang = TranslationStore.currentLang;
+    await TranslationStore.loadFromSupabase(activeLang);
+  }
+
+  /**
+   * Obtiene el diccionario en memoria/localStorage mezclado con los valores por defecto
+   */
   static getDictionary(lang = TranslationStore.currentLang) {
     const targetLang = lang === 'cat' ? 'ca' : lang;
     const saved = localStorage.getItem(`iq_dict_${targetLang}`);
@@ -243,14 +255,14 @@ export class TranslationStore {
           ...JSON.parse(saved) 
         };
       } catch (e) {
-        console.warn("Error leyendo diccionario guardado, usando por defecto.");
+        console.warn("[TranslationStore] Error leyendo diccionario guardado, usando por defecto.");
       }
     }
     return TranslationStore.defaultDictionary[targetLang] || TranslationStore.defaultDictionary.es;
   }
 
   /**
-   * Obtiene la traducción dada una clave.
+   * Obtiene la traducción dada una clave semántica o plana.
    */
   static t(key, fallback = "") {
     if (!key) return "";
@@ -271,6 +283,9 @@ export class TranslationStore {
     return fallback || key;
   }
 
+  /**
+   * Guarda un diccionario completo local y notifica al motor
+   */
   static saveDictionary(lang, newDict) {
     const targetLang = lang === 'cat' ? 'ca' : lang;
     localStorage.setItem(`iq_dict_${targetLang}`, JSON.stringify(newDict));
@@ -280,6 +295,9 @@ export class TranslationStore {
     I18n.notify();
   }
 
+  /**
+   * Cambia el idioma activo y recarga desde Supabase
+   */
   static async setLanguage(lang) {
     const targetLang = lang === 'cat' ? 'ca' : lang;
     I18n.setLocale(targetLang);

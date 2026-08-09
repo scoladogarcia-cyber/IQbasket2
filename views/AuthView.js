@@ -1,5 +1,5 @@
 /**
- * @fileoverview Vista de Autenticación / Login de IQ Basket.
+ * @fileoverview Vista de Autenticación / Login de IQ Basket (AuthView.js).
  * Soporta visualización/ocultamiento de contraseña con toque táctil accesible (44px),
  * manejo de errores visuales e internacionalización i18n completa mediante I18nService.
  */
@@ -95,8 +95,9 @@ export class AuthView {
           </form>
 
           <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; display: flex; flex-direction: column; gap: 10px;">
+            <!-- REEMPLAZADO: request_superadmin_access por "Alta nueva" (new_registration) -->
             <a href="#" style="font-size: 12px; color: #2563eb; font-weight: 700; text-decoration: none; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
-              ${this.t("request_superadmin_access", "¿No tienes cuenta? Solicita acceso al Superadmin")}
+              ${this.t("new_registration", "Alta nueva")}
             </a>
             <a href="#" style="font-size: 12px; color: #94a3b8; text-decoration: none; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
               ${this.t("forgot_password", "¿Olvidaste tu contraseña?")}

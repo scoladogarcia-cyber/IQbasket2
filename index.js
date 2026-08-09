@@ -4,13 +4,10 @@
  * GameBoxScoreView, AdvancedStatsView, PlayerStatsView, LineupsView, ComparatorView,
  * ReportsView, TranslationsView, AskAIView, ProfileView y DataStore.
  * 
- * Correcciones & Seguridad:
- * - Control global de cambios no guardados (window.hasUnsavedChanges) al navegar entre vistas.
- * - Sincronización instantánea de selectores de Equipo y Temporada del Sidebar.
- * - Registro completo de ProfileView (#/profile) para la vista "Mi Perfil".
- * - Registro completo de AskAIView (#/ask) para la vista "Pregúntale a tus datos".
- * - Invocación dinámica de bindLayoutEvents() en cada renderizado.
- * - Sincronización con TranslationStore y el motor i18n.
+ * Corrección de Pantalla de Carga:
+ * - Evita mostrar las claves 'preload_title' y 'preload_subtitle' antes de descargar el diccionario.
+ * - Soporta fallbacks inteligentes e inmediatos en el idioma activo guardado (ES, CA, EN, FR).
+ * - Sustitución total de marca externa por 'Base de Datos IQB'.
  */
 
 import { supabase } from "./config/database.config.js";
@@ -37,28 +34,26 @@ import { ProfileView } from "./views/ProfileView.js";
 
 export class IQBasketApp {
   constructor() {
-    this.isAuthenticated = false; // Estado inicial de autenticación
-    this.userRole = "SUPERADMIN"; // Rol asignado
+    this.isAuthenticated = false;
+    this.userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
     this.currentRoute = "dashboard";
     this.routeParams = {};
-    this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22"; // JMJ Manyanet Sant Andreu por defecto
+    this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
 
-    // Controller para partidos
     this.gameController = new GameController(
       null, 
       { can: () => true }, 
       { supabase }
     );
 
-    // Instancia auxiliar de Auth Controller simplificada para vistas
     const authController = {
       hasRole: (role) => {
-        if (Array.isArray(role)) return role.includes(this.userRole);
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(this.userRole);
+        const activeRole = localStorage.getItem("iq_user_role") || this.userRole;
+        if (Array.isArray(role)) return role.includes(activeRole);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(activeRole);
       }
     };
 
-    // Instancias activas de Vistas
     this.views = {
       auth: new AuthView(),
       dashboard: new SeasonDashboardView(supabase, authController),
@@ -75,15 +70,90 @@ export class IQBasketApp {
       comparator: new ComparatorView(authController),
       reports: new ReportsView(authController),
       settings: new TranslationsView(authController),
-      ask: new AskAIView(authController), // 👈 Asistente IA
-      profile: new ProfileView(authController), // 👈 Mi Perfil
+      ask: new AskAIView(authController),
+      profile: new ProfileView(authController),
       perfil: new ProfileView(authController)
     };
   }
 
   /**
-   * Vincula los eventos de AuthView.js (Login y Ver/Ocultar contraseña)
+   * Genera textos de fallback limpios según el idioma de preferencia si BBDD no ha respondido aún
    */
+  _getPreloadFallbackTexts(key) {
+    const lang = (localStorage.getItem("iq_lang") || "es").toLowerCase();
+    
+    const messages = {
+      es: {
+        preload_title: "Precargando IQ Basket...",
+        preload_subtitle: "Sincronizando plantilla, partidos y estadísticas desde la Base de Datos IQB...",
+        changing_team: "Cambiando de equipo...",
+        syncing_season: "Sincronizando temporada...",
+        changing_language: "Cambiando idioma..."
+      },
+      ca: {
+        preload_title: "Precarregant IQ Basket...",
+        preload_subtitle: "Sincronitzant plantilla, partits i estadístiques des de la Base de Dades IQB...",
+        changing_team: "Canviant d'equip...",
+        syncing_season: "Sincronitzant temporada...",
+        changing_language: "Canviant d'idioma..."
+      },
+      cat: {
+        preload_title: "Precarregant IQ Basket...",
+        preload_subtitle: "Sincronitzant plantilla, partits i estadístiques des de la Base de Dades IQB...",
+        changing_team: "Canviant d'equip...",
+        syncing_season: "Sincronitzant temporada...",
+        changing_language: "Canviant d'idioma..."
+      },
+      en: {
+        preload_title: "Preloading IQ Basket...",
+        preload_subtitle: "Synchronizing roster, games, and statistics from the IQB Database...",
+        changing_team: "Changing team...",
+        syncing_season: "Synchronizing season...",
+        changing_language: "Changing language..."
+      },
+      fr: {
+        preload_title: "Préchargement de IQ Basket...",
+        preload_subtitle: "Synchronisation de l'effectif, des matchs et des statistiques depuis la Base de Données IQB...",
+        changing_team: "Changement d'équipe...",
+        syncing_season: "Synchronisation de la saison...",
+        changing_language: "Changement de langue..."
+      }
+    };
+
+    const currentDict = messages[lang] || messages.es;
+    return currentDict[key] || messages.es[key] || key;
+  }
+
+  /**
+   * Muestra la pantalla de carga sin exponer claves desnudas tipo 'preload_title'
+   */
+  showLoadingOverlay(messageKey = "preload_title") {
+    const appContainer = document.getElementById("app");
+    if (!appContainer) return;
+
+    // Intentar leer de TranslationStore o recurrir al mapa de idiomas guardado
+    let title = TranslationStore.t(messageKey, "");
+    if (!title || title === messageKey) {
+      title = this._getPreloadFallbackTexts(messageKey);
+    }
+
+    let subtitle = TranslationStore.t("preload_subtitle", "");
+    if (!subtitle || subtitle === "preload_subtitle") {
+      subtitle = this._getPreloadFallbackTexts("preload_subtitle");
+    }
+
+    appContainer.innerHTML = `
+      <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; padding: 20px; text-align: center;">
+        <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #ea580c; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+        <h3 style="margin: 0 0 8px 0; color: #0f172a; font-size: 18px; font-weight: 800;">⚡ ${title}</h3>
+        <p style="margin: 0; color: #64748b; font-size: 13px; max-width: 420px;">${subtitle}</p>
+      </div>
+      <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+      </style>
+    `;
+  }
+
   bindAuthEvents() {
     const toggleBtn = document.getElementById("toggle-password-btn");
     const passwordInput = document.getElementById("login-password");
@@ -107,11 +177,7 @@ export class IQBasketApp {
     }
   }
 
-  /**
-   * Vincula los eventos del Layout (Cerrar Sesión, Selector de Idioma Global, Selectores de Equipo/Temporada y Navegación Hash).
-   */
   bindLayoutEvents() {
-    // 1. Logout
     const logoutBtn = document.getElementById("btn-logout");
     if (logoutBtn && !logoutBtn.dataset.bound) {
       logoutBtn.dataset.bound = "true";
@@ -123,86 +189,100 @@ export class IQBasketApp {
       });
     }
 
-    // 2. Selector de Idioma Global en el Sidebar
+    // Selector de Idioma Global
     const langSelect = document.getElementById("select-lang-toggle");
     if (langSelect && !langSelect.dataset.bound) {
       langSelect.dataset.bound = "true";
-      langSelect.addEventListener("change", (e) => {
+      langSelect.addEventListener("change", async (e) => {
         const lang = e.target.value;
 
-        // Actualizar el motor i18n y la tienda de traducciones
         if (i18n && typeof i18n.changeLanguage === "function") {
           i18n.changeLanguage(lang);
         }
         if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
-          TranslationStore.setLanguage(lang);
+          await TranslationStore.setLanguage(lang);
         } else {
           localStorage.setItem("iq_lang", lang);
         }
 
-        // Reconstrucción limpia del DOM para aplicar las nuevas etiquetas traducidas
-        const appContainer = document.getElementById("app");
-        if (appContainer) appContainer.innerHTML = "";
-        this.render();
-      });
-    }
+        this.showLoadingOverlay("changing_language");
 
-    // 3. Selector Dinámico de Equipo Activo en la Sidebar
-    const teamSelect = document.getElementById("sidebar-select-team");
-    if (teamSelect && !teamSelect.dataset.bound) {
-      teamSelect.dataset.bound = "true";
-      teamSelect.addEventListener("change", async (e) => {
-        const newTeamId = e.target.value;
-        this.teamId = newTeamId;
-        
-        if (typeof DataStore.setActiveTeamAndSeason === "function") {
-          DataStore.setActiveTeamAndSeason(newTeamId, null);
-        } else {
-          localStorage.setItem("iq_active_team_id", newTeamId);
-          DataStore.isLoaded = false;
+        if (TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
+          await TranslationStore.initAllTranslations();
         }
 
-        await DataStore.init(newTeamId, true);
         const appContainer = document.getElementById("app");
         if (appContainer) appContainer.innerHTML = "";
         this.render();
       });
     }
 
-    // 4. Selector Dinámico de Temporada Activa en la Sidebar
-    const seasonSelect = document.getElementById("sidebar-select-season");
-    if (seasonSelect && !seasonSelect.dataset.bound) {
-      seasonSelect.dataset.bound = "true";
-      seasonSelect.addEventListener("change", async (e) => {
-        const newSeason = e.target.value;
+    // Selector Dinámico de Equipo Activo
+    const handleTeamChange = async (e) => {
+      const newTeamId = e.target.value;
+      this.teamId = newTeamId;
+      localStorage.setItem("iq_active_team_id", newTeamId);
+      
+      this.showLoadingOverlay("changing_team");
 
-        if (typeof DataStore.setActiveTeamAndSeason === "function") {
-          DataStore.setActiveTeamAndSeason(null, newSeason);
-        } else {
-          localStorage.setItem("iq_active_season", newSeason);
-          DataStore.isLoaded = false;
-        }
+      if (typeof DataStore.setActiveTeamAndSeason === "function") {
+        DataStore.setActiveTeamAndSeason(newTeamId, null);
+      }
+      DataStore.isLoaded = false;
 
-        await DataStore.init(this.teamId, true);
-        const appContainer = document.getElementById("app");
-        if (appContainer) appContainer.innerHTML = "";
-        this.render();
-      });
+      await DataStore.init(newTeamId, true);
+      this.render();
+    };
+
+    const teamSelectDesktop = document.getElementById("sidebar-select-team");
+    const teamSelectMobile = document.getElementById("mobile-select-team");
+
+    if (teamSelectDesktop && !teamSelectDesktop.dataset.bound) {
+      teamSelectDesktop.dataset.bound = "true";
+      teamSelectDesktop.addEventListener("change", handleTeamChange);
+    }
+    if (teamSelectMobile && !teamSelectMobile.dataset.bound) {
+      teamSelectMobile.dataset.bound = "true";
+      teamSelectMobile.addEventListener("change", handleTeamChange);
     }
 
-    // 5. Navegación Hash con prevención de pérdidas de datos
+    // Selector Dinámico de Temporada Activa
+    const handleSeasonChange = async (e) => {
+      const newSeason = e.target.value;
+      localStorage.setItem("iq_active_season", newSeason);
+
+      this.showLoadingOverlay("syncing_season");
+
+      if (typeof DataStore.setActiveTeamAndSeason === "function") {
+        DataStore.setActiveTeamAndSeason(null, newSeason);
+      }
+      DataStore.isLoaded = false;
+
+      await DataStore.init(this.teamId, true);
+      this.render();
+    };
+
+    const seasonSelectDesktop = document.getElementById("sidebar-select-season");
+    const seasonSelectMobile = document.getElementById("mobile-select-season");
+
+    if (seasonSelectDesktop && !seasonSelectDesktop.dataset.bound) {
+      seasonSelectDesktop.dataset.bound = "true";
+      seasonSelectDesktop.addEventListener("change", handleSeasonChange);
+    }
+    if (seasonSelectMobile && !seasonSelectMobile.dataset.bound) {
+      seasonSelectMobile.dataset.bound = "true";
+      seasonSelectMobile.addEventListener("change", handleSeasonChange);
+    }
+
     if (!window.isHashBound) {
       window.isHashBound = true;
       window.onhashchange = () => {
-        // Control de seguridad: Si hay cambios de edición pendientes sin guardar
         if (window.hasUnsavedChanges) {
           const confirmLeave = confirm("⚠️ Tienes cambios sin guardar. Si cambias de pantalla se perderán las modificaciones. ¿Deseas salir sin guardar?");
           if (!confirmLeave) {
-            // Revertir la URL a la ruta donde estaba editando
             window.location.hash = `#/${this.currentRoute}`;
             return;
           }
-          // Limpiar el estado de advertencia si el usuario decide descartar los cambios
           window.hasUnsavedChanges = false;
         }
 
@@ -212,9 +292,6 @@ export class IQBasketApp {
     }
   }
 
-  /**
-   * Extrae la ruta activa y parámetros opcionales de la URL (#/game/ID_PARTIDO o #/boxscore/ID_PARTIDO)
-   */
   parseHashRoute() {
     const rawHash = window.location.hash.replace("#/", "").trim();
     if (!rawHash) {
@@ -230,9 +307,6 @@ export class IQBasketApp {
     };
   }
 
-  /**
-   * Helper para renderizar módulos en desarrollo
-   */
   renderPlaceholder(title, className = "") {
     const area = document.getElementById("dashboard-content-area");
     if (area) {
@@ -247,54 +321,42 @@ export class IQBasketApp {
     }
   }
 
-  /**
-   * Renderiza la aplicación según el estado de sesión, precarga y ruta activa
-   */
   async render() {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
-    // A) PANTALLA DE LOGIN
     if (!this.isAuthenticated) {
       appContainer.innerHTML = this.views.auth.render();
       this.bindAuthEvents();
       return;
     }
 
-    // B) PRECARGA MASIVA ÚNICA EN MEMORIA LOCAL (DATASTORE)
+    this.teamId = localStorage.getItem("iq_active_team_id") || this.teamId;
+
     if (!DataStore.isLoaded) {
-      appContainer.innerHTML = `
-        <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc;">
-          <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #1e3a8a; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
-          <h3 style="margin: 0 0 8px 0; color: #0f172a; font-size: 18px; font-weight: 800;">⚡ Precargando IQ Basket</h3>
-          <p style="margin: 0; color: #64748b; font-size: 13px;">Sincronizando plantilla, partidos y estadísticas en memoria local...</p>
-        </div>
-        <style>
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-      `;
-      await DataStore.init(this.teamId);
+      this.showLoadingOverlay("preload_title");
+
+      if (TranslationStore && typeof TranslationStore.initAllTranslations === "function") {
+        await TranslationStore.initAllTranslations();
+      }
+
+      await DataStore.init(this.teamId, true);
     }
 
-    // C) ESTRUCTURA DEL LAYOUT PRINCIPAL
-    let contentAreaEl = document.getElementById("dashboard-content-area");
-    if (!contentAreaEl) {
-      appContainer.innerHTML = LayoutView.wrap(
-        `<div id="dashboard-content-area"></div>`, 
-        this.currentRoute, 
-        this.userRole
-      );
-      contentAreaEl = document.getElementById("dashboard-content-area");
-    }
+    this.userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
 
-    // Revincular eventos del Layout y actualizar el marcado 'active' en cada render
+    appContainer.innerHTML = LayoutView.wrap(
+      `<div id="dashboard-content-area"></div>`, 
+      this.currentRoute, 
+      this.userRole
+    );
+
     this.bindLayoutEvents();
     LayoutView.updateActiveMenu(this.currentRoute);
 
     const route = this.currentRoute;
     const contentArea = "dashboard-content-area";
 
-    // D) ENRUTADOR PRINCIPAL (SWITCH DE VISTAS)
     switch (route) {
       case "dashboard":
         if (this.views.dashboard) await this.views.dashboard.render(contentArea, this.teamId);
@@ -377,6 +439,7 @@ export class IQBasketApp {
 
 document.addEventListener("DOMContentLoaded", () => {
   const app = new IQBasketApp();
+  window.iqApp = app;
   app.parseHashRoute();
   app.render();
 });
