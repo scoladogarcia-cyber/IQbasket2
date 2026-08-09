@@ -44,17 +44,87 @@ export class LayoutView {
     });
   }
 
+  /**
+   * Inicializa el menú desplegable táctil para móviles (Boton "Más")
+   * Totalmente compatible con Safari iOS, Edge, Chrome y PWA sin tocar datos.
+   */
+  static bindMobileDrawerEvents() {
+    setTimeout(() => {
+      const btnToggle = document.getElementById("btn-mobile-more-toggle");
+      const btnClose = document.getElementById("btn-close-drawer");
+      const drawerOverlay = document.getElementById("mobile-more-drawer");
+
+      if (!btnToggle || !drawerOverlay) return;
+
+      const closeDrawer = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        drawerOverlay.classList.remove("open", "is-visible");
+        drawerOverlay.setAttribute("aria-hidden", "true");
+        drawerOverlay.style.display = "none";
+        document.body.style.overflow = "";
+      };
+
+      const openDrawer = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        drawerOverlay.classList.add("open", "is-visible");
+        drawerOverlay.setAttribute("aria-hidden", "false");
+        drawerOverlay.style.display = "flex";
+        document.body.style.overflow = "hidden";
+      };
+
+      // 1. Abrir / Cerrar al pulsar "Más"
+      btnToggle.onclick = (e) => {
+        const isOpen = drawerOverlay.classList.contains("open") || drawerOverlay.style.display === "flex";
+        if (isOpen) {
+          closeDrawer(e);
+        } else {
+          openDrawer(e);
+        }
+      };
+
+      // 2. Botón de cierre "X"
+      if (btnClose) {
+        btnClose.onclick = (e) => closeDrawer(e);
+      }
+
+      // 3. Clic fuera para cerrar
+      drawerOverlay.onclick = (e) => {
+        if (e.target === drawerOverlay) {
+          closeDrawer(e);
+        }
+      };
+
+      // 4. Cierre automático al hacer clic en cualquier opción
+      const drawerItems = drawerOverlay.querySelectorAll("a, button, .drawer-item");
+      drawerItems.forEach(item => {
+        item.onclick = () => closeDrawer();
+      });
+    }, 50);
+  }
+
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
     const currentLang = I18n.getLocale();
 
-    // Cargar datos dinámicos de equipos y temporadas activas
+    // Cargar datos dinámicos de equipos y temporadas activas (Con fallback seguro a 2025-2026)
     const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
-    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2026";
+    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2025-2026";
 
     const teams = DataStore.getTeams() || [];
     const storedSeasons = localStorage.getItem("iq_seasons");
-    const seasons = storedSeasons ? JSON.parse(storedSeasons) : [{ id: "s-1", name: "2026", isActive: true }];
+    const seasons = storedSeasons ? JSON.parse(storedSeasons) : [
+      { id: "s-1", name: "2025-2026", isActive: true },
+      { id: "s-2", name: "2026", isActive: false }
+    ];
+
+    // Activar los eventos del menú flotante inmediatamente
+    LayoutView.bindMobileDrawerEvents();
 
     // Definición de grupos de navegación para Desktop
     const navGroups = [
@@ -222,7 +292,7 @@ export class LayoutView {
         </nav>
 
         <!-- BOTTOM SHEET MÓVIL PARA "MÁS" -->
-        <div id="mobile-more-drawer" class="mobile-drawer-overlay mobile-only" aria-hidden="true">
+        <div id="mobile-more-drawer" class="mobile-drawer-overlay mobile-only" aria-hidden="true" style="display: none;">
           <div class="mobile-drawer-content">
             <div class="drawer-header">
               <span class="drawer-title">${LayoutView.t("navigation.more", "Más Opciones")}</span>
@@ -559,6 +629,9 @@ export class LayoutView {
             min-height: 44px;
             background: none;
             border: none;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
           }
 
           .mobile-nav-item.active {
@@ -578,14 +651,16 @@ export class LayoutView {
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(0, 0, 0, 0.6);
+            background-color: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
             z-index: 1050;
             display: none;
             align-items: flex-end;
           }
 
           .mobile-drawer-overlay.open {
-            display: flex;
+            display: flex !important;
           }
 
           .mobile-drawer-content {
@@ -594,8 +669,10 @@ export class LayoutView {
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
             padding: 20px;
+            padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
             max-height: 80vh;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
           }
 
           .drawer-header {
@@ -617,6 +694,7 @@ export class LayoutView {
             border: none;
             cursor: pointer;
             color: #64748b;
+            font-weight: 800;
           }
 
           .drawer-grid {
@@ -631,12 +709,15 @@ export class LayoutView {
             gap: 8px;
             padding: 12px;
             background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
             text-decoration: none;
             color: #0f172a;
             font-weight: 600;
             font-size: 13px;
-            min-height: 44px;
+            min-height: 48px;
+            box-sizing: border-box;
+            touch-action: manipulation;
           }
         }
       </style>
