@@ -639,19 +639,21 @@ export class LayoutView {
             padding-bottom: calc(64px + env(safe-area-inset-bottom));
           }
 
-          /* Bottom Bar Fija */
+          /* Bottom Bar Fija Optimizada */
           .mobile-bottom-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            height: calc(60px + env(safe-area-inset-bottom));
+            height: calc(58px + env(safe-area-inset-bottom));
             padding-bottom: env(safe-area-inset-bottom);
             background-color: var(--color-secondary, #0f172a);
             border-top: 1px solid #1e293b;
             z-index: 1000;
+            display: flex;
             justify-content: space-around;
             align-items: center;
+            box-sizing: border-box;
           }
 
           .mobile-nav-item {
@@ -661,15 +663,18 @@ export class LayoutView {
             justify-content: center;
             color: #94a3b8;
             text-decoration: none;
-            font-size: 11px;
-            font-weight: 600;
-            min-width: 56px;
-            min-height: 44px;
+            font-size: 10px;
+            font-weight: 700;
+            flex: 1;
+            max-width: 20%;
+            height: 100%;
+            padding: 4px 0;
             background: none;
             border: none;
             cursor: pointer;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
           }
 
           .mobile-nav-item.active {
@@ -677,9 +682,17 @@ export class LayoutView {
           }
 
           .mobile-svg {
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
             margin-bottom: 2px;
+          }
+
+          .mobile-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            display: block;
           }
 
           /* Bottom Sheet "Más" */
