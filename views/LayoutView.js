@@ -1,7 +1,9 @@
 /**
  * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop.
  * Implementa la navegación agrupada en desktop, la navegación inferior PWA para móviles,
- * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) y selectores dinámicos.
+ * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) y selectores dinámicos
+ * de Equipo y Temporada tanto en Desktop (Sidebar) como en Móvil (Header).
+ * Sincronizado en tiempo real con las claves planas de la tabla 'translations' de Supabase.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -45,7 +47,7 @@ export class LayoutView {
   }
 
   /**
-   * Inicializa el menú desplegable táctil para móviles (Boton "Más")
+   * Inicializa el menú desplegable táctil para móviles (Botón "Más")
    * Totalmente compatible con Safari iOS, Edge, Chrome y PWA sin tocar datos.
    */
   static bindMobileDrawerEvents() {
@@ -112,7 +114,7 @@ export class LayoutView {
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
     const currentLang = I18n.getLocale();
 
-    // Cargar datos dinámicos de equipos y temporadas activas (Con fallback seguro a 2025-2026)
+    // Cargar datos dinámicos de equipos y temporadas activas
     const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
     const currentActiveSeason = localStorage.getItem("iq_active_season") || "2025-2026";
 
@@ -126,48 +128,48 @@ export class LayoutView {
     // Activar los eventos del menú flotante inmediatamente
     LayoutView.bindMobileDrawerEvents();
 
-    // Definición de grupos de navegación para Desktop
+    // 💡 CLAVES PLANAS TRADUCIBLES DIRECTAS DE SUPABASE
     const navGroups = [
       {
-        titleKey: "navigation.groups.general",
+        titleKey: "general",
         defaultTitle: "GENERAL",
         items: [
-          { key: "dashboard", labelKey: "navigation.dashboard", fallback: "Inicio", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' }
+          { key: "dashboard", labelKey: "dashboard", fallback: "Dashboard", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' }
         ]
       },
       {
-        titleKey: "navigation.groups.team",
+        titleKey: "team",
         defaultTitle: "EQUIPO",
         items: [
-          { key: "team", labelKey: "navigation.team", fallback: "Equipo", route: "team", svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle>' },
-          { key: "players", labelKey: "navigation.players", fallback: "Jugadores", route: "players", svg: '<circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 1 0-16 0"></path>' },
-          { key: "games", labelKey: "navigation.games", fallback: "Partidos", route: "games", svg: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>' },
-          { key: "lineups", labelKey: "navigation.lineups", fallback: "Quintetos", route: "lineups", svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><circle cx="19" cy="11" r="2"></circle>' }
+          { key: "team", labelKey: "team", fallback: "Equipo", route: "team", svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle>' },
+          { key: "players", labelKey: "players", fallback: "Jugadores", route: "players", svg: '<circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 1 0-16 0"></path>' },
+          { key: "games", labelKey: "games", fallback: "Partidos", route: "games", svg: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>' },
+          { key: "lineups", labelKey: "lineups", fallback: "Quintetos", route: "lineups", svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><circle cx="19" cy="11" r="2"></circle>' }
         ]
       },
       {
-        titleKey: "navigation.groups.analysis",
+        titleKey: "advanced_stats",
         defaultTitle: "ANÁLISIS",
         items: [
-          { key: "advanced", labelKey: "navigation.advancedStats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
-          { key: "comparator", labelKey: "navigation.comparator", fallback: "Comparador", route: "comparator", svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
-          { key: "reports", labelKey: "navigation.reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
-          { key: "ask", labelKey: "navigation.aiAssistant", fallback: "Asistente IQ", route: "ask", svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+          { key: "advanced", labelKey: "advanced_stats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
+          { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
+          { key: "reports", labelKey: "reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
+          { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
         ]
       },
       {
-        titleKey: "navigation.groups.account",
+        titleKey: "profile",
         defaultTitle: "CUENTA",
         items: [
-          { key: "profile", labelKey: "navigation.profile", fallback: "Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
-          { key: "settings", labelKey: "navigation.settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
+          { key: "profile", labelKey: "profile", fallback: "Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
+          { key: "settings", labelKey: "settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
         ]
       }
     ];
 
     const desktopNavMarkup = navGroups.map(group => `
       <div class="nav-group">
-        <span class="nav-group-title">${LayoutView.t(group.titleKey, group.defaultTitle)}</span>
+        <span class="nav-group-title">${LayoutView.t(group.titleKey, group.defaultTitle).toUpperCase()}</span>
         ${group.items.map(item => {
           const isActive = currentActiveKey === item.key;
           const label = LayoutView.t(item.labelKey, item.fallback);
@@ -183,19 +185,36 @@ export class LayoutView {
       </div>
     `).join("");
 
+    const teamOptionsMarkup = teams.length > 0 ? teams.map(t => `
+      <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
+        ${t.name} (${t.category || 'Senior'})
+      </option>
+    `).join("") : `<option value="${currentActiveTeamId}">JMJ Manyanet Sant Andreu</option>`;
+
+    const seasonOptionsMarkup = seasons.map(s => `
+      <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
+        ${s.name}
+      </option>
+    `).join("");
+
     return `
       <div class="app-layout">
         
-        <!-- HEADER MÓVIL (< 768px) -->
+        <!-- HEADER MÓVIL (< 768px) CON SELECTORES INTEGRADOS -->
         <header class="mobile-header mobile-only">
           <div class="mobile-brand">
-            <svg class="brand-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M5.6 5.6C9.2 9.2 14.8 9.2 18.4 5.6"></path>
-              <path d="M5.6 18.4C9.2 14.8 14.8 14.8 18.4 18.4"></path>
-              <line x1="12" y1="2" x2="12" y2="22"></line>
-            </svg>
+            <div class="logo-box" style="width: 28px; height: 28px; font-size: 12px;">IQ</div>
             <span class="brand-title">${APP_CONFIG.appName}</span>
+          </div>
+
+          <!-- SELECTORES DINÁMICOS MÓVILES -->
+          <div class="mobile-selectors-row">
+            <select id="mobile-select-team" class="mobile-select">
+              ${teamOptionsMarkup}
+            </select>
+            <select id="mobile-select-season" class="mobile-select">
+              ${seasonOptionsMarkup}
+            </select>
           </div>
         </header>
 
@@ -215,21 +234,13 @@ export class LayoutView {
               <div class="selector-group">
                 <label>${LayoutView.t("team", "EQUIPO").toUpperCase()}</label>
                 <select id="sidebar-select-team" class="sidebar-select">
-                  ${teams.length > 0 ? teams.map(t => `
-                    <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
-                      ${t.name} (${t.category || 'Senior'})
-                    </option>
-                  `).join("") : `<option value="${currentActiveTeamId}">JMJ Manyanet Sant Andreu</option>`}
+                  ${teamOptionsMarkup}
                 </select>
               </div>
               <div class="selector-group">
                 <label>${LayoutView.t("season", "TEMPORADA").toUpperCase()}</label>
                 <select id="sidebar-select-season" class="sidebar-select">
-                  ${seasons.map(s => `
-                    <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
-                      ${s.name}
-                    </option>
-                  `).join("")}
+                  ${seasonOptionsMarkup}
                 </select>
               </div>
             </div>
@@ -271,19 +282,19 @@ export class LayoutView {
         <nav class="mobile-bottom-bar mobile-only" aria-label="Navegación Móvil">
           <a href="#/dashboard" class="mobile-nav-item ${currentActiveKey === 'dashboard' ? 'active' : ''}" data-route-key="dashboard">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-            <span class="mobile-label">${LayoutView.t("navigation.home", "Inicio")}</span>
+            <span class="mobile-label">${LayoutView.t("dashboard", "Dashboard")}</span>
           </a>
           <a href="#/team" class="mobile-nav-item ${currentActiveKey === 'team' ? 'active' : ''}" data-route-key="team">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-            <span class="mobile-label">${LayoutView.t("navigation.team", "Equipo")}</span>
+            <span class="mobile-label">${LayoutView.t("team", "Equipo")}</span>
           </a>
           <a href="#/games" class="mobile-nav-item ${currentActiveKey === 'games' ? 'active' : ''}" data-route-key="games">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line></svg>
-            <span class="mobile-label">${LayoutView.t("navigation.games", "Partidos")}</span>
+            <span class="mobile-label">${LayoutView.t("games", "Partidos")}</span>
           </a>
           <a href="#/advanced" class="mobile-nav-item ${currentActiveKey === 'advanced' ? 'active' : ''}" data-route-key="advanced">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-            <span class="mobile-label">${LayoutView.t("navigation.advancedStats", "Stats")}</span>
+            <span class="mobile-label">${LayoutView.t("advanced_stats", "Stats")}</span>
           </a>
           <button type="button" id="btn-mobile-more-toggle" class="mobile-nav-item" aria-expanded="false">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
@@ -301,31 +312,31 @@ export class LayoutView {
             <div class="drawer-grid">
               <a href="#/players" class="drawer-item">
                 <span class="drawer-icon">👤</span>
-                <span>${LayoutView.t("navigation.players", "Jugadores")}</span>
+                <span>${LayoutView.t("players", "Jugadores")}</span>
               </a>
               <a href="#/lineups" class="drawer-item">
                 <span class="drawer-icon">🏀</span>
-                <span>${LayoutView.t("navigation.lineups", "Quintetos")}</span>
+                <span>${LayoutView.t("lineups", "Quintetos")}</span>
               </a>
               <a href="#/comparator" class="drawer-item">
                 <span class="drawer-icon">⚖️</span>
-                <span>${LayoutView.t("navigation.comparator", "Comparador")}</span>
+                <span>${LayoutView.t("comparator", "Comparador")}</span>
               </a>
               <a href="#/reports" class="drawer-item">
                 <span class="drawer-icon">📄</span>
-                <span>${LayoutView.t("navigation.reports", "Informes")}</span>
+                <span>${LayoutView.t("reports", "Informes")}</span>
               </a>
               <a href="#/ask" class="drawer-item">
                 <span class="drawer-icon">🤖</span>
-                <span>${LayoutView.t("navigation.aiAssistant", "Asistente IQ")}</span>
+                <span>${LayoutView.t("ask_ai", "Asistente IQ")}</span>
               </a>
               <a href="#/profile" class="drawer-item">
                 <span class="drawer-icon">👤</span>
-                <span>${LayoutView.t("navigation.profile", "Perfil")}</span>
+                <span>${LayoutView.t("profile", "Perfil")}</span>
               </a>
               <a href="#/settings" class="drawer-item">
                 <span class="drawer-icon">⚙️</span>
-                <span>${LayoutView.t("navigation.settings", "Configuración")}</span>
+                <span>${LayoutView.t("settings", "Configuración")}</span>
               </a>
             </div>
           </div>
@@ -575,23 +586,50 @@ export class LayoutView {
             background-color: var(--color-secondary, #0f172a);
             color: #ffffff;
             height: 56px;
-            padding: 0 16px;
+            padding: 0 12px;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #1e293b;
+            gap: 8px;
           }
 
           .mobile-brand {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-weight: 800;
-            color: var(--color-primary, #ea580c);
+            color: #ffffff;
+            flex-shrink: 0;
           }
 
-          .brand-svg {
-            width: 24px;
-            height: 24px;
+          .mobile-brand .brand-title {
+            font-size: 14px;
+            font-weight: 900;
+          }
+
+          .mobile-selectors-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex: 1;
+            max-width: 65%;
+            justify-content: flex-end;
+          }
+
+          .mobile-select {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: #ffffff;
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 11px;
+            font-weight: 700;
+            outline: none;
+            max-width: 120px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            height: 34px;
           }
 
           .app-main {
@@ -724,5 +762,37 @@ export class LayoutView {
     `;
   }
 }
+
+// SUSCRIPCIÓN EN TIEMPO REAL
+I18n.subscribe(() => {
+  const links = document.querySelectorAll(".nav-link .nav-label");
+  if (links.length > 0) {
+    const keysMap = {
+      dashboard: "dashboard",
+      team: "team",
+      players: "players",
+      games: "games",
+      lineups: "lineups",
+      advanced: "advanced_stats",
+      comparator: "comparator",
+      reports: "reports",
+      ask: "ask_ai",
+      profile: "profile",
+      settings: "settings"
+    };
+
+    document.querySelectorAll(".nav-link, .mobile-nav-item, .drawer-item").forEach(item => {
+      const routeKey = item.getAttribute("data-route-key") || item.getAttribute("href")?.replace("#/", "");
+      const normKey = LayoutView._normalizeRouteKey(routeKey);
+      const dictKey = keysMap[normKey];
+      if (dictKey) {
+        const labelEl = item.querySelector(".nav-label, .mobile-label, span:last-child");
+        if (labelEl) {
+          labelEl.textContent = LayoutView.t(dictKey, labelEl.textContent);
+        }
+      }
+    });
+  }
+});
 
 export default LayoutView;
