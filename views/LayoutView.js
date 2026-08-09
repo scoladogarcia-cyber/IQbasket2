@@ -1,8 +1,8 @@
 /**
- * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop.
+ * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop (LayoutView.js).
  * Implementa la navegación agrupada en desktop, la navegación inferior PWA para móviles,
- * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) y selectores dinámicos
- * de Equipo y Temporada tanto en Desktop (Sidebar) como en Móvil (Header).
+ * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) presente tanto en Desktop como en Móvil,
+ * y selectores dinámicos de Equipo y Temporada restringidos por los equipos asignados a cada usuario.
  * Sincronizado en tiempo real con las claves planas de la tabla 'translations' de Supabase.
  */
 
@@ -105,7 +105,23 @@ export class LayoutView {
       // 4. Cierre automático al hacer clic en cualquier opción
       const drawerItems = drawerOverlay.querySelectorAll("a, button, .drawer-item");
       drawerItems.forEach(item => {
-        item.onclick = () => closeDrawer();
+        item.onclick = (e) => {
+          if (item.classList.contains("disabled-link")) {
+            e.preventDefault();
+            alert("⚠️ Esta función no está disponible para tu rol de usuario.");
+            return;
+          }
+          closeDrawer();
+        };
+      });
+
+      // 5. Interceptador de enlaces deshabilitados en escritorio y móvil
+      document.querySelectorAll(".disabled-link").forEach(link => {
+        link.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          alert("⚠️ Esta función no está disponible para tu rol de usuario.");
+        };
       });
     }, 50);
   }
@@ -113,22 +129,37 @@ export class LayoutView {
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
     const currentLang = I18n.getLocale();
+    const currentUserEmail = localStorage.getItem("iq_user_email") || "";
 
     // Cargar datos dinámicos de equipos y temporadas activas
     const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
-    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2025-2026";
+    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2026";
 
-    const teams = DataStore.getTeams() || [];
+    // FILTRADO ESTRICTO DE EQUIPOS ASIGNADOS SEGÚN USUARIO Y ROL
+    const storedAssignments = localStorage.getItem("iq_user_teams_map");
+    const userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
+    const myAssignedTeamIds = userTeamAssignments[currentUserEmail] || [];
+
+    const allTeams = DataStore.getTeams() || [];
+
+    const allowedTeams = (userRole === "SUPERADMIN")
+      ? allTeams
+      : allTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+
+    const teamsToRender = allowedTeams.length > 0 ? allowedTeams : (userRole === "SUPERADMIN" ? allTeams : []);
+
     const storedSeasons = localStorage.getItem("iq_seasons");
     const seasons = storedSeasons ? JSON.parse(storedSeasons) : [
-      { id: "s-1", name: "2025-2026", isActive: true },
-      { id: "s-2", name: "2026", isActive: false }
+      { id: "s-1", name: "2026", isActive: true },
+      { id: "s-2", name: "2025", isActive: false }
     ];
 
-    // Activar los eventos del menú flotante inmediatamente
+    // Activar los eventos del menú flotante e interceptadores
     LayoutView.bindMobileDrawerEvents();
 
-    // 💡 CLAVES PLANAS TRADUCIBLES DIRECTAS DE SUPABASE
+    const isJugadorRole = userRole === "JUGADOR";
+
+    // CLAVES PLANAS TRADUCIBLES DIRECTAS DE SUPABASE
     const navGroups = [
       {
         titleKey: "general",
@@ -152,9 +183,9 @@ export class LayoutView {
         defaultTitle: "ANÁLISIS",
         items: [
           { key: "advanced", labelKey: "advanced_stats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
-          { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
+          { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", disabled: isJugadorRole, svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
           { key: "reports", labelKey: "reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
-          { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+          { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
         ]
       },
       {
@@ -173,23 +204,24 @@ export class LayoutView {
         ${group.items.map(item => {
           const isActive = currentActiveKey === item.key;
           const label = LayoutView.t(item.labelKey, item.fallback);
+          const isDisabled = Boolean(item.disabled);
           return `
-            <a href="#/${item.route}" 
-               class="nav-link ${isActive ? 'active' : ''}" 
+            <a href="${isDisabled ? 'javascript:void(0);' : '#/' + item.route}" 
+               class="nav-link ${isActive ? 'active' : ''} ${isDisabled ? 'disabled-link' : ''}" 
                data-route-key="${item.key}">
               <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${item.svg}</svg>
-              <span class="nav-label">${label}</span>
+              <span class="nav-label">${label}${isDisabled ? ' 🔒' : ''}</span>
             </a>
           `;
         }).join("")}
       </div>
     `).join("");
 
-    const teamOptionsMarkup = teams.length > 0 ? teams.map(t => `
+    const teamOptionsMarkup = teamsToRender.length > 0 ? teamsToRender.map(t => `
       <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
         ${t.name} (${t.category || 'Senior'})
       </option>
-    `).join("") : `<option value="${currentActiveTeamId}">JMJ Manyanet Sant Andreu</option>`;
+    `).join("") : `<option value="" disabled selected>⚠️ Sin equipos asignados</option>`;
 
     const seasonOptionsMarkup = seasons.map(s => `
       <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
@@ -197,17 +229,24 @@ export class LayoutView {
       </option>
     `).join("");
 
+    const langOptionsMarkup = `
+      <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
+      <option value="ca" ${currentLang === 'ca' || currentLang === 'cat' ? 'selected' : ''}>CAT</option>
+      <option value="en" ${currentLang === 'en' ? 'selected' : ''}>EN</option>
+      <option value="fr" ${currentLang === 'fr' ? 'selected' : ''}>FR</option>
+    `;
+
     return `
       <div class="app-layout">
         
-        <!-- HEADER MÓVIL (< 768px) CON SELECTORES INTEGRADOS -->
+        <!-- HEADER MÓVIL (< 768px) CON SELECTORES E ICONO DE IDIOMA INTEGRADOS -->
         <header class="mobile-header mobile-only">
           <div class="mobile-brand">
             <div class="logo-box" style="width: 28px; height: 28px; font-size: 12px;">IQ</div>
             <span class="brand-title">${APP_CONFIG.appName}</span>
           </div>
 
-          <!-- SELECTORES DINÁMICOS MÓVILES -->
+          <!-- SELECTORES DINÁMICOS MÓVILES E ICONO IDIOMA -->
           <div class="mobile-selectors-row">
             <select id="mobile-select-team" class="mobile-select">
               ${teamOptionsMarkup}
@@ -215,6 +254,12 @@ export class LayoutView {
             <select id="mobile-select-season" class="mobile-select">
               ${seasonOptionsMarkup}
             </select>
+            <div class="mobile-lang-box">
+              <span class="mobile-lang-icon">🌐</span>
+              <select id="mobile-select-lang-toggle" class="mobile-select mobile-lang-select">
+                ${langOptionsMarkup}
+              </select>
+            </div>
           </div>
         </header>
 
@@ -318,17 +363,17 @@ export class LayoutView {
                 <span class="drawer-icon">🏀</span>
                 <span>${LayoutView.t("lineups", "Quintetos")}</span>
               </a>
-              <a href="#/comparator" class="drawer-item">
+              <a href="${isJugadorRole ? 'javascript:void(0);' : '#/comparator'}" class="drawer-item ${isJugadorRole ? 'disabled-link' : ''}">
                 <span class="drawer-icon">⚖️</span>
-                <span>${LayoutView.t("comparator", "Comparador")}</span>
+                <span>${LayoutView.t("comparator", "Comparador")}${isJugadorRole ? ' 🔒' : ''}</span>
               </a>
               <a href="#/reports" class="drawer-item">
                 <span class="drawer-icon">📄</span>
                 <span>${LayoutView.t("reports", "Informes")}</span>
               </a>
-              <a href="#/ask" class="drawer-item">
+              <a href="${isJugadorRole ? 'javascript:void(0);' : '#/ask'}" class="drawer-item ${isJugadorRole ? 'disabled-link' : ''}">
                 <span class="drawer-icon">🤖</span>
-                <span>${LayoutView.t("ask_ai", "Asistente IQ")}</span>
+                <span>${LayoutView.t("ask_ai", "Asistente IQ")}${isJugadorRole ? ' 🔒' : ''}</span>
               </a>
               <a href="#/profile" class="drawer-item">
                 <span class="drawer-icon">👤</span>
@@ -368,6 +413,12 @@ export class LayoutView {
 
         .desktop-only { display: flex; }
         .mobile-only { display: none; }
+
+        .disabled-link {
+          opacity: 0.45 !important;
+          cursor: not-allowed !important;
+          filter: grayscale(0.8);
+        }
 
         /* Sidebar Escritorio */
         .app-sidebar {
@@ -586,11 +637,11 @@ export class LayoutView {
             background-color: var(--color-secondary, #0f172a);
             color: #ffffff;
             height: 56px;
-            padding: 0 12px;
+            padding: 0 10px;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #1e293b;
-            gap: 8px;
+            gap: 6px;
           }
 
           .mobile-brand {
@@ -603,16 +654,15 @@ export class LayoutView {
           }
 
           .mobile-brand .brand-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 900;
           }
 
           .mobile-selectors-row {
             display: flex;
-            gap: 6px;
+            gap: 4px;
             align-items: center;
             flex: 1;
-            max-width: 65%;
             justify-content: flex-end;
           }
 
@@ -621,15 +671,36 @@ export class LayoutView {
             border: 1px solid #334155;
             color: #ffffff;
             border-radius: 6px;
-            padding: 4px 6px;
+            padding: 4px;
             font-size: 11px;
             font-weight: 700;
             outline: none;
-            max-width: 120px;
+            max-width: 110px;
             text-overflow: ellipsis;
             white-space: nowrap;
             overflow: hidden;
             height: 34px;
+          }
+
+          .mobile-lang-box {
+            display: flex;
+            align-items: center;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding-left: 4px;
+            height: 34px;
+          }
+
+          .mobile-lang-icon {
+            font-size: 12px;
+          }
+
+          .mobile-lang-select {
+            border: none !important;
+            background: transparent !important;
+            padding-left: 2px !important;
+            width: 52px !important;
           }
 
           .app-main {
