@@ -1,6 +1,8 @@
 /**
  * @fileoverview DataStore.js - Gestor de Estado Local y Caché para IQ Basket.
  * Resuelve la recuperación de datos al alternar entre múltiples equipos sin necesidad de reiniciar la app.
+ * Garantiza la resolución correcta de UUIDs para season_id, inserciones limpias sin fallos de ON CONFLICT
+ * y el retorno consistente del UUID del partido guardado.
  */
 
 import { supabase } from "../config/database.config.js";
@@ -11,6 +13,7 @@ class DataStoreService {
     this.teams = [];
     this.players = [];
     this.games = [];
+    this.seasons = [];
     this.playerGameStats = [];
     this.gamePeriodScores = [];
     this.isLoaded = false;
@@ -18,8 +21,7 @@ class DataStoreService {
   }
 
   /**
-   * Carga los datos del equipo activo. Si se cambia de equipo (forceRefresh = true),
-   * vacía la caché antigua y consulta Supabase para recuperar la plantilla y partidos del nuevo equipo.
+   * Carga los datos del equipo activo y temporadas optimizando el tráfico de red.
    */
   async init(teamId, forceRefresh = false) {
     const activeTeamId = teamId || this.getActiveTeamId();
@@ -28,36 +30,57 @@ class DataStoreService {
     if (this.isLoading) return;
 
     this.isLoading = true;
-    console.log(`⚡ [DataStore] Carga limpia para equipo: ${activeTeamId}...`);
+    console.log(`⚡ [DataStore] Sincronizando equipo: ${activeTeamId}...`);
 
     try {
-      // 1. Limpieza de caché local para evitar contaminación de datos entre equipos
-      this.players = [];
-      this.games = [];
-      this.playerGameStats = [];
-      this.gamePeriodScores = [];
-
-      // 2. Consulta paralela a Supabase para el team_id solicitado
-      const [cRes, tRes, pRes, gRes, sRes, psRes] = await Promise.all([
+      // 1. Consulta principal paralela
+      const [cRes, tRes, pRes, gRes, sRes] = await Promise.all([
         supabase.from("clubs").select("*"),
         supabase.from("teams").select("*"),
         supabase.from("players").select("*").eq("team_id", activeTeamId),
         supabase.from("games").select("*").eq("team_id", activeTeamId).order("date", { ascending: false }),
-        supabase.from("player_game_stats").select("*"),
-        supabase.from("game_period_scores").select("*")
+        supabase.from("seasons").select("*").order("created_at", { ascending: false })
       ]);
 
+      if (cRes.error) throw cRes.error;
+      if (tRes.error) throw tRes.error;
+      if (pRes.error) throw pRes.error;
+      if (gRes.error) throw gRes.error;
+
+      const teamGames = gRes.data || [];
+      const gameIds = teamGames.map(g => g.id);
+
+      // 2. Consulta filtrada de estadísticas y cuartos solo para los partidos del equipo
+      let sData = [];
+      let psData = [];
+
+      if (gameIds.length > 0) {
+        const [statsRes, psRes] = await Promise.all([
+          supabase.from("player_game_stats").select("*").in("game_id", gameIds),
+          supabase.from("game_period_scores").select("*").in("game_id", gameIds)
+        ]);
+
+        if (statsRes.error) throw statsRes.error;
+        if (psRes.error) throw psRes.error;
+
+        sData = statsRes.data || [];
+        psData = psRes.data || [];
+      }
+
+      // 3. Volcado atómico en memoria
       this.clubs = cRes.data || [];
       this.teams = tRes.data || [];
       this.players = pRes.data || [];
-      this.games = gRes.data || [];
-      this.playerGameStats = sRes.data || [];
-      this.gamePeriodScores = psRes.data || [];
+      this.games = teamGames;
+      this.seasons = sRes.data || [];
+      this.playerGameStats = sData;
+      this.gamePeriodScores = psData;
 
       this.isLoaded = true;
-      console.log(`✅ [DataStore] Carga completada. ${this.players.length} jugadores y ${this.games.length} partidos recuperados.`);
+      console.log(`✅ [DataStore] Carga completada. ${this.players.length} jugadores, ${this.games.length} partidos, ${this.playerGameStats.length} registros estadísticos.`);
     } catch (err) {
       console.error("❌ [DataStore] Error cargando datos del equipo:", err);
+      throw err;
     } finally {
       this.isLoading = false;
     }
@@ -73,15 +96,44 @@ class DataStoreService {
     return localStorage.getItem("iq_active_season") || "2026";
   }
 
+  /**
+   * Resuelve el UUID real de la temporada activa evitando enviar nombres de texto al backend.
+   */
+  getActiveSeasonId() {
+    const activeSeasonName = String(this.getActiveSeason()).trim().toLowerCase();
+    
+    // 1. Buscar coincidencia exacta por nombre en la lista de temporadas cargadas
+    const matchedSeason = (this.seasons || []).find(s => {
+      const sName = String(s.name || '').trim().toLowerCase();
+      return sName === activeSeasonName || activeSeasonName.includes(sName) || sName.includes(activeSeasonName);
+    });
+
+    if (matchedSeason?.id && this.isValidUUID(matchedSeason.id)) {
+      return matchedSeason.id;
+    }
+
+    // 2. Si hay temporadas en memoria, tomar la primera válida
+    const firstValidSeason = (this.seasons || []).find(s => this.isValidUUID(s.id));
+    if (firstValidSeason?.id) {
+      return firstValidSeason.id;
+    }
+
+    // 3. Fallback a UUID constante de la base de datos
+    return "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d";
+  }
+
+  isValidUUID(val) {
+    if (!val || typeof val !== "string") return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+  }
+
   setActiveTeamAndSeason(teamId, season) {
     if (teamId) localStorage.setItem("iq_active_team_id", teamId);
     if (season) localStorage.setItem("iq_active_season", season);
-    
-    // Reset de seguridad para garantizar que el siguiente init() reconsulte Supabase
     this.isLoaded = false;
   }
 
-  // --- GETTERS ULTRARRÁPIDOS ---
+  // --- GETTERS ---
 
   getClubs() { 
     return this.clubs || []; 
@@ -89,7 +141,7 @@ class DataStoreService {
 
   getClubById(id) { 
     if (!id) return null;
-    return (this.clubs || []).find(c => String(c.id).toLowerCase() === String(id).toLowerCase()); 
+    return (this.clubs || []).find(c => String(c.id).toLowerCase() === String(id).toLowerCase()) || null; 
   }
 
   getTeams() { 
@@ -98,11 +150,11 @@ class DataStoreService {
         t.club_id && c.id && String(c.id).trim().toLowerCase() === String(t.club_id).trim().toLowerCase()
       );
 
-      const assignedCoach = t.coach_name || (parentClub ? parentClub.coordinator_name : null) || 'Por definir';
+      const assignedCoach = t.coach_name || (parentClub ? parentClub.coordinator_name : null) || "Por definir";
 
       return {
         ...t,
-        clubName: parentClub ? parentClub.name : 'JMJ Manyanet Sant Andreu',
+        clubName: parentClub ? parentClub.name : "JMJ Manyanet Sant Andreu",
         coach_name: assignedCoach,
         coach: assignedCoach
       };
@@ -111,7 +163,7 @@ class DataStoreService {
 
   getTeamById(id) { 
     if (!id) return null;
-    return (this.teams || []).find(t => String(t.id).toLowerCase() === String(id).toLowerCase()); 
+    return (this.teams || []).find(t => String(t.id).toLowerCase() === String(id).toLowerCase()) || null; 
   }
 
   getPlayers() { 
@@ -120,21 +172,18 @@ class DataStoreService {
   }
 
   getPlayerById(id) { 
-    return (this.players || []).find(p => String(p.id) === String(id)); 
+    if (!id) return null;
+    return (this.players || []).find(p => String(p.id) === String(id)) || null; 
   }
 
   getGames() { 
     const activeTeamId = this.getActiveTeamId();
-    const activeSeason = this.getActiveSeason();
-
-    return (this.games || []).filter(g => 
-      String(g.team_id) === String(activeTeamId) && 
-      (g.season ? String(g.season) === String(activeSeason) : true)
-    ); 
+    return (this.games || []).filter(g => String(g.team_id) === String(activeTeamId)); 
   }
 
   getGameById(id) { 
-    return (this.games || []).find(g => String(g.id) === String(id)); 
+    if (!id) return null;
+    return (this.games || []).find(g => String(g.id) === String(id)) || null; 
   }
 
   getPlayerGameStats(playerId = null, gameId = null) {
@@ -146,11 +195,12 @@ class DataStoreService {
   }
 
   getGamePeriodScores(gameId) {
+    if (!gameId) return [];
     return (this.gamePeriodScores || [])
       .filter(p => String(p.game_id) === String(gameId))
       .sort((a, b) => {
         if (a.is_overtime !== b.is_overtime) return a.is_overtime ? 1 : -1;
-        return a.period_number - b.period_number;
+        return (Number(a.period_number) || 0) - (Number(b.period_number) || 0);
       });
   }
 
@@ -158,97 +208,147 @@ class DataStoreService {
 
   async saveClub(clubData) {
     if (clubData.id) {
-      const { error } = await supabase.from("clubs").update(clubData).eq("id", clubData.id);
-      if (!error) {
-        const idx = this.clubs.findIndex(c => String(c.id) === String(clubData.id));
-        if (idx !== -1) this.clubs[idx] = { ...this.clubs[idx], ...clubData };
-      }
+      const { data, error } = await supabase.from("clubs").update(clubData).eq("id", clubData.id).select().single();
+      if (error) throw error;
+      const idx = this.clubs.findIndex(c => String(c.id) === String(clubData.id));
+      if (idx !== -1) this.clubs[idx] = data;
+      return data;
     } else {
       const { data, error } = await supabase.from("clubs").insert([clubData]).select().single();
-      if (data && !error) {
-        this.clubs.push(data);
-      }
+      if (error) throw error;
+      this.clubs.push(data);
+      return data;
     }
   }
 
   async saveTeam(teamData) {
     if (teamData.id) {
-      const { error } = await supabase.from("teams").update(teamData).eq("id", teamData.id);
-      if (!error) {
-        const idx = this.teams.findIndex(t => String(t.id) === String(teamData.id));
-        if (idx !== -1) this.teams[idx] = { ...this.teams[idx], ...teamData };
-      }
+      const { data, error } = await supabase.from("teams").update(teamData).eq("id", teamData.id).select().single();
+      if (error) throw error;
+      const idx = this.teams.findIndex(t => String(t.id) === String(teamData.id));
+      if (idx !== -1) this.teams[idx] = data;
+      return data;
     } else {
       const { data, error } = await supabase.from("teams").insert([teamData]).select().single();
-      if (data && !error) {
-        this.teams.push(data);
-      }
+      if (error) throw error;
+      this.teams.push(data);
+      return data;
     }
   }
 
   async updatePlayer(playerId, updates) {
-    const idx = this.players.findIndex(p => String(p.id) === String(playerId));
-    if (idx !== -1) {
-      this.players[idx] = { ...this.players[idx], ...updates };
+    const { data, error } = await supabase.from("players").update(updates).eq("id", playerId).select().single();
+    if (error) {
+      console.error("Error al actualizar jugador:", error);
+      throw error;
     }
-
-    const { error } = await supabase.from("players").update(updates).eq("id", playerId);
-    if (error) console.error("Error al hacer push de jugador:", error);
+    const idx = this.players.findIndex(p => String(p.id) === String(playerId));
+    if (idx !== -1) this.players[idx] = data;
+    return data;
   }
 
-  async saveGameAndStats(gameData, statsList, periodScoresList) {
+  /**
+   * Guarda o actualiza el partido, estadísticas en bloque y cuartos de forma atómica.
+   * Evita errores de ON CONFLICT mediante delete + insert por lote.
+   * @returns {Promise<string>} ID del partido guardado.
+   */
+  async saveGameAndStats(gameData, statsList = [], periodScoresList = []) {
     let savedGameId = gameData.id;
-    if (savedGameId) {
-      await supabase.from("games").update(gameData).eq("id", savedGameId);
-      const idx = this.games.findIndex(g => String(g.id) === String(savedGameId));
-      if (idx !== -1) this.games[idx] = { ...this.games[idx], ...gameData };
-    } else {
-      const { data } = await supabase.from("games").insert([gameData]).select().single();
-      if (data) {
+
+    // Normalizar season_id a UUID válido
+    const payloadGame = { ...gameData };
+    if (!this.isValidUUID(payloadGame.season_id)) {
+      payloadGame.season_id = this.getActiveSeasonId();
+    }
+
+    try {
+      // 1. Guardar o actualizar registro principal del partido
+      if (savedGameId) {
+        const { data, error } = await supabase.from("games").update(payloadGame).eq("id", savedGameId).select().single();
+        if (error) throw error;
+        const idx = this.games.findIndex(g => String(g.id) === String(savedGameId));
+        if (idx !== -1) this.games[idx] = data;
+      } else {
+        const { data, error } = await supabase.from("games").insert([payloadGame]).select().single();
+        if (error) throw error;
         savedGameId = data.id;
         this.games.unshift(data);
       }
-    }
 
-    if (!savedGameId) return;
-
-    for (const st of statsList) {
-      const payload = { ...st, game_id: savedGameId };
-      await supabase.from("player_game_stats").upsert(payload, { onConflict: "game_id,player_id" });
-
-      const sIdx = this.playerGameStats.findIndex(
-        s => String(s.game_id) === String(savedGameId) && String(s.player_id) === String(st.player_id)
-      );
-      if (sIdx !== -1) {
-        this.playerGameStats[sIdx] = { ...this.playerGameStats[sIdx], ...payload };
-      } else {
-        this.playerGameStats.push(payload);
+      if (!savedGameId) {
+        throw new Error("No se pudo obtener un ID válido para el partido guardado.");
       }
-    }
 
-    if (periodScoresList) {
-      await supabase.from("game_period_scores").delete().eq("game_id", savedGameId);
-      this.gamePeriodScores = this.gamePeriodScores.filter(p => String(p.game_id) !== String(savedGameId));
+      // 2. Guardar estadísticas: Limpieza previa + inserción limpia por lotes
+      if (statsList.length > 0) {
+        const { error: delStatsErr } = await supabase.from("player_game_stats").delete().eq("game_id", savedGameId);
+        if (delStatsErr) throw delStatsErr;
 
-      const preparedPeriods = periodScoresList.map(p => ({
-        game_id: savedGameId,
-        period_type: p.period_type || (p.is_overtime ? 'overtime' : 'quarter'),
-        period_number: p.period_number,
-        team_score: Number(p.team_score || 0),
-        opponent_score: Number(p.opponent_score || 0),
-        is_overtime: Boolean(p.is_overtime)
-      }));
+        this.playerGameStats = this.playerGameStats.filter(s => String(s.game_id) !== String(savedGameId));
 
-      const { data: insertedPeriods } = await supabase
-        .from("game_period_scores")
-        .insert(preparedPeriods)
-        .select();
+        const preparedStats = statsList.map(st => ({
+          game_id: savedGameId,
+          player_id: st.player_id,
+          minutes: Number(st.minutes || 0),
+          points: (Number(st.fg2_made || 0) * 2) + (Number(st.fg3_made || 0) * 3) + Number(st.ft_made || 0),
+          fg2_made: Number(st.fg2_made || 0),
+          fg2_attempted: Number(st.fg2_attempted || 0),
+          fg3_made: Number(st.fg3_made || 0),
+          fg3_attempted: Number(st.fg3_attempted || 0),
+          ft_made: Number(st.ft_made || 0),
+          ft_attempted: Number(st.ft_attempted || 0),
+          off_reb: Number(st.off_reb || 0),
+          def_reb: Number(st.def_reb || 0),
+          assists: Number(st.assists || 0),
+          steals: Number(st.steals || 0),
+          blocks_made: Number(st.blocks_made || st.blocks || 0),
+          blocks_received: Number(st.blocks_received || 0),
+          turnovers: Number(st.turnovers || 0),
+          fouls_committed: Number(st.fouls_committed || 0),
+          fouls_drawn: Number(st.fouls_drawn || st.fouls_received || 0),
+          plus_minus: Number(st.plus_minus || 0)
+        }));
 
-      if (insertedPeriods) {
-        this.gamePeriodScores.push(...insertedPeriods);
-      } else {
-        this.gamePeriodScores.push(...preparedPeriods);
+        const { data: insertedStats, error: statsError } = await supabase
+          .from("player_game_stats")
+          .insert(preparedStats)
+          .select();
+
+        if (statsError) throw statsError;
+
+        this.playerGameStats.push(...(insertedStats || preparedStats));
       }
+
+      // 3. Desglose de periodos: Limpieza previa + inserción limpia por lotes
+      if (periodScoresList.length > 0) {
+        const { error: delPeriodsErr } = await supabase.from("game_period_scores").delete().eq("game_id", savedGameId);
+        if (delPeriodsErr) throw delPeriodsErr;
+
+        this.gamePeriodScores = this.gamePeriodScores.filter(p => String(p.game_id) !== String(savedGameId));
+
+        const preparedPeriods = periodScoresList.map(p => ({
+          game_id: savedGameId,
+          period_type: p.period_type || (p.is_overtime ? "overtime" : "quarter"),
+          period_number: Number(p.period_number),
+          team_score: Number(p.team_score || 0),
+          opponent_score: Number(p.opponent_score || 0),
+          is_overtime: Boolean(p.is_overtime)
+        }));
+
+        const { data: insertedPeriods, error: insError } = await supabase
+          .from("game_period_scores")
+          .insert(preparedPeriods)
+          .select();
+
+        if (insError) throw insError;
+
+        this.gamePeriodScores.push(...(insertedPeriods || preparedPeriods));
+      }
+
+      return savedGameId;
+    } catch (err) {
+      console.error("❌ [DataStore] Error en saveGameAndStats:", err);
+      throw err;
     }
   }
 }

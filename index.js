@@ -3,7 +3,9 @@
  * - Autenticación Nativa Estricta con Supabase Auth (supabase.auth.signInWithPassword / signUp).
  * - Sincronizado con la tabla 'user_profiles' de la Base de Datos IQB.
  * - Sincronización en tiempo real de cambio de idioma tanto en Desktop como en Header Móvil.
- * - Guarda de seguridad de rutas para redirigir al Dashboard si un rol restringido (ej. JUGADOR) intenta acceder por hash a Comparador o Asistente IA.
+ * - Soporte para EasyStatsEntryView (Entrada rápida y modo pista/heatmap con control de roles).
+ * - Soporte para HeatmapAnalysisView (Análisis visual de mapas de calor, cartas de tiro y zonas).
+ * - Guarda de seguridad de rutas para redirigir al Dashboard si un rol restringido (ej. JUGADOR / INVITADO) intenta acceder por hash a Comparador, Asistente IA o Entrada de Datos.
  * - Validación estricta de equipos autorizados por usuario para evitar cargas no permitidas.
  * - Bloqueo absoluto de acceso ante contraseñas o correos no válidos.
  * - Registro público asignando de forma permanente el rol INVITADO.
@@ -15,6 +17,7 @@
 import { supabase } from "./config/database.config.js";
 import { DataStore } from "./services/DataStore.js";
 import { TranslationStore } from "./services/TranslationStore.js";
+import { I18n } from "./services/I18nService.js";
 import { i18n } from "./core-modules/i18n/I18nEngine.js";
 
 import { AuthView } from "./views/AuthView.js";
@@ -24,6 +27,8 @@ import { TeamStatsView } from "./views/TeamStatsView.js";
 
 import { GameController } from "./controllers/GameController.js";
 import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
+import { EasyStatsEntryView } from "./views/EasyStatsEntryView.js";
+import { HeatmapAnalysisView } from "./views/HeatmapAnalysisView.js";
 import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
 import { AdvancedStatsView } from "./views/AdvancedStatsView.js";
 import { PlayerStatsView } from "./views/PlayerStatsView.js";
@@ -50,9 +55,19 @@ export class IQBasketApp {
       { supabase }
     );
 
-    const authController = {
+    // Controlador de autorización compartido entre vistas
+    this.authController = {
+      getCurrentUser: () => {
+        const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || this.userRole;
+        return {
+          email: localStorage.getItem("iq_user_email") || this.userEmail,
+          role: role,
+          firstName: localStorage.getItem("iq_user_name") || "",
+          lastName: localStorage.getItem("iq_user_lastname") || ""
+        };
+      },
       hasRole: (role) => {
-        const activeRole = localStorage.getItem("iq_user_role") || this.userRole;
+        const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || this.userRole;
         if (Array.isArray(role)) return role.includes(activeRole);
         return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(activeRole);
       }
@@ -60,23 +75,26 @@ export class IQBasketApp {
 
     this.views = {
       auth: new AuthView(),
-      dashboard: new SeasonDashboardView(supabase, authController),
-      team: new TeamStatsView(supabase, authController),
-      equipo: new TeamStatsView(supabase, authController),
+      dashboard: new SeasonDashboardView(supabase, this.authController),
+      team: new TeamStatsView(supabase, this.authController),
+      equipo: new TeamStatsView(supabase, this.authController),
       
-      liveeditor: new GameLiveEditorView(this.gameController, authController),
-      partidos: new GameLiveEditorView(this.gameController, authController),
-      advanced: new AdvancedStatsView(this.gameController),
-      boxscore: new GameBoxScoreView(supabase, authController),
+      // Vistas de edición, toma de datos y mapas de calor
+      liveeditor: new GameLiveEditorView(this.gameController, this.authController),
+      easyentry: (gameId) => new EasyStatsEntryView(this.gameController, this.authController, TranslationStore, gameId),
+      heatmap: new HeatmapAnalysisView(supabase, this.authController),
 
-      player: new PlayerStatsView(supabase, authController),
-      lineups: new LineupsView(authController),
-      comparator: new ComparatorView(authController),
-      reports: new ReportsView(authController),
-      settings: new TranslationsView(authController),
-      ask: new AskAIView(authController),
-      profile: new ProfileView(authController),
-      perfil: new ProfileView(authController)
+      advanced: new AdvancedStatsView(this.gameController),
+      boxscore: new GameBoxScoreView(supabase, this.authController),
+
+      player: new PlayerStatsView(supabase, this.authController),
+      lineups: new LineupsView(this.authController),
+      comparator: new ComparatorView(this.authController),
+      reports: new ReportsView(this.authController),
+      settings: new TranslationsView(this.authController),
+      ask: new AskAIView(this.authController),
+      profile: new ProfileView(this.authController),
+      perfil: new ProfileView(this.authController)
     };
   }
 
@@ -480,11 +498,21 @@ export class IQBasketApp {
     const parts = rawHash.split("/");
     const targetRoute = parts[0].toLowerCase();
     
-    // GUARDA DE SEGURIDAD POR ROL: Bloquear acceso por hash a Comparador y Asistente IA para JUGADOR
+    // GUARDA DE SEGURIDAD POR ROL
     const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
     
-    if (activeRole === "JUGADOR" && ["comparator", "comparador", "ask", "ask-ai", "pregunta", "preguntale", "ai", "ia"].includes(targetRoute)) {
-      alert("⚠️ Tu rol de JUGADOR no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
+    // 1. Bloquear Comparador y Asistente IA a JUGADOR e INVITADO
+    if (["JUGADOR", "INVITADO"].includes(activeRole) && ["comparator", "comparador", "ask", "ask-ai", "pregunta", "preguntale", "ai", "ia"].includes(targetRoute)) {
+      alert("⚠️ Tu rol no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
+      window.location.hash = "#/dashboard";
+      this.currentRoute = "dashboard";
+      this.routeParams = {};
+      return;
+    }
+
+    // 2. Bloquear Entrada de Datos a JUGADOR e INVITADO
+    if (["JUGADOR", "INVITADO"].includes(activeRole) && ["easy-entry", "easy", "entrada-facil", "live-entry"].includes(targetRoute)) {
+      alert("⚠️ La entrada y edición de datos está reservada a entrenadores, analistas y administradores.");
       window.location.hash = "#/dashboard";
       this.currentRoute = "dashboard";
       this.routeParams = {};
@@ -582,6 +610,15 @@ export class IQBasketApp {
         if (this.views.team) await this.views.team.render(contentArea, this.teamId);
         break;
 
+      case "easy-entry":
+      case "easy":
+      case "entrada-facil":
+      case "live-entry":
+        const targetContainer = document.getElementById(contentArea);
+        const easyView = this.views.easyentry(this.routeParams.id || this.teamId);
+        await easyView.render(targetContainer);
+        break;
+
       case "games":
       case "partidos":
       case "game":
@@ -595,6 +632,13 @@ export class IQBasketApp {
 
       case "advanced":
         if (this.views.advanced) await this.views.advanced.render(contentArea);
+        break;
+
+      // RUTA DE ANÁLISIS DE MAPA DE CALOR Y TIRO
+      case "heatmap":
+      case "calor":
+      case "shotchart":
+        if (this.views.heatmap) await this.views.heatmap.render(contentArea, this.teamId);
         break;
 
       case "boxscore":
