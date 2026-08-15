@@ -4,6 +4,7 @@
  * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) presente tanto en Desktop como en Móvil,
  * y selectores dinámicos de Equipo y Temporada restringidos por los equipos asignados a cada usuario.
  * Sincronizado en tiempo real con las claves planas de la tabla 'translations' de Supabase.
+ * Integra accesos directos para Mapa de Calor (Heatmap) y Registro Rápido.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -20,6 +21,8 @@ export class LayoutView {
     const r = String(route || '').toLowerCase().trim();
     if (['partidos', 'games', 'game', 'live'].includes(r)) return 'games';
     if (['advanced', 'advanced_stats'].includes(r)) return 'advanced';
+    if (['heatmap', 'calor', 'shotchart'].includes(r)) return 'heatmap';
+    if (['easy-entry', 'easy', 'entrada-facil', 'live-entry'].includes(r)) return 'easy-entry';
     if (['boxscore', 'registro'].includes(r)) return 'boxscore';
     if (['team', 'equipo'].includes(r)) return 'team';
     if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
@@ -157,7 +160,7 @@ export class LayoutView {
     // Activar los eventos del menú flotante e interceptadores
     LayoutView.bindMobileDrawerEvents();
 
-    const isJugadorRole = userRole === "JUGADOR";
+    const isJugadorRole = userRole === "JUGADOR" || userRole === "INVITADO";
 
     // CLAVES PLANAS TRADUCIBLES DIRECTAS DE SUPABASE
     const navGroups = [
@@ -183,6 +186,7 @@ export class LayoutView {
         defaultTitle: "ANÁLISIS",
         items: [
           { key: "advanced", labelKey: "advanced_stats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
+          { key: "heatmap", labelKey: "heatmap_analysis", fallback: "Mapa de Calor", route: "heatmap", svg: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>' },
           { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", disabled: isJugadorRole, svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
           { key: "reports", labelKey: "reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
           { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
@@ -263,7 +267,7 @@ export class LayoutView {
           </div>
         </header>
 
-        <!-- BARRA LATERAL AZUL (DESKTOP >= 768px) -->
+        <!-- BARRA LATERAL (DESKTOP >= 768px) -->
         <aside class="app-sidebar desktop-only">
           
           <div class="sidebar-inner">
@@ -337,9 +341,9 @@ export class LayoutView {
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line></svg>
             <span class="mobile-label">${LayoutView.t("games", "Partidos")}</span>
           </a>
-          <a href="#/advanced" class="mobile-nav-item ${currentActiveKey === 'advanced' ? 'active' : ''}" data-route-key="advanced">
-            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-            <span class="mobile-label">${LayoutView.t("advanced_stats", "Stats")}</span>
+          <a href="#/heatmap" class="mobile-nav-item ${currentActiveKey === 'heatmap' ? 'active' : ''}" data-route-key="heatmap">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span class="mobile-label">${LayoutView.t("heatmap_analysis", "Calor")}</span>
           </a>
           <button type="button" id="btn-mobile-more-toggle" class="mobile-nav-item" aria-expanded="false">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
@@ -355,6 +359,10 @@ export class LayoutView {
               <button type="button" id="btn-close-drawer" class="drawer-close">&times;</button>
             </div>
             <div class="drawer-grid">
+              <a href="#/advanced" class="drawer-item">
+                <span class="drawer-icon">📈</span>
+                <span>${LayoutView.t("advanced_stats", "Stats Avanzadas")}</span>
+              </a>
               <a href="#/players" class="drawer-item">
                 <span class="drawer-icon">👤</span>
                 <span>${LayoutView.t("players", "Jugadores")}</span>
@@ -858,6 +866,7 @@ I18n.subscribe(() => {
       games: "games",
       lineups: "lineups",
       advanced: "advanced_stats",
+      heatmap: "heatmap_analysis",
       comparator: "comparator",
       reports: "reports",
       ask: "ask_ai",
