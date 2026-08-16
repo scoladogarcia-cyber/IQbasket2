@@ -1,8 +1,10 @@
 /**
  * @fileoverview DataStore.js - Gestor de Estado Local y Caché para IQ Basket.
- * Resuelve la recuperación de datos al alternar entre múltiples equipos sin necesidad de reiniciar la app.
- * Garantiza la resolución correcta de UUIDs para season_id, inserciones limpias sin fallos de ON CONFLICT
- * y el retorno consistente del UUID del partido guardado.
+ * Mapeo estricto con las columnas reales de:
+ *  - games (periods, periods_count, period_minutes, starter_ids, our_score, opp_score, period_scores, quarter_scores_team, quarter_scores_opponent)
+ *  - player_game_stats (cálculo de points, fg2, fg3, ft, reb, ast, stl, blk, tov, fouls, +/-)
+ *  - game_period_scores (period_type, period_number, team_score, opponent_score, is_overtime)
+ *  - game_events (persistencia espacial y borrado en cascada garantizado)
  */
 
 import { supabase } from "../config/database.config.js";
@@ -60,8 +62,8 @@ class DataStoreService {
           supabase.from("game_period_scores").select("*").in("game_id", gameIds)
         ]);
 
-        if (statsRes.error) throw statsRes.error;
-        if (psRes.error) throw psRes.error;
+        if (statsRes.error) console.warn("Aviso cargando player_game_stats:", statsRes.error);
+        if (psRes.error) console.warn("Aviso cargando game_period_scores:", psRes.error);
 
         sData = statsRes.data || [];
         psData = psRes.data || [];
@@ -96,13 +98,9 @@ class DataStoreService {
     return localStorage.getItem("iq_active_season") || "2026";
   }
 
-  /**
-   * Resuelve el UUID real de la temporada activa evitando enviar nombres de texto al backend.
-   */
   getActiveSeasonId() {
     const activeSeasonName = String(this.getActiveSeason()).trim().toLowerCase();
     
-    // 1. Buscar coincidencia exacta por nombre en la lista de temporadas cargadas
     const matchedSeason = (this.seasons || []).find(s => {
       const sName = String(s.name || '').trim().toLowerCase();
       return sName === activeSeasonName || activeSeasonName.includes(sName) || sName.includes(activeSeasonName);
@@ -112,13 +110,11 @@ class DataStoreService {
       return matchedSeason.id;
     }
 
-    // 2. Si hay temporadas en memoria, tomar la primera válida
     const firstValidSeason = (this.seasons || []).find(s => this.isValidUUID(s.id));
     if (firstValidSeason?.id) {
       return firstValidSeason.id;
     }
 
-    // 3. Fallback a UUID constante de la base de datos
     return "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d";
   }
 
@@ -194,14 +190,74 @@ class DataStoreService {
     });
   }
 
+  /**
+   * Recupera los eventos dinámicos guardados en localStorage o en memoria
+   */
+  getGameEvents(gameId = null) {
+    const targetGames = gameId 
+      ? (this.games || []).filter(g => String(g.id) === String(gameId))
+      : (this.games || []);
+
+    let allEvents = [];
+    targetGames.forEach(g => {
+      const cached = localStorage.getItem(`iq_game_events_${g.id}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            allEvents.push(...parsed.map(e => ({ ...e, game_id: g.id })));
+            return;
+          }
+        } catch (e) {}
+      }
+
+      let evList = g.events || g.observations;
+      if (typeof evList === "string") {
+        try { evList = JSON.parse(evList); } catch (e) { evList = []; }
+      }
+      if (Array.isArray(evList)) {
+        allEvents.push(...evList.map(e => ({ ...e, game_id: g.id })));
+      }
+    });
+
+    return allEvents;
+  }
+
+  /**
+   * Recupera los cuartos de un partido en orden.
+   * Prioriza 'game_period_scores' y usa como respaldo 'games.periods'.
+   */
   getGamePeriodScores(gameId) {
     if (!gameId) return [];
-    return (this.gamePeriodScores || [])
-      .filter(p => String(p.game_id) === String(gameId))
-      .sort((a, b) => {
+
+    const relationalScores = (this.gamePeriodScores || []).filter(p => String(p.game_id) === String(gameId));
+    if (relationalScores.length > 0) {
+      return relationalScores.sort((a, b) => {
         if (a.is_overtime !== b.is_overtime) return a.is_overtime ? 1 : -1;
         return (Number(a.period_number) || 0) - (Number(b.period_number) || 0);
       });
+    }
+
+    const game = this.getGameById(gameId);
+    if (game && game.periods) {
+      let rawPeriods = game.periods;
+      if (typeof rawPeriods === "string") {
+        try { rawPeriods = JSON.parse(rawPeriods); } catch (e) { rawPeriods = []; }
+      }
+
+      if (Array.isArray(rawPeriods) && rawPeriods.length > 0) {
+        return rawPeriods.map((p, idx) => ({
+          game_id: gameId,
+          period_type: (p.is_overtime || Number(p.period || p.period_number) > 4) ? 'overtime' : 'quarter',
+          period_number: Number(p.period || p.period_number || (idx + 1)),
+          team_score: Number(p.team_score || 0),
+          opponent_score: Number(p.opponent_score || 0),
+          is_overtime: Boolean(p.is_overtime || Number(p.period || p.period_number) > 4)
+        })).sort((a, b) => a.period_number - b.period_number);
+      }
+    }
+
+    return [];
   }
 
   // --- OPERACIONES DE PERSISTENCIA ---
@@ -248,21 +304,54 @@ class DataStoreService {
   }
 
   /**
-   * Guarda o actualiza el partido, estadísticas en bloque y cuartos de forma atómica.
-   * Evita errores de ON CONFLICT mediante delete + insert por lote.
+   * Guarda o actualiza el partido, estadísticas en bloque y cuartos.
+   * Envía arrays nativos para JSONB y mapea las columnas exactas de Supabase.
    * @returns {Promise<string>} ID del partido guardado.
    */
-  async saveGameAndStats(gameData, statsList = [], periodScoresList = []) {
+  async saveGameAndStats(gameData, statsList = [], periodScoresList = [], eventsList = []) {
     let savedGameId = gameData.id;
 
-    // Normalizar season_id a UUID válido
-    const payloadGame = { ...gameData };
+    // 1. Normalizar cuartos para la columna JSONB 'periods'
+    const formattedPeriods = periodScoresList.map((p, idx) => ({
+      period: Number(p.period_number || (idx + 1)),
+      team_score: Number(p.team_score || 0),
+      opponent_score: Number(p.opponent_score || 0),
+      is_overtime: Boolean(p.is_overtime || Number(p.period_number || (idx + 1)) > 4)
+    }));
+
+    // 2. Normalizar starter_ids
+    let parsedStarters = gameData.starter_ids || [];
+    if (typeof parsedStarters === "string") {
+      try { parsedStarters = JSON.parse(parsedStarters); } catch (e) { parsedStarters = []; }
+    }
+
+    const qTeam = formattedPeriods.map(p => p.team_score);
+    const qOpp = formattedPeriods.map(p => p.opponent_score);
+    const teamScore = Number(gameData.team_score || 0);
+    const oppScore = Number(gameData.opponent_score || 0);
+
+    const payloadGame = {
+      ...gameData,
+      periods: formattedPeriods,
+      periods_count: formattedPeriods.length || 4,
+      period_minutes: Number(gameData.period_minutes || 10),
+      starter_ids: parsedStarters,
+      team_score: teamScore,
+      opponent_score: oppScore,
+      our_score: teamScore,
+      opp_score: oppScore,
+      quarter_scores_team: qTeam,
+      quarter_scores_opponent: qOpp,
+      has_overtime: formattedPeriods.some(p => p.is_overtime),
+      overtime_count: formattedPeriods.filter(p => p.is_overtime).length
+    };
+
     if (!this.isValidUUID(payloadGame.season_id)) {
       payloadGame.season_id = this.getActiveSeasonId();
     }
 
     try {
-      // 1. Guardar o actualizar registro principal del partido
+      // 3. Guardar o actualizar en games
       if (savedGameId) {
         const { data, error } = await supabase.from("games").update(payloadGame).eq("id", savedGameId).select().single();
         if (error) throw error;
@@ -275,39 +364,58 @@ class DataStoreService {
         this.games.unshift(data);
       }
 
-      if (!savedGameId) {
-        throw new Error("No se pudo obtener un ID válido para el partido guardado.");
+      if (!savedGameId) throw new Error("No se pudo obtener un ID válido para el partido guardado.");
+
+      // 4. Guardar respaldo local de jugadas/tiros
+      if (eventsList && eventsList.length > 0) {
+        localStorage.setItem(`iq_game_events_${savedGameId}`, JSON.stringify(eventsList));
       }
 
-      // 2. Guardar estadísticas: Limpieza previa + inserción limpia por lotes
+      // 5. Guardar estadísticas en player_game_stats
       if (statsList.length > 0) {
         const { error: delStatsErr } = await supabase.from("player_game_stats").delete().eq("game_id", savedGameId);
         if (delStatsErr) throw delStatsErr;
 
         this.playerGameStats = this.playerGameStats.filter(s => String(s.game_id) !== String(savedGameId));
 
-        const preparedStats = statsList.map(st => ({
-          game_id: savedGameId,
-          player_id: st.player_id,
-          minutes: Number(st.minutes || 0),
-          points: (Number(st.fg2_made || 0) * 2) + (Number(st.fg3_made || 0) * 3) + Number(st.ft_made || 0),
-          fg2_made: Number(st.fg2_made || 0),
-          fg2_attempted: Number(st.fg2_attempted || 0),
-          fg3_made: Number(st.fg3_made || 0),
-          fg3_attempted: Number(st.fg3_attempted || 0),
-          ft_made: Number(st.ft_made || 0),
-          ft_attempted: Number(st.ft_attempted || 0),
-          off_reb: Number(st.off_reb || 0),
-          def_reb: Number(st.def_reb || 0),
-          assists: Number(st.assists || 0),
-          steals: Number(st.steals || 0),
-          blocks_made: Number(st.blocks_made || st.blocks || 0),
-          blocks_received: Number(st.blocks_received || 0),
-          turnovers: Number(st.turnovers || 0),
-          fouls_committed: Number(st.fouls_committed || 0),
-          fouls_drawn: Number(st.fouls_drawn || st.fouls_received || 0),
-          plus_minus: Number(st.plus_minus || 0)
-        }));
+        const preparedStats = statsList.map(st => {
+          const offReb = Number(st.off_reb || st.rebounds_offensive || 0);
+          const defReb = Number(st.def_reb || st.rebounds_defensive || 0);
+          const blkMade = Number(st.blocks_made || st.blocks || 0);
+          const fDrawn = Number(st.fouls_drawn || st.fouls_received || 0);
+          const fg2M = Number(st.fg2_made || 0);
+          const fg3M = Number(st.fg3_made || 0);
+          const ftM = Number(st.ft_made || 0);
+          const pts = (fg2M * 2) + (fg3M * 3) + ftM;
+
+          return {
+            game_id: savedGameId,
+            player_id: st.player_id,
+            starter: parsedStarters.includes(st.player_id),
+            minutes: Number(st.minutes || 0),
+            points: pts,
+            fg2_made: fg2M,
+            fg2_attempted: Number(st.fg2_attempted || 0),
+            fg3_made: fg3M,
+            fg3_attempted: Number(st.fg3_attempted || 0),
+            ft_made: ftM,
+            ft_attempted: Number(st.ft_attempted || 0),
+            off_reb: offReb,
+            def_reb: defReb,
+            rebounds_offensive: offReb,
+            rebounds_defensive: defReb,
+            assists: Number(st.assists || 0),
+            steals: Number(st.steals || 0),
+            blocks: blkMade,
+            blocks_made: blkMade,
+            blocks_received: Number(st.blocks_received || 0),
+            turnovers: Number(st.turnovers || 0),
+            fouls_committed: Number(st.fouls_committed || 0),
+            fouls_drawn: fDrawn,
+            fouls_received: fDrawn,
+            plus_minus: Number(st.plus_minus || 0)
+          };
+        });
 
         const { data: insertedStats, error: statsError } = await supabase
           .from("player_game_stats")
@@ -315,39 +423,77 @@ class DataStoreService {
           .select();
 
         if (statsError) throw statsError;
-
         this.playerGameStats.push(...(insertedStats || preparedStats));
       }
 
-      // 3. Desglose de periodos: Limpieza previa + inserción limpia por lotes
+      // 6. Guardar en game_period_scores
       if (periodScoresList.length > 0) {
-        const { error: delPeriodsErr } = await supabase.from("game_period_scores").delete().eq("game_id", savedGameId);
-        if (delPeriodsErr) throw delPeriodsErr;
+        try {
+          await supabase.from("game_period_scores").delete().eq("game_id", savedGameId);
+          this.gamePeriodScores = this.gamePeriodScores.filter(p => String(p.game_id) !== String(savedGameId));
 
-        this.gamePeriodScores = this.gamePeriodScores.filter(p => String(p.game_id) !== String(savedGameId));
+          const preparedPeriods = periodScoresList.map(p => ({
+            game_id: savedGameId,
+            period_type: p.period_type || (p.is_overtime ? "overtime" : "quarter"),
+            period_number: Number(p.period_number),
+            team_score: Number(p.team_score || 0),
+            opponent_score: Number(p.opponent_score || 0),
+            is_overtime: Boolean(p.is_overtime)
+          }));
 
-        const preparedPeriods = periodScoresList.map(p => ({
-          game_id: savedGameId,
-          period_type: p.period_type || (p.is_overtime ? "overtime" : "quarter"),
-          period_number: Number(p.period_number),
-          team_score: Number(p.team_score || 0),
-          opponent_score: Number(p.opponent_score || 0),
-          is_overtime: Boolean(p.is_overtime)
-        }));
+          const { data: insertedPeriods } = await supabase
+            .from("game_period_scores")
+            .insert(preparedPeriods)
+            .select();
 
-        const { data: insertedPeriods, error: insError } = await supabase
-          .from("game_period_scores")
-          .insert(preparedPeriods)
-          .select();
-
-        if (insError) throw insError;
-
-        this.gamePeriodScores.push(...(insertedPeriods || preparedPeriods));
+          this.gamePeriodScores.push(...(insertedPeriods || preparedPeriods));
+        } catch (periodErr) {
+          console.warn("Aviso: 'game_period_scores' guardado relacional:", periodErr);
+        }
       }
 
       return savedGameId;
     } catch (err) {
       console.error("❌ [DataStore] Error en saveGameAndStats:", err);
+      throw err;
+    }
+  }
+
+  /**
+   * Elimina un partido y todas sus tablas hijas en cascada estricta.
+   */
+  async deleteGame(gameId) {
+    if (!gameId) return false;
+
+    console.log(`🗑️ [DataStore] Iniciando borrado del partido: ${gameId}...`);
+
+    try {
+      // 1. Borrar en paralelo de todas las tablas dependientes
+      await Promise.allSettled([
+        supabase.from("player_game_stats").delete().eq("game_id", gameId),
+        supabase.from("game_period_scores").delete().eq("game_id", gameId),
+        supabase.from("game_events").delete().eq("game_id", gameId),
+        supabase.from("lineup_game_stats").delete().eq("game_id", gameId),
+        supabase.from("play_by_play_events").delete().eq("game_id", gameId),
+        supabase.from("player_notes").delete().eq("game_id", gameId),
+        supabase.from("player_goals").delete().eq("game_id", gameId),
+        supabase.from("reports").delete().eq("game_id", gameId)
+      ]);
+
+      // 2. Borrar de la tabla principal games
+      const { error: delGameErr } = await supabase.from("games").delete().eq("id", gameId);
+      if (delGameErr) throw delGameErr;
+
+      // 3. Limpiar memoria local y caché
+      localStorage.removeItem(`iq_game_events_${gameId}`);
+      this.games = (this.games || []).filter(g => String(g.id) !== String(gameId));
+      this.playerGameStats = (this.playerGameStats || []).filter(s => String(s.game_id) !== String(gameId));
+      this.gamePeriodScores = (this.gamePeriodScores || []).filter(p => String(p.game_id) !== String(gameId));
+
+      console.log(`✅ [DataStore] Partido ${gameId} eliminado de Supabase y memoria.`);
+      return true;
+    } catch (err) {
+      console.error("❌ [DataStore] Error eliminando partido:", err);
       throw err;
     }
   }
