@@ -1,120 +1,82 @@
 /**
- * @fileoverview Configuración global, marca, reglas deportivas y matriz RBAC de IQ Basket.
- * @description Centraliza el nombre oficial "IQ Basket", las reglas de baloncesto, los 6 roles oficiales,
- * la matriz de permisos RBAC con restricciones por rol y los límites mensuales de consultas para el Asistente IA.
+ * @fileoverview Configuración Global de la Aplicación: APP_CONFIG.
+ * @description Centraliza metadatos del sistema, matriz de permisos RBAC oficial,
+ * constantes reglamentarias de baloncesto FIBA, rutas de vistas y parámetros de IA.
  */
 
-export const APP_CONFIG = Object.freeze({
-  /** Nombre principal unificado de la marca */
+export const APP_CONFIG = {
   appName: "IQ Basket",
+  version: "2.4.0",
+  environment: "production",
+  defaultSeason: "2026",
   
-  /** Título extendido para PWA y encabezado de navegador */
-  appTitle: "IQ Basket - Basketball Stats Studio Pro",
-  
-  /** Versión del software */
-  version: "2.0.0",
-  env: "development",
-
-  /**
-   * Parámetros oficiales de juego (Reglas reglamentarias y prórrogas)
-   */
-  basketball: {
-    regularPeriodsPerGame: 4,      // Periodos reglamentarios (4 cuartos)
-    periodDurationMinutes: 10,     // Duración en minutos de cada cuarto
-    overtimeDurationMinutes: 5,    // Duración en minutos de cada prórroga
-    maxFoulsPerPlayer: 5,          // Límite de faltas para aviso/expulsión de jugador
-    allowUnlimitedOvertimes: true  // Permite añadir prórrogas dinámicas ilimitadas (OT1, OT2... OTn)
-  },
-
-  /**
-   * Roles de usuario oficiales e innegociables del sistema IQ Basket.
-   */
-  roles: {
-    SUPERADMIN: "SUPERADMIN",     // Acceso y visibilidad total de la plataforma
-    ADMIN: "ADMIN",               // Gestión de club / liga
-    ENTRENADOR: "ENTRENADOR",     // Gestión de plantilla y partidos
-    ANALISTA: "ANALISTA",         // Scouting y analítica avanzada
-    JUGADOR: "JUGADOR",            // Solo ve su equipo y sus propias stats
-    INVITADO: "INVITADO"          // Modo lectura pública / demostración
-  },
-
-  /**
-   * Límites mensuales de consultas al Asistente IA por rol (-1 = ilimitado, 0 = bloqueado)
-   */
-  aiMonthlyLimits: {
-    SUPERADMIN: -1,
-    ADMIN: 200,
-    ENTRENADOR: 100,
-    ANALISTA: 100,
-    JUGADOR: 0,
-    INVITADO: 0
-  },
-
-  /**
-   * Matriz RBAC (Role-Based Access Control): Vincula acciones con los roles autorizados.
-   */
+  // =========================================================================
+  // MATRIZ OFICIAL DE CONTROL DE ACCESO BASADO EN ROLES (RBAC)
+  // =========================================================================
   permissions: {
-    // 1. Clubes y Estructura
-    VIEW_CLUBS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    CREATE_CLUB: ["SUPERADMIN"],
-    EDIT_CLUB: ["SUPERADMIN", "ADMIN"],
-    DELETE_CLUB: ["SUPERADMIN"],
+    // Dashboards y Consultas Generales
+    VIEW_DASHBOARD: ["SUPERADMIN", "ADMIN", "SCOUT", "VIEWER"],
+    VIEW_REPORTS: ["SUPERADMIN", "ADMIN", "SCOUT", "VIEWER"],
+    EXPORT_REPORTS: ["SUPERADMIN", "ADMIN", "SCOUT", "VIEWER"],
+    VIEW_ALL_PLAYER_STATS: ["SUPERADMIN", "ADMIN", "SCOUT"],
+    VIEW_TEAM_STATS: ["SUPERADMIN", "ADMIN", "SCOUT", "VIEWER"],
+    
+    // Registro y Toma de Datos en Vivo (Event Sourcing / Play-by-Play)
+    RECORD_LIVE_GAME: ["SUPERADMIN", "ADMIN", "SCOUT"],
+    EDIT_PLAY_BY_PLAY: ["SUPERADMIN", "ADMIN", "SCOUT"],
+    CREATE_GAME: ["SUPERADMIN", "ADMIN", "SCOUT"],
+    DELETE_GAME: ["SUPERADMIN", "ADMIN"],
+    
+    // Gestión de Entidades (Plantilla y Estructura Deportiva)
+    MANAGE_ROSTER: ["SUPERADMIN", "ADMIN"],
+    CREATE_PLAYER: ["SUPERADMIN", "ADMIN"],
+    EDIT_PLAYER: ["SUPERADMIN", "ADMIN"],
+    DELETE_PLAYER: ["SUPERADMIN", "ADMIN"],
+    MANAGE_TEAMS: ["SUPERADMIN", "ADMIN"],
+    CREATE_TEAM: ["SUPERADMIN", "ADMIN"],
+    EDIT_TEAM: ["SUPERADMIN", "ADMIN"],
+    DELETE_TEAM: ["SUPERADMIN", "ADMIN"],
+    
+    // Auditoría, Aprobaciones y Sistema
+    VALIDATE_CHANGE_REQUESTS: ["SUPERADMIN", "ADMIN"],
+    MANAGE_TRANSLATIONS: ["SUPERADMIN", "ADMIN"],
+    MANAGE_USERS: ["SUPERADMIN"]
+  },
 
-    // 2. Equipos y Temporadas
-    VIEW_TEAMS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    CREATE_TEAM: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    EDIT_TEAM: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    SWITCH_TEAM_CONTEXT: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    CREATE_SEASON: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    EDIT_SEASON: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    SWITCH_SEASON: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
+  // =========================================================================
+  // PARÁMETROS REGLAMENTARIOS DE BALONCESTO (FIBA)
+  // =========================================================================
+  basketball: {
+    periodMinutes: 10,
+    overtimeMinutes: 5,
+    regulationPeriods: 4,
+    foulsBonusLimit: 5,
+    playersOnCourt: 5,
+    positions: [
+      { id: "PG", name: "Base", shortName: "1" },
+      { id: "SG", name: "Escolta", shortName: "2" },
+      { id: "SF", name: "Alero", shortName: "3" },
+      { id: "PF", name: "Ala-Pívot", shortName: "4" },
+      { id: "C", name: "Pívot", shortName: "5" }
+    ],
+    shotZones: {
+      RESTRICTED_AREA_RADIUS: 1.25, // metros
+      PAINT_WIDTH: 4.9,
+      PAINT_LENGTH: 5.8,
+      THREE_POINT_RADIUS: 6.75,     // Distancia FIBA oficial
+      CORNER_THREE_DISTANCE: 6.60
+    }
+  },
 
-    // 3. Plantilla y Jugadores
-    VIEW_ROSTER: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    CREATE_PLAYER: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    EDIT_PLAYER: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    SEARCH_GLOBAL_MARKET: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    REQUEST_TRANSFER: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    APPROVE_TRANSFER: ["SUPERADMIN", "ADMIN"],
-
-    // 4. Anotación y Partidos
-    RECORD_GAME: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"],
-    RECORD_LIVE_GAME: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    EDIT_BOXSCORE: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-    VIEW_GAMES: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    CREATE_GAME: ["SUPERADMIN", "ADMIN", "ENTRENADOR"],
-
-    // 5. Visualización de Estadísticas (Privacidad y Métricas)
-    VIEW_GAME_STATS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    VIEW_TEAM_STATS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    VIEW_ALL_PLAYER_STATS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"],
-    VIEW_OWN_PLAYER_STATS: ["JUGADOR"],
-    VIEW_DASHBOARD: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    VIEW_ADVANCED_STATS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    VIEW_LINEUP_STATS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    VIEW_COMPARATOR: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-
-    // 6. Informes y Exportaciones
-    EXPORT_DATA: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"],
-    GENERATE_REPORTS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    EXPORT_REPORTS_PDF: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"],
-
-    // 7. Gestión de Usuarios, Solicitudes y Roles
-    VIEW_USERS: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    INVITE_USER: ["SUPERADMIN", "ADMIN"],
-    ASSIGN_ROLES_AND_TEAMS: ["SUPERADMIN", "ADMIN"],
-    CHANGE_USER_ROLE: ["SUPERADMIN"],
-    REQUEST_TEAM_MEMBERSHIP: ["ENTRENADOR", "ANALISTA", "JUGADOR"],
-    APPROVE_JOIN_REQUEST: ["SUPERADMIN", "ADMIN"],
-
-    // 8. Asistente IA
-    VIEW_AI_NAV: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"],
-    QUERY_AI: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"],
-
-    // 9. Administración del Sistema e Internacionalización
-    MANAGE_TRANSLATIONS: ["SUPERADMIN"],
-    SWITCH_LOCALE: ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"]
+  // =========================================================================
+  // CONFIGURACIÓN DEL ASISTENTE DE IA (LLM)
+  // =========================================================================
+  ai: {
+    defaultModel: "gemini-2.5-pro",
+    temperature: 0.2,
+    maxTokens: 1500,
+    supportedLanguages: ["es", "ca", "en", "fr"]
   }
-});
+};
 
 export default APP_CONFIG;

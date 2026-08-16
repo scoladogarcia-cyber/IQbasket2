@@ -1,15 +1,18 @@
 /**
- * @fileoverview Vista de Partidos y Formulario de Edición (GameLiveEditorView.js).
- * - Acta Oficial (Tabla) con edición de cuartos y control de cuadre de puntos en vivo.
- * - Validación cruzada: Suma de Jugadores vs Suma de Cuartos vs Total de Partido.
- * - Borrado directo garantizado mediante DataStore.deleteGame.
- * - Registro en vivo, mapas de tiro y persistencia en Supabase/LocalStorage.
+ * @fileoverview Vista de Partidos, Toma Gráfica en Pista y Acta Oficial: GameLiveEditorView.js
+ * @description Gestión integral de la toma de datos de partido en 4 modos:
+ * 1) Modo Pista (Shot chart y coordenadas espaciales)
+ * 2) Modo Rápido (Control táctil con 5 en pista)
+ * 3) Acta Oficial (Tabla completa con cuadre de parciales)
+ * 4) HUD Pro En Vivo (Conexión con LiveScoreHUDView para reloj, sustituciones y Play-by-Play)
  */
 
 import { supabase } from "../config/database.config.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -25,7 +28,7 @@ export class GameLiveEditorView {
     this.sortOrder = "desc";
     this.isEditing = false;
     
-    this.entrySubMode = "court";
+    this.entrySubMode = "court"; // 'court' | 'fast' | 'classic'
     this.activePeriodNumber = 1;
     this.isPeriodOvertime = false;
     this.selectedPlayerId = null;
@@ -37,7 +40,7 @@ export class GameLiveEditorView {
   }
 
   t(key, fallback = "") {
-    return TranslationStore.t(key, fallback) || I18n.t(key, fallback) || fallback;
+    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
   _canEditFullBoxScore() {
@@ -45,17 +48,18 @@ export class GameLiveEditorView {
     return (
       this.auth.hasRole("SUPERADMIN") ||
       this.auth.hasRole("ADMIN") ||
+      this.auth.hasRole("SCOUT") ||
       this.auth.hasRole("ENTRENADOR") ||
       this.auth.hasRole("ANALISTA")
     );
   }
 
   async render(containerId = "dashboard-content-area", gameId = null, teamId = null) {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
     this.teamId = teamId || DataStore.getActiveTeamId();
-    this.players = DataStore.getPlayers() || [];
+    this.players = DataStore.getPlayers(this.teamId) || [];
 
     if (gameId && gameId !== this.teamId) {
       await this._openEditForm(gameId, container);
@@ -70,7 +74,7 @@ export class GameLiveEditorView {
   }
 
   async _renderGamesList(container, teamId) {
-    this.games = DataStore.getGames() || [];
+    this.games = DataStore.getGames(teamId) || [];
 
     const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const pCodeMap = new Map();
@@ -78,8 +82,8 @@ export class GameLiveEditorView {
       pCodeMap.set(String(g.id), `P${idx + 1}`);
     });
 
-    const filteredGames = this.games.filter(g => {
-      const v = String(g.venue || '').toLowerCase();
+    const filteredGames = this.games.filter((g) => {
+      const v = String(g.venue || "").toLowerCase();
       if (this.filterCondition === "Local") return v === "local" || v === "home";
       if (this.filterCondition === "Visitante") return v === "visitante" || v === "away";
       return true;
@@ -91,38 +95,38 @@ export class GameLiveEditorView {
       return this.sortOrder === "asc" ? dateA - dateB : dateB - dateA;
     });
 
-    const gamesCardsMarkup = sortedGames.map(g => {
-      const isWin = Number(g.team_score || 0) > Number(g.opponent_score || 0);
-      const resultClass = isWin ? "background: #166534; color: white;" : "background: #dc2626; color: white;";
+    const gamesCardsMarkup = sortedGames.map((g) => {
+      const isWin = Number(g.team_score ?? g.teamScore ?? 0) > Number(g.opponent_score ?? g.opponentScore ?? 0);
+      const resultClass = isWin ? "background: #166534; color: #ffffff;" : "background: #dc2626; color: #ffffff;";
       const resultText = isWin ? this.t("win", "VICTORIA") : this.t("loss", "DERROTA");
 
       const periods = DataStore.getGamePeriodScores(g.id) || [];
-      const quarters = periods.filter(p => !p.is_overtime);
-      const overtimes = periods.filter(p => p.is_overtime);
+      const quarters = periods.filter(p => !p.is_overtime && !p.isOvertime);
+      const overtimes = periods.filter(p => p.is_overtime || p.isOvertime);
 
-      const q1 = quarters[0] ? `${quarters[0].team_score}-${quarters[0].opponent_score}` : '0-0';
-      const q2 = quarters[1] ? `${quarters[1].team_score}-${quarters[1].opponent_score}` : '0-0';
-      const q3 = quarters[2] ? `${quarters[2].team_score}-${quarters[2].opponent_score}` : '0-0';
-      const q4 = quarters[3] ? `${quarters[3].team_score}-${quarters[3].opponent_score}` : '0-0';
+      const q1 = quarters[0] ? `${quarters[0].team_score ?? quarters[0].teamScore ?? 0}-${quarters[0].opponent_score ?? quarters[0].opponentScore ?? 0}` : "0-0";
+      const q2 = quarters[1] ? `${quarters[1].team_score ?? quarters[1].teamScore ?? 0}-${quarters[1].opponent_score ?? quarters[1].opponentScore ?? 0}` : "0-0";
+      const q3 = quarters[2] ? `${quarters[2].team_score ?? quarters[2].teamScore ?? 0}-${quarters[2].opponent_score ?? quarters[2].opponentScore ?? 0}` : "0-0";
+      const q4 = quarters[3] ? `${quarters[3].team_score ?? quarters[3].teamScore ?? 0}-${quarters[3].opponent_score ?? quarters[3].opponentScore ?? 0}` : "0-0";
 
       let otMarkup = "";
       if (overtimes.length > 0) {
-        otMarkup = overtimes.map((ot, i) => `<b>OT${i + 1}:</b> ${ot.team_score}-${ot.opponent_score} `).join(" ");
+        otMarkup = overtimes.map((ot, i) => `<b>OT${i + 1}:</b> ${ot.team_score ?? ot.teamScore ?? 0}-${ot.opponent_score ?? ot.opponentScore ?? 0} `).join(" ");
       }
 
-      const venueLower = String(g.venue || '').toLowerCase();
-      const isHome = venueLower === 'home' || venueLower === 'local';
+      const venueLower = String(g.venue || "").toLowerCase();
+      const isHome = venueLower === "home" || venueLower === "local" || g.is_home === true || g.isHome === true;
       const venueText = isHome ? this.t("local", "Local") : this.t("visitor", "Visitante");
       const pCode = pCodeMap.get(String(g.id)) || "P-";
-      const opponentText = g.opponent || this.t("opponent", "Rival");
-      const formattedDate = g.date ? I18n.formatDate(g.date) : '-';
+      const opponentText = g.opponent || g.opponent_name || g.opponentName || this.t("opponent", "Rival");
+      const formattedDate = g.date ? (I18n.formatDate ? I18n.formatDate(g.date) : g.date) : "-";
 
       return `
-        <div class="game-item-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-wrap: wrap; gap: 12px;">
+        <div class="game-item-card card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
             <div style="padding: 10px 14px; border-radius: 10px; font-weight: 900; font-size: 13px; text-align: center; width: 85px; ${resultClass}">
               <div style="font-size: 9px; text-transform: uppercase; opacity: 0.9;">${resultText}</div>
-              <div style="font-size: 16px; font-weight: 900; margin-top: 2px;">${g.team_score ?? 0}-${g.opponent_score ?? 0}</div>
+              <div style="font-size: 16px; font-weight: 900; margin-top: 2px;">${g.team_score ?? g.teamScore ?? 0}-${g.opponent_score ?? g.opponentScore ?? 0}</div>
             </div>
 
             <div>
@@ -132,21 +136,25 @@ export class GameLiveEditorView {
                   ${venueText} (${pCode})
                 </span>
               </div>
-              <div style="font-size: 12px; color: #64748b; margin: 4px 0;">
-                📅 ${formattedDate} &nbsp;·&nbsp; 🏆 ${g.competition || 'Liga'} &nbsp;·&nbsp; 📍 ${g.venue_name || '-'}
+              <div style="font-size: 12px; color: #475569; margin: 4px 0;">
+                📅 ${formattedDate} &nbsp;·&nbsp; 🏆 ${g.competition || 'Liga'} &nbsp;·&nbsp; 📍 ${g.venue_name || g.venueName || '-'}
               </div>
-              <div style="font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #f1f5f9; display: inline-block;">
+              <div style="font-size: 11px; color: #334155; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-block;">
                 <b>${this.t("quarters", "CUARTOS")}:</b> Q1: ${q1} &nbsp; Q2: ${q2} &nbsp; Q3: ${q3} &nbsp; Q4: ${q4} ${otMarkup ? `&nbsp; ${otMarkup}` : ''}
               </div>
             </div>
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button class="btn-open-court-direct" data-id="${g.id}" style="background: #0284c7; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
-              🏀 ${this.t("track_live", "Toma Gráfica / Pista")}
+            <!-- BOTÓN DIRECTO HUD EN VIVO -->
+            <button class="btn-open-live-hud" data-id="${g.id}" style="background: #f97316; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(249,115,22,0.25);">
+              ⚡ En Vivo (HUD)
             </button>
-            <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">👁️ Boxscore</button>
-            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 ${this.t("report", "Informe")}</button>
+            <button class="btn-open-court-direct" data-id="${g.id}" style="background: #0284c7; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
+              🏀 Pista / Edición
+            </button>
+            <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📋 Boxscore</button>
+            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 Informe</button>
             <button class="btn-delete-game-direct" data-id="${g.id}" style="background: #fee2e2; border: 1px solid #fca5a5; font-size: 18px; cursor: pointer; color: #dc2626; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Eliminar partido">🗑️</button>
           </div>
         </div>
@@ -158,34 +166,54 @@ export class GameLiveEditorView {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div>
             <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${this.t("team_games", "Partidos del Equipo")}</h1>
-            <span style="font-size: 13px; color: #64748b;">${this.games.length} ${this.t("registered_games", "partidos registrados")}</span>
+            <span style="font-size: 13px; color: #475569;">${this.games.length} ${this.t("registered_games", "partidos registrados")}</span>
           </div>
 
-          <button id="btn-create-game" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
-            + 🏀 ${this.t("register_new_game", "Registrar Nuevo Partido")}
-          </button>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <!-- BOTÓN PRINCIPAL ANOTACIÓN EN VIVO HUD -->
+            <button id="btn-create-game-hud" style="background: #f97316; color: #ffffff; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(249,115,22,0.3);">
+              ⚡ Nueva Anotación en Vivo (HUD Pro)
+            </button>
+            <button id="btn-create-game" style="background: #0f172a; color: #ffffff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
+              + 🏀 Registro Rápido
+            </button>
+          </div>
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; gap: 8px;">
-            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? 'white' : '#475569'};">${this.t("all", "Todos")} (${this.games.length})</button>
-            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? 'white' : '#475569'};">${this.t("local", "Local")}</button>
-            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? 'white' : '#475569'};">${this.t("visitor", "Visitante")}</button>
+            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? '#ffffff' : '#334155'};">${this.t("all", "Todos")} (${this.games.length})</button>
+            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? '#ffffff' : '#334155'};">${this.t("local", "Local")}</button>
+            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? '#ffffff' : '#334155'};">${this.t("visitor", "Visitante")}</button>
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 12px; font-weight: 700; color: #64748b;">${this.t("sort", "ORDENAR")}:</label>
-            <select id="select-sort-games" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; cursor: pointer; min-height: 44px;">
+            <label style="font-size: 12px; font-weight: 700; color: #475569;">${this.t("sort", "ORDENAR")}:</label>
+            <select id="select-sort-games" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: #ffffff; color: #0f172a; cursor: pointer; min-height: 44px;">
               <option value="desc" ${this.sortOrder === 'desc' ? 'selected' : ''}>Pn → P1 (Más recientes primero)</option>
               <option value="asc" ${this.sortOrder === 'asc' ? 'selected' : ''}>P1 → Pn (Antiguos a recientes)</option>
             </select>
           </div>
         </div>
 
-        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding: 40px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px solid #e2e8f0;">${this.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
+        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding: 40px; text-align: center; color: #64748b; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">${this.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
       </div>
     `;
 
+    // Botón para crear partido en vivo en HUD
+    container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
+      new LiveScoreHUDView(this.auth).render("dashboard-content-area");
+    });
+
+    // Abrir partido en HUD en Vivo
+    container.querySelectorAll(".btn-open-live-hud").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const id = e.currentTarget.getAttribute("data-id");
+        new LiveScoreHUDView(this.auth, id).render("dashboard-content-area");
+      });
+    });
+
+    // Abrir toma de datos clásica / pista
     container.querySelectorAll(".btn-open-court-direct").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.getAttribute("data-id");
@@ -194,13 +222,14 @@ export class GameLiveEditorView {
       });
     });
 
+    // Nuevo partido clásico
     container.querySelector("#btn-create-game")?.addEventListener("click", () => {
       const activeTeam = DataStore.getTeamById(teamId) || {};
       this.currentGame = {
         date: new Date().toISOString().split("T")[0],
         time: "18:00",
         opponent: "",
-        competition: activeTeam.competition || "B1",
+        competition: activeTeam.competition || "Liga",
         round: "Jornada " + (this.games.length + 1),
         venue: "Local",
         venue_name: "",
@@ -228,6 +257,7 @@ export class GameLiveEditorView {
       this._renderEditForm(container);
     });
 
+    // Eliminar partido
     container.querySelectorAll(".btn-delete-game-direct").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -242,7 +272,7 @@ export class GameLiveEditorView {
 
         try {
           await DataStore.deleteGame(id);
-          this.games = DataStore.getGames() || [];
+          this.games = DataStore.getGames(teamId) || [];
           await this._renderGamesList(container, teamId);
           alert("✅ Partido eliminado correctamente.");
         } catch (err) {
@@ -271,11 +301,11 @@ export class GameLiveEditorView {
 
     if (existingPeriods.length > 0) {
       this.currentPeriods = existingPeriods.map(p => ({
-        period_type: p.period_type || (p.is_overtime ? 'overtime' : 'quarter'),
-        period_number: Number(p.period_number),
-        team_score: Number(p.team_score || 0),
-        opponent_score: Number(p.opponent_score || 0),
-        is_overtime: Boolean(p.is_overtime)
+        period_type: p.period_type || p.periodType || (p.is_overtime || p.isOvertime ? 'overtime' : 'quarter'),
+        period_number: Number(p.period_number ?? p.periodNumber ?? 1),
+        team_score: Number(p.team_score ?? p.teamScore ?? 0),
+        opponent_score: Number(p.opponent_score ?? p.opponentScore ?? 0),
+        is_overtime: Boolean(p.is_overtime ?? p.isOvertime)
       }));
     } else {
       this.currentPeriods = [1, 2, 3, 4].map(num => ({
@@ -287,9 +317,9 @@ export class GameLiveEditorView {
       }));
     }
 
-    const pStats = DataStore.getPlayerGameStats(null, gameId);
+    const pStats = DataStore.getPlayerGameStats(null, gameId) || [];
     this.currentGameStats = this.players.map(p => {
-      const existing = (pStats || []).find(s => String(s.player_id) === String(p.id));
+      const existing = pStats.find(s => String(s.player_id ?? s.playerId) === String(p.id));
       return existing ? { ...existing } : {
         player_id: p.id, minutes: 0, fg2_made: 0, fg2_attempted: 0, fg3_made: 0, fg3_attempted: 0,
         ft_made: 0, ft_attempted: 0, off_reb: 0, def_reb: 0, assists: 0, steals: 0, blocks_made: 0,
@@ -299,9 +329,9 @@ export class GameLiveEditorView {
 
     let loadedEvents = DataStore.getGameEvents(gameId);
 
-    if (loadedEvents.length === 0 && gameId) {
+    if (loadedEvents.length === 0 && gameId && this.supabase) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await this.supabase
           .from("game_events")
           .select("*")
           .eq("game_id", gameId)
@@ -313,7 +343,7 @@ export class GameLiveEditorView {
             return {
               id: ev.id,
               playerId: ev.player_id,
-              playerName: pObj ? `#${pObj.jersey ?? '-'} ${pObj.first_name || ''}` : "Equipo",
+              playerName: pObj ? `#${pObj.jersey ?? '-'} ${pObj.first_name || pObj.firstName || ''}` : "Equipo",
               action: ev.action_type,
               points: ev.points || 0,
               period: ev.period,
@@ -340,83 +370,128 @@ export class GameLiveEditorView {
 
   _renderEditForm(container) {
     const g = this.currentGame || {};
-    let starters = g.starter_ids || [];
+    let starters = g.starter_ids || g.starterIds || [];
     if (typeof starters === "string") {
-      try { starters = JSON.parse(starters); } catch (e) { starters = []; }
+      try { starters = JSON.parse(starters); } catch { starters = []; }
     }
     const canManageTable = this._canEditFullBoxScore();
 
     let qTeamSum = 0;
     let qOppSum = 0;
     this.currentPeriods.forEach(p => {
-      qTeamSum += Number(p.team_score || 0);
-      qOppSum += Number(p.opponent_score || 0);
+      qTeamSum += Number(p.team_score ?? p.teamScore ?? 0);
+      qOppSum += Number(p.opponent_score ?? p.opponentScore ?? 0);
     });
 
     const startersMarkup = this.players.map(p => {
       const isSelected = starters.includes(p.id);
       return `
-        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid ${isSelected ? '#2563eb' : '#cbd5e1'}; background: ${isSelected ? '#eff6ff' : 'white'}; color: ${isSelected ? '#1e40af' : '#475569'}; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 40px;">
-          <span>#${p.jersey ?? '-'} ${p.first_name || ''}</span>
-          <span style="font-size: 9px; opacity: 0.8;">${p.primary_position || 'Jugador'}</span>
+        <button type="button" class="btn-starter ${isSelected ? 'active' : ''}" data-id="${p.id}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid ${isSelected ? '#f97316' : '#cbd5e1'}; background: ${isSelected ? '#fff7ed' : '#ffffff'}; color: ${isSelected ? '#ea580c' : '#334155'}; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 40px;">
+          <span>#${p.jersey ?? '-'} ${p.first_name || p.firstName || ''}</span>
+          <span style="font-size: 9px; opacity: 0.8;">${p.primary_position || p.primaryPosition || 'Jugador'}</span>
         </button>
       `;
     }).join("");
 
     container.innerHTML = `
       <div style="max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
+        
+        <style>
+          .st-input, .period-input, .meta-input, .live-input-box {
+            color: #0f172a !important;
+            background-color: #ffffff !important;
+            -webkit-text-fill-color: #0f172a !important;
+            opacity: 1 !important;
+            font-weight: 700 !important;
+            box-sizing: border-box !important;
+            line-height: normal !important;
+            display: inline-block !important;
+            visibility: visible !important;
+            padding: 0 !important;
+            margin: 0 auto !important;
+          }
+          .st-input {
+            width: 38px !important;
+            height: 32px !important;
+            text-align: center !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px !important;
+            font-size: 13px !important;
+          }
+          .period-input {
+            width: 44px !important;
+            height: 34px !important;
+            text-align: center !important;
+            font-size: 15px !important;
+            font-weight: 900 !important;
+            border-radius: 6px !important;
+            border: 1px solid #cbd5e1 !important;
+          }
+          .btn-period-select.active {
+            background: #f97316 !important;
+            color: #ffffff !important;
+          }
+        </style>
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <div>
             <h1 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">🏀 ${this.t("edit_game", "Toma de Datos & Acta Oficial")}</h1>
-            <span style="font-size: 12px; color: #64748b;">${g.opponent ? `vs ${g.opponent}` : 'Nuevo Partido'} · ${g.date || ''}</span>
+            <span style="font-size: 12px; color: #475569;">${g.opponent || g.opponentName ? `vs ${g.opponent || g.opponentName}` : 'Nuevo Partido'} · ${g.date || ''}</span>
           </div>
-          <button id="btn-cancel-edit" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 40px;">✕ ${this.t("cancel", "Volver al Listado")}</button>
+          
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btn-switch-to-hud-pro" style="background: #f97316; color: #ffffff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(249,115,22,0.3);">
+              ⚡ Abrir en HUD Pro (En Vivo)
+            </button>
+            <button id="btn-cancel-edit" style="background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 40px;">✕ ${this.t("cancel", "Volver al Listado")}</button>
+          </div>
         </div>
 
-        <form id="form-game-editor" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px;">
+        <form id="form-game-editor" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px;">
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
             <div>
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px;">${this.t("date", "Fecha")}</label>
+              <label style="font-size: 10px; font-weight: 800; color: #475569; display: block; margin-bottom: 2px;">${this.t("date", "Fecha")}</label>
               <input type="date" name="date" class="meta-input" data-key="date" value="${g.date || ''}" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
             </div>
             <div>
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px;">${this.t("opponent", "Rival")} *</label>
-              <input type="text" name="opponent" class="meta-input" data-key="opponent" value="${g.opponent || ''}" required placeholder="Nombre del rival" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
+              <label style="font-size: 10px; font-weight: 800; color: #475569; display: block; margin-bottom: 2px;">${this.t("opponent", "Rival")} *</label>
+              <input type="text" name="opponent" class="meta-input" data-key="opponent" value="${g.opponent || g.opponentName || ''}" required placeholder="Nombre del rival" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
             </div>
             <div>
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px;">${this.t("matchday", "Jornada")}</label>
+              <label style="font-size: 10px; font-weight: 800; color: #475569; display: block; margin-bottom: 2px;">${this.t("matchday", "Jornada")}</label>
               <input type="text" name="round" class="meta-input" data-key="round" value="${g.round || ''}" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
             </div>
             <div>
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px;">${this.t("venue", "Sede")}</label>
-              <select name="venue" class="meta-input" data-key="venue" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; font-size: 12px;">
-                <option value="Local" ${g.venue === 'Local' ? 'selected' : ''}>${this.t("local", "Local")}</option>
-                <option value="Visitante" ${g.venue === 'Visitante' ? 'selected' : ''}>${this.t("visitor", "Visitante")}</option>
+              <label style="font-size: 10px; font-weight: 800; color: #475569; display: block; margin-bottom: 2px;">${this.t("venue", "Sede")}</label>
+              <select name="venue" class="meta-input" data-key="venue" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; color: #0f172a; font-size: 12px;">
+                <option value="Local" ${g.venue === 'Local' || g.is_home || g.isHome ? 'selected' : ''}>${this.t("local", "Local")}</option>
+                <option value="Visitante" ${g.venue === 'Visitante' || g.venue === 'Away' ? 'selected' : ''}>${this.t("visitor", "Visitante")}</option>
               </select>
             </div>
             <div>
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; display: block; margin-bottom: 2px;">${this.t("arena", "Pabellón / Arena")}</label>
-              <input type="text" name="venue_name" class="meta-input" data-key="venue_name" value="${g.venue_name || ''}" placeholder="Ej: Polideportivo Municipal" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
+              <label style="font-size: 10px; font-weight: 800; color: #475569; display: block; margin-bottom: 2px;">${this.t("arena", "Pabellón / Arena")}</label>
+              <input type="text" name="venue_name" class="meta-input" data-key="venue_name" value="${g.venue_name || g.venueName || ''}" placeholder="Ej: Pavelló JMJ" style="width: 100%; height: 40px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" />
             </div>
           </div>
 
           <div>
-            <h3 style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin: 0 0 8px 0;">${this.t("starting_five", "QUINTETO TITULAR")} (${starters.length}/5)</h3>
+            <h3 style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin: 0 0 8px 0;">${this.t("starting_five", "QUINTETO TITULAR")} (${starters.length}/5)</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px;">
               ${startersMarkup}
             </div>
           </div>
 
+          <!-- BOTONES DE MODOS DE ENTRADA -->
           <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div style="display: flex; gap: 6px; width: 100%;">
-              <button type="button" id="btn-mode-court" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'court' ? '#16a34a' : 'white'}; color: ${this.entrySubMode === 'court' ? 'white' : '#475569'};">
+            <div style="display: flex; gap: 6px; width: 100%; flex-wrap: wrap;">
+              <button type="button" id="btn-mode-court" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'court' ? '#16a34a' : '#ffffff'}; color: ${this.entrySubMode === 'court' ? '#ffffff' : '#334155'};">
                 🏀 Modo Pista (Visual)
               </button>
-              <button type="button" id="btn-mode-fast" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'fast' ? '#0284c7' : 'white'}; color: ${this.entrySubMode === 'fast' ? 'white' : '#475569'};">
+              <button type="button" id="btn-mode-fast" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'fast' ? '#0284c7' : '#ffffff'}; color: ${this.entrySubMode === 'fast' ? '#ffffff' : '#334155'};">
                 ⚡ Modo Rápido (Botones)
               </button>
               ${canManageTable ? `
-                <button type="button" id="btn-mode-classic" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'classic' ? '#0f172a' : 'white'}; color: ${this.entrySubMode === 'classic' ? 'white' : '#475569'};">
+                <button type="button" id="btn-mode-classic" style="flex: 1; min-height: 40px; padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer; border: 1px solid #cbd5e1; background: ${this.entrySubMode === 'classic' ? '#0f172a' : '#ffffff'}; color: ${this.entrySubMode === 'classic' ? '#ffffff' : '#334155'};">
                   📊 Acta Oficial (Tabla & Cuadre)
                 </button>
               ` : ''}
@@ -434,7 +509,7 @@ export class GameLiveEditorView {
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-            <button type="submit" id="btn-submit-game-all" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 900; cursor: pointer; min-height: 44px; font-size: 14px; width: 100%; max-width: 320px;">
+            <button type="submit" id="btn-submit-game-all" style="background: var(--color-primary, #f97316); color: #ffffff; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 900; cursor: pointer; min-height: 44px; font-size: 14px; width: 100%; max-width: 320px;">
               💾 ${this.t("save_changes", "Guardar Cambios")}
             </button>
           </div>
@@ -446,8 +521,8 @@ export class GameLiveEditorView {
   }
 
   _renderBSAGraphicalModeMarkup(qTeamSum, qOppSum) {
-    const quarters = this.currentPeriods.filter(p => !p.is_overtime);
-    const overtimes = this.currentPeriods.filter(p => p.is_overtime);
+    const quarters = this.currentPeriods.filter(p => !p.is_overtime && !p.isOvertime);
+    const overtimes = this.currentPeriods.filter(p => p.is_overtime || p.isOvertime);
 
     const getActionLabel = (action) => {
       const map = {
@@ -471,17 +546,17 @@ export class GameLiveEditorView {
 
     return `
       <div style="display: flex; flex-direction: column; gap: 14px;">
-        <div style="background: #0f172a; color: white; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="background: #0f172a; color: #ffffff; border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; gap: 4px; overflow-x: auto; max-width: 100%;">
             ${quarters.map((q, i) => `
-              <button type="button" class="btn-period-select ${this.activePeriodNumber === (i + 1) && !this.isPeriodOvertime ? 'active' : ''}" data-period="${i + 1}" data-ot="false" style="padding: 6px 10px; border-radius: 6px; border: none; font-weight: 800; font-size: 11px; cursor: pointer; background: ${this.activePeriodNumber === (i + 1) && !this.isPeriodOvertime ? '#ea580c' : '#334155'}; color: white; white-space: nowrap;">
-                Q${i + 1} (${q.team_score}-${q.opponent_score})
+              <button type="button" class="btn-period-select ${this.activePeriodNumber === (i + 1) && !this.isPeriodOvertime ? 'active' : ''}" data-period="${i + 1}" data-ot="false" style="padding: 6px 10px; border-radius: 6px; border: none; font-weight: 800; font-size: 11px; cursor: pointer; background: ${this.activePeriodNumber === (i + 1) && !this.isPeriodOvertime ? '#f97316' : '#334155'}; color: #ffffff; white-space: nowrap;">
+                Q${i + 1} (${q.team_score ?? q.teamScore ?? 0}-${q.opponent_score ?? q.opponentScore ?? 0})
               </button>
             `).join('')}
 
             ${overtimes.map((ot, i) => `
-              <button type="button" class="btn-period-select ${this.activePeriodNumber === (i + 1) && this.isPeriodOvertime ? 'active' : ''}" data-period="${i + 1}" data-ot="true" style="padding: 6px 10px; border-radius: 6px; border: none; font-weight: 800; font-size: 11px; cursor: pointer; background: ${this.activePeriodNumber === (i + 1) && this.isPeriodOvertime ? '#ea580c' : '#475569'}; color: white; white-space: nowrap;">
-                OT${i + 1} (${ot.team_score}-${ot.opponent_score})
+              <button type="button" class="btn-period-select ${this.activePeriodNumber === (i + 1) && this.isPeriodOvertime ? 'active' : ''}" data-period="${i + 1}" data-ot="true" style="padding: 6px 10px; border-radius: 6px; border: none; font-weight: 800; font-size: 11px; cursor: pointer; background: ${this.activePeriodNumber === (i + 1) && this.isPeriodOvertime ? '#f97316' : '#475569'}; color: #ffffff; white-space: nowrap;">
+                OT${i + 1} (${ot.team_score ?? ot.teamScore ?? 0}-${ot.opponent_score ?? ot.opponentScore ?? 0})
               </button>
             `).join('')}
           </div>
@@ -492,22 +567,23 @@ export class GameLiveEditorView {
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
-          <div style="background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px;">
+          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px;">
             <h3 style="font-size: 11px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0; text-transform: uppercase;">1️⃣ Elige Jugador Activo</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 6px;">
               ${this.players.map(p => {
-                const st = this.currentGameStats.find(s => String(s.player_id) === String(p.id)) || { minutes: 0 };
+                const st = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(p.id)) || { minutes: 0 };
+                const pMin = Number(st.minutes ?? st.minutesPlayed ?? 0);
                 return `
                   <div style="display: flex; flex-direction: column; gap: 2px;">
                     <button type="button" class="live-player-btn ${this.selectedPlayerId === p.id ? 'active' : ''}" 
-                            data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name || ''}"
+                            data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name || p.firstName || ''}"
                             style="display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border: 2px solid ${this.selectedPlayerId === p.id ? '#0284c7' : '#e2e8f0'}; background: ${this.selectedPlayerId === p.id ? '#e0f2fe' : '#f8fafc'}; border-radius: 8px; cursor: pointer;">
                       <span style="font-size: 1.1rem; font-weight: 900; color: #0f172a;">#${p.jersey ?? '-'}</span>
-                      <span style="font-size: 0.7rem; font-weight: 700; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">${p.first_name || p.name}</span>
+                      <span style="font-size: 0.7rem; font-weight: 700; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;">${p.first_name || p.firstName || p.name}</span>
                     </button>
                     <div style="display: flex; align-items: center; justify-content: center; gap: 2px;">
-                      <span style="font-size: 0.6rem; color: #64748b; font-weight: 800;">MIN</span>
-                      <input type="number" class="st-input" data-player-id="${p.id}" data-field="minutes" value="${st.minutes ?? 0}" style="width: 38px; height: 22px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.7rem; font-weight: 700;" />
+                      <span style="font-size: 0.65rem; color: #475569; font-weight: 800;">MIN</span>
+                      <input type="number" class="st-input" data-player-id="${p.id}" data-field="minutes" value="${pMin}" style="width: 38px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.75rem; font-weight: 800; color: #0f172a !important; background: #ffffff !important;" />
                     </div>
                   </div>
                 `;
@@ -516,12 +592,12 @@ export class GameLiveEditorView {
           </div>
 
           ${this.entrySubMode === 'court' ? `
-            <div style="background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center;">
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center;">
               <div style="font-size: 11px; font-weight: 800; color: #334155; margin-bottom: 6px; width: 100%; display: flex; justify-content: space-between;">
                 <span>📍 Toca en la Cancha</span>
                 <span id="court-shot-hint" style="color: #0284c7;">Paso 2: Toca el punto exacto</span>
               </div>
-              <div style="position: relative; width: 100%; max-width: 380px; aspect-ratio: 50/47; background: #e09f67; border: 3px solid #fff; border-radius: 8px; overflow: hidden; cursor: crosshair;" id="court-canvas-clickarea">
+              <div style="position: relative; width: 100%; max-width: 380px; aspect-ratio: 50/47; background: #e09f67; border: 3px solid #ffffff; border-radius: 8px; overflow: hidden; cursor: crosshair;" id="court-canvas-clickarea">
                 <svg viewBox="0 0 500 470" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; pointer-events: none;">
                   <rect x="0" y="0" width="500" height="470" fill="none" stroke="#fff" stroke-width="4"/>
                   <rect x="170" y="0" width="160" height="190" fill="rgba(255,255,255,0.15)" stroke="#fff" stroke-width="3"/>
@@ -535,43 +611,43 @@ export class GameLiveEditorView {
                 </svg>
                 <div id="live-shot-markers-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                   ${this.liveEventsHistory.filter(ev => ev.coordinates).map(ev => `
-                    <div style="position: absolute; left: ${ev.coordinates.x}%; top: ${ev.coordinates.y}%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: ${ev.coordinates.made ? '#22c55e' : '#ef4444'}; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.5);"></div>
+                    <div style="position: absolute; left: ${ev.coordinates.x}%; top: ${ev.coordinates.y}%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 50%; background: ${ev.coordinates.made ? '#22c55e' : '#ef4444'}; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.5);"></div>
                   `).join('')}
                 </div>
               </div>
             </div>
           ` : ''}
 
-          <div style="background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
             <h3 style="font-size: 11px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase;">2️⃣ Registrar Acción</h3>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-              <button type="button" class="btn-live-court-outcome" data-made="true" style="background: #22c55e; color: white; border: none; padding: 10px 4px; border-radius: 8px; font-weight: 900; font-size: 0.9rem; cursor: pointer;">✔ ANOTADO</button>
-              <button type="button" class="btn-live-court-outcome" data-made="false" style="background: #ef4444; color: white; border: none; padding: 10px 4px; border-radius: 8px; font-weight: 900; font-size: 0.9rem; cursor: pointer;">✖ FALLADO</button>
+              <button type="button" class="btn-live-court-outcome" data-made="true" style="background: #22c55e; color: #ffffff; border: none; padding: 10px 4px; border-radius: 8px; font-weight: 900; font-size: 0.9rem; cursor: pointer;">✔ ANOTADO</button>
+              <button type="button" class="btn-live-court-outcome" data-made="false" style="background: #ef4444; color: #ffffff; border: none; padding: 10px 4px; border-radius: 8px; font-weight: 900; font-size: 0.9rem; cursor: pointer;">✖ FALLADO</button>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #f8fafc; padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0;">
-              <button type="button" class="btn-court-ft" data-made="true" style="background: #84cc16; color: white; border: none; padding: 6px 4px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+1 TL Anotado</button>
-              <button type="button" class="btn-court-ft" data-made="false" style="background: #fca5a5; color: #7f1d1d; border: none; padding: 6px 4px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">Fallo TL</button>
+              <button type="button" class="btn-court-ft" data-made="true" style="background: #84cc16; color: #ffffff; border: none; padding: 8px 4px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+1 TL Anotado</button>
+              <button type="button" class="btn-court-ft" data-made="false" style="background: #fca5a5; color: #7f1d1d; border: none; padding: 8px 4px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">Fallo TL</button>
             </div>
 
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
-              <button type="button" class="btn-fast-action" data-action="off_reb" style="background: #0284c7; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Of</button>
-              <button type="button" class="btn-fast-action" data-action="def_reb" style="background: #38bdf8; color: #0f172a; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Def</button>
-              <button type="button" class="btn-fast-action" data-action="assists" style="background: #6366f1; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Asistencia</button>
-              <button type="button" class="btn-fast-action" data-action="steals" style="background: #8b5cf6; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Robo</button>
-              <button type="button" class="btn-fast-action" data-action="blocks_made" style="background: #a855f7; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Tapón</button>
-              <button type="button" class="btn-fast-action" data-action="turnovers" style="background: #ea580c; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Pérdida</button>
-              <button type="button" class="btn-fast-action" data-action="fouls_committed" style="background: #f59e0b; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Com.</button>
-              <button type="button" class="btn-fast-action" data-action="fouls_drawn" style="background: #fbbf24; color: #78350f; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Rec.</button>
+              <button type="button" class="btn-fast-action" data-action="off_reb" style="background: #0284c7; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Of</button>
+              <button type="button" class="btn-fast-action" data-action="def_reb" style="background: #38bdf8; color: #0f172a; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Def</button>
+              <button type="button" class="btn-fast-action" data-action="assists" style="background: #6366f1; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Asistencia</button>
+              <button type="button" class="btn-fast-action" data-action="steals" style="background: #8b5cf6; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Robo</button>
+              <button type="button" class="btn-fast-action" data-action="blocks_made" style="background: #a855f7; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Tapón</button>
+              <button type="button" class="btn-fast-action" data-action="turnovers" style="background: #ea580c; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Pérdida</button>
+              <button type="button" class="btn-fast-action" data-action="fouls_committed" style="background: #f59e0b; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Com.</button>
+              <button type="button" class="btn-fast-action" data-action="fouls_drawn" style="background: #fbbf24; color: #78350f; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Rec.</button>
             </div>
 
             <div style="background: #fff7ed; padding: 6px; border-radius: 6px; border: 1px solid #ffedd5; display: flex; flex-direction: column; gap: 4px;">
               <span style="font-size: 9px; font-weight: 800; color: #c2410c; text-transform: uppercase;">Estadísticas del Rival</span>
               <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
-                <button type="button" class="btn-opp-action" data-field="points" data-val="2" style="background: #ea580c; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+2 Rival</button>
-                <button type="button" class="btn-opp-action" data-field="points" data-val="3" style="background: #c2410c; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+3 Rival</button>
-                <button type="button" class="btn-opp-action" data-field="points" data-val="1" style="background: #f97316; color: white; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+1 TL Riv</button>
+                <button type="button" class="btn-opp-action" data-field="points" data-val="2" style="background: #ea580c; color: #ffffff; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+2 Rival</button>
+                <button type="button" class="btn-opp-action" data-field="points" data-val="3" style="background: #c2410c; color: #ffffff; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+3 Rival</button>
+                <button type="button" class="btn-opp-action" data-field="points" data-val="1" style="background: #f97316; color: #ffffff; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">+1 TL Riv</button>
                 <button type="button" class="btn-opp-action" data-field="tov" style="background: #fed7aa; color: #9a3412; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">Pérdida Riv</button>
                 <button type="button" class="btn-opp-action" data-field="oreb" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Of Riv</button>
                 <button type="button" class="btn-opp-action" data-field="dreb" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Def Riv</button>
@@ -582,11 +658,11 @@ export class GameLiveEditorView {
           </div>
         </div>
 
-        <section style="background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px;">
+        <section style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <div>
               <h3 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: #0f172a;">📋 Historial de Jugadas Registradas (${this.liveEventsHistory.length})</h3>
-              <span style="font-size: 0.75rem; color: #64748b;">Listado cronológico de acciones del partido</span>
+              <span style="font-size: 0.75rem; color: #475569;">Listado cronológico de acciones del partido</span>
             </div>
             <button type="button" id="btn-clear-all-events" style="background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
               Vaciar Jugadas
@@ -595,12 +671,12 @@ export class GameLiveEditorView {
 
           <div style="max-height: 250px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
             ${this.liveEventsHistory.length === 0 ? `
-              <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 0.85rem;">
+              <div style="padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem;">
                 No hay jugadas registradas todavía. Selecciona un jugador y pulsa su acción.
               </div>
             ` : `
               <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
-                <thead style="background: #f8fafc; color: #475569; position: sticky; top: 0; z-index: 5;">
+                <thead style="background: #f8fafc; color: #334155; position: sticky; top: 0; z-index: 5;">
                   <tr style="border-bottom: 1px solid #cbd5e1;">
                     <th style="padding: 6px 8px;">#</th>
                     <th style="padding: 6px 8px;">Periodo</th>
@@ -613,17 +689,17 @@ export class GameLiveEditorView {
                   ${[...this.liveEventsHistory].reverse().map((ev, rIdx) => {
                     const originalIdx = this.liveEventsHistory.length - 1 - rIdx;
                     return `
-                      <tr style="border-bottom: 1px solid #f1f5f9; background: ${ev.isOpponent ? '#fff7ed' : 'white'};">
-                        <td style="padding: 6px 8px; color: #94a3b8; font-weight: 700;">${this.liveEventsHistory.length - rIdx}</td>
+                      <tr style="border-bottom: 1px solid #f1f5f9; background: ${ev.isOpponent ? '#fff7ed' : '#ffffff'};">
+                        <td style="padding: 6px 8px; color: #64748b; font-weight: 700;">${this.liveEventsHistory.length - rIdx}</td>
                         <td style="padding: 6px 8px;">
-                          <span style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.75rem;">
+                          <span style="background: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.75rem;">
                             ${ev.isOvertime ? 'OT' : 'Q'}${ev.period}
                           </span>
                         </td>
                         <td style="padding: 6px 8px; font-weight: 800; color: #0f172a;">
                           ${ev.isOpponent ? '🔴 Rival' : (ev.playerName || 'Jugador')}
                         </td>
-                        <td style="padding: 6px 8px;">
+                        <td style="padding: 6px 8px; color: #334155;">
                           ${ev.isOpponent ? `Acción Rival: ${ev.field}` : getActionLabel(ev.action)}
                         </td>
                         <td style="padding: 6px 8px; text-align: right;">
@@ -651,9 +727,9 @@ export class GameLiveEditorView {
     if (type === "shot_missed") {
       return `
         <div style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
-          <div style="background: white; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
+          <div style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
             <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 900; color: #0f172a;">🏀 Tiro Fallado por ${shooterName}</h3>
-            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px 0;">¿Quién capturó el rebote?</p>
+            <p style="font-size: 12px; color: #475569; margin: 0 0 14px 0;">¿Quién capturó el rebote?</p>
             
             <div style="margin-bottom: 12px;">
               <button type="button" id="btn-cont-opp-dreb" style="width: 100%; background: #fed7aa; color: #9a3412; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer; font-size: 12px; margin-bottom: 10px;">
@@ -663,14 +739,14 @@ export class GameLiveEditorView {
               <div style="font-size: 11px; font-weight: 800; color: #0284c7; margin-bottom: 6px; text-transform: uppercase;">Rebote Ofensivo de Nuestro Equipo:</div>
               <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; max-height: 140px; overflow-y: auto;">
                 ${this.players.map(p => `
-                  <button type="button" class="btn-cont-oreb-player" data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name}" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 6px 2px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">
-                    #${p.jersey ?? '-'} ${p.first_name}
+                  <button type="button" class="btn-cont-oreb-player" data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name || p.firstName}" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 6px 2px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">
+                    #${p.jersey ?? '-'} ${p.first_name || p.firstName}
                   </button>
                 `).join('')}
               </div>
             </div>
 
-            <button type="button" id="btn-close-continuation" style="background: #f1f5f9; border: none; padding: 8px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #64748b; cursor: pointer;">
+            <button type="button" id="btn-close-continuation" style="background: #f1f5f9; border: none; padding: 8px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer;">
               Omitir / No registrar rebote
             </button>
           </div>
@@ -681,19 +757,19 @@ export class GameLiveEditorView {
     if (type === "shot_made") {
       return `
         <div style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
-          <div style="background: white; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
+          <div style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
             <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 900; color: #16a34a;">🎯 ¡Canasta de ${shooterName}!</h3>
-            <p style="font-size: 12px; color: #64748b; margin: 0 0 14px 0;">¿Hubo asistencia de algún compañero?</p>
+            <p style="font-size: 12px; color: #475569; margin: 0 0 14px 0;">¿Hubo asistencia de algún compañero?</p>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; margin-bottom: 14px; max-height: 160px; overflow-y: auto;">
               ${this.players.filter(p => p.id !== this.continuationDialog.shooterId).map(p => `
-                <button type="button" class="btn-cont-ast-player" data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name}" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 6px 2px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">
-                  #${p.jersey ?? '-'} ${p.first_name}
+                <button type="button" class="btn-cont-ast-player" data-id="${p.id}" data-name="#${p.jersey ?? '-'} ${p.first_name || p.firstName}" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 6px 2px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer;">
+                  #${p.jersey ?? '-'} ${p.first_name || p.firstName}
                 </button>
               `).join('')}
             </div>
 
-            <button type="button" id="btn-close-continuation" style="background: #f1f5f9; border: none; padding: 8px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #64748b; cursor: pointer;">
+            <button type="button" id="btn-close-continuation" style="background: #f1f5f9; border: none; padding: 8px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer;">
               Sin Asistencia
             </button>
           </div>
@@ -704,42 +780,35 @@ export class GameLiveEditorView {
     return "";
   }
 
-  /* VISTA 3: ACTA OFICIAL (TABLA CON DESGLOSE DE CUARTOS Y CUADRE EN VIVO) */
   _renderClassicTableMarkup() {
-    // 1. Calcular suma de puntos por cuartos
     let quartersTeamSum = 0;
     let quartersOppSum = 0;
     this.currentPeriods.forEach(p => {
-      quartersTeamSum += Number(p.team_score || 0);
-      quartersOppSum += Number(p.opponent_score || 0);
+      quartersTeamSum += Number(p.team_score ?? p.teamScore ?? 0);
+      quartersOppSum += Number(p.opponent_score ?? p.opponentScore ?? 0);
     });
 
-    // 2. Calcular suma de puntos registrados en la tabla de jugadores
     let playersTeamSum = 0;
     this.currentGameStats.forEach(st => {
       const pPts = (Number(st.fg2_made || 0) * 2) + (Number(st.fg3_made || 0) * 3) + Number(st.ft_made || 0);
       playersTeamSum += pPts;
     });
 
-    // 3. Verificación de cuadre
     const isMatched = quartersTeamSum === playersTeamSum;
     const diffPts = playersTeamSum - quartersTeamSum;
 
-    const quarters = this.currentPeriods.filter(p => !p.is_overtime);
-    const overtimes = this.currentPeriods.filter(p => p.is_overtime);
+    const quarters = this.currentPeriods.filter(p => !p.is_overtime && !p.isOvertime);
+    const overtimes = this.currentPeriods.filter(p => p.is_overtime || p.isOvertime);
 
     return `
       <div style="display: flex; flex-direction: column; gap: 14px;">
-        
-        <!-- PANEL DE CONTROL Y REVISIÓN DE MARCADOR POR CUARTOS -->
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="font-size: 13px; font-weight: 900; color: #0f172a;">⏱️ Desglose de Puntos por Cuartos</span>
-              <span style="font-size: 11px; color: #64748b;">(Introduce los parciales del acta oficial)</span>
+              <span style="font-size: 11px; color: #475569;">(Introduce los parciales del acta oficial)</span>
             </div>
 
-            <!-- BADGE DINÁMICO DE CUADRE -->
             <div style="padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; ${isMatched ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac;' : 'background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;'}">
               ${isMatched 
                 ? `✅ Puntos Cuadrados: Jugadores (${playersTeamSum}) = Cuartos (${quartersTeamSum})` 
@@ -748,31 +817,30 @@ export class GameLiveEditorView {
             </div>
           </div>
 
-          <!-- INPUTS DE CUARTOS -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
             ${quarters.map((q, i) => `
-              <div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; text-align: center;">
+              <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; text-align: center;">
                 <div style="font-size: 10px; font-weight: 800; color: #475569; margin-bottom: 4px;">Cuarto ${i + 1} (Q${i + 1})</div>
                 <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                  <input type="number" class="period-input" data-period-idx="${i}" data-side="team" value="${q.team_score ?? 0}" min="0" style="width: 44px; height: 30px; text-align: center; font-weight: 900; font-size: 13px; color: #1e40af; border: 1px solid #cbd5e1; border-radius: 6px; background: #eff6ff;" title="Puntos de Nuestro Equipo en Q${i + 1}" />
+                  <input type="number" class="period-input" data-period-idx="${i}" data-side="team" value="${q.team_score ?? q.teamScore ?? 0}" min="0" style="color: #1e40af !important; background: #eff6ff !important;" />
                   <span style="font-weight: 900; color: #94a3b8;">-</span>
-                  <input type="number" class="period-input" data-period-idx="${i}" data-side="opp" value="${q.opponent_score ?? 0}" min="0" style="width: 44px; height: 30px; text-align: center; font-weight: 900; font-size: 13px; color: #b91c1c; border: 1px solid #cbd5e1; border-radius: 6px; background: #fef2f2;" title="Puntos del Rival en Q${i + 1}" />
+                  <input type="number" class="period-input" data-period-idx="${i}" data-side="opp" value="${q.opponent_score ?? q.opponentScore ?? 0}" min="0" style="color: #b91c1c !important; background: #fef2f2 !important;" />
                 </div>
               </div>
             `).join('')}
 
             ${overtimes.map((ot, i) => `
-              <div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; text-align: center;">
-                <div style="font-size: 10px; font-weight: 800; color: #ea580c; margin-bottom: 4px;">Prórroga (OT${i + 1})</div>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                  <input type="number" class="period-input" data-period-idx="${quarters.length + i}" data-side="team" value="${ot.team_score ?? 0}" min="0" style="width: 44px; height: 30px; text-align: center; font-weight: 900; font-size: 13px; color: #1e40af; border: 1px solid #cbd5e1; border-radius: 6px; background: #eff6ff;" />
+              <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                <div style="font-size: 10px; font-weight: 800; color: #f97316; margin-bottom: 4px;">Prórroga (OT${i + 1})</div>
+                <div style="display: align-items: center; justify-content: center; gap: 4px;">
+                  <input type="number" class="period-input" data-period-idx="${quarters.length + i}" data-side="team" value="${ot.team_score ?? ot.teamScore ?? 0}" min="0" style="color: #1e40af !important; background: #eff6ff !important;" />
                   <span style="font-weight: 900; color: #94a3b8;">-</span>
-                  <input type="number" class="period-input" data-period-idx="${quarters.length + i}" data-side="opp" value="${ot.opponent_score ?? 0}" min="0" style="width: 44px; height: 30px; text-align: center; font-weight: 900; font-size: 13px; color: #b91c1c; border: 1px solid #cbd5e1; border-radius: 6px; background: #fef2f2;" />
+                  <input type="number" class="period-input" data-period-idx="${quarters.length + i}" data-side="opp" value="${ot.opponent_score ?? ot.opponentScore ?? 0}" min="0" style="color: #b91c1c !important; background: #fef2f2 !important;" />
                 </div>
               </div>
             `).join('')}
 
-            <div style="background: #0f172a; color: white; border-radius: 8px; padding: 6px 8px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+            <div style="background: #0f172a; color: #ffffff; border-radius: 8px; padding: 6px 8px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
               <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Marcador Final</div>
               <div style="font-size: 15px; font-weight: 900;">
                 <span style="color: #38bdf8;">${quartersTeamSum}</span> - <span style="color: #f87171;">${quartersOppSum}</span>
@@ -781,11 +849,10 @@ export class GameLiveEditorView {
           </div>
         </div>
 
-        <!-- TABLA COMPLETA DE ESTADÍSTICAS POR JUGADOR -->
-        <div style="overflow-x: auto; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center;">
+        <div style="overflow-x: auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center;">
             <thead>
-              <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569;">
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #334155; font-weight: 800;">
                 <th style="padding: 8px; text-align: left;">Jugador</th>
                 <th style="padding: 8px;">MIN</th>
                 <th style="padding: 8px; background: #eff6ff; color: #1e40af; font-weight: 900;">PTS</th>
@@ -800,53 +867,58 @@ export class GameLiveEditorView {
             </thead>
             <tbody>
               ${this.players.map(p => {
-                const st = this.currentGameStats.find(s => String(s.player_id) === String(p.id)) || {};
-                const fg2m = Number(st.fg2_made || 0);
-                const fg2a = Number(st.fg2_attempted || 0);
-                const fg3m = Number(st.fg3_made || 0);
-                const fg3a = Number(st.fg3_attempted || 0);
-                const ftm = Number(st.ft_made || 0);
-                const fta = Number(st.ft_attempted || 0);
-                const ro = Number(st.off_reb || 0);
-                const rd = Number(st.def_reb || 0);
-                const ast = Number(st.assists || 0);
-                const stl = Number(st.steals || 0);
-                const blk = Number(st.blocks_made || 0);
-                const tov = Number(st.turnovers || 0);
-                const fc = Number(st.fouls_committed || 0);
-                const fr = Number(st.fouls_drawn || 0);
+                const st = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(p.id)) || {};
+                
+                const valMin = Number(st.minutes ?? st.minutesPlayed ?? 0);
+                const valFg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
+                const valFg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
+                const valFg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
+                const valFg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
+                const valFtm = Number(st.ft_made ?? st.ftMade ?? 0);
+                const valFta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
+                const valRo = Number(st.off_reb ?? st.offReb ?? 0);
+                const valRd = Number(st.def_reb ?? st.defReb ?? 0);
+                const valAst = Number(st.assists ?? st.ast ?? 0);
+                const valRob = Number(st.steals ?? st.stl ?? 0);
+                const valTap = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+                const valPer = Number(st.turnovers ?? st.tov ?? 0);
+                const valFc = Number(st.fouls_committed ?? st.fouls ?? 0);
+                const valFr = Number(st.fouls_drawn ?? st.fouls_received ?? 0);
+                const valPts = st.points !== undefined && st.points !== null ? Number(st.points) : (valFg2m * 2 + valFg3m * 3 + valFtm);
 
-                const pts = (fg2m * 2) + (fg3m * 3) + ftm;
-                // Valoración ACB/FEB oficial
-                const val = (pts + ro + rd + ast + stl + blk + fr) - ((fg2a - fg2m) + (fg3a - fg3m) + (fta - ftm) + tov + fc);
+                const boxMetrics = BoxScoreCalculator.calculatePlayerBoxScore({
+                  minutes: valMin, fg2_made: valFg2m, fg2_attempted: valFg2a,
+                  fg3_made: valFg3m, fg3_attempted: valFg3a, ft_made: valFtm, ft_attempted: valFta,
+                  off_reb: valRo, def_reb: valRd, assists: valAst, steals: valRob,
+                  blocks: valTap, turnovers: valPer, fouls_committed: valFc, fouls_drawn: valFr,
+                  points: valPts
+                });
 
                 return `
                   <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 6px 8px; font-weight: 800; text-align: left; white-space: nowrap;">
-                      #${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}
+                    <td style="padding: 6px 8px; font-weight: 800; text-align: left; white-space: nowrap; color: #0f172a;">
+                      #${p.jersey ?? p.number ?? '-'} ${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}
                     </td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="minutes" value="${st.minutes ?? 0}" style="width: 36px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="minutes" value="${valMin}" /></td>
                     
-                    <!-- PUNTOS TOTALES CALCULADOS EN TIEMPO REAL -->
-                    <td style="padding: 2px; background: #eff6ff; font-weight: 900; color: #1e40af; font-size: 13px;">${pts}</td>
+                    <td style="padding: 2px; background: #eff6ff; font-weight: 900; color: #1e40af; font-size: 14px;">${boxMetrics.points}</td>
 
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg2_made" value="${fg2m}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg2_attempted" value="${fg2a}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg3_made" value="${fg3m}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg3_attempted" value="${fg3a}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="ft_made" value="${ftm}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="ft_attempted" value="${fta}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="off_reb" value="${ro}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="def_reb" value="${rd}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="assists" value="${ast}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="steals" value="${stl}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="blocks_made" value="${blk}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="turnovers" value="${tov}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_committed" value="${fc}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_drawn" value="${fr}" style="width: 34px; height: 26px; text-align: center; border: 1px solid #cbd5e1; border-radius: 4px;" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg2_made" value="${valFg2m}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg2_attempted" value="${valFg2a}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg3_made" value="${valFg3m}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fg3_attempted" value="${valFg3a}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="ft_made" value="${valFtm}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="ft_attempted" value="${valFta}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="off_reb" value="${valRo}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="def_reb" value="${valRd}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="assists" value="${valAst}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="steals" value="${valRob}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="blocks_made" value="${valTap}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="turnovers" value="${valPer}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_committed" value="${valFc}" /></td>
+                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_drawn" value="${valFr}" /></td>
                     
-                    <!-- VALORACIÓN AUTOMÁTICA -->
-                    <td style="padding: 2px; background: #fefce8; font-weight: 800; color: #854d0e;">${val}</td>
+                    <td style="padding: 2px; background: #fefce8; font-weight: 800; color: #854d0e; font-size: 13px;">${boxMetrics.pir}</td>
                   </tr>
                 `;
               }).join('')}
@@ -858,6 +930,11 @@ export class GameLiveEditorView {
   }
 
   _bindUnifiedFormEvents(container, canManageTable, g) {
+    // Abrir directamente en HUD Pro
+    container.querySelector("#btn-switch-to-hud-pro")?.addEventListener("click", () => {
+      new LiveScoreHUDView(this.auth, g.id || this.currentGame?.id).render("dashboard-content-area");
+    });
+
     container.querySelectorAll(".meta-input").forEach(input => {
       input.addEventListener("input", (e) => {
         const key = e.target.getAttribute("data-key");
@@ -882,11 +959,10 @@ export class GameLiveEditorView {
 
     const handleCancel = () => {
       this.isEditing = false;
-      this._renderGamesList(container, g.team_id || this.teamId || DataStore.getActiveTeamId());
+      this._renderGamesList(container, g.team_id || g.teamId || this.teamId || DataStore.getActiveTeamId());
     };
     container.querySelector("#btn-cancel-edit")?.addEventListener("click", handleCancel);
 
-    // Eventos para inputs de cuartos en el acta oficial
     container.querySelectorAll(".period-input").forEach(inp => {
       inp.addEventListener("input", (e) => {
         const pIdx = Number(e.target.getAttribute("data-period-idx"));
@@ -915,7 +991,7 @@ export class GameLiveEditorView {
         const playerId = e.target.getAttribute("data-player-id");
         const field = e.target.getAttribute("data-field");
         const val = Number(e.target.value || 0);
-        const st = this.currentGameStats.find(s => String(s.player_id) === String(playerId));
+        const st = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(playerId));
         if (st) st[field] = val;
 
         if (this.entrySubMode === "classic") {
@@ -1084,11 +1160,11 @@ export class GameLiveEditorView {
       let qTeamSum = 0;
       let qOppSum = 0;
       this.currentPeriods.forEach(p => {
-        qTeamSum += Number(p.team_score || 0);
-        qOppSum += Number(p.opponent_score || 0);
+        qTeamSum += Number(p.team_score ?? p.teamScore ?? 0);
+        qOppSum += Number(p.opponent_score ?? p.opponentScore ?? 0);
       });
 
-      const targetTeamId = g.team_id || this.teamId || DataStore.getActiveTeamId();
+      const targetTeamId = g.team_id || g.teamId || this.teamId || DataStore.getActiveTeamId();
       const targetSeasonId = DataStore.getActiveSeasonId();
 
       const gameData = {
@@ -1096,17 +1172,17 @@ export class GameLiveEditorView {
         season_id: targetSeasonId,
         date: formData.get("date") || this.currentGame?.date,
         time: formData.get("time") || this.currentGame?.time || "18:00",
-        opponent: formData.get("opponent") || this.currentGame?.opponent,
+        opponent: formData.get("opponent") || this.currentGame?.opponent || this.currentGame?.opponentName,
         competition: formData.get("competition") || this.currentGame?.competition,
         round: formData.get("round") || this.currentGame?.round || "Jornada 1",
         venue: formData.get("venue") || this.currentGame?.venue || "Local",
-        venue_name: formData.get("venue_name") || this.currentGame?.venue_name || "",
+        venue_name: formData.get("venue_name") || this.currentGame?.venue_name || this.currentGame?.venueName || "",
         status: formData.get("status") || this.currentGame?.status || "Finalizado",
-        starter_ids: this.currentGame.starter_ids || [],
+        starter_ids: this.currentGame.starter_ids || this.currentGame.starterIds || [],
         team_score: qTeamSum,
         opponent_score: qOppSum,
         notes: formData.get("notes") || this.currentGame?.notes || "",
-        video_url: formData.get("video_url") || this.currentGame?.video_url || ""
+        video_url: formData.get("video_url") || this.currentGame?.video_url || this.currentGame?.videoUrl || ""
       };
 
       if (g.id) gameData.id = g.id;
@@ -1121,8 +1197,8 @@ export class GameLiveEditorView {
 
         localStorage.setItem(`iq_game_events_${savedGameId}`, JSON.stringify(this.liveEventsHistory));
 
-        if (this.liveEventsHistory.length > 0 && savedGameId) {
-          await supabase.from("game_events").delete().eq("game_id", savedGameId);
+        if (this.liveEventsHistory.length > 0 && savedGameId && this.supabase) {
+          await this.supabase.from("game_events").delete().eq("game_id", savedGameId);
 
           const eventsToInsert = this.liveEventsHistory
             .filter(ev => ev.coordinates)
@@ -1139,7 +1215,7 @@ export class GameLiveEditorView {
             }));
 
           if (eventsToInsert.length > 0) {
-            await supabase.from("game_events").insert(eventsToInsert);
+            await this.supabase.from("game_events").insert(eventsToInsert);
           }
         }
 
@@ -1159,7 +1235,7 @@ export class GameLiveEditorView {
   }
 
   _recordLiveEvent(playerId, playerName, action, points, coordinates) {
-    const pStat = this.currentGameStats.find(s => String(s.player_id) === String(playerId));
+    const pStat = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(playerId));
     if (pStat) {
       if (action === "fg2_made") { pStat.fg2_made = (pStat.fg2_made || 0) + 1; pStat.fg2_attempted = (pStat.fg2_attempted || 0) + 1; }
       else if (action === "fg3_made") { pStat.fg3_made = (pStat.fg3_made || 0) + 1; pStat.fg3_attempted = (pStat.fg3_attempted || 0) + 1; }
@@ -1234,7 +1310,7 @@ export class GameLiveEditorView {
         this.opponentStats[target.field] = Math.max(0, (this.opponentStats[target.field] || 0) - 1);
       }
     } else {
-      const pStat = this.currentGameStats.find(s => String(s.player_id) === String(target.playerId));
+      const pStat = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(target.playerId));
       if (pStat) {
         if (target.action === "fg2_made") { pStat.fg2_made = Math.max(0, pStat.fg2_made - 1); pStat.fg2_attempted = Math.max(0, pStat.fg2_attempted - 1); }
         else if (target.action === "fg3_made") { pStat.fg3_made = Math.max(0, pStat.fg3_made - 1); pStat.fg3_attempted = Math.max(0, pStat.fg3_attempted - 1); }

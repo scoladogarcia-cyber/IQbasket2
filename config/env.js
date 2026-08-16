@@ -1,6 +1,7 @@
 /**
- * @fileoverview Constantes y variables de entorno sensibles de IQ Basket.
- * Aislar aquí las claves de acceso evita que se pierdan o expongan al modificar la base de datos.
+ * @fileoverview Constantes y variables de entorno de IQ Basket.
+ * @description Centraliza los endpoints y claves públicas de acceso a Supabase
+ * garantizando una única fuente de verdad para la conexión remota.
  */
 
 export const ENV = {

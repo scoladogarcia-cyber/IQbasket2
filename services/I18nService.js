@@ -1,219 +1,291 @@
 /**
- * @fileoverview Servicio principal de internacionalización (I18nService.js).
- * @description Prioriza la lectura plana desde Supabase Cloud ('translations') sobre
- * las traducciones estáticas locales. Soporta detección automática del idioma del sistema/navegador,
- * cambio de idioma en vivo e interpolación.
+ * @fileoverview Servicio Principal de Internacionalización: I18nService.
+ * @description Orquesta la resolución, detección de locale del sistema, sincronización con
+ * Supabase Cloud (`translations`) e interpolación de variables.
+ * 
+ * Reglas de diseño:
+ * 1. Prioridad en cascada: BBDD Supabase/LocalStorage (0ms) -> Diccionarios Estáticos -> Fallback 'es' -> Clave.
+ * 2. Soporte nativo para esquemas planos y rutas anidadas (`stats.pir`, `heatmap.paint_badge`).
+ * 3. Normalización transparente de alias `cat` y `ca`.
+ * 4. Formateo reactivo nativo de números, porcentajes y fechas según el locale activo.
  */
 
-import { I18N_CONFIG } from '../config/i18n.config.js';
-import { es } from '../locales/es.js';
-import { ca } from '../locales/ca.js';
-import { en } from '../locales/en.js';
-import { fr } from '../locales/fr.js';
+import { I18N_CONFIG } from "../config/i18n.config.js";
+import { i18n } from "../core-modules/i18n/I18nEngine.js";
 
 class I18nService {
   constructor() {
-    this.dictionaries = { 
-      es: { ...es }, 
-      ca: { ...ca }, 
-      en: { ...en }, 
-      fr: { ...fr } 
+    this.dictionaries = {
+      es: {},
+      ca: {},
+      en: {},
+      fr: {}
     };
     this.listeners = new Set();
     this.currentLocale = this._resolveAndMigrateLocale();
     this._hydrateLocalCustomTranslations();
   }
 
+  // =========================================================================
+  // 1. RESOLUCIÓN DE IDIOMA Y DETECCIÓN AUTOMÁTICA
+  // =========================================================================
+
   /**
-   * Carga las traducciones personalizadas guardadas previamente en localStorage (versión BBDD)
+   * Resuelve el locale activo priorizando:
+   * 1. Selección guardada en localStorage (`iq_locale`).
+   * 2. Claves heredadas (`iq_language`, `language`, `locale`).
+   * 3. Detección automática del navegador (`navigator.languages`).
+   * 4. Fallback por defecto ('es').
+   * @private
+   * @returns {string}
+   */
+  _resolveAndMigrateLocale() {
+    const storageKey = I18N_CONFIG?.storageKey || "iq_locale";
+
+    if (typeof localStorage !== "undefined") {
+      // 1. Clave principal
+      const savedLocale = localStorage.getItem(storageKey);
+      if (savedLocale && this._isValidLocale(this._normalizeLocale(savedLocale))) {
+        return this._normalizeLocale(savedLocale);
+      }
+
+      // 2. Claves legacy
+      const legacyKeys = I18N_CONFIG?.legacyStorageKeys || ["iq_language", "language", "locale", "iq_dict_lang"];
+      for (const legKey of legacyKeys) {
+        const legacyValue = localStorage.getItem(legKey);
+        if (legacyValue) {
+          const norm = this._normalizeLocale(legacyValue);
+          if (this._isValidLocale(norm)) {
+            this.setLocale(norm);
+            return norm;
+          }
+        }
+      }
+    }
+
+    // 3. Detección por navegador/sistema
+    if (typeof navigator !== "undefined") {
+      const systemLangs = navigator.languages || [navigator.language || navigator.userLanguage || "es"];
+      for (const lang of systemLangs) {
+        const code = String(lang).split("-")[0].toLowerCase();
+        const normCode = this._normalizeLocale(code);
+        if (this._isValidLocale(normCode)) {
+          this.setLocale(normCode);
+          return normCode;
+        }
+      }
+    }
+
+    // 4. Fallback por defecto
+    const defaultLocale = I18N_CONFIG?.defaultLocale || "es";
+    this.setLocale(defaultLocale);
+    return defaultLocale;
+  }
+
+  /**
+   * Normaliza 'cat' a 'ca'.
+   * @private
+   */
+  _normalizeLocale(code) {
+    const c = String(code || "es").trim().toLowerCase();
+    return c === "cat" ? "ca" : c;
+  }
+
+  /**
+   * Valida si el locale está soportado.
+   * @private
+   */
+  _isValidLocale(code) {
+    const supported = I18N_CONFIG?.supportedLocales?.map((l) => l.code) || ["es", "ca", "en", "fr"];
+    return supported.includes(code);
+  }
+
+  // =========================================================================
+  // 2. CACHÉ Y CARGA DE TRADUCCIONES
+  // =========================================================================
+
+  /**
+   * Carga las traducciones guardadas en localStorage (copia de la BBDD).
+   * @private
    */
   _hydrateLocalCustomTranslations() {
-    const locales = ['es', 'ca', 'en', 'fr'];
-    locales.forEach(loc => {
+    if (typeof localStorage === "undefined") return;
+    const locales = ["es", "ca", "en", "fr"];
+
+    locales.forEach((loc) => {
       const savedDict = localStorage.getItem(`iq_dict_${loc}`);
       if (savedDict) {
         try {
           const parsed = JSON.parse(savedDict);
           if (!this.dictionaries[loc]) this.dictionaries[loc] = {};
-          // Las traducciones de BBDD sobreescriben las estáticas locales
           Object.assign(this.dictionaries[loc], parsed);
-        } catch (e) {
-          console.warn(`[i18n] Error leyendo iq_dict_${loc} de localStorage`);
+          // Inyecta en I18nEngine
+          i18n.loadDictionary(loc, parsed);
+        } catch {
+          console.warn(`[I18nService] Error parseando iq_dict_${loc}`);
         }
       }
     });
   }
 
   /**
-   * Resuelve el locale activo priorizando:
-   * 1. Previa selección guardada en localStorage
-   * 2. Idioma del sistema/navegador del usuario (navigator.languages / navigator.language)
-   * 3. Fallback 'es'
+   * Carga las traducciones desde la tabla `translations` de Supabase en caliente.
+   * @param {Object} supabaseClient - Cliente Supabase activo.
    */
-  _resolveAndMigrateLocale() {
-    // 1. Verificar clave principal 'iq_locale' guardada anteriormente
-    const savedLocale = localStorage.getItem(I18N_CONFIG.storageKey);
-    if (savedLocale && this._isValidLocale(savedLocale)) {
-      return savedLocale;
-    }
+  async loadRemoteTranslations(supabaseClient) {
+    if (!supabaseClient) return;
 
-    // 2. Comprobar llaves antiguas para evitar pérdida de preferencia
-    for (const legacyKey of I18N_CONFIG.legacyStorageKeys) {
-      const legacyValue = localStorage.getItem(legacyKey);
-      if (legacyValue) {
-        const normalized = legacyValue === 'cat' ? 'ca' : legacyValue;
-        if (this._isValidLocale(normalized)) {
-          this.setLocale(normalized);
-          return normalized;
+    try {
+      const current = this.getLocale();
+      const queryLang = current === "ca" ? "cat" : current;
+
+      const { data, error } = await supabaseClient
+        .from("translations")
+        .select("*")
+        .or(`language_code.eq.${current},language_code.eq.${queryLang}`);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        if (!this.dictionaries[current]) {
+          this.dictionaries[current] = {};
         }
-      }
-    }
 
-    // 3. Detección automática del idioma del sistema/navegador/teclado del usuario
-    const systemLangs = navigator.languages || [navigator.language || navigator.userLanguage || 'es'];
-    for (const lang of systemLangs) {
-      const code = String(lang).split('-')[0].toLowerCase();
-      const normCode = code === 'cat' ? 'ca' : code;
-      if (this._isValidLocale(normCode)) {
-        this.setLocale(normCode);
-        return normCode;
-      }
-    }
+        const remoteDict = {};
+        data.forEach((item) => {
+          if (item.key && item.translation !== undefined) {
+            this.dictionaries[current][item.key] = item.translation;
+            remoteDict[item.key] = item.translation;
+          }
+        });
 
-    // 4. Fallback al idioma por defecto (ES)
-    const finalLocale = I18N_CONFIG.defaultLocale || 'es';
-    this.setLocale(finalLocale);
-    return finalLocale;
+        // Actualizar caché de localStorage
+        if (typeof localStorage !== "undefined") {
+          const existing = JSON.parse(localStorage.getItem(`iq_dict_${current}`) || "{}");
+          localStorage.setItem(`iq_dict_${current}`, JSON.stringify({ ...existing, ...remoteDict }));
+        }
+
+        i18n.loadDictionary(current, remoteDict);
+        this.notify();
+      }
+    } catch (err) {
+      console.warn("[I18nService] No se pudieron sincronizar traducciones desde Supabase:", err.message);
+    }
   }
 
-  _isValidLocale(code) {
-    return I18N_CONFIG.supportedLocales.some(l => l.code === code);
+  /**
+   * Agrega o sobrescribe un diccionario en tiempo real.
+   * @param {string} locale - 'es', 'ca', 'cat', 'en', 'fr'.
+   * @param {Record<string, string>} translationsObj
+   */
+  addTranslations(locale, translationsObj = {}) {
+    const target = this._normalizeLocale(locale);
+    if (!this.dictionaries[target]) {
+      this.dictionaries[target] = {};
+    }
+
+    Object.assign(this.dictionaries[target], translationsObj);
+    i18n.loadDictionary(target, translationsObj);
+
+    if (typeof localStorage !== "undefined") {
+      const existing = JSON.parse(localStorage.getItem(`iq_dict_${target}`) || "{}");
+      localStorage.setItem(`iq_dict_${target}`, JSON.stringify({ ...existing, ...translationsObj }));
+    }
+
+    if (target === this.currentLocale) {
+      this.notify();
+    }
   }
+
+  // =========================================================================
+  // 3. GESTIÓN DEL LOCALE ACTIVO Y REACTIVIDAD
+  // =========================================================================
 
   getLocale() {
     return this.currentLocale;
   }
 
   setLocale(locale) {
-    const targetLocale = locale === 'cat' ? 'ca' : locale;
-    if (!this._isValidLocale(targetLocale)) return;
+    const target = this._normalizeLocale(locale);
+    if (!this._isValidLocale(target)) return;
 
-    this.currentLocale = targetLocale;
-    localStorage.setItem(I18N_CONFIG.storageKey, targetLocale);
-    I18N_CONFIG.legacyStorageKeys.forEach(key => localStorage.setItem(key, targetLocale));
-    
-    document.documentElement.lang = targetLocale;
-    this._notify();
+    this.currentLocale = target;
+    i18n.setLanguage(target);
+
+    if (typeof localStorage !== "undefined") {
+      const storageKey = I18N_CONFIG?.storageKey || "iq_locale";
+      localStorage.setItem(storageKey, target);
+
+      const legacyKeys = I18N_CONFIG?.legacyStorageKeys || ["iq_language", "language", "locale"];
+      legacyKeys.forEach((k) => localStorage.setItem(k, target));
+    }
+
+    if (typeof document !== "undefined" && document.documentElement) {
+      document.documentElement.lang = target;
+    }
+
+    this.notify();
   }
 
   subscribe(listener) {
-    this.listeners.add(listener);
+    if (typeof listener === "function") {
+      this.listeners.add(listener);
+    }
     return () => this.listeners.delete(listener);
   }
 
   notify() {
-    this._notify();
-  }
-
-  notifyListeners() {
-    this._notify();
-  }
-
-  _notify() {
-    this.listeners.forEach(fn => {
-      if (typeof fn === 'function') {
+    this.listeners.forEach((fn) => {
+      try {
         fn(this.currentLocale);
+      } catch (err) {
+        console.error("[I18nService] Error en listener:", err);
       }
     });
   }
 
-  /**
-   * Carga las traducciones de la tabla 'translations' en Supabase e inyecta los resultados en caliente
-   */
-  async loadRemoteTranslations(supabaseClient) {
-    if (!supabaseClient) return;
-    try {
-      const currentLocale = this.getLocale();
-      // Consultar tanto por 'ca' como por el alias 'cat' si aplica
-      const queryLang = currentLocale === 'ca' ? 'cat' : currentLocale;
-      
-      const { data, error } = await supabaseClient
-        .from("translations")
-        .select("*")
-        .or(`language_code.eq.${currentLocale},language_code.eq.${queryLang}`);
-
-      if (!error && data && data.length > 0) {
-        if (!this.dictionaries[currentLocale]) {
-          this.dictionaries[currentLocale] = {};
-        }
-        
-        const remoteDict = {};
-        data.forEach(item => {
-          if (item.key && item.translation) {
-            this.dictionaries[currentLocale][item.key] = item.translation;
-            remoteDict[item.key] = item.translation;
-          }
-        });
-
-        // Guardar copia local limpia para disponibilidad offline a 0ms
-        const existingLocal = JSON.parse(localStorage.getItem(`iq_dict_${currentLocale}`) || '{}');
-        localStorage.setItem(`iq_dict_${currentLocale}`, JSON.stringify({ ...existingLocal, ...remoteDict }));
-
-        this._notify();
-      }
-    } catch (err) {
-      console.warn("[i18n] No se pudieron cargar las traducciones remotas de Supabase:", err);
-    }
-  }
+  // =========================================================================
+  // 4. TRADUCCIÓN E INTERPOLACIÓN
+  // =========================================================================
 
   /**
-   * Agrega/Sobreescribe un objeto de traducciones en tiempo real
-   */
-  addTranslations(locale, translationsObj) {
-    const targetLocale = locale === 'cat' ? 'ca' : locale;
-    if (!this.dictionaries[targetLocale]) {
-      this.dictionaries[targetLocale] = {};
-    }
-
-    // Sobreescritura directa en memoria: BBDD manda sobre el local
-    Object.assign(this.dictionaries[targetLocale], translationsObj);
-
-    const existing = JSON.parse(localStorage.getItem(`iq_dict_${targetLocale}`) || '{}');
-    localStorage.setItem(`iq_dict_${targetLocale}`, JSON.stringify({ ...existing, ...translationsObj }));
-
-    if (targetLocale === this.currentLocale) {
-      this._notify();
-    }
-  }
-
-  /**
-   * Búsqueda e interpretación de traducciones (Prioridad: 1. Clave plana BBDD, 2. Clave anidada)
+   * Traduce una clave con resolución por clave plana o anidada e interpolación.
+   * @param {string} key - Clave (ej: "team", "stats.pir", "heatmap.filter_period").
+   * @param {Record<string, any>} [params={}] - Parámetros dinámicos.
+   * @param {string} [fallbackString=""] - Fallback textual si no existe.
+   * @returns {string}
    */
   t(key, params = {}, fallbackString = "") {
     if (!key) return "";
 
-    let dict = this.dictionaries[this.currentLocale] || {};
+    const dict = this.dictionaries[this.currentLocale] || {};
     let result = undefined;
 
-    // 1. PRIORIDAD MÁXIMA: Clave Plana de la BBDD Supabase (Ej: "team", "players", "market", "app_tagline")
-    if (dict && dict[key] !== undefined) {
+    // 1. Clave plana directa (esquema BBDD)
+    if (dict[key] !== undefined) {
       result = dict[key];
     }
 
-    // 2. Búsqueda por ruta anidada semántica (Ej: common.actions.save)
-    if (result === undefined && dict) {
-      const keys = key.split('.');
-      result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined) ? acc[curr] : undefined, dict);
+    // 2. Búsqueda por ruta anidada semántica
+    if (result === undefined && key.includes(".")) {
+      const keys = key.split(".");
+      result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined ? acc[curr] : undefined), dict);
     }
 
-    // 3. Fallback al idioma por defecto ES (primero plana, luego anidada)
-    if (result === undefined && this.currentLocale !== I18N_CONFIG.fallbackLocale) {
-      const fallbackDict = this.dictionaries[I18N_CONFIG.fallbackLocale] || {};
+    // 3. Fallback a través de I18nEngine
+    if (result === undefined) {
+      const engineRes = i18n.t(key, params);
+      if (engineRes && engineRes !== key) {
+        return engineRes;
+      }
+    }
+
+    // 4. Fallback al idioma base 'es'
+    if (result === undefined && this.currentLocale !== "es") {
+      const fallbackDict = this.dictionaries["es"] || {};
       if (fallbackDict[key] !== undefined) {
         result = fallbackDict[key];
-      } else {
-        const keys = key.split('.');
-        result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined) ? acc[curr] : undefined, fallbackDict);
+      } else if (key.includes(".")) {
+        const keys = key.split(".");
+        result = keys.reduce((acc, curr) => (acc && acc[curr] !== undefined ? acc[curr] : undefined), fallbackDict);
       }
     }
 
@@ -221,35 +293,40 @@ class I18nService {
       return fallbackString || key;
     }
 
-    // Interpolación de variables {{param}}
-    if (typeof result === 'string' && Object.keys(params).length > 0) {
+    // Interpolación de variables con sintaxis {{param}} o {param}
+    if (typeof result === "string" && params && Object.keys(params).length > 0) {
       return Object.keys(params).reduce((acc, p) => {
-        return acc.replace(new RegExp(`{{\\s*${p}\\s*}}`, 'g'), params[p]);
+        const val = params[p] !== undefined && params[p] !== null ? String(params[p]) : "";
+        return acc
+          .replace(new RegExp(`{{\\s*${p}\\s*}}`, "g"), val)
+          .replace(new RegExp(`\\{${p}\\}`, "g"), val);
       }, result);
     }
 
-    return result;
+    return String(result);
   }
 
-  // --- Formateadores Nativos de Datos Locales ---
+  // =========================================================================
+  // 5. FORMATEADORES NATIVOS SEGÚN LOCALE
+  // =========================================================================
 
   formatNumber(value, options = {}) {
-    if (value === null || value === undefined || isNaN(value)) return '-';
-    return new Intl.NumberFormat(this.currentLocale, options).format(value);
+    if (value === null || value === undefined || isNaN(Number(value))) return "-";
+    return new Intl.NumberFormat(this.currentLocale, options).format(Number(value));
   }
 
   formatPercent(value, decimals = 1) {
-    if (value === null || value === undefined || isNaN(value)) return '-';
+    if (value === null || value === undefined || isNaN(Number(value))) return "-";
     return new Intl.NumberFormat(this.currentLocale, {
-      style: 'percent',
+      style: "percent",
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals
-    }).format(value / 100);
+    }).format(Number(value) / 100);
   }
 
-  formatDate(date, options = { year: 'numeric', month: 'short', day: 'numeric' }) {
-    if (!date) return '-';
-    const d = typeof date === 'string' ? new Date(date) : date;
+  formatDate(date, options = { year: "numeric", month: "short", day: "numeric" }) {
+    if (!date) return "-";
+    const d = typeof date === "string" ? new Date(date) : date;
     return new Intl.DateTimeFormat(this.currentLocale, options).format(d);
   }
 }

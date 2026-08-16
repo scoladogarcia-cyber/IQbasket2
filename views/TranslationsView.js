@@ -1,12 +1,16 @@
 /**
- * @fileoverview Vista de Configuración de IQ Basket (TranslationsView.js).
- * Sincronización Real con Supabase Auth y la tabla 'user_profiles'.
- * Control Estricto de Permisos por Rol según la Matriz Oficial:
- * - AVISO DE SOLICITUDES DE ADHESIÓN: Notificación en tarjeta destacada para ADMIN y SUPERADMIN.
- * - BOTÓN ROL ACTIVO: Solo ejecutable por SUPERADMIN. Deshabilitado con aviso para el resto.
- * - CLUBS & EQUIPOS: SUPERADMIN (Total), ADMIN (Solo ver/editar equipos asignados), OTROS ROLES (Lista de acceso + Solicitud de adhesión).
- * - PLANTILLA Y TEMPORADAS: Ajustadas opciones de creación, edición y borrado por rol.
- * - IDIOMAS Y SIMULACIÓN: Exclusivas de SUPERADMIN.
+ * @fileoverview Vista de Configuración Integral de IQ Basket (TranslationsView.js).
+ * @description Centro neurálgico de administración del club, gestión de roles RBAC,
+ * transferencias de mercado, aprobación de adhesiones a equipos, temporadas y traducción multilingüe.
+ * 
+ * Contiene todas las funcionalidades completas:
+ * 1. Control estricto de permisos por matriz de roles (SUPERADMIN, ADMIN, ENTRENADOR, ANALISTA, SCOUT, JUGADOR, INVITADO).
+ * 2. Gestión de Clubs y Equipos (creación, edición, activación en vivo).
+ * 3. Gestión de Plantilla activa y Mercado Global de Fichajes con modal y buscador.
+ * 4. Aprobación y rechazo de solicitudes de traspaso y adhesión multiequipo con badges reactivos.
+ * 5. Administración de Usuarios y asignación de equipos autorizados (`user_profiles` + Supabase Auth).
+ * 6. Gestión de Temporadas registradas en Supabase.
+ * 7. Subvista integrada de Idiomas (`LanguageSettingsView`) y Simulación de Roles para SUPERADMIN.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -16,7 +20,11 @@ import { LanguageSettingsView } from "./LanguageSettingsView.js";
 import { I18n } from "../services/I18nService.js";
 
 export class TranslationsView {
-  constructor(authController) {
+  /**
+   * Crea una instancia de TranslationsView.
+   * @param {Object} [authController=null] - Controlador de autenticación y roles.
+   */
+  constructor(authController = null) {
     this.auth = authController;
     this.currentUserRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
     this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
@@ -24,7 +32,7 @@ export class TranslationsView {
     const effectiveRole = this.getEffectiveRole();
     this.activeTab = ["JUGADOR", "INVITADO"].includes(effectiveRole) 
       ? "requests" 
-      : (["ENTRENADOR", "ANALISTA"].includes(effectiveRole) ? "players" : "club");
+      : (["ENTRENADOR", "ANALISTA", "SCOUT"].includes(effectiveRole) ? "players" : "club");
       
     this.clubSubView = "list"; // 'list' | 'edit-club' | 'edit-team'
     this.selectedTeamForEdit = null;
@@ -45,7 +53,7 @@ export class TranslationsView {
     this.selectedLangForEdit = localStorage.getItem("iq_lang") || "es";
     this.availableLangs = [
       { code: "es", label: "Español (ES)" },
-      { code: "cat", label: "Català (CAT)" },
+      { code: "ca", label: "Català (CAT)" },
       { code: "en", label: "English (EN)" },
       { code: "fr", label: "Français (FR)" }
     ];
@@ -71,7 +79,7 @@ export class TranslationsView {
   }
 
   t(key, fallback = "") {
-    const res = TranslationStore.t(key, "");
+    const res = TranslationStore ? TranslationStore.t(key, "") : I18n.t(key);
     return (!res || res === key) ? fallback : res;
   }
 
@@ -88,14 +96,14 @@ export class TranslationsView {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        z-index: 9999; color: white; font-family: system-ui, sans-serif;
+        z-index: 9999; color: white; font-family: var(--font-family-base, system-ui);
       `;
       document.body.appendChild(overlay);
     }
     overlay.innerHTML = `
-      <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <div style="width: 48px; height: 48px; border: 4px solid var(--color-primary, #f97316); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
-      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos IQB...</p>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
     overlay.style.display = "flex";
@@ -134,24 +142,24 @@ export class TranslationsView {
         return ["SUPERADMIN", "ADMIN"].includes(role);
 
       case "VIEW_TAB_PLAYERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
 
       case "MANAGE_PLAYERS":
       case "APPROVE_TRANSFERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
 
       case "VIEW_TAB_SEASONS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
 
       case "CREATE_SEASON":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
 
       case "VIEW_TAB_REQUESTS":
       case "REQUEST_JOIN_CLUB":
-        return ["ENTRENADOR", "ANALISTA", "JUGADOR", "INVITADO"].includes(role);
+        return ["ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
 
       case "EDIT_DATA":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(role);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
 
       default:
         return false;
@@ -160,6 +168,7 @@ export class TranslationsView {
 
   async _fetchProfiles() {
     try {
+      if (!supabase) return;
       const { data, error } = await supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
       if (!error && data) {
         this.profilesList = data;
@@ -172,6 +181,7 @@ export class TranslationsView {
   async _fetchSeasons() {
     try {
       const activeTeamId = DataStore.getActiveTeamId();
+      if (!supabase) return;
       const { data, error } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
       
       if (!error && data && data.length > 0) {
@@ -206,6 +216,7 @@ export class TranslationsView {
 
   async _fetchTranslationsForLang(langCode) {
     try {
+      if (!supabase) return;
       const normLang = langCode === "cat" ? "ca" : langCode;
       const { data, error } = await supabase.from("translations").select("*");
       if (!error && data) {
@@ -220,6 +231,7 @@ export class TranslationsView {
     if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) return;
 
     try {
+      if (!supabase) return;
       const [pRes, tRes] = await Promise.all([
         supabase.from("players").select("*"),
         supabase.from("teams").select("*")
@@ -242,7 +254,7 @@ export class TranslationsView {
   }
 
   async render(containerId = "dashboard-content-area") {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
     if (this.seasonsList.length === 0) await this._fetchSeasons();
@@ -260,7 +272,7 @@ export class TranslationsView {
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
-    const currentActiveSeasonName = localStorage.getItem("iq_active_season") || "2026";
+    const currentActiveSeasonName = DataStore.getActiveSeason() || "2026";
 
     // Pestaña por defecto para Jugador e Invitado
     if (["JUGADOR", "INVITADO"].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
@@ -279,10 +291,10 @@ export class TranslationsView {
       : this.profilesList.filter(p => p.role !== "SUPERADMIN");
 
     // Filtrado y paginación del Mercado
-    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.players || []);
+    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.getPlayers() || []);
     const filteredPlayers = sourcePlayersList.filter(p => {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-      const teamName = (p.team_name || '').toLowerCase();
+      const fullName = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.toLowerCase();
+      const teamName = (p.team_name || p.teamName || '').toLowerCase();
       const query = this.marketSearchQuery.toLowerCase();
       return fullName.includes(query) || teamName.includes(query);
     });
@@ -512,7 +524,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'JMJ Manyanet Sant Andreu'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
+                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -526,7 +538,7 @@ export class TranslationsView {
                 </div>
 
                 <form id="form-edit-team" class="grid-2-cols">
-                  <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'JMJ Manyanet Sant Andreu'}" disabled /></div>
+                  <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'Club'}" disabled /></div>
                   <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
                   <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
@@ -931,7 +943,7 @@ export class TranslationsView {
 
       <!-- ESTILOS RESPONSIVE -->
       <style>
-        .config-container { max-width: 1000px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; gap: 16px; }
+        .config-container { max-width: 1000px; margin: 0 auto; font-family: var(--font-family-base, system-ui); display: flex; flex-direction: column; gap: 16px; }
         .config-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
         .config-header h1 { font-size: 22px; font-weight: 900; color: #0f172a; margin: 0; }
         .config-header p { font-size: 12px; color: #64748b; margin: 2px 0 0 0; }
@@ -955,13 +967,13 @@ export class TranslationsView {
 
         .form-group { display: flex; flex-direction: column; gap: 4px; }
         .form-group label { font-size: 11px; font-weight: 700; color: #475569; }
-        .form-group input, .form-group select { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; outline: none; background: white; }
+        .form-group input, .form-group select { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; outline: none; background: white; min-height: 44px; box-sizing: border-box; }
 
-        .btn-primary { background: #1e3a8a; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; }
-        .btn-secondary { background: #6366f1; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; }
-        .btn-secondary-sm { background: #6366f1; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; }
-        .btn-outline-sm { background: white; border: 1px solid #cbd5e1; color: #334155; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; }
-        .btn-danger-sm { background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+        .btn-primary { background: #1e3a8a; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; min-height: 44px; }
+        .btn-secondary { background: #6366f1; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; min-height: 44px; }
+        .btn-secondary-sm { background: #6366f1; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; min-height: 36px; }
+        .btn-outline-sm { background: white; border: 1px solid #cbd5e1; color: #334155; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; min-height: 36px; }
+        .btn-danger-sm { background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; min-height: 36px; }
 
         .table-responsive { overflow-x: auto; }
         .data-table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -993,7 +1005,6 @@ export class TranslationsView {
     }
 
     // --- BINDING DE EVENTOS PESTAÑAS PRINCIPALES ---
-
     container.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         this.activeTab = e.currentTarget.getAttribute("data-tab");
@@ -1056,7 +1067,6 @@ export class TranslationsView {
         </div>
       `;
 
-      // Eventos dentro del modal de ficha técnica
       modalContent.querySelectorAll(".btn-approve-join-req").forEach(btn => {
         btn.addEventListener("click", (e) => {
           const reqId = e.currentTarget.getAttribute("data-id");
@@ -1198,7 +1208,7 @@ export class TranslationsView {
       });
     });
 
-    // BINDING ALTA DE USUARIO E INVITACIÓN DIRECTA (SUPABASE AUTH + USER_PROFILES)
+    // ALTA DE USUARIO E INVITACIÓN DIRECTA (SUPABASE AUTH + USER_PROFILES)
     const formCreateUser = container.querySelector("#form-create-user-profile");
     if (formCreateUser) {
       formCreateUser.addEventListener("submit", async (e) => {
@@ -1222,6 +1232,7 @@ export class TranslationsView {
         this.showSyncOverlay("⚡ Registrando usuario en la Base de Datos IQB...");
 
         try {
+          if (!supabase) throw new Error("Cliente Supabase no configurado");
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email,
             password: tempPassword,
@@ -1260,7 +1271,7 @@ export class TranslationsView {
       });
     }
 
-    // BINDING GUARDAR ROL DE USUARIO EN USER_PROFILES
+    // GUARDAR ROL DE USUARIO EN USER_PROFILES
     container.querySelectorAll(".btn-save-user-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -1272,6 +1283,7 @@ export class TranslationsView {
         this.showSyncOverlay("💾 Actualizando rol del usuario...");
 
         try {
+          if (!supabase) throw new Error("Cliente Supabase no configurado");
           const { error } = await supabase
             .from("user_profiles")
             .update({ role: newRole })
@@ -1304,7 +1316,7 @@ export class TranslationsView {
       });
     });
 
-    // BINDING APROBAR Y RECHAZAR TRASPASOS
+    // APROBAR Y RECHAZAR TRASPASOS
     container.querySelectorAll(".btn-approve-transfer").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -1315,6 +1327,7 @@ export class TranslationsView {
         this.showSyncOverlay("⚡ Procesando y aprobando traspaso en Supabase...");
 
         try {
+          if (!supabase) throw new Error("Cliente Supabase no configurado");
           const { error } = await supabase
             .from("players")
             .update({ team_id: targetTeamId, status: "Activo" })
@@ -1344,7 +1357,7 @@ export class TranslationsView {
       });
     });
 
-    // BINDING ACTIVAR EQUIPO (ADMIN Y SUPERADMIN)
+    // ACTIVAR EQUIPO (ADMIN Y SUPERADMIN)
     container.querySelectorAll(".btn-set-active-team").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -1405,6 +1418,7 @@ export class TranslationsView {
         this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
 
         try {
+          if (!supabase) throw new Error("Cliente Supabase no configurado");
           const { data, error } = await supabase
             .from("seasons")
             .insert([{ name: seasonName, team_id: activeTeamId }])
@@ -1439,6 +1453,7 @@ export class TranslationsView {
         if (confirm("⚠️ ¿Estás seguro de eliminar esta temporada de Supabase?")) {
           this.showSyncOverlay("🗑️ Eliminando temporada en Supabase...");
           try {
+            if (!supabase) throw new Error("Cliente Supabase no configurado");
             const { error } = await supabase.from("seasons").delete().eq("id", seasonId);
             if (error) {
               this.hideSyncOverlay();

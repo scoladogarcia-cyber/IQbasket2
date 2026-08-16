@@ -1,76 +1,95 @@
 /**
- * @fileoverview Módulo de Exportación e Impresión de Informes en PDF (ReportExporter.js).
- * @description Permite imprimir o descargar informes en PDF formateados para impresión con soporte multilingüe.
+ * @fileoverview Servicio de Exportación e Impresión de Informes: ReportExporter.js
+ * @description Genera vistas de impresión optimizadas e inyecta estilos CSS para exportación PDF.
  */
 
 import { TranslationStore } from "./TranslationStore.js";
+import { DataStore } from "./DataStore.js";
+import { I18n } from "./I18nService.js";
 
 export class ReportExporter {
   /**
-   * Abre una ventana de impresión para convertir el HTML en PDF en el idioma activo.
-   * 
+   * Genera una ventana o iframe de impresión con estilos CSS embebidos para exportar a PDF.
    * @param {string} title - Título del documento.
-   * @param {string} htmlContent - Contenido HTML renderizado por las Vistas.
+   * @param {string} contentHtml - Estructura HTML que formará el reporte.
    */
-  static printReport(title, htmlContent) {
-    const printWindow = window.open("", "_blank");
+  static printReport(title = "Informe_IQ_Basket", contentHtml = "") {
+    const printWindow = window.open("", "_blank", "width=1024,height=768");
     if (!printWindow) {
-      alert(TranslationStore.t("allow_popups", "Por favor, permite las ventanas emergentes para generar el informe en PDF."));
+      alert(TranslationStore ? TranslationStore.t("popup_blocked", "La ventana emergente para imprimir fue bloqueada. Permite las ventanas emergentes.") : "La ventana emergente para imprimir fue bloqueada.");
       return;
     }
 
-    const currentLang = TranslationStore.currentLang || "es";
-    const documentTitle = title || TranslationStore.t("report", "Informe Estadístico");
-
-    printWindow.document.write(`
+    const htmlDoc = `
       <!DOCTYPE html>
-      <html lang="${currentLang}">
-        <head>
-          <meta charset="UTF-8">
-          <title>${documentTitle}</title>
-          <style>
-            @media print {
-              @page { margin: 15mm; size: auto; }
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-            body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; color: #0f172a; line-height: 1.4; }
-            h2, h3 { color: #0f172a; margin-bottom: 10px; font-weight: 800; }
-            .kpi-grid { display: flex; gap: 15px; margin-bottom: 20px; }
-            .kpi-card { border: 1px solid #cbd5e1; padding: 12px; border-radius: 8px; text-align: center; flex: 1; background: #f8fafc; }
-            .kpi-val { font-size: 22px; font-weight: 900; display: block; color: #1e3a8a; }
-            .kpi-lbl { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
-            table.data-table, table.period-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-            th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: center; font-size: 12px; }
-            th { background-color: #f1f5f9; font-weight: 800; color: #475569; text-transform: uppercase; }
-            .print-footer { margin-top: 30px; font-size: 10px; color: #94a3b8; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-          </style>
-        </head>
-        <body>
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 20px;">
-            <div>
-              <h1 style="margin: 0; font-size: 20px; font-weight: 900; color: #1e3a8a;">IQ BASKET</h1>
-              <span style="font-size: 12px; color: #64748b;">${TranslationStore.t("app_tagline", "Análisis estadístico de baloncesto")}</span>
-            </div>
-            <div style="text-align: right; font-size: 11px; color: #64748b;">
-              <strong>${TranslationStore.t("season", "Temporada")}:</strong> 2026<br/>
-              <span>${new Date().toLocaleDateString(currentLang)}</span>
-            </div>
-          </div>
-
-          ${htmlContent}
-
-          <div class="print-footer">
-            IQ Basket Stats & Analytics · ${TranslationStore.t("generated_report", "Informe generado automáticamente")}
-          </div>
-        </body>
+      <html lang="${I18n.getLocale ? I18n.getLocale() : 'es'}">
+      <head>
+        <meta charset="UTF-8">
+        <title>${title}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 15mm 12mm 15mm 12mm;
+          }
+          *, *::before, *::after {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 0;
+            font-size: 12px;
+            line-height: 1.4;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+            font-size: 11px;
+            margin-top: 10px;
+          }
+          .data-table th, .data-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .data-table th {
+            background-color: #f1f5f9 !important;
+            font-weight: 800;
+            color: #475569;
+            text-transform: uppercase;
+          }
+          h1, h2, h3, h4 {
+            margin: 0 0 8px 0;
+            font-weight: 800;
+          }
+          svg {
+            max-width: 100%;
+          }
+        </style>
+      </head>
+      <body>
+        ${contentHtml}
+        <script>
+          window.onload = function() {
+            window.focus();
+            window.print();
+            window.onafterprint = function() {
+              window.close();
+            };
+          };
+        </script>
+      </body>
       </html>
-    `);
+    `;
 
+    printWindow.document.open();
+    printWindow.document.write(htmlDoc);
     printWindow.document.close();
-    printWindow.focus();
-
-    setTimeout(() => {
-      printWindow.print();
-    }, 300);
   }
 }
+
+export default ReportExporter;

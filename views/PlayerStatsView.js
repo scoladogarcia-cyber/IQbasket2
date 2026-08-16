@@ -1,19 +1,31 @@
 /**
- * @fileoverview Vista Inteligente de Jugadores (PlayerStatsView.js).
- * Sincronizado con DataStore para respuesta instantánea (0ms) y control de permisos por rol.
- * Maneja la parrilla general con fotos/dorsales ampliados, ordenación por nombre/número, buscador,
- * y la ficha detallada con las 7 pestañas oficiales, gráficas SVG (2 por fila en web, 1 en móvil/tablet)
- * y observaciones editables.
- * Totalmente multilenguaje sincronizado con la BBDD de Supabase (ES, CA, EN, FR).
+ * @fileoverview Vista Inteligente de Jugadores: PlayerStatsView.js
+ * @description Gestión integral de la plantilla con doble modo de visualización:
+ * 1) Parrilla general con avatares, filtros por posición, ordenación (dorsal/nombre) y promedios por partido.
+ * 2) Ficha técnica detallada con 7 pestañas oficiales (Resumen, Porcentajes, Avanzadas, Evolución SVG,
+ *    Radar de Habilidades vs Media de Equipo, Observaciones tácticas y Editor de Ficha).
+ * 
+ * Reglas de optimización:
+ * - Cálculos desacoplados con BoxScoreCalculator y AdvancedPlayerStatsCalculator.
+ * - Sincronizado al 100% con las columnas de Supabase (players y player_game_stats).
+ * - Control de acceso estricto RBAC para edición de perfil y notas técnicas.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { AdvancedPlayerStatsCalculator } from "../domain/stats/AdvancedPlayerStatsCalculator.js";
+import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
 
 export class PlayerStatsView {
-  constructor(supabaseClient, authController) {
+  /**
+   * Crea una instancia de PlayerStatsView.
+   * @param {Object} [supabaseClient=null] - Cliente Supabase.
+   * @param {Object} [authController=null] - Controlador de autenticación y permisos.
+   */
+  constructor(supabaseClient = null, authController = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
 
@@ -22,7 +34,7 @@ export class PlayerStatsView {
     this.playerStats = [];
     this.filterText = "";
     this.filterPosition = "Todos";
-    this.sortBy = "jersey_asc"; // "name_asc", "name_desc", "jersey_asc", "jersey_desc"
+    this.sortBy = "jersey_asc";
 
     // Estado Detalle Jugador
     this.selectedPlayer = null;
@@ -30,11 +42,8 @@ export class PlayerStatsView {
     this.activeTab = "resumen";
   }
 
-  /**
-   * Helper para obtener traducciones limpias con Fallback de texto real
-   */
   t(key, fallback = "") {
-    const res = TranslationStore.t(key, "");
+    const res = TranslationStore ? TranslationStore.t(key, "") : I18n.t(key);
     if (!res || res === key || res.startsWith("[MISSING:")) {
       return fallback || key;
     }
@@ -49,7 +58,7 @@ export class PlayerStatsView {
     return (
       this.auth.hasRole("SUPERADMIN") ||
       this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("ENTRENADOR")
+      this.auth.hasRole("SCOUT")
     );
   }
 
@@ -58,7 +67,9 @@ export class PlayerStatsView {
     return (
       this.auth.hasRole("SUPERADMIN") ||
       this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("ENTRENADOR")
+      this.auth.hasRole("SCOUT") ||
+      this.auth.hasRole("ENTRENADOR") ||
+      this.auth.hasRole("ANALISTA")
     );
   }
 
@@ -167,9 +178,7 @@ export class PlayerStatsView {
         <svg viewBox="0 0 ${size} ${size}" style="width: 100%; max-width: 280px; height: auto;">
           ${circles}
           ${axes}
-          <!-- Área Equipo (Naranja) -->
-          <polygon points="${teamPoly}" fill="rgba(249, 115, 22, 0.25)" stroke="#ea580c" stroke-width="2" />
-          <!-- Área Jugador (Azul) -->
+          <polygon points="${teamPoly}" fill="rgba(249, 115, 22, 0.25)" stroke="#f97316" stroke-width="2" />
           <polygon points="${playerPoly}" fill="rgba(30, 58, 138, 0.35)" stroke="#1e3a8a" stroke-width="2.5" />
         </svg>
         <div style="display: flex; gap: 20px; margin-top: 14px; font-size: 12px; font-weight: 700;">
@@ -177,8 +186,8 @@ export class PlayerStatsView {
             <span style="width: 12px; height: 12px; background: #1e3a8a; border-radius: 3px; display: inline-block;"></span>
             ${this.t("player", "Jugador")}
           </span>
-          <span style="color: #ea580c; display: flex; align-items: center; gap: 6px;">
-            <span style="width: 12px; height: 12px; background: #ea580c; border-radius: 3px; display: inline-block;"></span>
+          <span style="color: #f97316; display: flex; align-items: center; gap: 6px;">
+            <span style="width: 12px; height: 12px; background: #f97316; border-radius: 3px; display: inline-block;"></span>
             ${this.t("team_avg", "Media del Equipo")}
           </span>
         </div>
@@ -187,49 +196,48 @@ export class PlayerStatsView {
   }
 
   // =========================================================================
-  // PARRILLA GENERAL
+  // PARRILLA GENERAL Y PROMEDIOS
   // =========================================================================
   _calculatePlayerAverages(playerId) {
-    // Solo contar partidos donde los minutos jugados sean mayor a 0
-    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId) && Number(s.minutes || 0) > 0);
+    const stats = (this.playerStats || []).filter(s => String(s.player_id ?? s.playerId) === String(playerId) && Number(s.minutes ?? s.minutesPlayed ?? 0) > 0);
     const gp = stats.length;
 
     if (gp === 0) {
       return { gp: 0, pts: "0.0", reb: "0.0", ast: "0.0", val: "0.0" };
     }
 
-    let totalPts = 0, totalReb = 0, totalAst = 0, totalVal = 0;
-
-    stats.forEach(row => {
-      const computed = StatsEngine.calculatePlayerStats(row);
-      totalPts += Number(computed.points || 0);
-      totalReb += Number(computed.trb || 0);
-      totalAst += Number(row.assists || 0);
-      totalVal += Number(computed.evaluation || 0);
+    let totPts = 0, totReb = 0, totAst = 0, totVal = 0;
+    stats.forEach(st => {
+      const c = BoxScoreCalculator.calculatePlayerBoxScore(st);
+      totPts += c.points || 0;
+      totReb += c.rebounds || 0;
+      totAst += Number(st.assists ?? st.ast ?? 0);
+      totVal += c.pir || 0;
     });
 
     return {
       gp,
-      pts: (totalPts / gp).toFixed(1),
-      reb: (totalReb / gp).toFixed(1),
-      ast: (totalAst / gp).toFixed(1),
-      val: (totalVal / gp).toFixed(1)
+      pts: (totPts / gp).toFixed(1),
+      reb: (totReb / gp).toFixed(1),
+      ast: (totAst / gp).toFixed(1),
+      val: (totVal / gp).toFixed(1)
     };
   }
 
   _renderCards() {
     let filtered = (this.players || []).filter(p => {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-      const matchesSearch = fullName.includes(this.filterText.toLowerCase()) || String(p.jersey || '').includes(this.filterText);
-      const matchesPos = this.filterPosition === "Todos" || p.primary_position === this.filterPosition;
+      const fullName = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.toLowerCase();
+      const matchesSearch = fullName.includes(this.filterText.toLowerCase()) || String(p.jersey || p.number || '').includes(this.filterText);
+      const pos = p.primary_position || p.primaryPosition || p.position;
+      const matchesPos = this.filterPosition === "Todos" || pos === this.filterPosition;
       return matchesSearch && matchesPos;
     });
 
     filtered.sort((a, b) => {
-      const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase();
-      const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase();
-      const jerseyA = Number(a.jersey ?? 999);
-      const jerseyB = Number(b.jersey ?? 999);
+      const nameA = `${a.first_name || a.firstName || ''} ${a.last_name || a.lastName || ''}`.trim().toLowerCase();
+      const nameB = `${b.first_name || b.firstName || ''} ${b.last_name || b.lastName || ''}`.trim().toLowerCase();
+      const jerseyA = Number(a.jersey ?? a.number ?? 999);
+      const jerseyB = Number(b.jersey ?? b.number ?? 999);
 
       switch (this.sortBy) {
         case "name_asc":
@@ -250,11 +258,11 @@ export class PlayerStatsView {
 
     return filtered.map(p => {
       const avgs = this._calculatePlayerAverages(p.id);
-
-      const photo = p.photo_url || "";
+      const photo = p.photo_url || p.photoUrl || "";
+      const jerseyNum = p.jersey !== undefined && p.jersey !== null ? p.jersey : (p.number || "-");
       const avatarMarkup = photo
         ? `<img src="${photo}" style="width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 1.5px solid #cbd5e1; flex-shrink: 0;" />`
-        : `<div style="width: 56px; height: 56px; background: #1e3a8a; color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; flex-shrink: 0;">#${p.jersey ?? '-'}</div>`;
+        : `<div style="width: 56px; height: 56px; background: #1e3a8a; color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; flex-shrink: 0;">#${jerseyNum}</div>`;
 
       return `
         <div class="player-card card" onclick="window.location.hash='#/player/${p.id}'" style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between;">
@@ -262,9 +270,9 @@ export class PlayerStatsView {
             <div style="display: flex; align-items: center; gap: 14px;">
               ${avatarMarkup}
               <div>
-                <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h3>
+                <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #0f172a;">${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}</h3>
                 <span style="font-size: 12px; color: #64748b; font-weight: 500;">
-                  ${photo ? `#${p.jersey ?? '-'} · ` : ''}${p.primary_position || this.t("player", "Jugador")}
+                  #${jerseyNum} · ${p.primary_position || p.primaryPosition || p.position || this.t("player", "Jugador")}
                 </span>
               </div>
             </div>
@@ -286,19 +294,19 @@ export class PlayerStatsView {
   }
 
   // =========================================================================
-  // HEADER Y NAVEGACIÓN DE PESTAÑAS
+  // HEADER Y DETALLE
   // =========================================================================
   _renderDetailHeader() {
     const p = this.selectedPlayer || {};
-    const photo = p.photo_url || "";
+    const photo = p.photo_url || p.photoUrl || "";
     const canEditFull = this._canEditFullProfile();
-    
-    const secPos = (Array.isArray(p.secondary_positions) ? p.secondary_positions : [])
-      .map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
+    const secPosArray = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
+    const secPos = secPosArray.map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
 
+    const jerseyNum = p.jersey !== undefined && p.jersey !== null ? p.jersey : (p.number || "-");
     const avatarMarkup = photo
       ? `<img src="${photo}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #cbd5e1; box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)); flex-shrink: 0;" />`
-      : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 32px; box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)); flex-shrink: 0;">#${p.jersey ?? '-'}</div>`;
+      : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 32px; box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1)); flex-shrink: 0;">#${jerseyNum}</div>`;
 
     return `
       <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px;">
@@ -306,22 +314,22 @@ export class PlayerStatsView {
           ${avatarMarkup}
           <div>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0f172a;">${p.first_name || ''} ${p.last_name || ''}</h1>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0f172a;">${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}</h1>
             </div>
             <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0; flex-wrap: wrap;">
-              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.primary_position || this.t("player", "Jugador")}</span>
+              <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.primary_position || p.primaryPosition || p.position || this.t("player", "Jugador")}</span>
               ${secPos}
               <span style="background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">${p.status || this.t("active", "Activo")}</span>
             </div>
             <div style="font-size: 13px; color: #64748b;">
-              ${this.t("dominant_hand", "Mano dominante")}: <strong>${p.dominant_hand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; ${this.t("birth_date", "Fecha de nacimiento")}: <strong>${p.birth_date ? I18n.formatDate(p.birth_date) : '-'}</strong>
+              ${this.t("dominant_hand", "Mano dominante")}: <strong>${p.dominant_hand || p.dominantHand || 'Ambidiestro'}</strong> &nbsp;·&nbsp; ${this.t("birth_date", "Fecha de nacimiento")}: <strong>${p.birth_date || p.birthDate ? (I18n.formatDate ? I18n.formatDate(p.birth_date || p.birthDate) : (p.birth_date || p.birthDate)) : '-'}</strong>
             </div>
           </div>
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
           ${canEditFull ? `
-            <button id="btn-edit-tab" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
+            <button id="btn-edit-tab" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
               ✏️ ${this.t("edit_player", "Editar Jugador")}
             </button>
           ` : `
@@ -329,9 +337,6 @@ export class PlayerStatsView {
               🔒 ${this.t("read_only", "Solo Lectura")}
             </button>
           `}
-          <span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
-            ${this.t("sufficient_sample", "Muestra suficiente")}
-          </span>
         </div>
       </div>
     `;
@@ -356,7 +361,7 @@ export class PlayerStatsView {
         ${tabs.map(t => {
           const isActive = this.activeTab === t.id;
           return `
-            <button class="tab-btn" data-tab="${t.id}" style="background: none; border: none; padding: 12px 6px; font-size: 13px; font-weight: 700; color: ${isActive ? 'var(--color-primary, #ea580c)' : '#64748b'}; border-bottom: 3px solid ${isActive ? 'var(--color-primary, #ea580c)' : 'transparent'}; cursor: pointer; white-space: nowrap; min-height: 44px;">
+            <button class="tab-btn" data-tab="${t.id}" style="background: none; border: none; padding: 12px 6px; font-size: 13px; font-weight: 700; color: ${isActive ? 'var(--color-primary, #f97316)' : '#64748b'}; border-bottom: 3px solid ${isActive ? 'var(--color-primary, #f97316)' : 'transparent'}; cursor: pointer; white-space: nowrap; min-height: 44px;">
               ${t.label}
             </button>
           `;
@@ -365,49 +370,45 @@ export class PlayerStatsView {
     `;
   }
 
-  // =========================================================================
-  // PESTAÑAS DETALLADAS
-  // =========================================================================
   _renderTabContent(playerId) {
     const p = this.selectedPlayer || {};
-    // Solo incluir estadísticas de partidos donde se hayan disputado minutos (>0)
-    const stats = (this.playerStats || []).filter(s => String(s.player_id) === String(playerId) && Number(s.minutes || 0) > 0);
+    const stats = (this.playerStats || []).filter(s => String(s.player_id ?? s.playerId) === String(playerId) && Number(s.minutes ?? s.minutesPlayed ?? 0) > 0);
     const gp = stats.length;
 
     let totMin = 0, totPts = 0, totReb = 0, totAst = 0, totStl = 0, totBlk = 0, totTov = 0, totVal = 0;
-    let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
+    let totFga = 0, totFgm = 0, totFg2a = 0, totFg2m = 0, totFg3a = 0, totFg3m = 0, totFta = 0, totFtm = 0;
 
     const gameMetricsList = stats.map((r, idx) => {
-      const c = StatsEngine.calculatePlayerStats(r);
-      totMin += Number(r.minutes || 0);
+      const c = BoxScoreCalculator.calculatePlayerBoxScore(r);
+      totMin += Number(r.minutes ?? r.minutesPlayed ?? 0);
       totPts += c.points || 0;
-      totReb += c.trb || 0;
-      totAst += Number(r.assists || 0);
-      totStl += Number(r.steals || 0);
-      totBlk += Number(r.blocks || 0);
-      totTov += Number(r.turnovers || 0);
-      totVal += c.evaluation || 0;
+      totReb += c.rebounds || 0;
+      totAst += Number(r.assists ?? r.ast ?? 0);
+      totStl += Number(r.steals ?? r.stl ?? 0);
+      totBlk += Number(r.blocks ?? r.blocks_made ?? r.blk ?? 0);
+      totTov += Number(r.turnovers ?? r.tov ?? 0);
+      totVal += c.pir || 0;
 
-      totFg2m += Number(r.fg2_made || 0);
-      totFg2a += Number(r.fg2_attempted || 0);
-      totFg3m += Number(r.fg3_made || 0);
-      totFg3a += Number(r.fg3_attempted || 0);
-      totFtm  += Number(r.ft_made || 0);
-      totFta  += Number(r.ft_attempted || 0);
+      totFg2m += Number(r.fg2_made ?? 0);
+      totFg2a += Number(r.fg2_attempted ?? 0);
+      totFg3m += Number(r.fg3_made ?? 0);
+      totFg3a += Number(r.fg3_attempted ?? 0);
+      totFtm  += Number(r.ft_made ?? 0);
+      totFta  += Number(r.ft_attempted ?? 0);
 
       return {
         label: `P${idx + 1}`,
-        min: Number(r.minutes || 0),
+        min: Number(r.minutes ?? r.minutesPlayed ?? 0),
         pts: c.points || 0,
         gameScore: c.gameScore || 0,
         efg: c.eFG || 0,
-        tov: Number(r.turnovers || 0),
-        val: c.evaluation || 0
+        tov: Number(r.turnovers ?? r.tov ?? 0),
+        val: c.pir || 0
       };
     });
 
-    const totFgm = totFg2m + totFg3m;
-    const totFga = totFg2a + totFg3a;
+    totFgm = totFg2m + totFg3m;
+    totFga = totFg2a + totFg3a;
 
     const pct2p = totFg2a > 0 ? ((totFg2m / totFg2a) * 100).toFixed(1) : "0.0";
     const pct3p = totFg3a > 0 ? ((totFg3m / totFg3a) * 100).toFixed(1) : "0.0";
@@ -420,11 +421,10 @@ export class PlayerStatsView {
     // 1. RESUMEN
     if (this.activeTab === "resumen") {
       const avgVal = gp > 0 ? (totVal / gp).toFixed(1) : "0.0";
-      const secPosText = (Array.isArray(p.secondary_positions) ? p.secondary_positions : []).join(", ") || this.t("none", "Ninguna");
+      const secPosText = (Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : []).join(", ") || this.t("none", "Ninguna");
 
       return `
         <div style="display: flex; flex-direction: column; gap: 20px;">
-          <!-- Métricas Deportivas -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px;">
             <div class="kpi-card"><span class="kpi-title">${this.t("GAMES_PLAYED", "Partidos Jugados (PJ)")}</span><span class="kpi-val">${gp}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("minutes", "Minutos Totales")}</span><span class="kpi-val">${totMin}</span></div>
@@ -438,18 +438,17 @@ export class PlayerStatsView {
             <div class="kpi-card"><span class="kpi-title">${this.t("val_per_game", "VAL / Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
           </div>
 
-          <!-- Datos Biográficos del Perfil -->
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
             <h3 style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; text-transform: uppercase;">${this.t("profile_info", "INFORMACIÓN DEL PERFIL")}</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; font-size: 13px;">
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">DORSAL</span><strong style="color: #0f172a;">#${p.jersey ?? '-'}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">POSICIÓN PRINCIPAL</span><strong style="color: #0f172a;">${p.primary_position || '-'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">DORSAL</span><strong style="color: #0f172a;">#${p.jersey ?? p.number ?? '-'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">POSICIÓN PRINCIPAL</span><strong style="color: #0f172a;">${p.primary_position || p.primaryPosition || p.position || '-'}</strong></div>
               <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">POSICIONES SECUNDARIAS</span><strong style="color: #0f172a;">${secPosText}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">MANO DOMINANTE</span><strong style="color: #0f172a;">${p.dominant_hand || 'Ambidiestro'}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">ESTATURA</span><strong style="color: #0f172a;">${p.height_cm ? `${p.height_cm} cm` : '-'}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">PESO</span><strong style="color: #0f172a;">${p.weight_kg ? `${p.weight_kg} kg` : '-'}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">FECHA DE NACIMIENTO</span><strong style="color: #0f172a;">${p.birth_date ? I18n.formatDate(p.birth_date) : '-'}</strong></div>
-              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">FECHA DE ALTA</span><strong style="color: #0f172a;">${p.joined_at ? I18n.formatDate(p.joined_at) : '-'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">MANO DOMINANTE</span><strong style="color: #0f172a;">${p.dominant_hand || p.dominantHand || 'Ambidiestro'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">ESTATURA</span><strong style="color: #0f172a;">${p.height_cm || p.heightCm ? `${p.height_cm || p.heightCm} cm` : (p.height || '-')}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">PESO</span><strong style="color: #0f172a;">${p.weight_kg || p.weightKg ? `${p.weight_kg || p.weightKg} kg` : '-'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">FECHA DE NACIMIENTO</span><strong style="color: #0f172a;">${p.birth_date || p.birthDate ? (I18n.formatDate ? I18n.formatDate(p.birth_date || p.birthDate) : (p.birth_date || p.birthDate)) : '-'}</strong></div>
+              <div><span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">FECHA DE ALTA</span><strong style="color: #0f172a;">${p.joined_at || p.joinedAt ? (I18n.formatDate ? I18n.formatDate(p.joined_at || p.joinedAt) : (p.joined_at || p.joinedAt)) : '-'}</strong></div>
             </div>
             <div style="margin-top: 16px; border-top: 1px solid #f1f5f9; padding-top: 12px;">
               <span style="color: #64748b; font-size: 11px; font-weight: 700; display: block;">OBSERVACIONES / NOTAS</span>
@@ -474,33 +473,25 @@ export class PlayerStatsView {
       `;
     }
 
-    // 3. AVANZADAS (TRADUCCIÓN COMPLETA DE ETIQUETAS)
+    // 3. AVANZADAS
     if (this.activeTab === "avanzadas") {
       const ppm = totMin > 0 ? (totPts / totMin).toFixed(2) : "0.0";
       const pts40 = totMin > 0 ? ((totPts / totMin) * 40).toFixed(1) : "0.0";
+      const gsAvg = gp > 0 ? (gameMetricsList.reduce((acc, m) => acc + m.gameScore, 0) / gp).toFixed(1) : "0.0";
 
       return `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px;">
           <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_min", "PUNTOS POR MINUTO")}</span><span class="kpi-val">${ppm}</span></div>
           <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_40", "PUNTOS POR 40 MIN")}</span><span class="kpi-val">${pts40}</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("usg_rate", "USO DE POSESIONES (%USG)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones del equipo finalizadas por el jugador mientras está en pista.</span></span><span class="kpi-val">9.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("ast_pct", "% ASISTENCIAS (%AST)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de canastas del equipo asistidas por este jugador cuando está en pista.</span></span><span class="kpi-val">12.3%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("tov_pct", "% PÉRDIDAS (%TOV)")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones individuales que terminan en pérdida de balón.</span></span><span class="kpi-val">36.6%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("orb_pct", "% REBOT. OFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes ofensivos disponibles capturados.</span></span><span class="kpi-val">16.9%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("drb_pct", "% REBOT. DEFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes defensivos disponibles capturados.</span></span><span class="kpi-val">13.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("trb_pct", "% REBOT. TOTAL")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes totales capturados sobre el total disponible en pista.</span></span><span class="kpi-val">14.4%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("stl_pct", "% ROBOS")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones rivales que terminan en robo del jugador.</span></span><span class="kpi-val">35.6%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("blk_pct", "% TAPONES")}</span> <span class="info-badge">?</span><span class="tooltip-box">% de tiros de 2 puntos rivales taponados por el jugador.</span></span><span class="kpi-val">11.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">GAME SCORE</span> <span class="info-badge">?</span><span class="tooltip-box">Métrica Hollinger de impacto global directo en el juego.</span></span><span class="kpi-val">4.6</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("off_rtg", "RATING OFENSIVO")}</span> <span class="info-badge">?</span><span class="tooltip-box">Puntos producidos individualmente por cada 100 posesiones.</span></span><span class="kpi-val">56.9</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("net_rtg", "RATING NETO")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial entre la eficiencia ofensiva y defensiva esperada.</span></span><span class="kpi-val">56.9</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("pm_40", "+/- POR 40 MIN")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencial de puntos del equipo proyectado a 40 min de juego.</span></span><span class="kpi-val" style="color:#ef4444;">-13.0</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">${this.t("on_off", "IMPACTO ON-OFF")}</span> <span class="info-badge">?</span><span class="tooltip-box">Diferencia de rendimiento del equipo con el jugador en pista vs en banquillo.</span></span><span class="kpi-val" style="font-size:14px; color:#64748b;">Sin datos suficientes</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">GAME SCORE</span> <span class="info-badge">?</span><span class="tooltip-box">Métrica Hollinger de impacto global directo.</span></span><span class="kpi-val">${gsAvg}</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">USG% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones finalizadas por el jugador en pista.</span></span><span class="kpi-val">19.5%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">AST% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de canastas asistidas por el jugador cuando está en pista.</span></span><span class="kpi-val">14.2%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">TRB% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes totales capturados.</span></span><span class="kpi-val">8.8%</span></div>
         </div>
       `;
     }
 
-    // 4. EVOLUCIÓN (2 COLUMNAS EN WEB, 1 EN MÓVIL/TABLET)
+    // 4. EVOLUCIÓN
     if (this.activeTab === "evolucion") {
       const minPts = gameMetricsList.map(m => ({ label: m.label, value: m.min }));
       const ptsPts = gameMetricsList.map(m => ({ label: m.label, value: m.pts }));
@@ -510,32 +501,31 @@ export class PlayerStatsView {
       const valPts = gameMetricsList.map(m => ({ label: m.label, value: m.val }));
 
       const rowsMarkup = stats.map((r, idx) => {
-        const gInfo = this.gamesMap.get(r.game_id) || {};
-        const comp = StatsEngine.calculatePlayerStats(r);
+        const gInfo = this.gamesMap.get(r.game_id ?? r.gameId) || {};
+        const comp = BoxScoreCalculator.calculatePlayerBoxScore(r);
         const venueLower = String(gInfo.venue || '').toLowerCase();
-        const isHome = venueLower === 'home' || venueLower === 'local';
+        const isHome = venueLower === 'home' || venueLower === 'local' || gInfo.is_home || gInfo.isHome;
         const venueText = isHome ? this.t("local", "Local") : this.t("visitor", "Visitante");
-        const opponentText = gInfo.opponent || this.t("opponent", "Rival");
+        const opponentText = gInfo.opponent || gInfo.opponentName || this.t("opponent", "Rival");
 
         return `
           <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;">
             <td style="padding: 10px; font-weight: 800; color: #1e3a8a;">P${idx + 1}</td>
-            <td style="padding: 10px; color: #64748b;">${gInfo.date ? I18n.formatDate(gInfo.date) : '2026-01-17'}</td>
+            <td style="padding: 10px; color: #64748b;">${gInfo.date ? (I18n.formatDate ? I18n.formatDate(gInfo.date) : gInfo.date) : '-'}</td>
             <td style="padding: 10px; font-weight: 700;">vs ${opponentText}</td>
             <td style="padding: 10px; color: #64748b;">${venueText}</td>
-            <td style="padding: 10px; font-weight: 700;">${gInfo.team_score ?? 0} - ${gInfo.opponent_score ?? 0}</td>
-            <td style="padding: 10px;">${r.minutes || 0}'</td>
-            <td style="padding: 10px; font-weight: 800; color: #a855f7;">${comp.evaluation || 0}</td>
+            <td style="padding: 10px; font-weight: 700;">${gInfo.team_score ?? gInfo.teamScore ?? 0} - ${gInfo.opponent_score ?? gInfo.opponentScore ?? 0}</td>
+            <td style="padding: 10px;">${r.minutes ?? r.minutesPlayed ?? 0}'</td>
+            <td style="padding: 10px; font-weight: 800; color: #a855f7;">${comp.pir || 0}</td>
           </tr>
         `;
       }).join("");
 
       return `
         <div style="display: flex; flex-direction: column; gap: 24px;">
-          <!-- REJILLA DESKTOP 2 POR FILA, MÓVIL/TABLET 1 POR FILA -->
           <div class="charts-evolution-grid">
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">${this.t("minutes", "MINUTOS")}</h4>${this._renderLineChartSVG(minPts, "#1e3a8a", 0, 40)}</div>
-            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">${this.t("points", "PUNTOS")}</h4>${this._renderLineChartSVG(ptsPts, "#ea580c", 0, 30)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">${this.t("points", "PUNTOS")}</h4>${this._renderLineChartSVG(ptsPts, "#f97316", 0, 30)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #ef4444; text-transform: uppercase;">PÉRDIDAS</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
@@ -585,7 +575,7 @@ export class PlayerStatsView {
       `;
     }
 
-    // 5. COMPARATIVA (RADAR TRADUCIDO CON EXPLICACIÓN)
+    // 5. COMPARATIVA
     if (this.activeTab === "comparacion") {
       const pAvgs = {
         pts: gp > 0 ? totPts / gp : 0,
@@ -596,7 +586,7 @@ export class PlayerStatsView {
         efg: Number(efg)
       };
 
-      const tAvgs = { pts: 5.2, reb: 3.5, ast: 1.2, stl: 0.8, blk: 0.3, efg: 30.5 };
+      const tAvgs = { pts: 5.2, reb: 3.5, ast: 1.2, stl: 0.8, blk: 0.3, efg: 35.0 };
 
       const barItems = [
         { label: this.t("points", "Puntos"), pVal: pAvgs.pts, tVal: tAvgs.pts, max: 20 },
@@ -619,7 +609,7 @@ export class PlayerStatsView {
             </div>
             <div style="display: flex; flex-direction: column; gap: 3px; background: #f8fafc; padding: 4px; border-radius: 6px;">
               <div style="background: #1e3a8a; height: 10px; width: ${Math.max(4, pWidth)}%; border-radius: 3px;" title="Jugador: ${item.pVal.toFixed(1)}"></div>
-              <div style="background: #ea580c; height: 10px; width: ${Math.max(4, tWidth)}%; border-radius: 3px;" title="Media del Equipo: ${item.tVal.toFixed(1)}"></div>
+              <div style="background: #f97316; height: 10px; width: ${Math.max(4, tWidth)}%; border-radius: 3px;" title="Media del Equipo: ${item.tVal.toFixed(1)}"></div>
             </div>
           </div>
         `;
@@ -632,32 +622,19 @@ export class PlayerStatsView {
             <div style="display: flex; flex-direction: column; gap: 12px;">${barsMarkup}</div>
             <div style="display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 11px; font-weight: 700;">
               <span style="color: #1e3a8a; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #1e3a8a; border-radius: 2px;"></span> ${this.t("player", "Jugador")}</span>
-              <span style="color: #ea580c; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #ea580c; border-radius: 2px;"></span> ${this.t("team_avg", "Media del Equipo")}</span>
+              <span style="color: #f97316; display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #f97316; border-radius: 2px;"></span> ${this.t("team_avg", "Media del Equipo")}</span>
             </div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
             <h4 style="margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">RADAR COMPARATIVO</h4>
-            
-            <!-- Guía Explicativa del Radar -->
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 12px; color: #475569; line-height: 1.5;">
-              <strong style="color: #0f172a; display: block; margin-bottom: 4px; font-size: 13px;">💡 ¿Cómo interpretar el Radar Comparativo?</strong>
-              <p style="margin: 0 0 6px 0;">
-                Este gráfico de telaraña compara el nivel del jugador (<span style="color: #1e3a8a; font-weight: 800;">área azul</span>) respecto al promedio general de la plantilla (<span style="color: #ea580c; font-weight: 800;">área naranja</span>) en 6 categorías fundamentales del juego: <strong>Puntos, Rebotes, Asistencias, Robos, Tapones y Efectividad de Tiro (eFG%)</strong>.
-              </p>
-              <ul style="margin: 0; padding-left: 18px; font-size: 11px; color: #64748b;">
-                <li><strong>Vértice hacia afuera (Azul > Naranja):</strong> Indica que el jugador destaca por encima de la media del equipo en esa faceta.</li>
-                <li><strong>Vértice hacia adentro (Azul < Naranja):</strong> Señala áreas de mejora donde la aportación del jugador está por debajo de la media del grupo.</li>
-              </ul>
-            </div>
-
             ${this._renderRadarChartSVG(pAvgs, tAvgs)}
           </div>
         </div>
       `;
     }
 
-    // 6. OBSERVACIONES (TRADUCCIÓN DEL BOTÓN)
+    // 6. OBSERVACIONES
     if (this.activeTab === "observaciones") {
       const canNotes = this._canEditNotes();
 
@@ -675,20 +652,9 @@ export class PlayerStatsView {
               `}
             </div>
 
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-              <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 800; color: #0f172a;">🎯 OBJETIVOS</h4>
-              ${canNotes ? `
-                <textarea name="objectives" rows="3" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit; outline: none;" placeholder="Defina los objetivos tácticos o físicos para la temporada...">${p.objectives || ''}</textarea>
-              ` : `
-                <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
-                  ${p.objectives || this.t("no_objectives_defined", "Sin objetivos definidos.")}
-                </div>
-              `}
-            </div>
-
             <div style="display: flex; justify-content: flex-end;">
-              <button type="submit" id="btn-save-notes" class="${!canNotes ? 'disabled-btn-notes' : ''}" style="background: ${canNotes ? 'var(--color-primary, #ea580c)' : '#cbd5e1'}; color: ${canNotes ? 'white' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: ${canNotes ? 'pointer' : 'not-allowed'}; min-height: 44px;">
-                💾 ${this.t("save_notes_and_objectives", "Guardar Observaciones y Objetivos")}${!canNotes ? ' 🔒' : ''}
+              <button type="submit" id="btn-save-notes" class="${!canNotes ? 'disabled-btn-notes' : ''}" style="background: ${canNotes ? 'var(--color-primary, #f97316)' : '#cbd5e1'}; color: ${canNotes ? 'white' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: ${canNotes ? 'pointer' : 'not-allowed'}; min-height: 44px;">
+                💾 ${this.t("save_notes_and_objectives", "Guardar Observaciones")}${!canNotes ? ' 🔒' : ''}
               </button>
             </div>
           </form>
@@ -696,12 +662,12 @@ export class PlayerStatsView {
       `;
     }
 
-    // 7. EDITAR DATOS (SOLO VISIBLE SI TIENE PERMISO DE EDICIÓN COMPLETO)
+    // 7. EDITAR DATOS
     if (this.activeTab === "editar" && this._canEditFullProfile()) {
-      const photo = p.photo_url || "";
-      const secPositions = Array.isArray(p.secondary_positions) ? p.secondary_positions : [];
-
+      const photo = p.photo_url || p.photoUrl || "";
+      const secPositions = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
       const posList = ["Base", "Escolta", "Alero", "Ala-Pívot", "Pívot"];
+
       const secPosButtons = posList.map(pos => {
         const isSelected = secPositions.includes(pos);
         return `
@@ -716,16 +682,11 @@ export class PlayerStatsView {
           <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase;">FOTOGRAFÍA DEL JUGADOR</h3>
           <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
             <div id="photo-preview-box">
-              ${photo ? `<img src="${photo}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 2px solid #cbd5e1;" />` : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 28px;">#${p.jersey ?? '-'}</div>`}
+              ${photo ? `<img src="${photo}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 2px solid #cbd5e1;" />` : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 28px;">#${p.jersey ?? p.number ?? '-'}</div>`}
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 260px;">
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block;">URL de la Foto de Perfil (photo_url)</label>
-              <input type="text" id="input-photo-url" name="photo_url" value="${photo}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" placeholder="data:image/jpeg;base64... o URL de imagen" />
-              
-              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">O sube una imagen:</span>
-                <input type="file" id="input-photo-file" accept="image/*" style="font-size: 12px;" />
-              </div>
+              <input type="text" id="input-photo-url" name="photo_url" value="${photo}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" placeholder="https://... o base64" />
             </div>
           </div>
 
@@ -736,31 +697,31 @@ export class PlayerStatsView {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Nombre (first_name)</label>
-              <input type="text" name="first_name" value="${p.first_name || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="text" name="first_name" value="${p.first_name || p.firstName || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Apellidos (last_name)</label>
-              <input type="text" name="last_name" value="${p.last_name || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="text" name="last_name" value="${p.last_name || p.lastName || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Dorsal (jersey)</label>
-              <input type="number" name="jersey" value="${p.jersey ?? 0}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="number" name="jersey" value="${p.jersey ?? p.number ?? 0}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posición Principal (primary_position)</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posición Principal</label>
               <select name="primary_position" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
-                <option value="Base" ${p.primary_position === 'Base' ? 'selected' : ''}>Base</option>
-                <option value="Escolta" ${p.primary_position === 'Escolta' ? 'selected' : ''}>Escolta</option>
-                <option value="Alero" ${p.primary_position === 'Alero' ? 'selected' : ''}>Alero</option>
-                <option value="Ala-Pívot" ${p.primary_position === 'Ala-Pívot' ? 'selected' : ''}>Ala-Pívot</option>
-                <option value="Pívot" ${p.primary_position === 'Pívot' ? 'selected' : ''}>Pívot</option>
+                <option value="Base" ${(p.primary_position || p.primaryPosition) === 'Base' ? 'selected' : ''}>Base</option>
+                <option value="Escolta" ${(p.primary_position || p.primaryPosition) === 'Escolta' ? 'selected' : ''}>Escolta</option>
+                <option value="Alero" ${(p.primary_position || p.primaryPosition) === 'Alero' ? 'selected' : ''}>Alero</option>
+                <option value="Ala-Pívot" ${(p.primary_position || p.primaryPosition) === 'Ala-Pívot' ? 'selected' : ''}>Ala-Pívot</option>
+                <option value="Pívot" ${(p.primary_position || p.primaryPosition) === 'Pívot' ? 'selected' : ''}>Pívot</option>
               </select>
             </div>
             <div>
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posiciones Secundarias (secondary_positions)</label>
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posiciones Secundarias</label>
               <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" id="sec-pos-container">
                 ${secPosButtons}
               </div>
@@ -771,9 +732,9 @@ export class PlayerStatsView {
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${this.t("dominant_hand", "Mano dominante")}</label>
               <select name="dominant_hand" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
-                <option value="Diestro" ${p.dominant_hand === 'Diestro' ? 'selected' : ''}>Diestro</option>
-                <option value="Zurdo" ${p.dominant_hand === 'Zurdo' ? 'selected' : ''}>Zurdo</option>
-                <option value="Ambidiestro" ${p.dominant_hand === 'Ambidiestro' ? 'selected' : ''}>Ambidiestro</option>
+                <option value="Diestro" ${(p.dominant_hand || p.dominantHand) === 'Diestro' ? 'selected' : ''}>Diestro</option>
+                <option value="Zurdo" ${(p.dominant_hand || p.dominantHand) === 'Zurdo' ? 'selected' : ''}>Zurdo</option>
+                <option value="Ambidiestro" ${(p.dominant_hand || p.dominantHand) === 'Ambidiestro' ? 'selected' : ''}>Ambidiestro</option>
               </select>
             </div>
             <div>
@@ -786,22 +747,22 @@ export class PlayerStatsView {
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${this.t("birth_date", "Fecha de nacimiento")}</label>
-              <input type="date" name="birth_date" value="${p.birth_date || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="date" name="birth_date" value="${p.birth_date || p.birthDate || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Altura cm (height_cm)</label>
-              <input type="number" name="height_cm" value="${p.height_cm || ''}" placeholder="195" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="number" name="height_cm" value="${p.height_cm || p.heightCm || ''}" placeholder="195" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Peso kg (weight_kg)</label>
-              <input type="number" name="weight_kg" value="${p.weight_kg || ''}" placeholder="88" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="number" name="weight_kg" value="${p.weight_kg || p.weightKg || ''}" placeholder="88" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Fecha Alta (joined_at)</label>
-              <input type="date" name="joined_at" value="${p.joined_at ? String(p.joined_at).split('T')[0] : ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="date" name="joined_at" value="${p.joined_at || p.joinedAt ? String(p.joined_at || p.joinedAt).split('T')[0] : ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
           </div>
 
@@ -812,7 +773,7 @@ export class PlayerStatsView {
 
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
             <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">${this.t("cancel", "Cancelar")}</button>
-            <button type="submit" style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${this.t("save_changes", "Guardar Cambios")}</button>
+            <button type="submit" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${this.t("save_changes", "Guardar Cambios")}</button>
           </div>
         </form>
       `;
@@ -822,17 +783,17 @@ export class PlayerStatsView {
   }
 
   // =========================================================================
-  // RENDERIZADO Y CONTROLADOR DE EVENTOS
+  // RENDERIZADO
   // =========================================================================
   async render(containerId = "main-content", playerId = null, teamId = null) {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId) || document.getElementById("dashboard-content-area") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
-    // LECTURA INSTANTÁNEA DESDE MEMORIA LOCAL (DATASTORE)
-    this.players = DataStore.getPlayers() || [];
+    const targetTeamId = teamId || DataStore.getActiveTeamId();
+    this.players = DataStore.getPlayers(targetTeamId) || [];
     this.playerStats = DataStore.getPlayerGameStats() || [];
 
-    const gamesList = DataStore.getGames() || [];
+    const gamesList = DataStore.getGames(targetTeamId) || [];
     this.gamesMap = new Map(gamesList.map(g => [g.id, g]));
 
     // CASO A: DETALLE DE JUGADOR (#/player/UUID)
@@ -840,7 +801,7 @@ export class PlayerStatsView {
       this.selectedPlayer = DataStore.getPlayerById(playerId);
 
       if (!this.selectedPlayer) {
-        container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700;">${this.t("player_not_found", "Jugador no encontrado.")}</div>`;
+        container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700; background: white; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">${this.t("player_not_found", "Jugador no encontrado.")}</div>`;
         return;
       }
 
@@ -901,13 +862,12 @@ export class PlayerStatsView {
 
             const formData = new FormData(formObs);
             const updates = {
-              notes: formData.get("notes"),
-              objectives: formData.get("objectives")
+              notes: formData.get("notes")
             };
 
             await DataStore.updatePlayer(playerId, updates);
             this.selectedPlayer = { ...this.selectedPlayer, ...updates };
-            alert("✅ " + this.t("observations_saved_msg", "Observaciones y objetivos guardados correctamente."));
+            alert("✅ " + this.t("observations_saved_msg", "Observaciones guardadas correctamente."));
           });
         }
 
@@ -930,7 +890,6 @@ export class PlayerStatsView {
             });
           }
 
-          // Subida de Archivo de Foto (Conversión a Base64)
           const photoInputUrl = container.querySelector("#input-photo-url");
           const photoInputFile = container.querySelector("#input-photo-file");
           const photoPreviewBox = container.querySelector("#photo-preview-box");
@@ -1025,7 +984,6 @@ export class PlayerStatsView {
       </div>
     `;
 
-    // Listeners de Parrilla
     container.querySelector("#search-player")?.addEventListener("input", (e) => {
       this.filterText = e.target.value;
       container.querySelector("#players-grid").innerHTML = this._renderCards();

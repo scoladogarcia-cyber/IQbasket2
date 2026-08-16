@@ -1,35 +1,21 @@
 /**
- * @fileoverview Servicio de Gestión de Idiomas y Diccionario Completo (TranslationStore.js).
- * Refactorizado para conectar con Supabase de forma transparente y sincronizarse con I18nService.js.
- * Soporta ES, CA (alias cat), EN y FR con sincronización bidireccional en caliente.
- * Incluye el diccionario completo para la Suite Analítica, Mapa de Calor, Shot Chart y Comparativa On/Off.
+ * @fileoverview Almacén y Servicio de Gestión de Idiomas, Diccionarios y Traducciones: TranslationStore.js
+ * @description Exporta tanto `TranslationStore` como `TranslationService` para máxima compatibilidad.
+ * Conexión reactiva a Supabase (`translations`), persistencia local en `localStorage` y diccionarios de fallback (ES, CA/CAT, EN, FR).
  */
 
-import { I18n } from './I18nService.js';
-import { supabase } from '../config/database.config.js';
+import { supabase } from "../config/database.config.js";
+import { I18n } from "./I18nService.js";
 
 export class TranslationStore {
-  /** Obtiene el idioma actual */
-  static get currentLang() {
-    return I18n.getLocale();
-  }
-
-  static set currentLang(val) {
-    const normalized = val === 'cat' ? 'ca' : val;
-    I18n.setLocale(normalized);
-  }
-
-  /**
-   * Diccionario por defecto multilingüe (Fallback local en caso de fallo de red)
-   */
   static defaultDictionary = {
     es: {
       dashboard: "Dashboard",
       team: "Equipo",
       players: "Jugadores",
       games: "Partidos",
-      boxscore: "Registro estadístico",
-      advanced_stats: "Estadística avanzada",
+      boxscore: "Registro Estadístico",
+      advanced_stats: "Estadística Avanzada",
       lineups: "Quintetos",
       comparator: "Comparador",
       reports: "Informes",
@@ -57,7 +43,6 @@ export class TranslationStore {
       position: "Posición",
       status: "Estado",
       height: "Altura",
-      ppg_tooltip: "Puntos Por Partido promedio anotados por el jugador.",
       save_changes: "Guardar Cambios",
       read_only: "Modo Solo Lectura",
       view_boxscore: "Análisis",
@@ -69,7 +54,7 @@ export class TranslationStore {
       track_live: "Toma Gráfica / Pista",
       report: "Informe",
       delete_game: "Eliminar partido",
-      confirm_delete_game: "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas, cuartos y jugadas asociadas.",
+      confirm_delete_game: "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas y eventos asociados.",
       team_games: "Partidos del Equipo",
       registered_games: "partidos registrados",
       register_new_game: "Registrar Nuevo Partido",
@@ -82,16 +67,12 @@ export class TranslationStore {
       venue: "Sede",
       arena: "Pabellón / Arena",
       starting_five: "QUINTETO TITULAR",
-      game_saved_msg: "Partido guardado exitosamente con cuartos, estadísticas y mapa de calor sincronizados.",
-
-      // Suite Analítica, Mapa de Calor y Cartas de Tiro
+      game_saved_msg: "Partido guardado exitosamente con cuartos, estadísticas y mapa de tiro sincronizados.",
       analytics_suite: "Estadística Avanzada & Cartas de Tiro",
       analytics_subtitle: "Rendimiento espacial, informe individual con radar y comparativa On/Off",
       tab_court_heatmap: "Pista & Zonas",
       tab_player_report: "Informe de Jugador",
       tab_on_off: "Comparativa On / Off & Rival",
-
-      // Filtros
       "heatmap.filter_game": "PARTIDO",
       "heatmap.all_games": "Todos los partidos",
       "heatmap.filter_player": "JUGADOR",
@@ -102,8 +83,6 @@ export class TranslationStore {
       "heatmap.all_outcomes": "Anotados y Fallados",
       "heatmap.only_made": "Solo Anotados",
       "heatmap.only_missed": "Solo Fallados",
-
-      // Rangos de distancia y modos de vista
       "heatmap.all_distances": "Todas las Distancias",
       "heatmap.paint": "Bajo el Aro / Pintura",
       "heatmap.mid_range": "Media Distancia",
@@ -111,15 +90,11 @@ export class TranslationStore {
       "heatmap.mode_zones": "Zonas",
       "heatmap.mode_density": "Calor",
       "heatmap.mode_shots": "Tiros",
-
-      // Badges sobre pista
       "heatmap.paint_badge": "PINTURA",
       "heatmap.mid_badge": "MEDIA DIST.",
       "heatmap.top_three_badge": "TRIPLE FRONTAL",
       "heatmap.left_corner_badge": "ESQ. IZQ",
       "heatmap.right_corner_badge": "ESQ. DER",
-
-      // Resumen y métricas de tiro
       "heatmap.summary_title": "Resumen de Lanzamiento",
       "heatmap.zones_title": "Distribución por Distancia",
       "heatmap.made_shots": "Anotados",
@@ -128,20 +103,13 @@ export class TranslationStore {
       "heatmap.efficiency": "Eficiencia",
       "heatmap.made_legend": "Anotado",
       "heatmap.missed_legend": "Fallado",
-
-      // Informe de Jugador con Radar
       "heatmap.season_report": "Informe de Temporada",
       "heatmap.efficiency_profile": "Perfil de Eficiencia Ofensiva y Porcentajes de Tiro",
       "heatmap.skills_radar": "Radar de Habilidades (Advanced Radar)",
       "heatmap.shot_breakdown": "Desglose de Lanzamientos de",
-
-      // Matriz On / Off
       "heatmap.on_off_title": "Matriz de Rendimiento On / Off & Rival",
       "heatmap.on_off_subtitle": "Impacto diferencial en pista con el jugador presente (ON) vs descansando (OFF)",
-      "heatmap.analyzed_players": "Jugadores Analizados",
-      player: "JUGADOR",
-      minutes: "MIN",
-      possessions: "POSS"
+      "heatmap.analyzed_players": "Jugadores Analizados"
     },
     ca: {
       dashboard: "Tauler Principal",
@@ -177,7 +145,6 @@ export class TranslationStore {
       position: "Posició",
       status: "Estat",
       height: "Alçada",
-      ppg_tooltip: "Punts per partit mitjans anotats pel jugador.",
       save_changes: "Desar Canvis",
       read_only: "Mode Només Lectura",
       view_boxscore: "Anàlisi",
@@ -189,7 +156,7 @@ export class TranslationStore {
       track_live: "Presa Gràfica / Pista",
       report: "Informe",
       delete_game: "Eliminar partit",
-      confirm_delete_game: "Segur que voleu eliminar aquest partit? S'esborraran totes les seves estadístiques, quarts i jugades associades.",
+      confirm_delete_game: "Segur que voleu eliminar aquest partit? S'esborraran totes les seves estadístiques i esdeveniments associats.",
       team_games: "Partits de l'Equip",
       registered_games: "partits registrats",
       register_new_game: "Registrar Nou Partit",
@@ -202,16 +169,12 @@ export class TranslationStore {
       venue: "Seu",
       arena: "Pavelló / Arena",
       starting_five: "QUINTET TITULAR",
-      game_saved_msg: "Partit desat correctament amb quarts, estadístiques i mapa de calor sincronitzats.",
-
-      // Suite Analítica, Mapa de Calor i Cartes de Tir
+      game_saved_msg: "Partit desat correctament amb quarts, estadístiques i mapa de tir sincronitzats.",
       analytics_suite: "Estadística Avançada & Cartes de Tir",
       analytics_subtitle: "Rendiment espacial, informe individual amb radar i comparativa On/Off",
       tab_court_heatmap: "Pista & Zones",
       tab_player_report: "Informe de Jugador",
       tab_on_off: "Comparativa On / Off & Rival",
-
-      // Filtres
       "heatmap.filter_game": "PARTIT",
       "heatmap.all_games": "Tots els partits",
       "heatmap.filter_player": "JUGADOR",
@@ -222,8 +185,6 @@ export class TranslationStore {
       "heatmap.all_outcomes": "Anotats i Fallats",
       "heatmap.only_made": "Només Anotats",
       "heatmap.only_missed": "Només Fallats",
-
-      // Rangs de distància i modes de vista
       "heatmap.all_distances": "Totes les Distàncies",
       "heatmap.paint": "Sota la Canastra / Pintura",
       "heatmap.mid_range": "Mitja Distància",
@@ -231,15 +192,11 @@ export class TranslationStore {
       "heatmap.mode_zones": "Zones",
       "heatmap.mode_density": "Calor",
       "heatmap.mode_shots": "Tirs",
-
-      // Badges sobre pista
       "heatmap.paint_badge": "PINTURA",
       "heatmap.mid_badge": "MITJA DIST.",
       "heatmap.top_three_badge": "TRIPLE FRONTAL",
       "heatmap.left_corner_badge": "ESQ. ESQ",
       "heatmap.right_corner_badge": "ESQ. DRE",
-
-      // Resum i mètriques de tir
       "heatmap.summary_title": "Resum de Llançament",
       "heatmap.zones_title": "Distribució per Distància",
       "heatmap.made_shots": "Anotats",
@@ -248,20 +205,13 @@ export class TranslationStore {
       "heatmap.efficiency": "Eficiència",
       "heatmap.made_legend": "Anotat",
       "heatmap.missed_legend": "Fallat",
-
-      // Informe de Jugador amb Radar
       "heatmap.season_report": "Informe de Temporada",
       "heatmap.efficiency_profile": "Perfil d'Eficiència Ofensiva i Percentatges de Tir",
       "heatmap.skills_radar": "Radar d'Habilitats (Advanced Radar)",
       "heatmap.shot_breakdown": "Desglossament de Llançaments de",
-
-      // Matriu On / Off
       "heatmap.on_off_title": "Matriu de Rendiment On / Off & Rival",
       "heatmap.on_off_subtitle": "Impacte diferencial a pista amb el jugador present (ON) vs descansant (OFF)",
-      "heatmap.analyzed_players": "Jugadors Analitzats",
-      player: "JUGADOR",
-      minutes: "MIN",
-      possessions: "POSS"
+      "heatmap.analyzed_players": "Jugadors Analitzats"
     },
     en: {
       dashboard: "Dashboard",
@@ -297,7 +247,6 @@ export class TranslationStore {
       position: "Position",
       status: "Status",
       height: "Height",
-      ppg_tooltip: "Average points per game scored by the player.",
       save_changes: "Save Changes",
       read_only: "Read-Only Mode",
       view_boxscore: "Analysis",
@@ -309,7 +258,7 @@ export class TranslationStore {
       track_live: "Graphical Tracking / Court",
       report: "Report",
       delete_game: "Delete Game",
-      confirm_delete_game: "Are you sure you want to delete this game? All associated stats, periods, and plays will be permanently removed.",
+      confirm_delete_game: "Are you sure you want to delete this game? All associated stats and events will be permanently removed.",
       team_games: "Team Games",
       registered_games: "registered games",
       register_new_game: "Register New Game",
@@ -323,15 +272,11 @@ export class TranslationStore {
       arena: "Arena / Gym",
       starting_five: "STARTING FIVE",
       game_saved_msg: "Game saved successfully with periods, stats, and shot chart synchronized.",
-
-      // Analytics Suite & Heatmap
       analytics_suite: "Advanced Stats & Shot Charts",
       analytics_subtitle: "Spatial performance, individual report with radar, and On/Off comparison",
       tab_court_heatmap: "Court & Zones",
       tab_player_report: "Player Report",
       tab_on_off: "On / Off & Opponent Comparison",
-
-      // Filters
       "heatmap.filter_game": "GAME",
       "heatmap.all_games": "All Games",
       "heatmap.filter_player": "PLAYER",
@@ -342,8 +287,6 @@ export class TranslationStore {
       "heatmap.all_outcomes": "Made & Missed",
       "heatmap.only_made": "Only Made",
       "heatmap.only_missed": "Only Missed",
-
-      // Distance ranges and view modes
       "heatmap.all_distances": "All Distances",
       "heatmap.paint": "Under Rim / Paint",
       "heatmap.mid_range": "Mid-Range",
@@ -351,15 +294,11 @@ export class TranslationStore {
       "heatmap.mode_zones": "Zones",
       "heatmap.mode_density": "Heatmap",
       "heatmap.mode_shots": "Shots",
-
-      // Badges
       "heatmap.paint_badge": "PAINT",
       "heatmap.mid_badge": "MID-RANGE",
       "heatmap.top_three_badge": "TOP THREE",
       "heatmap.left_corner_badge": "LEFT CORNER",
       "heatmap.right_corner_badge": "RIGHT CORNER",
-
-      // Summary & Shot Metrics
       "heatmap.summary_title": "Shooting Summary",
       "heatmap.zones_title": "Distance Breakdown",
       "heatmap.made_shots": "Made",
@@ -368,20 +307,13 @@ export class TranslationStore {
       "heatmap.efficiency": "Efficiency",
       "heatmap.made_legend": "Made",
       "heatmap.missed_legend": "Missed",
-
-      // Player Report (Radar)
       "heatmap.season_report": "Season Report",
       "heatmap.efficiency_profile": "Offensive Efficiency Profile & Shooting Percentages",
       "heatmap.skills_radar": "Skills Radar (Advanced Radar)",
       "heatmap.shot_breakdown": "Shot Breakdown of",
-
-      // On / Off Matrix
       "heatmap.on_off_title": "On / Off & Opponent Performance Matrix",
       "heatmap.on_off_subtitle": "Differential on-court impact with player present (ON) vs resting (OFF)",
-      "heatmap.analyzed_players": "Analyzed Players",
-      player: "PLAYER",
-      minutes: "MIN",
-      possessions: "POSS"
+      "heatmap.analyzed_players": "Analyzed Players"
     },
     fr: {
       dashboard: "Tableau de Bord",
@@ -417,7 +349,6 @@ export class TranslationStore {
       position: "Poste",
       status: "Statut",
       height: "Taille",
-      ppg_tooltip: "Moyenne de points par match marqués par le joueur.",
       save_changes: "Enregistrer les modifications",
       read_only: "Mode Lecture Seule",
       view_boxscore: "Analyse",
@@ -443,13 +374,11 @@ export class TranslationStore {
       arena: "Gymnase / Salle",
       starting_five: "CINQ MAJEUR",
       game_saved_msg: "Match enregistré avec succès.",
-
       analytics_suite: "Statistiques Avancées & Cartes de Tir",
       analytics_subtitle: "Performance spatiale, rapport individuel avec radar et On/Off",
       tab_court_heatmap: "Terrain & Zones",
       tab_player_report: "Rapport Joueur",
       tab_on_off: "Comparatif On / Off & Adversaire",
-
       "heatmap.filter_game": "MATCH",
       "heatmap.all_games": "Tous les matchs",
       "heatmap.filter_player": "JOUEUR",
@@ -460,7 +389,6 @@ export class TranslationStore {
       "heatmap.all_outcomes": "Réussis et Manqués",
       "heatmap.only_made": "Seulement Réussis",
       "heatmap.only_missed": "Seulement Manqués",
-
       "heatmap.all_distances": "Toutes les Distances",
       "heatmap.paint": "Sous le Panier / Raquette",
       "heatmap.mid_range": "Mi-Distance",
@@ -468,13 +396,11 @@ export class TranslationStore {
       "heatmap.mode_zones": "Zones",
       "heatmap.mode_density": "Chaleur",
       "heatmap.mode_shots": "Tirs",
-
       "heatmap.paint_badge": "RAQUETTE",
       "heatmap.mid_badge": "MI-DISTANCE",
       "heatmap.top_three_badge": "3 PTS EN TÊTE",
       "heatmap.left_corner_badge": "COIN GAUCHE",
       "heatmap.right_corner_badge": "COIN DROIT",
-
       "heatmap.summary_title": "Résumé des Tirs",
       "heatmap.zones_title": "Répartition par Distance",
       "heatmap.made_shots": "Réussis",
@@ -483,131 +409,113 @@ export class TranslationStore {
       "heatmap.efficiency": "Efficacité",
       "heatmap.made_legend": "Réussi",
       "heatmap.missed_legend": "Manqué",
-
       "heatmap.season_report": "Rapport de Saison",
       "heatmap.efficiency_profile": "Profil d'Efficacité Offensive et Pourcentages de Tir",
       "heatmap.skills_radar": "Radar de Compétences (Advanced Radar)",
       "heatmap.shot_breakdown": "Détail des Tirs de",
-
       "heatmap.on_off_title": "Matrice de Rendement On / Off & Adversaire",
       "heatmap.on_off_subtitle": "Impact différentiel sur le terrain avec le joueur (ON) vs au repos (OFF)",
-      "heatmap.analyzed_players": "Joueurs Analysés",
-      player: "JOUEUR",
-      minutes: "MIN",
-      possessions: "POSS"
+      "heatmap.analyzed_players": "Joueurs Analysés"
     }
   };
 
-  /** Alias para retrocompatibilidad con la clave 'cat' */
-  static get dictWithCatAlias() {
-    return {
-      ...TranslationStore.defaultDictionary,
-      cat: TranslationStore.defaultDictionary.ca
-    };
+  static dictionaries = {
+    es: { ...TranslationStore.defaultDictionary.es },
+    ca: { ...TranslationStore.defaultDictionary.ca },
+    en: { ...TranslationStore.defaultDictionary.en },
+    fr: { ...TranslationStore.defaultDictionary.fr }
+  };
+
+  static currentLang = localStorage.getItem("iq_lang") || "es";
+
+  static normalizeLang(langCode = "es") {
+    const code = String(langCode || "es").trim().toLowerCase();
+    return code === "cat" ? "ca" : code;
   }
 
-  /**
-   * Carga el diccionario desde Supabase para el idioma dado e integra las claves en I18n
-   */
-  static async loadFromSupabase(lang = TranslationStore.currentLang) {
-    const targetLang = lang === 'cat' ? 'ca' : lang;
-    try {
-      const { data, error } = await supabase
-        .from("translations")
-        .select("*")
-        .or(`language_code.eq.${targetLang},language_code.eq.${lang}`);
-
-      if (!error && data && data.length > 0) {
-        const remoteDict = {};
-        data.forEach(item => {
-          if (item.key && item.translation) {
-            remoteDict[item.key] = item.translation;
-          }
-        });
-
-        // 1. Guardar copia local para acceso inmediato offline (0ms)
-        localStorage.setItem(`iq_dict_${targetLang}`, JSON.stringify(remoteDict));
-
-        // 2. Inyectar sobreescribiendo en I18n
-        I18n.addTranslations(targetLang, remoteDict);
-
-        // 3. Notificar cambios a la vista
-        I18n.notify();
-      }
-    } catch (e) {
-      console.warn("⚠️ [TranslationStore] Error cargando diccionario de Supabase:", e);
-    }
-  }
-
-  /**
-   * Inicialización masiva al arrancar la aplicación
-   */
-  static async initAllTranslations() {
-    const activeLang = TranslationStore.currentLang;
-    await TranslationStore.loadFromSupabase(activeLang);
-  }
-
-  /**
-   * Obtiene el diccionario en memoria/localStorage mezclado con los valores por defecto
-   */
-  static getDictionary(lang = TranslationStore.currentLang) {
-    const targetLang = lang === 'cat' ? 'ca' : lang;
-    const saved = localStorage.getItem(`iq_dict_${targetLang}`);
-    if (saved) {
-      try {
-        return { 
-          ...TranslationStore.defaultDictionary[targetLang], 
-          ...JSON.parse(saved) 
-        };
-      } catch (e) {
-        console.warn("[TranslationStore] Error leyendo diccionario guardado, usando por defecto.");
-      }
-    }
-    return TranslationStore.defaultDictionary[targetLang] || TranslationStore.defaultDictionary.es;
-  }
-
-  /**
-   * Obtiene la traducción dada una clave semántica o plana.
-   */
-  static t(key, fallback = "") {
+  static t(key, fallbackOrParams = "", maybeFallback = "") {
     if (!key) return "";
-
-    // 1. Intentar resolver mediante I18nService
-    const translated = I18n.t(key, {}, null);
-    if (typeof translated === "string" && !translated.startsWith("[MISSING:") && translated !== key) {
-      return translated;
+    let fallback = typeof fallbackOrParams === "string" ? fallbackOrParams : maybeFallback;
+    const lang = this.normalizeLang(this.currentLang);
+    const dict = this.dictionaries[lang] || this.dictionaries.es || {};
+    const res = dict[key];
+    if (res !== undefined && res !== null && res !== "") {
+      return res;
     }
-
-    // 2. Fallback al diccionario plano directo
-    const currentDict = TranslationStore.getDictionary(TranslationStore.currentLang);
-    if (currentDict && currentDict[key]) {
-      return currentDict[key];
-    }
-
-    // 3. Devolver fallback o la clave original
     return fallback || key;
   }
 
-  /**
-   * Guarda un diccionario completo local y notifica al motor
-   */
-  static saveDictionary(lang, newDict) {
-    const targetLang = lang === 'cat' ? 'ca' : lang;
-    localStorage.setItem(`iq_dict_${targetLang}`, JSON.stringify(newDict));
-    if (I18n.dictionaries[targetLang]) {
-      Object.assign(I18n.dictionaries[targetLang], newDict);
-    }
-    I18n.notify();
+  static getDictionary(langCode = null) {
+    const code = this.normalizeLang(langCode || this.currentLang);
+    return this.dictionaries[code] || this.defaultDictionary[code] || this.defaultDictionary.es;
   }
 
-  /**
-   * Cambia el idioma activo y recarga desde Supabase
-   */
-  static async setLanguage(lang) {
-    const targetLang = lang === 'cat' ? 'ca' : lang;
-    I18n.setLocale(targetLang);
-    await TranslationStore.loadFromSupabase(targetLang);
+  static saveDictionary(langCode, dict) {
+    const code = this.normalizeLang(langCode);
+    this.dictionaries[code] = { ...(this.dictionaries[code] || {}), ...dict };
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(`iq_dict_${code}`, JSON.stringify(this.dictionaries[code]));
+    }
+  }
+
+  static async setLanguage(langCode) {
+    const code = this.normalizeLang(langCode);
+    this.currentLang = code;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("iq_lang", code);
+      const cached = localStorage.getItem(`iq_dict_${code}`);
+      if (cached) {
+        try {
+          this.dictionaries[code] = { ...this.dictionaries[code], ...JSON.parse(cached) };
+        } catch {
+          // continuar
+        }
+      }
+    }
+    if (I18n && typeof I18n.setLocale === "function") {
+      I18n.setLocale(code);
+    }
+  }
+
+  static async initAllTranslations() {
+    try {
+      // 1. Cargar caché de LocalStorage primero
+      if (typeof localStorage !== "undefined") {
+        for (const lang of ["es", "ca", "en", "fr"]) {
+          const cached = localStorage.getItem(`iq_dict_${lang}`);
+          if (cached) {
+            try {
+              this.dictionaries[lang] = { ...this.dictionaries[lang], ...JSON.parse(cached) };
+            } catch {
+              // continuar
+            }
+          }
+        }
+      }
+
+      // 2. Sincronizar desde Supabase
+      if (supabase) {
+        const { data, error } = await supabase.from("translations").select("*");
+        if (!error && data) {
+          data.forEach(item => {
+            const lang = this.normalizeLang(item.language_code);
+            if (!this.dictionaries[lang]) this.dictionaries[lang] = {};
+            this.dictionaries[lang][item.key] = item.translation;
+          });
+
+          if (typeof localStorage !== "undefined") {
+            Object.keys(this.dictionaries).forEach(lang => {
+              localStorage.setItem(`iq_dict_${lang}`, JSON.stringify(this.dictionaries[lang]));
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[TranslationStore] Inicialización offline:", err.message);
+    }
   }
 }
 
+// Alias de exportación para total compatibilidad
+export const TranslationService = TranslationStore;
 export default TranslationStore;

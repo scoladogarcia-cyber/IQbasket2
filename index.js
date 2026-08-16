@@ -1,32 +1,28 @@
 /**
- * @fileoverview Orquestador Principal de IQ Basket (index.js).
- * - Autenticación Nativa Estricta con Supabase Auth (supabase.auth.signInWithPassword / signUp).
- * - Sincronizado con la tabla 'user_profiles' de la Base de Datos IQB.
- * - Sincronización en tiempo real de cambio de idioma tanto en Desktop como en Header Móvil.
- * - Soporte para EasyStatsEntryView (Entrada rápida y modo pista/heatmap con control de roles).
- * - Soporte para HeatmapAnalysisView (Análisis visual de mapas de calor, cartas de tiro y zonas).
- * - Guarda de seguridad de rutas para redirigir al Dashboard si un rol restringido (ej. JUGADOR / INVITADO) intenta acceder por hash a Comparador, Asistente IA o Entrada de Datos.
- * - Validación estricta de equipos autorizados por usuario para evitar cargas no permitidas.
- * - Bloqueo absoluto de acceso ante contraseñas o correos no válidos.
- * - Registro público asignando de forma permanente el rol INVITADO.
- * - Preserva a scolado@nechigroup.com como SUPERADMIN.
- * - Control global de cambios no guardados (window.hasUnsavedChanges).
- * - Exposición de la instancia global (window.iqApp) para refrescos en tiempo real.
+ * @fileoverview Orquestador Principal de IQ Basket: index.js
+ * @description Punto de entrada central y enrutador SPA reactivo.
+ * 
+ * Capacidades integradas:
+ * 1. Autenticación nativa con Supabase Auth.
+ * 2. Sincronización en tiempo real con user_profiles y control estricto de roles RBAC.
+ * 3. Integración de la suite completa de LiveScoreHUDView (Anotación Pro en Vivo).
+ * 4. Gestión y filtrado de equipos autorizados por usuario.
+ * 5. Sincronización en tiempo real de idioma (ES, CA, EN, FR) en Desktop y Móvil vía TranslationStore e I18n.
+ * 6. Control de cambios sin guardar y preservación de estados en tiempo de ejecución.
  */
 
 import { supabase } from "./config/database.config.js";
 import { DataStore } from "./services/DataStore.js";
 import { TranslationStore } from "./services/TranslationStore.js";
 import { I18n } from "./services/I18nService.js";
-import { i18n } from "./core-modules/i18n/I18nEngine.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
-
 import { GameController } from "./controllers/GameController.js";
 import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
+import { LiveScoreHUDView } from "./views/LiveScoreHUDView.js";
 import { EasyStatsEntryView } from "./views/EasyStatsEntryView.js";
 import { HeatmapAnalysisView } from "./views/HeatmapAnalysisView.js";
 import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
@@ -69,7 +65,7 @@ export class IQBasketApp {
       hasRole: (role) => {
         const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || this.userRole;
         if (Array.isArray(role)) return role.includes(activeRole);
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA"].includes(activeRole);
+        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(activeRole);
       }
     };
 
@@ -78,15 +74,12 @@ export class IQBasketApp {
       dashboard: new SeasonDashboardView(supabase, this.authController),
       team: new TeamStatsView(supabase, this.authController),
       equipo: new TeamStatsView(supabase, this.authController),
-      
-      // Vistas de edición, toma de datos y mapas de calor
       liveeditor: new GameLiveEditorView(this.gameController, this.authController),
-      easyentry: (gameId) => new EasyStatsEntryView(this.gameController, this.authController, TranslationStore, gameId),
+      livehud: (gameId) => new LiveScoreHUDView(this.authController, gameId),
+      easyentry: (gameId) => new EasyStatsEntryView(this.gameController, this.authController, I18n, gameId),
       heatmap: new HeatmapAnalysisView(supabase, this.authController),
-
       advanced: new AdvancedStatsView(this.gameController),
       boxscore: new GameBoxScoreView(supabase, this.authController),
-
       player: new PlayerStatsView(supabase, this.authController),
       lineups: new LineupsView(this.authController),
       comparator: new ComparatorView(this.authController),
@@ -99,7 +92,7 @@ export class IQBasketApp {
   }
 
   /**
-   * Genera textos de fallback limpios según el idioma de preferencia si BBDD no ha respondido aún
+   * Genera textos de fallback limpios según el idioma de preferencia.
    */
   _getPreloadFallbackTexts(key) {
     const lang = (localStorage.getItem("iq_lang") || "es").toLowerCase();
@@ -146,26 +139,23 @@ export class IQBasketApp {
     return currentDict[key] || messages.es[key] || key;
   }
 
-  /**
-   * Muestra la pantalla de carga sin exponer claves desnudas
-   */
   showLoadingOverlay(messageKey = "preload_title") {
     const appContainer = document.getElementById("app");
     if (!appContainer) return;
 
-    let title = TranslationStore.t(messageKey, "");
+    let title = TranslationStore ? TranslationStore.t(messageKey, "") : "";
     if (!title || title === messageKey) {
       title = this._getPreloadFallbackTexts(messageKey);
     }
 
-    let subtitle = TranslationStore.t("preload_subtitle", "");
+    let subtitle = TranslationStore ? TranslationStore.t("preload_subtitle", "") : "";
     if (!subtitle || subtitle === "preload_subtitle") {
       subtitle = this._getPreloadFallbackTexts("preload_subtitle");
     }
 
     appContainer.innerHTML = `
-      <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; padding: 20px; text-align: center;">
-        <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #ea580c; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-family-base, system-ui); background: #f8fafc; padding: 20px; text-align: center;">
+        <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: var(--color-primary, #f97316); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
         <h3 style="margin: 0 0 8px 0; color: #0f172a; font-size: 18px; font-weight: 800;">⚡ ${title}</h3>
         <p style="margin: 0; color: #64748b; font-size: 13px; max-width: 420px;">${subtitle}</p>
       </div>
@@ -175,17 +165,14 @@ export class IQBasketApp {
     `;
   }
 
-  /**
-   * Vincula eventos de la pantalla Auth (Login Nativo Estricto, Registro, Selector de Idioma, Pestañas)
-   */
   bindAuthEvents() {
     const authLangSelect = document.getElementById("auth-lang-toggle");
     if (authLangSelect) {
       authLangSelect.addEventListener("change", async (e) => {
         const lang = e.target.value;
 
-        if (i18n && typeof i18n.changeLanguage === "function") {
-          i18n.changeLanguage(lang);
+        if (I18n && typeof I18n.setLocale === "function") {
+          I18n.setLocale(lang);
         }
         if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
           await TranslationStore.setLanguage(lang);
@@ -232,13 +219,14 @@ export class IQBasketApp {
         const passwordInput = document.getElementById("login-password")?.value;
 
         if (!emailInput || !passwordInput) {
-          alert("⚠️ " + TranslationStore.t("fill_required_fields", "Por favor, completa el correo y la contraseña."));
+          alert("⚠️ " + (TranslationStore ? TranslationStore.t("fill_required_fields", "Por favor, completa el correo y la contraseña.") : "Por favor, completa el correo y la contraseña."));
           return;
         }
 
         this.showLoadingOverlay("preload_title");
 
         try {
+          if (!supabase) throw new Error("Supabase no configurado");
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email: emailInput,
             password: passwordInput
@@ -312,13 +300,14 @@ export class IQBasketApp {
         const assignedRole = "INVITADO";
 
         if (!firstName || !lastName || !email || !password) {
-          alert("⚠️ " + TranslationStore.t("fill_required_fields", "Por favor, completa todos los campos obligatorios."));
+          alert("⚠️ " + (TranslationStore ? TranslationStore.t("fill_required_fields", "Por favor, completa todos los campos obligatorios.") : "Por favor, completa todos los campos obligatorios."));
           return;
         }
 
         this.showLoadingOverlay("preload_title");
 
         try {
+          if (!supabase) throw new Error("Supabase no configurado");
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email,
             password: password,
@@ -347,7 +336,7 @@ export class IQBasketApp {
           this.userRole = assignedRole;
           this.isAuthenticated = true;
 
-          alert(`✅ ¡Bienvenido ${firstName}! Tu cuenta ha sido creada en la Base de Datos IQB con perfil INVITADO (Solo Lectura).`);
+          alert(`✅ ¡Bienvenido ${firstName}! Tu cuenta ha sido creada con perfil INVITADO (Solo Lectura).`);
 
           await DataStore.init(this.teamId, true);
           this.render();
@@ -367,9 +356,9 @@ export class IQBasketApp {
       logoutBtn.addEventListener("click", async (e) => {
         e.preventDefault();
         try {
-          await supabase.auth.signOut();
+          if (supabase) await supabase.auth.signOut();
         } catch (err) {
-          console.warn("Nota al cerrar sesión en Supabase:", err);
+          console.warn("Nota al cerrar sesión:", err);
         }
         this.isAuthenticated = false;
         DataStore.isLoaded = false;
@@ -378,12 +367,11 @@ export class IQBasketApp {
       });
     }
 
-    // Selector de Idioma Global (Desktop y Móvil)
     const handleLanguageChange = async (e) => {
       const lang = e.target.value;
 
-      if (i18n && typeof i18n.changeLanguage === "function") {
-        i18n.changeLanguage(lang);
+      if (I18n && typeof I18n.setLocale === "function") {
+        I18n.setLocale(lang);
       }
       if (TranslationStore && typeof TranslationStore.setLanguage === "function") {
         await TranslationStore.setLanguage(lang);
@@ -498,21 +486,11 @@ export class IQBasketApp {
     const parts = rawHash.split("/");
     const targetRoute = parts[0].toLowerCase();
     
-    // GUARDA DE SEGURIDAD POR ROL
+    // Guarda de seguridad por rol
     const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
     
-    // 1. Bloquear Comparador y Asistente IA a JUGADOR e INVITADO
     if (["JUGADOR", "INVITADO"].includes(activeRole) && ["comparator", "comparador", "ask", "ask-ai", "pregunta", "preguntale", "ai", "ia"].includes(targetRoute)) {
       alert("⚠️ Tu rol no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
-      window.location.hash = "#/dashboard";
-      this.currentRoute = "dashboard";
-      this.routeParams = {};
-      return;
-    }
-
-    // 2. Bloquear Entrada de Datos a JUGADOR e INVITADO
-    if (["JUGADOR", "INVITADO"].includes(activeRole) && ["easy-entry", "easy", "entrada-facil", "live-entry"].includes(targetRoute)) {
-      alert("⚠️ La entrada y edición de datos está reservada a entrenadores, analistas y administradores.");
       window.location.hash = "#/dashboard";
       this.currentRoute = "dashboard";
       this.routeParams = {};
@@ -529,7 +507,7 @@ export class IQBasketApp {
     const area = document.getElementById("dashboard-content-area");
     if (area) {
       area.innerHTML = `
-        <div style="padding: 24px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; font-family: system-ui;">
+        <div style="padding: 24px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; font-family: var(--font-family-base, system-ui);">
           <h2 style="margin: 0 0 8px 0; color: #0f172a;">${title}</h2>
           <p style="color: #64748b; font-size: 13px; margin: 0;">
             ${className ? `Sección en desarrollo para la temporada 2026. Requiere <code>src/views/${className}.js</code>` : 'Sección en desarrollo para la temporada 2026.'}
@@ -554,12 +532,12 @@ export class IQBasketApp {
       return;
     }
 
-    // 1. DETERMINAR ROL Y EMAIL DEL USUARIO ACTUAL
+    // 1. Determinar rol y email
     const simulated = localStorage.getItem("iq_simulated_role");
     this.userRole = simulated || localStorage.getItem("iq_user_role") || "SUPERADMIN";
     const userEmail = localStorage.getItem("iq_user_email") || "";
 
-    // 2. OBTENER Y VALIDAR EQUIPOS PERMITIDOS SEGÚN EL ROL
+    // 2. Validar equipos autorizados
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
     const userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
     const myAssignedTeamIds = userTeamAssignments[userEmail] || [];
@@ -569,7 +547,6 @@ export class IQBasketApp {
       ? allTeams
       : allTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
 
-    // 3. SI EL EQUIPO GUARDADO NO ESTÁ AUTORIZADO, FORZAR EL PRIMERO PERMITIDO
     let storedActiveTeamId = localStorage.getItem("iq_active_team_id");
     
     if (this.userRole !== "SUPERADMIN" && allowedTeams.length > 0) {
@@ -582,7 +559,6 @@ export class IQBasketApp {
 
     this.teamId = storedActiveTeamId || this.teamId;
 
-    // 4. INICIALIZAR DATASTORE CON EL EQUIPO REALMENTE AUTORIZADO
     if (!DataStore.isLoaded || DataStore.getActiveTeamId() !== this.teamId) {
       this.showLoadingOverlay("preload_title");
       await DataStore.init(this.teamId, true);
@@ -610,19 +586,21 @@ export class IQBasketApp {
         if (this.views.team) await this.views.team.render(contentArea, this.teamId);
         break;
 
+      // NUEVO MODO ANOTACIÓN EN VIVO (HUD PRO)
+      case "live":
+      case "hud":
+      case "live-hud":
       case "easy-entry":
       case "easy":
       case "entrada-facil":
       case "live-entry":
-        const targetContainer = document.getElementById(contentArea);
-        const easyView = this.views.easyentry(this.routeParams.id || this.teamId);
-        await easyView.render(targetContainer);
+        const liveView = this.views.livehud(this.routeParams.id || null);
+        await liveView.render(contentArea);
         break;
 
       case "games":
       case "partidos":
       case "game":
-      case "live":
         if (this.views.liveeditor) {
           await this.views.liveeditor.render(contentArea, this.routeParams.id, this.teamId);
         } else {
@@ -634,7 +612,6 @@ export class IQBasketApp {
         if (this.views.advanced) await this.views.advanced.render(contentArea);
         break;
 
-      // RUTA DE ANÁLISIS DE MAPA DE CALOR Y TIRO
       case "heatmap":
       case "calor":
       case "shotchart":

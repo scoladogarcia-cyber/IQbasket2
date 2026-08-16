@@ -1,8 +1,12 @@
 /**
- * @fileoverview Vista de Administración Dinámica de Idiomas (LanguageSettingsView.js).
- * Totalmente internacionalizada mediante TranslationStore.t(...) sin cadenas fijas.
- * Permite modificar traducciones con paginación de seguridad (máx 20 ítems por página)
- * y guardarlas directamente en Supabase.
+ * @fileoverview Vista de Administración Dinámica de Idiomas: LanguageSettingsView.js
+ * @description Permite consultar, modificar y sincronizar directamente con Supabase las claves de traducción.
+ * 
+ * Reglas de optimización y diseño:
+ * 1. Paginación de seguridad (20 claves por página) para evitar bloqueos del DOM.
+ * 2. Normalización de códigos ISO ('cat' -> 'ca').
+ * 3. Persistencia atómica con upsert en `translations` y actualización en tiempo real de `TranslationStore` e `I18n`.
+ * 4. Fallbacks contextuales sin cadenas fijas desnudas.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
@@ -10,7 +14,12 @@ import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
 
 export class LanguageSettingsView {
-  constructor(translationRepo, syncEngine) {
+  /**
+   * Crea una instancia de LanguageSettingsView.
+   * @param {Object} [translationRepo=null] - Repositorio de traducciones.
+   * @param {Object} [syncEngine=null] - Motor de sincronización.
+   */
+  constructor(translationRepo = null, syncEngine = null) {
     this.translationRepo = translationRepo;
     this.syncEngine = syncEngine;
 
@@ -20,7 +29,7 @@ export class LanguageSettingsView {
   }
 
   t(key, fallback = "") {
-    return TranslationStore.t(key, fallback);
+    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
   showSyncOverlay(message = "⚡ Guardando idioma...") {
@@ -32,12 +41,12 @@ export class LanguageSettingsView {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        z-index: 9999; color: white; font-family: system-ui, sans-serif;
+        z-index: 9999; color: white; font-family: var(--font-family-base, system-ui);
       `;
       document.body.appendChild(overlay);
     }
     overlay.innerHTML = `
-      <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <div style="width: 48px; height: 48px; border: 4px solid var(--color-primary, #f97316); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
       <p style="margin: 0; color: #94a3b8; font-size: 13px;">Actualizando diccionario en Supabase...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
@@ -50,9 +59,6 @@ export class LanguageSettingsView {
     if (overlay) overlay.style.display = "none";
   }
 
-  /**
-   * Normaliza los códigos de idioma ('cat' -> 'ca')
-   */
   _normalizeLang(code) {
     if (!code) return "es";
     const c = String(code).trim().toLowerCase();
@@ -60,40 +66,28 @@ export class LanguageSettingsView {
     return c;
   }
 
-  render(currentLangCode = I18n.getLocale(), currentDictionary = []) {
+  render(currentLangCode = (I18n.getLocale ? I18n.getLocale() : "es"), currentDictionary = []) {
     const langCode = this._normalizeLang(currentLangCode);
-    const dict = TranslationStore.getDictionary(langCode);
+    const dict = TranslationStore ? TranslationStore.getDictionary(langCode) : {};
 
-    // Lista unificada y completa de claves del sistema
     const keysToTranslate = [
-      // Menú y Navegación
       "general", "dashboard", "team", "players", "games", "boxscore", "advanced_stats",
       "lineups", "comparator", "reports", "ask_ai", "profile", "settings", "logout", "language",
-      
-      // Partidos y Estados
       "local", "visitor", "pending", "completed", "opponent", "score", "score_result", "in_favor", 
       "against", "actions", "season", "record", "active_players", "team_info", "roster", 
       "no_players_loaded", "jersey", "position", "status", "height", "save_changes", "read_only", 
       "view_boxscore", "edit", "search_player", "all_positions", "points", "rebounds", "assists", 
       "steals", "turnovers", "blocks", "fouls", "team_games", "register_new_game", "registered_games",
       "back_to_players", "back_to_register", "boxscore_detail_subtitle",
-
-      // Dashboard y Gráficos
       "net_rating_evolution", "pts_scored_vs_received", "efg_evolution", "turnovers_per_game",
       "rebound_off_def", "quarter_performance", "pts_for", "pts_against", "reb_off", "reb_def",
       "last_games", "date", "rival", "venue", "diff", "off_rating_tooltip", "def_rating_tooltip", "analysis",
-
-      // Quintetos, Avanzadas y Comparador
       "lineups_title", "lineups_with", "games_with_registered_lineup", "see_names", "see_numbers",
       "min_games_short", "note_label", "sample_warning_note", "advanced_subtitle", "efg_desc", "tov_desc",
       "select_players", "select_at_least_2", "select_players_desc", "reports_module",
-
-      // Mi Perfil
       "profile_role_label", "profile_data_title", "first_name", "last_name", "phone", "email",
       "login", "role_disabled_label", "save_profile", "change_password_title", "new_password",
       "repeat_password", "change_password_btn", "assigned_teams_title", "superadmin_access_msg",
-
-      // Pestañas y Modales de Configuración
       "settings_subtitle", "tab_clubs_teams", "tab_roster", "tab_users_roles", "tab_seasons",
       "tab_languages_translations", "tab_role_simulation", "create_new_club_title", "club_name",
       "coordinator_name", "address", "create_club_btn", "create_new_team_title", "assigned_club",
@@ -108,7 +102,6 @@ export class LanguageSettingsView {
       "edit_player_data", "cancel", "active", "inactive"
     ];
 
-    // CÁLCULO DE PAGINACIÓN DE SEGURIDAD (MÁXIMO 20 ELEMENTOS)
     const totalItems = keysToTranslate.length;
     const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
 
@@ -121,7 +114,7 @@ export class LanguageSettingsView {
 
     let rowsHtml = "";
     paginatedKeys.forEach((key) => {
-      const dbEntry = currentDictionary.find((d) => d.key === key);
+      const dbEntry = Array.isArray(currentDictionary) ? currentDictionary.find((d) => d.key === key) : null;
       const val = dbEntry ? (dbEntry.translation || dbEntry.value) : (dict[key] || "");
 
       rowsHtml += `
@@ -134,7 +127,7 @@ export class LanguageSettingsView {
               type="text" 
               data-key="${key}" 
               value="${val}" 
-              placeholder="${TranslationStore.t(key, key)}" 
+              placeholder="${this.t(key, key)}" 
               class="i18n-input" 
               style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; box-sizing: border-box;"
             />
@@ -164,7 +157,6 @@ export class LanguageSettingsView {
               </select>
             </div>
 
-            <!-- CONTROLES SUPERIORES DE PAGINACIÓN TRADUCIDOS -->
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b;">
               <button type="button" id="btn-prev-lang-page" class="btn-outline-sm" ${this.currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>⬅️ ${this.t("previous", "Anterior")}</button>
               <span style="font-weight: 800; color: #1e3a8a;">${this.t("page_indicator", "Pág.")} ${this.currentPage} ${this.t("of", "de")} ${totalPages}</span>
@@ -186,7 +178,6 @@ export class LanguageSettingsView {
             </table>
           </div>
 
-          <!-- CONTROLES INFERIORES DE PAGINACIÓN TRADUCIDOS -->
           <div class="actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b;">
               <button type="button" id="btn-prev-lang-page-bottom" class="btn-outline-sm" ${this.currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>⬅️ ${this.t("previous", "Anterior")}</button>
@@ -197,7 +188,7 @@ export class LanguageSettingsView {
             <button 
               id="btnSaveLanguage" 
               class="btn-primary" 
-              style="background: var(--color-primary, #ea580c); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;"
+              style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;"
             >
               💾 ${this.t("save_translations_btn", "Guardar Traducciones en Supabase")}
             </button>
@@ -207,12 +198,9 @@ export class LanguageSettingsView {
     `;
   }
 
-  /**
-   * Guarda las traducciones editadas directamente en Supabase y refresca I18nService sin desloguear.
-   */
   async handleSave(langCodeParam = null) {
     const rawInput = document.getElementById("langCodeInput")?.value;
-    const targetLang = this._normalizeLang(langCodeParam || rawInput || I18n.getLocale());
+    const targetLang = this._normalizeLang(langCodeParam || rawInput || (I18n.getLocale ? I18n.getLocale() : "es"));
     const inputs = document.querySelectorAll(".i18n-input");
 
     const payload = [];
@@ -240,36 +228,37 @@ export class LanguageSettingsView {
     this.showSyncOverlay(`💾 Guardando traducciones [${targetLang.toUpperCase()}] en Supabase...`);
 
     try {
-      // 1. Upsert directo en la tabla public.translations de Supabase
-      const { data, error } = await supabase
-        .from("translations")
-        .upsert(payload, { onConflict: "key,language_code" });
+      if (supabase) {
+        const { error } = await supabase
+          .from("translations")
+          .upsert(payload, { onConflict: "key,language_code" });
 
-      if (error) {
-        console.warn("Upsert directo falló, intentando por claves individuales:", error.message);
-        for (const item of payload) {
-          await supabase
-            .from("translations")
-            .delete()
-            .eq("key", item.key)
-            .eq("language_code", item.language_code);
-          await supabase
-            .from("translations")
-            .insert([item]);
+        if (error) {
+          console.warn("Upsert directo falló, intentando por claves individuales:", error.message);
+          for (const item of payload) {
+            await supabase
+              .from("translations")
+              .delete()
+              .eq("key", item.key)
+              .eq("language_code", item.language_code);
+            await supabase
+              .from("translations")
+              .insert([item]);
+          }
         }
       }
 
-      // 2. Inyección local e inmediata en tiempo real
-      TranslationStore.saveDictionary(targetLang, newDict);
-      await TranslationStore.setLanguage(targetLang);
+      if (TranslationStore) {
+        TranslationStore.saveDictionary(targetLang, newDict);
+        await TranslationStore.setLanguage(targetLang);
+      }
 
-      // Notificar reactividad
       if (I18n && typeof I18n.notify === "function") {
         I18n.notify();
       }
 
       this.hideSyncOverlay();
-      alert(`✅ ¡Traducciones guardadas con éxito en Supabase para [${targetLang.toUpperCase()}]!`);
+      alert(`✅ ¡Traducciones guardadas con éxito para [${targetLang.toUpperCase()}]!`);
     } catch (err) {
       this.hideSyncOverlay();
       console.error("Error al guardar traducciones:", err);

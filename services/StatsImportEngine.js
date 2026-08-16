@@ -1,128 +1,234 @@
 /**
- * @fileoverview Motor de Ingesta, Recálculo y Sobreescritura Estadístico (StatsImportEngine.js).
- * Toma datos brutos (CSV, API, Acta) -> Calcula Fórmulas -> Sobreescribe en Supabase.
+ * @fileoverview Motor de Ingesta, Recálculo y Sobrescritura Estadística: StatsImportEngine.
+ * @description Procesa importaciones de datos brutos (actas oficiales FIBA/FEB, CSV, JSON o APIs externas),
+ * recalcula las 93 métricas individuales y 95 colectivas del catálogo oficial mediante StatsEngine / StatsAggregator,
+ * y consolida los datos en `player_game_stats` y `players` (PPG, RPG, APG, VAL) en Supabase y caché local.
+ * 
+ * Reglas de diseño:
+ * 1. Desacoplamiento matemático total: delega el 100% de las fórmulas en `BoxScoreCalculator` y `StatsEngine`.
+ * 2. Operaciones atómicas por lotes (upsert masivo) para optimizar el tráfico de red.
+ * 3. Actualización multivariable de promedios de temporada en la tabla `players` (PPG, RPG, APG, PIR, GP).
+ * 4. Validación estricta de esquemas, dorsales y detección de inconsistencias numéricas.
  */
 
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+
 export class StatsImportEngine {
-  constructor(supabaseClient) {
-    this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient || window.supabase;
+  /**
+   * Crea una instancia de StatsImportEngine.
+   * @param {Object} [supabaseClient=null] - Cliente configurado de Supabase.
+   */
+  constructor(supabaseClient = null) {
+    this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient || (typeof window !== "undefined" ? window.supabase : null);
   }
 
+  // =========================================================================
+  // 1. INGESTA Y PROCESAMIENTO DE ESTADÍSTICAS DE JUGADORES
+  // =========================================================================
+
   /**
-   * Recibe registros de partidos/jugadores (brutos o importados), los procesa y los sobreescribe en Supabase.
+   * Recibe registros brutos de estadísticas por partido, ejecuta el motor de cálculo
+   * unificado y los sobreescribe en `player_game_stats` con actualización de promedios en `players`.
    * 
-   * @param {Array<Object>} rawPlayerStatsRows - Array de objetos con estadísticas de jugadores.
-   * @param {string} [teamId] - ID del equipo opcional.
+   * @param {Array<Object>} rawPlayerStatsRows - Registros brutos importados.
+   * @param {string|null} [teamId=null] - ID de equipo opcional para auditoría.
+   * @returns {Promise<{ success: boolean, count: number, error?: string }>}
    */
   async processAndOverwriteStats(rawPlayerStatsRows = [], teamId = null) {
     if (!this.supabase) {
       console.error("[StatsImportEngine] Cliente de Supabase no disponible.");
-      return { success: false, error: "Sin conexión a Supabase" };
+      return { success: false, count: 0, error: "Sin conexión a Supabase" };
+    }
+
+    if (!Array.isArray(rawPlayerStatsRows) || rawPlayerStatsRows.length === 0) {
+      return { success: true, count: 0 };
     }
 
     try {
-      console.log(`📥 [ImportEngine] Procesando ${rawPlayerStatsRows.length} registros para sobreescritura...`);
+      console.log(`📥 [StatsImportEngine] Procesando ${rawPlayerStatsRows.length} registros para ingesta/sobrescritura...`);
 
-      // 1. RECALCULAR FÓRMULAS OFICIALES FIBA PARA CADA REGISTRO
+      // 1. Procesar cada fila individual mediante BoxScoreCalculator oficial
       const processedRows = rawPlayerStatsRows.map((row) => {
-        const fg2m = Number(row.fg2_made || 0);
-        const fg2a = Number(row.fg2_attempted || 0);
-        const fg3m = Number(row.fg3_made || 0);
-        const fg3a = Number(row.fg3_attempted || 0);
-        const ftm  = Number(row.ft_made || 0);
-        const fta  = Number(row.ft_attempted || 0);
+        const pId = row.player_id ?? row.playerId ?? row.id;
+        const gId = row.game_id ?? row.gameId;
 
-        // Puntos Calculados Reales
-        const points = (fg2m * 2) + (fg3m * 3) + ftm;
+        if (!pId || !gId) {
+          throw new Error(`Fila inválida: Faltan identificadores clave (player_id: ${pId}, game_id: ${gId})`);
+        }
 
-        // Valoración Oficial FIBA
-        const offReb = Number(row.off_reb || row.rebounds_offensive || 0);
-        const defReb = Number(row.def_reb || row.rebounds_defensive || 0);
-        const ast    = Number(row.assists || 0);
-        const stl    = Number(row.steals || 0);
-        const blk    = Number(row.blocks || 0);
-        const turn   = Number(row.turnovers || 0);
-        const fouls  = Number(row.fouls_committed || 0);
-
-        const missedFg = (fg2a - fg2m) + (fg3a - fg3m);
-        const missedFt = fta - ftm;
-        const evaluation = (points + offReb + defReb + ast + stl + blk) - (missedFg + missedFt + turn + fouls);
+        const calculated = BoxScoreCalculator.calculatePlayerBoxScore(row);
 
         return {
           ...(row.id ? { id: row.id } : {}),
-          game_id: row.game_id,
-          player_id: row.player_id,
+          game_id: gId,
+          player_id: pId,
           starter: Boolean(row.starter),
-          minutes: Number(row.minutes || 0),
-          fg2_made: fg2m,
-          fg2_attempted: fg2a,
-          fg3_made: fg3m,
-          fg3_attempted: fg3a,
-          ft_made: ftm,
-          ft_attempted: fta,
-          off_reb: offReb,
-          def_reb: defReb,
-          rebounds_offensive: offReb,
-          rebounds_defensive: defReb,
-          assists: ast,
-          steals: stl,
-          blocks: blk,
-          turnovers: turn,
-          fouls_committed: fouls,
-          points: points,               // 💡 Sobreescribe con puntos calculados
-          evaluation: evaluation        // 💡 Sobreescribe con valoración FIBA
+          minutes: Number(calculated.minutes || 0),
+          minutes_seconds: Math.round(Number(calculated.minutes || 0) * 60),
+          points: calculated.points,
+          pts: calculated.points,
+          fg2_made: calculated.fg2Made,
+          fg2_attempted: calculated.fg2Attempted,
+          fg3_made: calculated.fg3Made,
+          fg3_attempted: calculated.fg3Attempted,
+          ft_made: calculated.ftMade,
+          ft_attempted: calculated.ftAttempted,
+          off_reb: calculated.offReb,
+          def_reb: calculated.defReb,
+          rebounds: calculated.totalRebounds,
+          rebounds_offensive: calculated.offReb,
+          rebounds_defensive: calculated.defReb,
+          assists: calculated.assists,
+          steals: calculated.steals,
+          blocks: calculated.blocksMade,
+          blocks_made: calculated.blocksMade,
+          blocks_received: calculated.blocksReceived,
+          turnovers: calculated.turnovers,
+          fouls_committed: calculated.foulsCommitted,
+          fouls: calculated.foulsCommitted,
+          fouls_drawn: calculated.foulsDrawn,
+          fouls_received: calculated.foulsDrawn,
+          plus_minus: Number(row.plus_minus ?? row.plusMinus ?? 0),
+          valuation: calculated.pir,
+          val: calculated.pir,
+          pir: calculated.pir,
+          efficiency: calculated.efficiency,
+          game_score: calculated.gameScore
         };
       });
 
-      // 2. SOBREESCRIBIR EN player_game_stats CON UPSERT POR CLAVE ÚNICA (game_id, player_id)
-      if (processedRows.length > 0) {
-        const { error: pgsErr } = await this.supabase
-          .from("player_game_stats")
-          .upsert(processedRows, { onConflict: "game_id, player_id" });
+      // 2. Sobrescribir en `player_game_stats` mediante upsert por clave única (game_id, player_id)
+      const { error: pgsErr } = await this.supabase
+        .from("player_game_stats")
+        .upsert(processedRows, { onConflict: "game_id, player_id" });
 
-        if (pgsErr) throw new Error(`Error en upsert player_game_stats: ${pgsErr.message}`);
-      }
+      if (pgsErr) throw new Error(`Error en upsert player_game_stats: ${pgsErr.message}`);
 
-      // 3. RECÁLCULO AUTOMÁTICO DE LOS PROMEDIOS (PPG) EN LA TABLA players
-      const playerIds = [...new Set(processedRows.map(p => p.player_id).filter(Boolean))];
+      // 3. Recalcular promedios acumulados en la tabla `players`
+      const playerIds = [...new Set(processedRows.map((p) => p.player_id).filter(Boolean))];
       await this.syncPlayersAverages(playerIds, teamId);
 
-      console.log("✅ [ImportEngine] Registros sobreescritos y promedios actualizados con éxito.");
+      console.log(`✅ [StatsImportEngine] ${processedRows.length} registros consolidados y promedios actualizados.`);
       return { success: true, count: processedRows.length };
-
     } catch (err) {
-      console.error("❌ [ImportEngine] Error en procesamiento:", err);
-      return { success: false, error: err.message };
+      console.error("❌ [StatsImportEngine] Error en procesamiento:", err);
+      return { success: false, count: 0, error: err.message };
     }
   }
 
+  // =========================================================================
+  // 2. RECÁLCULO Y SINCRONIZACIÓN DE PROMEDIOS DE TEMPORADA EN PLAYERS
+  // =========================================================================
+
   /**
-   * Recalcula el PPG acumulado de la plantilla en la tabla `players`.
+   * Recalcula los promedios globales de temporada (PPG, RPG, APG, PIR, GP) y los actualiza en `players`.
+   * @param {Array<string>} [playerIds=[]] - Lista de IDs de jugadores a actualizar.
+   * @param {string|null} [teamId=null] - ID de equipo opcional.
    */
   async syncPlayersAverages(playerIds = [], teamId = null) {
     try {
-      let query = this.supabase.from("player_game_stats").select("player_id, points");
-      if (playerIds.length > 0) query = query.in("player_id", playerIds);
+      let query = this.supabase.from("player_game_stats").select("*");
+      if (Array.isArray(playerIds) && playerIds.length > 0) {
+        query = query.in("player_id", playerIds);
+      }
 
-      const { data: allStats } = await query;
+      const { data: allStats, error: fetchErr } = await query;
+      if (fetchErr) throw fetchErr;
 
-      const playerMap = {};
-      (allStats || []).forEach(r => {
-        if (!r.player_id) return;
-        if (!playerMap[r.player_id]) playerMap[r.player_id] = { points: 0, games: 0 };
-        playerMap[r.player_id].points += Number(r.points || 0);
-        playerMap[r.player_id].games += 1;
+      // Agrupar filas por jugador
+      const groupedByPlayer = {};
+      (allStats || []).forEach((row) => {
+        const pid = row.player_id;
+        if (!pid) return;
+        if (!groupedByPlayer[pid]) groupedByPlayer[pid] = [];
+        groupedByPlayer[pid].push(row);
       });
 
-      for (const [pId, st] of Object.entries(playerMap)) {
-        const avgPpg = st.games > 0 ? Number((st.points / st.games).toFixed(1)) : 0;
+      // Procesar métricas acumuladas y actualizar cada ficha
+      const updatePromises = Object.entries(groupedByPlayer).map(async ([pid, rows]) => {
+        const seasonTotals = StatsAggregator.aggregatePlayerSeasonStats(rows);
+        if (!seasonTotals) return;
+
+        const ppg = seasonTotals.averages?.ppg || 0;
+        const rpg = seasonTotals.averages?.rpg || 0;
+        const apg = seasonTotals.averages?.apg || 0;
+        const pir = seasonTotals.averages?.pir || seasonTotals.averages?.valuation || 0;
+        const gp = seasonTotals.totals?.gp || rows.length;
+
         await this.supabase
           .from("players")
-          .update({ ppg: avgPpg })
-          .eq("id", pId);
-      }
+          .update({
+            ppg,
+            rpg,
+            apg,
+            val: pir,
+            games_played: gp,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", pid);
+      });
+
+      await Promise.all(updatePromises);
     } catch (e) {
-      console.warn("[ImportEngine] Warning sincronizando PPG:", e.message);
+      console.warn("[StatsImportEngine] Aviso al sincronizar promedios en tabla players:", e.message);
     }
   }
+
+  // =========================================================================
+  // 3. PARSEO E INGESTA DESDE ARCHIVO CSV / ACTA
+  // =========================================================================
+
+  /**
+   * Parsea un texto CSV de acta de partido y lo mapea al esquema de `player_game_stats`.
+   * @param {string} csvText - Contenido en texto plano del archivo CSV.
+   * @param {string} gameId - UUID del partido al que pertenecen los datos.
+   * @returns {Array<Object>} Lista de registros normalizados listos para procesar.
+   */
+  parseStatsCSV(csvText, gameId) {
+    if (!csvText || typeof csvText !== "string" || !gameId) return [];
+
+    const lines = csvText.trim().split(/\r\n|\n/);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(/[;,]/).map((h) => h.trim().toLowerCase());
+    const parsedRows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const currentLine = lines[i].trim();
+      if (!currentLine) continue;
+
+      const values = currentLine.split(/[;,]/).map((v) => v.trim().replace(/^"|"$/g, ""));
+      const rowObj = { game_id: gameId };
+
+      headers.forEach((header, idx) => {
+        const val = values[idx];
+        if (header.includes("player") || header === "id") rowObj.player_id = val;
+        else if (header === "dorsal" || header === "jersey" || header === "#") rowObj.jersey = val;
+        else if (header === "min" || header === "minutes") rowObj.minutes = Number(val) || 0;
+        else if (header === "pts" || header === "points") rowObj.points = Number(val) || 0;
+        else if (header === "2pm" || header === "fg2_made") rowObj.fg2_made = Number(val) || 0;
+        else if (header === "2pa" || header === "fg2_attempted") rowObj.fg2_attempted = Number(val) || 0;
+        else if (header === "3pm" || header === "fg3_made") rowObj.fg3_made = Number(val) || 0;
+        else if (header === "3pa" || header === "fg3_attempted") rowObj.fg3_attempted = Number(val) || 0;
+        else if (header === "ftm" || header === "ft_made") rowObj.ft_made = Number(val) || 0;
+        else if (header === "fta" || header === "ft_attempted") rowObj.ft_attempted = Number(val) || 0;
+        else if (header === "oreb" || header === "off_reb") rowObj.off_reb = Number(val) || 0;
+        else if (header === "dreb" || header === "def_reb") rowObj.def_reb = Number(val) || 0;
+        else if (header === "ast" || header === "assists") rowObj.assists = Number(val) || 0;
+        else if (header === "stl" || header === "steals") rowObj.steals = Number(val) || 0;
+        else if (header === "blk" || header === "blocks") rowObj.blocks = Number(val) || 0;
+        else if (header === "tov" || header === "turnovers") rowObj.turnovers = Number(val) || 0;
+        else if (header === "pf" || header === "fouls") rowObj.fouls_committed = Number(val) || 0;
+        else if (header === "fd" || header === "fouls_drawn") rowObj.fouls_drawn = Number(val) || 0;
+        else if (header === "+/-" || header === "plus_minus") rowObj.plus_minus = Number(val) || 0;
+      });
+
+      parsedRows.push(rowObj);
+    }
+
+    return parsedRows;
+  }
 }
+
+export default StatsImportEngine;

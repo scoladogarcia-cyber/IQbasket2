@@ -1,35 +1,398 @@
-/* Tarjetas Básicas del Design System */
+/**
+ * @fileoverview Catálogo Completo de Componentes UI del Design System: components.css
+ * @description Define componentes visuales con garantía estricta de contraste y accesibilidad:
+ * tarjetas, botones, badges, tablas analíticas, celdas de entrada numérica, modales y overlays.
+ */
+
+/* =========================================================================
+   1. TARJETAS Y CONTENEDORES DE SUPERFICIE (CARDS)
+   ========================================================================= */
 .card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-md, 16px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+  transition: box-shadow var(--transition-fast, 0.15s ease), border-color var(--transition-fast, 0.15s ease);
 }
 
 .card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-border-dark);
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1));
+  border-color: var(--color-border-dark, #cbd5e1);
 }
 
-/* Botones Principales */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm, 12px);
+  padding-bottom: var(--space-xs, 8px);
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.card-title {
+  font-size: var(--font-size-md, 16px);
+  font-weight: var(--font-weight-extrabold, 800);
+  color: var(--color-text-main, #0f172a);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 8px);
+}
+
+.card-subtitle {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-text-muted, #64748b);
+  margin-top: var(--space-3xs, 2px);
+}
+
+.card-body {
+  position: relative;
+  width: 100%;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-xs, 8px);
+  margin-top: var(--space-sm, 12px);
+  padding-top: var(--space-xs, 8px);
+  border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+/* =========================================================================
+   2. BOTONES Y ACCIONES (BUTTONS)
+   ========================================================================= */
+.btn, button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .btn-primary {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  font-weight: 600;
+  background-color: var(--color-primary, #f97316);
+  color: #ffffff !important;
+  font-weight: var(--font-weight-semibold, 700);
+  border: none;
 }
 
 .btn-primary:hover {
-  background-color: var(--color-primary-hover);
+  background-color: var(--color-primary-hover, #ea580c);
+  color: #ffffff !important;
 }
 
 .btn-secondary {
-  background-color: var(--color-secondary);
-  color: var(--color-text-inverse);
-  font-weight: 600;
+  background-color: var(--color-secondary, #1e3a8a);
+  color: #ffffff !important;
+  font-weight: var(--font-weight-semibold, 700);
+  border: none;
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-secondary-hover);
+  background-color: var(--color-secondary-hover, #1e40af);
+  color: #ffffff !important;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid var(--color-border-dark, #cbd5e1);
+  color: var(--color-text-main, #0f172a) !important;
+  font-weight: var(--font-weight-semibold, 700);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-surface-hover, #f1f5f9);
+  border-color: var(--color-border-strong, #94a3b8);
+}
+
+.btn-danger {
+  background-color: var(--color-danger, #dc2626);
+  color: #ffffff !important;
+  font-weight: var(--font-weight-semibold, 700);
+  border: none;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.btn-success {
+  background-color: var(--color-success, #16a34a);
+  color: #ffffff !important;
+  font-weight: var(--font-weight-semibold, 700);
+  border: none;
+}
+
+.btn-success:hover {
+  background-color: #15803d;
+}
+
+.btn-sm {
+  padding: var(--space-2xs, 4px) var(--space-sm, 12px);
+  font-size: var(--font-size-xs, 12px);
+  min-height: 32px;
+}
+
+.btn-lg {
+  padding: var(--space-sm, 12px) var(--space-lg, 24px);
+  font-size: var(--font-size-md, 16px);
+  min-height: 48px;
+}
+
+.btn-icon {
+  width: var(--touch-target-min, 44px);
+  height: var(--touch-target-min, 44px);
+  padding: 0;
+  border-radius: var(--radius-full, 9999px);
+}
+
+/* =========================================================================
+   3. TARJETAS KPI Y BLOQUES DE MÉTRICAS (KPI METRICS)
+   ========================================================================= */
+.kpi-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-sm, 12px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0,0,0,0.05));
+}
+
+.kpi-val {
+  font-size: var(--font-size-xl, 22px);
+  font-weight: var(--font-weight-black, 900);
+  color: var(--color-text-main, #0f172a);
+  line-height: var(--line-height-tight, 1.2);
+}
+
+.kpi-val.text-success {
+  color: #16a34a !important;
+}
+
+.kpi-val.text-danger {
+  color: #dc2626 !important;
+}
+
+.kpi-val.text-primary {
+  color: #f97316 !important;
+}
+
+.kpi-lbl, .kpi-title {
+  font-size: var(--font-size-2xs, 10px);
+  color: var(--color-text-muted, #64748b);
+  font-weight: var(--font-weight-bold, 800);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: var(--space-2xs, 4px);
+}
+
+/* =========================================================================
+   4. INSIGNIAS Y ETIQUETAS DE ESTADO (BADGES)
+   ========================================================================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2xs, 4px);
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: var(--font-size-2xs, 10px);
+  font-weight: var(--font-weight-bold, 800);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge-success, .badge-win {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.badge-danger, .badge-loss {
+  background-color: #fee2e2 !important;
+  color: #991b1b !important;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.badge-warning {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+.badge-info {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.badge-neutral {
+  background-color: var(--color-surface-hover, #f1f5f9) !important;
+  color: var(--color-text-muted, #475569) !important;
+  border: 1px solid var(--color-border, #cbd5e1);
+}
+
+/* =========================================================================
+   5. TABLAS DE DATOS Y BOX SCORES (DATA TABLES)
+   ========================================================================= */
+.data-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--color-surface, #ffffff);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs, 12px);
+}
+
+.data-table th {
+  background-color: var(--color-surface-hover, #f8fafc);
+  color: var(--color-text-muted, #475569);
+  font-weight: var(--font-weight-bold, 800);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-xs, 8px) var(--space-sm, 12px);
+  border-bottom: 2px solid var(--color-border, #e2e8f0);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: var(--space-xs, 8px) var(--space-sm, 12px);
+  border-bottom: 1px solid var(--color-border, #f1f5f9);
+  text-align: center;
+  white-space: nowrap;
+  color: var(--color-text-body, #0f172a);
+}
+
+.data-table tr:hover td {
+  background-color: var(--color-surface-hover, #f8fafc);
+}
+
+/* =========================================================================
+   6. FORMULARIOS, INPUTS Y CELDAS MATRICIALES (GARANTÍA DE CONTRASTE)
+   ========================================================================= */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs, 4px);
+  margin-bottom: var(--space-sm, 12px);
+}
+
+.form-label {
+  font-size: var(--font-size-xs, 11px);
+  font-weight: var(--font-weight-bold, 800);
+  color: var(--color-text-main, #334155);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Regla universal para todos los campos de entrada */
+input, select, textarea, .form-control {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  opacity: 1 !important;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--color-border-dark, #cbd5e1);
+  box-sizing: border-box;
+}
+
+input:focus, select:focus, textarea:focus, .form-control:focus {
+  outline: none;
+  border-color: var(--color-primary, #f97316) !important;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+}
+
+/* Inputs matriciales de Acta y Box Score (MIN, Tiros, Rebotes, etc.) */
+.bs-input, .acta-input, .st-input, .matrix-input {
+  width: 38px !important;
+  height: 32px !important;
+  text-align: center !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  -webkit-text-fill-color: #0f172a !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+  line-height: 32px !important;
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
+/* Inputs de parciales por cuarto (Q1-Q4) */
+.q-score-input, .period-input {
+  width: 44px !important;
+  height: 34px !important;
+  text-align: center !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e1 !important;
+  background-color: #ffffff !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+  line-height: 34px !important;
+}
+
+/* Inputs en contenedores de modo oscuro */
+header input, header select, .dark-theme input, .dark-theme select {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: #475569 !important;
+}
+
+/* =========================================================================
+   7. MODALES Y DIÁLOGOS DE CONFIRMACIÓN (MODALS)
+   ========================================================================= */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-index-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md, 16px);
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background-color: var(--color-surface, #ffffff);
+  color: var(--color-text-main, #0f172a);
+  border-radius: var(--radius-xl, 14px);
+  max-width: 500px;
+  width: 100%;
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0,0,0,0.1));
+  padding: var(--space-lg, 24px);
+  box-sizing: border-box;
+  animation: modalPop var(--transition-smooth, 0.2s ease);
+}
+
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

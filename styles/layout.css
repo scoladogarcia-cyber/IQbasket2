@@ -1,23 +1,289 @@
-/* App Shell Responsive */
+/**
+ * @fileoverview Estilos de Arquitectura de Layout y Estructura Shell: layout.css
+ * @description Controla la disposición del Shell para Desktop, Tablet y Móvil.
+ * Garantiza alto contraste en textos y títulos sobre fondos oscuros.
+ */
+
+/* =========================================================================
+   1. APP SHELL Y CONTENEDORES PRINCIPALES
+   ========================================================================= */
+.app-layout-shell,
 .app-shell {
   display: flex;
   width: 100%;
   min-height: 100vh;
+  background-color: var(--color-bg, #f8fafc);
+  position: relative;
 }
 
+.app-main-content,
 .main-content {
   flex: 1;
-  padding: var(--space-md);
-  padding-bottom: calc(var(--touch-target-min) + var(--space-xl) + env(safe-area-inset-bottom));
+  padding: var(--space-md, 16px);
+  padding-bottom: calc(var(--bottom-bar-height-mobile, 60px) + var(--space-lg, 24px) + env(safe-area-inset-bottom, 16px));
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
+  overflow-y: auto;
+  box-sizing: border-box;
+  position: relative;
+  z-index: var(--z-index-base, 1);
 }
 
-/* En Desktop se elimina el padding inferior excesivo para el bottom bar */
-@media (min-width: 1024px) {
-  .main-content {
-    padding: var(--space-xl);
-    padding-bottom: var(--space-xl);
+/* =========================================================================
+   2. HEADER SUPERIOR MÓVIL Y TABLET PORTRAIT
+   ========================================================================= */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky, 1000);
+  background-color: var(--color-secondary, #0f172a);
+  color: #ffffff;
+  height: var(--header-height-mobile, 56px);
+  padding: 0 var(--space-md, 16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-secondary-border, #1e293b);
+}
+
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 8px);
+  font-weight: var(--font-weight-black, 900);
+  font-size: var(--font-size-md, 16px);
+  color: var(--color-primary, #f97316);
+  letter-spacing: 0.5px;
+}
+
+.mobile-brand .brand-svg {
+  width: 22px;
+  height: 22px;
+  color: var(--color-primary, #f97316);
+}
+
+/* =========================================================================
+   3. SIDEBAR LATERAL (DESKTOP & TABLET LANDSCAPE)
+   ========================================================================= */
+.app-sidebar {
+  width: var(--sidebar-width-desktop, 260px);
+  background-color: #0b1329 !important; /* Azul noche oscuro */
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: var(--space-lg, 20px) var(--space-sm, 12px);
+  border-right: 1px solid var(--color-secondary-border, #1e293b);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: var(--z-index-sidebar, 50);
+  box-sizing: border-box;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 8px);
+  font-weight: var(--font-weight-black, 900);
+  font-size: var(--font-size-lg, 18px);
+  letter-spacing: 0.5px;
+  color: var(--color-primary, #f97316);
+  margin-bottom: var(--space-lg, 20px);
+  padding: 0 var(--space-xs, 8px);
+}
+
+.sidebar-brand .brand-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--color-primary, #f97316);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 16px);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs, 4px);
+}
+
+/* TÍTULOS DE GRUPO: AZUL CELESTE LUMINOSO */
+.nav-group-title {
+  display: block;
+  font-size: var(--font-size-2xs, 10px);
+  font-weight: var(--font-weight-extrabold, 800);
+  letter-spacing: 0.08em;
+  color: #93c5fd !important; /* Celeste de alto contraste */
+  margin-bottom: var(--space-2xs, 4px);
+  padding-left: var(--space-xs, 8px);
+}
+
+/* ENLACES INACTIVOS: BLANCO HUESO (#e2e8f0) */
+.nav-item, .nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 12px);
+  padding: var(--space-xs, 8px) var(--space-sm, 12px);
+  color: #e2e8f0 !important; /* Blanco hueso de alto contraste */
+  text-decoration: none;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-semibold, 700);
+  border-radius: var(--radius-md, 8px);
+  min-height: 40px;
+  transition: background-color var(--transition-fast, 0.15s ease), color var(--transition-fast, 0.15s ease);
+}
+
+.nav-item .nav-svg, .nav-link .nav-svg {
+  stroke: #e2e8f0 !important;
+  color: #e2e8f0 !important;
+}
+
+.nav-item:hover, .nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.nav-item:hover .nav-svg, .nav-link:hover .nav-svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* ENLACE ACTIVO: NARANJA BRILLANTE */
+.nav-item.active, .nav-link.active {
+  background-color: var(--color-primary, #f97316) !important;
+  color: #ffffff !important;
+  font-weight: var(--font-weight-bold, 800);
+  box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
+}
+
+.nav-item.active .nav-svg, .nav-link.active .nav-svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+
+.nav-svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* =========================================================================
+   4. BOTTOM NAVIGATION BAR (MÓVIL)
+   ========================================================================= */
+.mobile-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--bottom-bar-height-mobile, 58px) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: var(--color-secondary, #0f172a);
+  border-top: 1px solid var(--color-secondary-border, #1e293b);
+  z-index: var(--z-index-nav, 1000);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1 !important;
+  text-decoration: none;
+  font-size: var(--font-size-2xs, 10px);
+  font-weight: var(--font-weight-semibold, 700);
+  min-width: 52px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast, 0.15s ease);
+}
+
+.mobile-nav-item.active {
+  color: var(--color-primary, #f97316) !important;
+  font-weight: var(--font-weight-bold, 800);
+}
+
+.mobile-svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 2px;
+}
+
+/* =========================================================================
+   5. REJILLAS ESTRUCTURALES MAESTRAS
+   ========================================================================= */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md, 16px);
+  margin-top: var(--space-md, 16px);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-sm, 12px);
+  margin-bottom: var(--space-md, 16px);
+}
+
+.analytics-split-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md, 16px);
+}
+
+.live-game-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md, 16px);
+}
+
+/* =========================================================================
+   6. MEDIA QUERIES RESPONSIVE
+   ========================================================================= */
+@media (min-width: 768px) {
+  .analytics-split-layout {
+    grid-template-columns: 1.1fr 0.9fr;
   }
+  .live-game-layout {
+    grid-template-columns: 1fr 340px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .mobile-header,
+  .mobile-bottom-bar,
+  .mobile-tablet-only {
+    display: none !important;
+  }
+
+  .desktop-only {
+    display: flex !important;
+  }
+
+  .app-main-content,
+  .main-content {
+    padding: var(--space-xl, 32px);
+    padding-bottom: var(--space-xl, 32px);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(12, 1fr);
+    gap: var(--space-lg, 24px);
+  }
+
+  .dashboard-col-8 { grid-column: span 8; }
+  .dashboard-col-4 { grid-column: span 4; }
+  .dashboard-col-12 { grid-column: span 12; }
 }

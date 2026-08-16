@@ -1,8 +1,13 @@
 /**
- * @fileoverview Vista de "Mi Perfil" para IQ Basket (ProfileView.js).
- * Sincronizado en tiempo real con la tabla 'user_profiles' de Supabase y Supabase Auth.
- * Carga los datos reales del usuario (first_name, last_name, phone, role) desde Supabase,
- * los guarda en la base de datos y actualiza la contraseña de la cuenta en Supabase Auth.
+ * @fileoverview Vista de "Mi Perfil": ProfileView.js
+ * @description Gestión del perfil de usuario y credenciales.
+ * Sincronizado en tiempo real con la tabla `user_profiles` de Supabase y Supabase Auth.
+ * 
+ * Capacidades:
+ * 1. Lectura y persistencia de datos personales (nombre, apellidos, teléfono).
+ * 2. Visualización protegida de campos inmutables (email, login y rol asignado).
+ * 3. Actualización de contraseñas de acceso mediante `supabase.auth.updateUser`.
+ * 4. Integración completa con `TranslationStore` e `I18nService` y soporte móvil táctil (44px).
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
@@ -10,19 +15,20 @@ import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
 
 export class ProfileView {
-  constructor(authController) {
+  /**
+   * Crea una instancia de ProfileView.
+   * @param {Object} [authController=null] - Controlador de autenticación.
+   */
+  constructor(authController = null) {
     this.auth = authController;
     this.userProfile = null;
     this.isFetching = false;
   }
 
-  /**
-   * Helper para obtener traducciones limpias asegurando que NUNCA aparezca la clave desnuda
-   */
   t(key, fallback = "") {
-    const text = TranslationStore.t(key, "");
+    const text = TranslationStore ? TranslationStore.t(key, "") : I18n.t(key);
     if (!text || text === key) {
-      return fallback;
+      return fallback || key;
     }
     return text;
   }
@@ -36,14 +42,14 @@ export class ProfileView {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        z-index: 9999; color: white; font-family: system-ui, sans-serif;
+        z-index: 9999; color: white; font-family: var(--font-family-base, system-ui);
       `;
       document.body.appendChild(overlay);
     }
     overlay.innerHTML = `
-      <div style="width: 48px; height: 48px; border: 4px solid #ea580c; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
+      <div style="width: 48px; height: 48px; border: 4px solid var(--color-primary, #f97316); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
-      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos IQB...</p>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Guardando cambios en la Base de Datos...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
     overlay.style.display = "flex";
@@ -55,11 +61,12 @@ export class ProfileView {
   }
 
   /**
-   * Consulta en tiempo real el perfil del usuario activo en la tabla `user_profiles`
+   * Consulta en tiempo real el perfil del usuario activo en la tabla `user_profiles`.
    */
   async _fetchUserProfile(email) {
     try {
       this.isFetching = true;
+      if (!supabase) return;
       const { data, error } = await supabase
         .from("user_profiles")
         .select("*")
@@ -80,9 +87,6 @@ export class ProfileView {
     }
   }
 
-  /**
-   * Vincula la funcionalidad de ver/ocultar contraseña en las cajas de texto
-   */
   _bindPasswordToggles(container) {
     container.querySelectorAll(".pwd-toggle-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -99,29 +103,26 @@ export class ProfileView {
   }
 
   async render(containerId = "dashboard-content-area") {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
-    // 1. Obtener email del usuario activo en la sesión
-    const userEmail = localStorage.getItem("iq_user_email") || "scolado@nechigroup.com";
+    const userEmail = localStorage.getItem("iq_user_email") || "usuario@iqbasket.com";
 
-    // Cargar perfil desde la tabla `user_profiles` de Supabase si aún no se ha obtenido
     if (!this.userProfile && !this.isFetching) {
       await this._fetchUserProfile(userEmail);
     }
 
     const userRole = (this.userProfile?.role || localStorage.getItem("iq_user_role") || "SUPERADMIN").toUpperCase();
-    const userName = this.userProfile?.first_name || localStorage.getItem("iq_user_name") || "Sergio";
-    const userLastName = this.userProfile?.last_name || localStorage.getItem("iq_user_lastname") || "Colado";
+    const userName = this.userProfile?.first_name || localStorage.getItem("iq_user_name") || "Usuario";
+    const userLastName = this.userProfile?.last_name || localStorage.getItem("iq_user_lastname") || "IQ";
     const userPhone = this.userProfile?.phone || localStorage.getItem("iq_user_phone") || "";
     const userLogin = userEmail.split("@")[0];
-
-    const initial = userName.charAt(0).toUpperCase() || "S";
+    const initial = userName.charAt(0).toUpperCase() || "U";
 
     container.innerHTML = `
       <div class="profile-container">
         
-        <!-- BANNER HEADER AZUL -->
+        <!-- HEADER AZUL DEL PERFIL -->
         <div class="profile-header-card">
           <div class="avatar-circle-lg">${initial}</div>
           <div class="header-info">
@@ -131,7 +132,7 @@ export class ProfileView {
           </div>
         </div>
 
-        <!-- 1. DATOS DE PERFIL -->
+        <!-- 1. DATOS DEL PERFIL -->
         <div class="profile-card card">
           <div class="card-title">
             <span>👤</span> ${this.t("profile_data_title", "DATOS DEL PERFIL").toUpperCase()}
@@ -167,7 +168,7 @@ export class ProfileView {
           </form>
         </div>
 
-        <!-- 2. CAMBIAR CONTRASEÑA -->
+        <!-- 2. CAMBIO DE CONTRASEÑA -->
         <div class="profile-card card">
           <div class="card-title">
             <span>🔑</span> ${this.t("change_password_title", "CAMBIAR CONTRASEÑA").toUpperCase()}
@@ -193,23 +194,22 @@ export class ProfileView {
           </form>
         </div>
 
-        <!-- 3. EQUIPOS ASIGNADOS -->
+        <!-- 3. ALCANCE Y EQUIPOS ASIGNADOS -->
         <div class="profile-card card">
           <div class="card-title">
             <span>🛡️</span> ${this.t("assigned_teams_title", "EQUIPOS ASIGNADOS").toUpperCase()}
           </div>
           <div class="assigned-info-box">
             ${userRole === 'SUPERADMIN' 
-              ? 'Como SUPERADMIN tienes acceso global a todos los equipos del club.' 
+              ? 'Como SUPERADMIN tienes acceso global y completo a todos los equipos y temporadas.' 
               : (userRole === 'INVITADO'
                   ? 'Acceso en modo INVITADO (Solo Lectura para Demostración).'
-                  : 'Acceso asignado al equipo activo actual.')}
+                  : 'Acceso técnico asignado al equipo activo actual.')}
           </div>
         </div>
 
       </div>
 
-      <!-- ESTILOS ESPECÍFICOS Y RESPONSIVE -->
       <style>
         .profile-container {
           max-width: 950px;
@@ -236,7 +236,7 @@ export class ProfileView {
           width: 64px;
           height: 64px;
           border-radius: 50%;
-          background: var(--color-primary, #ea580c);
+          background: var(--color-primary, #f97316);
           color: white;
           font-weight: 900;
           font-size: 28px;
@@ -319,7 +319,7 @@ export class ProfileView {
         }
 
         .form-group input:focus {
-          border-color: #2563eb;
+          border-color: var(--color-primary, #f97316);
           background: white;
         }
 
@@ -417,10 +417,8 @@ export class ProfileView {
       </style>
     `;
 
-    // Vincular los toggles ver/ocultar contraseña
     this._bindPasswordToggles(container);
 
-    // Evento de guardar perfil en la tabla `user_profiles` de Supabase
     container.querySelector("#form-profile-data")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = container.querySelector("#input-profile-name")?.value.trim();
@@ -432,9 +430,10 @@ export class ProfileView {
         return;
       }
 
-      this.showSyncOverlay("💾 Guardando perfil en Supabase user_profiles...");
+      this.showSyncOverlay("💾 Guardando perfil en Supabase...");
 
       try {
+        if (!supabase) throw new Error("Cliente Supabase no configurado");
         const { data, error } = await supabase
           .from("user_profiles")
           .update({
@@ -451,7 +450,6 @@ export class ProfileView {
           return;
         }
 
-        // Actualizar almacenamiento local para sincronía inmediata
         localStorage.setItem("iq_user_name", name);
         localStorage.setItem("iq_user_lastname", lastname);
         localStorage.setItem("iq_user_phone", phone);
@@ -461,16 +459,15 @@ export class ProfileView {
         }
 
         this.hideSyncOverlay();
-        alert("✅ Perfil guardado e integrado con éxito en la tabla 'user_profiles' de Supabase.");
+        alert("✅ Perfil guardado e integrado con éxito en la tabla 'user_profiles'.");
         await this.render(containerId);
       } catch (err) {
         this.hideSyncOverlay();
-        console.error("Error guardando perfil en Supabase:", err);
+        console.error("Error guardando perfil:", err);
         alert(`❌ Error al conectar con Supabase: ${err.message}`);
       }
     });
 
-    // Evento de cambiar contraseña en Supabase Auth
     container.querySelector("#form-change-password")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const pass1 = container.querySelector("#input-new-password")?.value;
@@ -494,7 +491,8 @@ export class ProfileView {
       this.showSyncOverlay("🔒 Actualizando contraseña en Supabase Auth...");
 
       try {
-        const { data, error } = await supabase.auth.updateUser({
+        if (!supabase) throw new Error("Cliente Supabase no configurado");
+        const { error } = await supabase.auth.updateUser({
           password: pass1
         });
 
@@ -506,8 +504,10 @@ export class ProfileView {
 
         this.hideSyncOverlay();
         alert("🔑 Contraseña actualizada con éxito en tu cuenta de Supabase Auth.");
-        container.querySelector("#input-new-password").value = "";
-        container.querySelector("#input-repeat-password").value = "";
+        const p1 = container.querySelector("#input-new-password");
+        const p2 = container.querySelector("#input-repeat-password");
+        if (p1) p1.value = "";
+        if (p2) p2.value = "";
       } catch (err) {
         this.hideSyncOverlay();
         console.error("Error actualizando contraseña:", err);

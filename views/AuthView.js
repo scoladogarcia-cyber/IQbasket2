@@ -1,9 +1,12 @@
 /**
- * @fileoverview Vista de Autenticación / Login / Registro de IQ Basket (AuthView.js).
- * Incluye selector global de idioma accesible en la parte superior.
- * Incluye fallbacks en texto plano para garantizar que NUNCA se muestren claves desnudas al arrancar.
- * Soporta alternancia fluida entre Inicio de Sesión y Alta Nueva (Registro Público).
- * Los usuarios registrados públicamente reciben el rol INVITADO (Solo Lectura) por defecto.
+ * @fileoverview Vista de Autenticación, Acceso y Registro Público: AuthView.js
+ * @description Maneja el inicio de sesión y la creación de nuevas cuentas (rol INVITADO por defecto).
+ * 
+ * Reglas de optimización y diseño:
+ * 1. Selector reactivo de idioma en cabecera superior sincronizado con I18nService.
+ * 2. Fallbacks de texto plano directos en cada etiqueta para garantizar 0ms y evitar claves desnudas al arrancar.
+ * 3. Campos de entrada táctiles estandarizados (44px mínimo de interacción).
+ * 4. Botón toggle para visualización/ocultación de contraseña integrado.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
@@ -11,18 +14,21 @@ import { I18n } from "../services/I18nService.js";
 import { APP_CONFIG } from "../config/app.config.js";
 
 export class AuthView {
+  /**
+   * Crea una instancia de AuthView.
+   */
   constructor() {
-    this.activeTab = "login";
+    this.activeTab = "login"; // 'login' | 'register'
   }
 
   t(key, fallback = "") {
-    return TranslationStore.t(key, fallback);
+    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
   render(params = {}) {
     const currentLang = localStorage.getItem("iq_lang") || "es";
     const errorMessage = params.errorMessage 
-      ? I18n.t("auth.error", {}, params.errorMessage)
+      ? (I18n.t("auth.error", {}, params.errorMessage) || params.errorMessage)
       : "";
 
     const errorMarkup = errorMessage 
@@ -30,12 +36,12 @@ export class AuthView {
       : "";
 
     return `
-      <div style="min-height: 100vh; background-color: var(--color-bg, #f8fafc); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; font-family: var(--font-family-base, system-ui); position: relative;">
+      <div style="min-height: 100vh; background-color: var(--color-bg, #f8fafc); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; font-family: var(--font-family-base, system-ui); position: relative; box-sizing: border-box;">
         
-        <!-- Selector Global de Idioma en la esquina superior derecha -->
-        <div style="position: absolute; top: 16px; right: 20px; display: flex; align-items: center; gap: 8px; background: white; padding: 6px 12px; border-radius: 20px; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <!-- Selector Global de Idioma -->
+        <div style="position: absolute; top: 16px; right: 20px; display: flex; align-items: center; gap: 8px; background: white; padding: 6px 12px; border-radius: 20px; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 10;">
           <span style="font-size: 14px;">🌐</span>
-          <select id="auth-lang-toggle" style="border: none; background: transparent; font-size: 12px; font-weight: 800; color: #334155; outline: none; cursor: pointer;">
+          <select id="auth-lang-toggle" style="border: none; background: transparent; font-size: 12px; font-weight: 800; color: #334155; outline: none; cursor: pointer; min-height: 32px;">
             <option value="es" ${currentLang === 'es' ? 'selected' : ''}>Español (ES)</option>
             <option value="ca" ${currentLang === 'ca' || currentLang === 'cat' ? 'selected' : ''}>Català (CAT)</option>
             <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English (EN)</option>
@@ -48,7 +54,7 @@ export class AuthView {
           <div style="width: 64px; height: 64px; background-color: var(--color-secondary, #0f172a); border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
             <span style="font-size: 32px;">🏀</span>
           </div>
-          <h1 style="font-size: 26px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: -0.02em;">${APP_CONFIG.appName}</h1>
+          <h1 style="font-size: 26px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: -0.02em;">${APP_CONFIG.appName || "IQ Basket"}</h1>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">${this.t("app_tagline", "Análisis estadístico de baloncesto")}</p>
         </div>
 
@@ -60,14 +66,14 @@ export class AuthView {
             <button
               type="button"
               id="tab-btn-login"
-              style="flex: 1; padding: 10px; background: none; border: none; font-size: 13px; font-weight: 800; cursor: pointer; color: ${this.activeTab === 'login' ? '#1e3a8a' : '#64748b'}; border-bottom: 3px solid ${this.activeTab === 'login' ? '#1e3a8a' : 'transparent'}; margin-bottom: -2px;"
+              style="flex: 1; padding: 10px; background: none; border: none; font-size: 13px; font-weight: 800; cursor: pointer; color: ${this.activeTab === 'login' ? '#1e3a8a' : '#64748b'}; border-bottom: 3px solid ${this.activeTab === 'login' ? '#1e3a8a' : 'transparent'}; margin-bottom: -2px; min-height: 44px;"
             >
               ${this.t("login_title", "Iniciar sesión")}
             </button>
             <button
               type="button"
               id="tab-btn-register"
-              style="flex: 1; padding: 10px; background: none; border: none; font-size: 13px; font-weight: 800; cursor: pointer; color: ${this.activeTab === 'register' ? '#1e3a8a' : '#64748b'}; border-bottom: 3px solid ${this.activeTab === 'register' ? '#1e3a8a' : 'transparent'}; margin-bottom: -2px;"
+              style="flex: 1; padding: 10px; background: none; border: none; font-size: 13px; font-weight: 800; cursor: pointer; color: ${this.activeTab === 'register' ? '#1e3a8a' : '#64748b'}; border-bottom: 3px solid ${this.activeTab === 'register' ? '#1e3a8a' : 'transparent'}; margin-bottom: -2px; min-height: 44px;"
             >
               ${this.t("register_tab", "Alta Nueva (Registro)")}
             </button>
@@ -79,7 +85,6 @@ export class AuthView {
           ${this.activeTab === 'login' ? `
             <form id="login-form" style="display: flex; flex-direction: column; gap: 18px;">
               
-              <!-- Campo Email -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label for="login-email" style="display: block; font-size: 12px; font-weight: 700; color: #334155;">
                   ${this.t("email_label", "Mail de acceso")} *
@@ -88,12 +93,11 @@ export class AuthView {
                   id="login-email"
                   type="email"
                   required
-                  placeholder="scolado@nechigroup.com"
+                  placeholder="usuario@iqbasket.com"
                   style="width: 100%; height: 44px; padding: 10px 12px; background-color: #f0f7ff; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; color: #0f172a; outline: none; box-sizing: border-box;"
                 />
               </div>
 
-              <!-- Campo Contraseña -->
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 <label for="login-password" style="display: block; font-size: 12px; font-weight: 700; color: #334155;">
                   ${this.t("password_label", "Contraseña")} *
@@ -118,11 +122,10 @@ export class AuthView {
                 </div>
               </div>
 
-              <!-- Botón Entrar -->
               <button
                 id="login-submit-btn"
                 type="submit"
-                style="width: 100%; height: 44px; background-color: var(--color-primary, #ea580c); color: #ffffff; font-weight: 800; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;"
+                style="width: 100%; height: 44px; background-color: var(--color-primary, #f97316); color: #ffffff; font-weight: 800; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px;"
               >
                 ➔ ${this.t("enter_button", "Entrar")}
               </button>
@@ -174,7 +177,7 @@ export class AuthView {
                 </label>
                 <div style="position: relative; display: flex; align-items: center; width: 100%;">
                   <input id="reg-password" type="password" required placeholder="Mínimo 6 caracteres" minlength="6" style="width: 100%; height: 40px; padding: 8px 40px 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
-                  <button type="button" class="pwd-toggle-btn" data-target="reg-password" style="position: absolute; right: 2px; background: none; border: none; cursor: pointer; color: #64748b; font-size: 14px; padding: 8px;">👁️</button>
+                  <button type="button" class="pwd-toggle-btn" data-target="reg-password" style="position: absolute; right: 2px; background: none; border: none; cursor: pointer; color: #64748b; font-size: 14px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;">👁️</button>
                 </div>
               </div>
 
@@ -190,7 +193,7 @@ export class AuthView {
             </form>
 
             <div style="margin-top: 16px; text-align: center;">
-              <button type="button" id="btn-switch-to-login" style="background: none; border: none; font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer;">
+              <button type="button" id="btn-switch-to-login" style="background: none; border: none; font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer; min-height: 36px;">
                 ${this.t("already_have_account", "¿Ya tienes una cuenta? Iniciar sesión")}
               </button>
             </div>

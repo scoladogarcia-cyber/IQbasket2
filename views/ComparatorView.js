@@ -1,37 +1,43 @@
 /**
- * @fileoverview Vista del Comparador de Jugadores (ComparatorView.js).
- * Permite seleccionar entre 2 y 4 jugadores para comparar sus estadísticas
- * convencionales, avanzadas, selector de métrica para evolución por partido y fortalezas relativas.
- * Gráfico 100% alineado mediante dibujado unificado de Eje X/Y dentro del propio SVG.
- * Totalmente integrado con DataStore, TranslationStore e I18nService.
- * Adaptado con diseño responsivo dual (TableView Desktop / CardView Smartphone).
- * Restricción de acceso para el rol JUGADOR y conteo de partidos disputados con minutos > 0.
+ * @fileoverview Vista del Comparador de Jugadores: ComparatorView.js
+ * @description Permite seleccionar entre 2 y 4 jugadores simultáneamente para comparar
+ * su producción estadística tradicional, analítica avanzada, evolución por partido y fortalezas relativas.
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 
 export class ComparatorView {
-  constructor(authController) {
+  /**
+   * Crea una instancia de ComparatorView.
+   * @param {Object} [authController=null] - Controlador de autenticación y roles.
+   */
+  constructor(authController = null) {
     this.auth = authController;
     this.selectedPlayerIds = []; // IDs de los jugadores seleccionados (máx 4)
     this.modePerGame = true; // true = Por partido, false = Por 40 min
     this.selectedMetric = "pts"; // 'pts', 'val', 'reb', 'ast', 'stl', 'blk'
+    this.hasInitialized = false; // Control de inicialización única
     
-    // Paleta de colores profesionales para los jugadores comparados
-    this.playerColors = ["#1e3a8a", "#ea580c", "#16a34a", "#9333ea"];
+    // Paleta cromática coordinada para los jugadores comparados
+    this.playerColors = ["#1e3a8a", "#f97316", "#16a34a", "#9333ea"];
+  }
+
+  t(key, fallback = "") {
+    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
   _canAccess() {
     if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    const role = (localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN").toUpperCase();
     return role !== "JUGADOR";
   }
 
   /**
-   * Calcula promedios e indicadores para los jugadores seleccionados
+   * Calcula promedios e indicadores consolidados para los jugadores seleccionados de forma segura.
    */
   _getPlayerStatsMap() {
     const map = new Map();
@@ -40,9 +46,8 @@ export class ComparatorView {
       const p = DataStore.getPlayerById(pId);
       if (!p) return;
 
-      // 💡 FILTRADO ESTRICTO: Solo contar partidos donde los minutos disputados sean mayores a 0
       const rawStats = DataStore.getPlayerGameStats(pId) || [];
-      const pStats = rawStats.filter(st => Number(st.minutes || 0) > 0);
+      const pStats = rawStats.filter(st => Number(st.minutes ?? st.minutesPlayed ?? 0) > 0);
       const gamesCount = pStats.length;
 
       let totMin = 0, totPts = 0, totOffReb = 0, totDefReb = 0, totAst = 0, totStl = 0, totBlk = 0;
@@ -50,41 +55,43 @@ export class ComparatorView {
       let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
 
       pStats.forEach((st) => {
-        const computed = StatsEngine.calculatePlayerStats(st);
-        const min = Number(st.minutes || 0);
+        const computed = BoxScoreCalculator.calculatePlayerBoxScore(st);
+        const min = Number(st.minutes ?? st.minutesPlayed ?? 0);
         const pts = computed.points || 0;
 
         totMin += min;
         totPts += pts;
-        totOffReb += Number(st.off_reb || 0);
-        totDefReb += Number(st.def_reb || 0);
-        totAst += Number(st.assists || 0);
-        totStl += Number(st.steals || 0);
-        totBlk += Number(st.blocks || 0);
-        totTov += Number(st.turnovers || 0);
-        totFc += Number(st.fouls_committed || 0);
-        totFr += Number(st.fouls_received || 0);
-        totPm += Number(st.plus_minus || 0);
-        totVal += computed.evaluation || 0;
+        totOffReb += Number(st.off_reb ?? st.rebOff ?? 0);
+        totDefReb += Number(st.def_reb ?? st.rebDef ?? 0);
+        totAst += Number(st.assists ?? st.ast ?? 0);
+        totStl += Number(st.steals ?? st.stl ?? 0);
+        totBlk += Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+        totTov += Number(st.turnovers ?? st.tov ?? 0);
+        totFc += Number(st.fouls_committed ?? st.fouls ?? 0);
+        totFr += Number(st.fouls_drawn ?? st.fouls_received ?? 0);
+        totPm += Number(st.plus_minus ?? st.plusMinus ?? 0);
+        totVal += computed.pir || 0;
         totGs += computed.gameScore || 0;
 
-        totFg2m += Number(st.fg2_made || 0);
-        totFg2a += Number(st.fg2_attempted || 0);
-        totFg3m += Number(st.fg3_made || 0);
-        totFg3a += Number(st.fg3_attempted || 0);
-        totFtm  += Number(st.ft_made || 0);
-        totFta  += Number(st.ft_attempted || 0);
+        totFg2m += Number(st.fg2_made ?? st.fg2Made ?? 0);
+        totFg2a += Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
+        totFg3m += Number(st.fg3_made ?? st.fg3Made ?? 0);
+        totFg3a += Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
+        totFtm  += Number(st.ft_made ?? st.ftMade ?? 0);
+        totFta  += Number(st.ft_attempted ?? st.ftAttempted ?? 0);
       });
 
       const mult = this.modePerGame 
         ? (gamesCount > 0 ? 1 / gamesCount : 0)
         : (totMin > 0 ? 40 / totMin : 0);
 
-      const totFgm = totFg2m + totFg3m;
       const totFga = totFg2a + totFg3a;
+      const totFgm = totFg2m + totFg3m;
+
       const efg = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "0.0";
       const tsDenom = 2 * (totFga + 0.44 * totFta);
       const ts = tsDenom > 0 ? ((totPts / tsDenom) * 100).toFixed(1) : "0.0";
+      const usg = "18.5%";
 
       map.set(pId, {
         player: p,
@@ -106,7 +113,7 @@ export class ComparatorView {
         gs: (totGs * mult).toFixed(1),
         efg,
         ts,
-        usg: "18.5%"
+        usg
       });
     });
 
@@ -118,12 +125,12 @@ export class ComparatorView {
    */
   _renderHorizontalBarChart(statsMap) {
     const metrics = [
-      { key: "pts", label: TranslationStore.t("points", "Puntos") },
-      { key: "offReb", label: TranslationStore.t("reb_off_short", "Reb. of.") },
-      { key: "defReb", label: TranslationStore.t("reb_def_short", "Reb. def.") },
-      { key: "ast", label: TranslationStore.t("assists", "Asistencias") },
-      { key: "stl", label: TranslationStore.t("steals", "Robos") },
-      { key: "blk", label: TranslationStore.t("blocks", "Tapones") }
+      { key: "pts", label: this.t("points", "Puntos") },
+      { key: "offReb", label: this.t("reb_off_short", "Reb. of.") },
+      { key: "defReb", label: this.t("reb_def_short", "Reb. def.") },
+      { key: "ast", label: this.t("assists", "Asistencias") },
+      { key: "stl", label: this.t("steals", "Robos") },
+      { key: "blk", label: this.t("blocks", "Tapones") }
     ];
 
     let maxVal = 10;
@@ -139,7 +146,7 @@ export class ComparatorView {
 
     const legendItemsMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
-      const name = pData ? `${pData.player.first_name || ''} ${pData.player.last_name || ''}`.trim() : 'Jugador';
+      const name = pData ? `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim() : 'Jugador';
       const color = this.playerColors[idx % this.playerColors.length];
 
       return `
@@ -159,8 +166,8 @@ export class ComparatorView {
 
         return `
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div style="height: 10px; background: ${color}; width: ${pct}%; border-radius: 4px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="${val}"></div>
-            <span style="font-size: 10px; font-weight: 800; color: #475569; min-width: 20px;">${val}</span>
+            <div style="height: 10px; background: ${color}; width: ${pct}%; border-radius: 4px; transition: width 0.4s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="${val}"></div>
+            <span style="font-size: 11px; font-weight: 800; color: #0f172a; min-width: 24px;">${val}</span>
           </div>
         `;
       }).join("");
@@ -176,9 +183,9 @@ export class ComparatorView {
     }).join("");
 
     return `
-      <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
-          <span>📊 ${TranslationStore.t("conventional_stats", "ESTADÍSTICAS CONVENCIONALES")} (${this.modePerGame ? 'POR PARTIDO' : 'POR 40 MIN'})</span>
+          <span>📊 ${this.t("conventional_stats", "ESTADÍSTICAS CONVENCIONALES")} (${this.modePerGame ? 'POR PARTIDO' : 'POR 40 MIN'})</span>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
@@ -198,7 +205,7 @@ export class ComparatorView {
   _renderComparisonTable(statsMap) {
     const playerHeadersMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
-      const name = pData ? `${pData.player.first_name || ''} ${pData.player.last_name || ''}`.trim().toUpperCase() : 'JUGADOR';
+      const name = pData ? `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim().toUpperCase() : 'JUGADOR';
       const color = this.playerColors[idx % this.playerColors.length];
 
       return `
@@ -209,40 +216,29 @@ export class ComparatorView {
     }).join("");
 
     const rows = [
-      { label: TranslationStore.t("games_played", "Partidos Jugados"), key: "gamesCount" },
-      { label: TranslationStore.t("minutes", "Minutos"), key: "avgMin" },
-      { label: TranslationStore.t("points", "Puntos"), key: "pts" },
-      { label: TranslationStore.t("rebounds", "Rebotes"), key: "reb" },
-      { label: TranslationStore.t("assists", "Asistencias"), key: "ast" },
-      { label: TranslationStore.t("steals", "Robos"), key: "stl" },
-      { label: TranslationStore.t("blocks", "Tapones"), key: "blk" },
-      { label: TranslationStore.t("turnovers", "Pérdidas"), key: "tov" },
-      { label: TranslationStore.t("fouls_committed", "Faltas com."), key: "fc" },
-      { label: TranslationStore.t("fouls_received", "Faltas rec."), key: "fr" },
+      { label: this.t("games_played", "Partidos Jugados"), key: "gamesCount" },
+      { label: this.t("minutes", "Minutos"), key: "avgMin" },
+      { label: this.t("points", "Puntos"), key: "pts" },
+      { label: this.t("rebounds", "Rebotes"), key: "reb" },
+      { label: this.t("assists", "Asistencias"), key: "ast" },
+      { label: this.t("steals", "Robos"), key: "stl" },
+      { label: this.t("blocks", "Tapones"), key: "blk" },
+      { label: this.t("turnovers", "Pérdidas"), key: "tov" },
+      { label: this.t("fouls_committed", "Faltas com."), key: "fc" },
+      { label: this.t("fouls_received", "Faltas rec."), key: "fr" },
       { label: "Plus/Minus", key: "pm" },
-      { label: TranslationStore.t("valuation", "Valoración (FIBA)"), key: "val" },
+      { label: this.t("valuation", "Valoración (FIBA)"), key: "val" },
       { label: "Game Score", key: "gs" },
       { label: "eFG%", key: "efg", isPct: true },
       { label: "TS%", key: "ts", isPct: true },
-      { label: "USG%", key: "usg" },
-      { label: TranslationStore.t("reliability", "Fiabilidad"), isBadge: true }
+      { label: "USG%", key: "usg" }
     ];
 
     const rowsMarkup = rows.map((r, rIdx) => {
       const isEven = rIdx % 2 === 0;
       const valsMarkup = this.selectedPlayerIds.map(pId => {
         const pData = statsMap.get(pId);
-        if (!pData) return `<td style="padding: 10px; text-align: center;">-</td>`;
-
-        if (r.isBadge) {
-          return `
-            <td style="padding: 10px; text-align: center;">
-              <span style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 3px 10px; border-radius: 12px; font-weight: 800; font-size: 11px;">
-                ✔ Muestra suficiente
-              </span>
-            </td>
-          `;
-        }
+        if (!pData) return `<td style="padding: 10px; text-align: center; color: #64748b;">-</td>`;
 
         const rawVal = pData[r.key] ?? '-';
         const displayVal = r.isPct ? `${rawVal}%` : rawVal;
@@ -262,37 +258,13 @@ export class ComparatorView {
       `;
     }).join("");
 
-    // CARDVIEW PARA TELÉFONOS MÓVILES
-    const mobileCardsMarkup = this.selectedPlayerIds.map((pId, idx) => {
-      const pData = statsMap.get(pId);
-      if (!pData) return "";
-      const color = this.playerColors[idx % this.playerColors.length];
-
-      return `
-        <div class="card" style="padding: 16px; border-top: 4px solid ${color};">
-          <strong style="font-size: 15px; color: #0f172a; display: block; margin-bottom: 12px;">
-            #${pData.player.jersey ?? '-'} ${pData.player.first_name || ''} ${pData.player.last_name || ''}
-          </strong>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
-            <div><span style="color: #64748b;">${TranslationStore.t("games_played", "PJ")}:</span> <strong>${pData.gamesCount}</strong></div>
-            <div><span style="color: #64748b;">PTS:</span> <strong>${pData.pts}</strong></div>
-            <div><span style="color: #64748b;">REB:</span> <strong>${pData.reb}</strong></div>
-            <div><span style="color: #64748b;">AST:</span> <strong>${pData.ast}</strong></div>
-            <div><span style="color: #64748b;">VAL:</span> <strong style="color: #a855f7;">${pData.val}</strong></div>
-            <div><span style="color: #64748b;">eFG%:</span> <strong>${pData.efg}%</strong></div>
-            <div><span style="color: #64748b;">TS%:</span> <strong>${pData.ts}%</strong></div>
-          </div>
-        </div>
-      `;
-    }).join("");
-
     return `
-      <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">
           📋 TABLA COMPARATIVA
         </div>
 
-        <div class="desktop-only" style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
+        <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px;">
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
               <tr style="background: #f1f5f9; font-size: 11px; border-bottom: 2px solid #e2e8f0;">
@@ -305,16 +277,12 @@ export class ComparatorView {
             </tbody>
           </table>
         </div>
-
-        <div class="mobile-only" style="display: flex; flex-direction: column; gap: 12px;">
-          ${mobileCardsMarkup}
-        </div>
       </div>
     `;
   }
 
   /**
-   * Genera el Gráfico SVG de Evolución por Partido con Eje X y Y renderizados internamente en el mismo lienzo
+   * Genera el Gráfico SVG de Evolución por Partido con Eje X y Y integrados
    */
   _renderEvolutionChartSVG(statsMap) {
     const viewBoxWidth = 800;
@@ -333,14 +301,14 @@ export class ComparatorView {
     const totalGames = Math.max(1, allGames.length);
 
     const metricLabels = {
-      pts: TranslationStore.t("points", "PUNTOS"),
-      val: TranslationStore.t("valuation", "VALORACIÓN FIBA"),
-      reb: TranslationStore.t("rebounds", "REBOTES"),
-      ast: TranslationStore.t("assists", "ASISTENCIAS"),
-      stl: TranslationStore.t("steals", "ROBOS"),
-      blk: TranslationStore.t("blocks", "TAPONES")
+      pts: this.t("points", "PUNTOS"),
+      val: this.t("valuation", "VALORACIÓN FIBA"),
+      reb: this.t("rebounds", "REBOTES"),
+      ast: this.t("assists", "ASISTENCIAS"),
+      stl: this.t("steals", "ROBOS"),
+      blk: this.t("blocks", "TAPONES")
     };
-    const metricTitle = metricLabels[this.selectedMetric] || TranslationStore.t("points", "PUNTOS");
+    const metricTitle = metricLabels[this.selectedMetric] || this.t("points", "PUNTOS");
 
     let minVal = 0;
     let maxVal = 10;
@@ -348,14 +316,14 @@ export class ComparatorView {
     this.selectedPlayerIds.forEach(pId => {
       const playerStats = DataStore.getPlayerGameStats(pId) || [];
       playerStats.forEach(st => {
-        const computed = StatsEngine.calculatePlayerStats(st);
+        const computed = BoxScoreCalculator.calculatePlayerBoxScore(st);
         let val = 0;
         switch (this.selectedMetric) {
-          case "val": val = computed.evaluation || 0; break;
-          case "reb": val = computed.trb || 0; break;
-          case "ast": val = Number(st.assists || 0); break;
-          case "stl": val = Number(st.steals || 0); break;
-          case "blk": val = Number(st.blocks || 0); break;
+          case "val": val = computed.pir || 0; break;
+          case "reb": val = computed.rebounds || 0; break;
+          case "ast": val = Number(st.assists ?? st.ast ?? 0); break;
+          case "stl": val = Number(st.steals ?? st.stl ?? 0); break;
+          case "blk": val = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0); break;
           case "pts":
           default: val = computed.points || 0; break;
         }
@@ -390,20 +358,20 @@ export class ComparatorView {
 
       const color = this.playerColors[idx % this.playerColors.length];
       const playerStats = DataStore.getPlayerGameStats(pId) || [];
-      const statsByGameId = new Map(playerStats.map(s => [String(s.game_id), s]));
+      const statsByGameId = new Map(playerStats.map(s => [String(s.game_id ?? s.gameId), s]));
 
       const points = allGames.map((g, i) => {
         const st = statsByGameId.get(String(g.id));
         let val = 0;
 
         if (st) {
-          const computed = StatsEngine.calculatePlayerStats(st);
+          const computed = BoxScoreCalculator.calculatePlayerBoxScore(st);
           switch (this.selectedMetric) {
-            case "val": val = computed.evaluation || 0; break;
-            case "reb": val = computed.trb || 0; break;
-            case "ast": val = Number(st.assists || 0); break;
-            case "stl": val = Number(st.steals || 0); break;
-            case "blk": val = Number(st.blocks || 0); break;
+            case "val": val = computed.pir || 0; break;
+            case "reb": val = computed.rebounds || 0; break;
+            case "ast": val = Number(st.assists ?? st.ast ?? 0); break;
+            case "stl": val = Number(st.steals ?? st.stl ?? 0); break;
+            case "blk": val = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0); break;
             case "pts":
             default: val = computed.points || 0; break;
           }
@@ -451,7 +419,7 @@ export class ComparatorView {
 
     const legendMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
-      const name = pData ? `${pData.player.first_name || ''} ${pData.player.last_name || ''}`.trim() : 'Jugador';
+      const name = pData ? `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim() : 'Jugador';
       const color = this.playerColors[idx % this.playerColors.length];
 
       return `
@@ -463,17 +431,16 @@ export class ComparatorView {
     }).join("");
 
     return `
-      <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
           <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">
             📈 EVOLUCIÓN DE ${metricTitle} POR PARTIDO (P1 - P${totalGames})
           </div>
 
-          <!-- Selector de Métrica -->
           <div style="display: flex; align-items: center; gap: 6px;">
             <label style="font-size: 11px; font-weight: 700; color: #64748b;">Métrica:</label>
-            <select id="select-evolution-metric" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: white; color: #0f172a; outline: none; cursor: pointer; min-height: 44px;">
+            <select id="select-evolution-metric" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: #ffffff; color: #0f172a; outline: none; cursor: pointer; min-height: 44px;">
               <option value="pts" ${this.selectedMetric === 'pts' ? 'selected' : ''}>Puntos</option>
               <option value="val" ${this.selectedMetric === 'val' ? 'selected' : ''}>Valoración (FIBA)</option>
               <option value="reb" ${this.selectedMetric === 'reb' ? 'selected' : ''}>Rebotes</option>
@@ -502,16 +469,16 @@ export class ComparatorView {
   }
 
   /**
-   * Genera el módulo de Fortalezas Relativas (Destacados)
+   * Genera el módulo de Fortalezas Relativas
    */
   _renderRelativeStrengths(statsMap) {
     const cardsMarkup = this.selectedPlayerIds.map(pId => {
       const pData = statsMap.get(pId);
       if (!pData) return "";
 
-      const name = `${pData.player.first_name || ''} ${pData.player.last_name || ''}`.trim();
-      const bestAttr = parseFloat(pData.val) > 5 ? TranslationStore.t("valuation", "Valoración") : (parseFloat(pData.pts) > 4 ? TranslationStore.t("points", "Puntos") : TranslationStore.t("reb_def", "Reb. def."));
-      const worstAttr = TranslationStore.t("blocks", "Tapones");
+      const name = `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim();
+      const bestAttr = parseFloat(pData.val) > 5 ? this.t("valuation", "Valoración") : (parseFloat(pData.pts) > 4 ? this.t("points", "Puntos") : this.t("reb_def", "Reb. def."));
+      const worstAttr = this.t("blocks", "Tapones");
 
       return `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; flex-wrap: wrap; gap: 8px;">
@@ -527,7 +494,7 @@ export class ComparatorView {
     }).join("");
 
     return `
-      <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">
           ⚡ FORTALEZAS RELATIVAS
         </div>
@@ -539,17 +506,16 @@ export class ComparatorView {
   }
 
   async render(containerId = "dashboard-content-area") {
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
-    // 🔒 RESTRICCIÓN DE PERMISOS: Bloqueo para JUGADOR
     if (!this._canAccess()) {
       container.innerHTML = `
-        <div style="padding: 40px; text-align: center; background: white; border-radius: 14px; border: 1px solid #fecaca; max-width: 600px; margin: 40px auto;">
+        <div style="padding: 40px; text-align: center; background: #ffffff; border-radius: 14px; border: 1px solid #fecaca; max-width: 600px; margin: 40px auto;">
           <div style="font-size: 40px; margin-bottom: 12px;">🔒</div>
           <h2 style="margin: 0 0 8px 0; color: #991b1b; font-size: 18px; font-weight: 800;">Acceso no permitido</h2>
           <p style="color: #7f1d1d; font-size: 13px; margin: 0 0 20px 0;">Tu rol de usuario de JUGADOR no tiene acceso a la pantalla del Comparador.</p>
-          <a href="#/dashboard" style="background: #1e3a8a; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 13px; display: inline-block;">Volver al Dashboard</a>
+          <a href="#/dashboard" style="background: #1e3a8a; color: #ffffff; padding: 10px 20px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 13px; display: inline-block;">Volver al Dashboard</a>
         </div>
       `;
       return;
@@ -557,15 +523,24 @@ export class ComparatorView {
 
     const allPlayers = DataStore.getPlayers() || [];
 
-    // Marcado Chips de selección de jugadores
+    // Inicializar los 2 primeros SOLO la primera vez que se carga la vista
+    if (!this.hasInitialized) {
+      if (allPlayers.length >= 2) {
+        this.selectedPlayerIds = [String(allPlayers[0].id), String(allPlayers[1].id)];
+      } else if (allPlayers.length === 1) {
+        this.selectedPlayerIds = [String(allPlayers[0].id)];
+      }
+      this.hasInitialized = true;
+    }
+
     const chipsMarkup = allPlayers.map(p => {
       const isSelected = this.selectedPlayerIds.includes(String(p.id));
       const idx = this.selectedPlayerIds.indexOf(String(p.id));
       
-      let chipStyle = "background: white; color: #334155; border: 1px solid #cbd5e1;";
+      let chipStyle = "background: #ffffff; color: #334155; border: 1px solid #cbd5e1;";
       if (isSelected) {
         const color = this.playerColors[idx % this.playerColors.length];
-        chipStyle = `background: ${color}; color: white; border: 1px solid ${color}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);`;
+        chipStyle = `background: ${color}; color: #ffffff; border: 1px solid ${color}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);`;
       }
 
       return `
@@ -573,8 +548,8 @@ export class ComparatorView {
                 class="btn-select-player-chip" 
                 data-id="${p.id}" 
                 style="padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; ${chipStyle}">
-          #${p.jersey ?? '-'} ${p.first_name || ''} ${p.last_name || ''}
-          ${isSelected ? '✕' : ''}
+          #${p.jersey ?? p.number ?? '-'} ${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}
+          ${isSelected ? '✕' : '+'}
         </button>
       `;
     }).join("");
@@ -585,30 +560,27 @@ export class ComparatorView {
     container.innerHTML = `
       <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         
-        <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">
-            🔀 ${TranslationStore.t("comparator", "Comparador")}
+            🔀 ${this.t("comparator", "Comparador de Jugadores")}
           </h1>
 
           ${hasEnoughPlayers ? `
-            <!-- TOGGLE POR PARTIDO / POR 40 MIN -->
             <div style="background: #e2e8f0; padding: 4px; border-radius: 10px; display: flex; gap: 4px;">
-              <button id="btn-mode-pergame" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.modePerGame ? 'white' : 'transparent'}; color: ${this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
-                ${TranslationStore.t("per_game", "Por partido")}
+              <button id="btn-mode-pergame" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${this.modePerGame ? '#ffffff' : 'transparent'}; color: ${this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
+                ${this.t("per_game", "Por partido")}
               </button>
-              <button id="btn-mode-per40" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${!this.modePerGame ? 'white' : 'transparent'}; color: ${!this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${!this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
-                ${TranslationStore.t("per_40_min", "Por 40 min")}
+              <button id="btn-mode-per40" style="padding: 8px 16px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; min-height: 44px; background: ${!this.modePerGame ? '#ffffff' : 'transparent'}; color: ${!this.modePerGame ? '#0f172a' : '#64748b'}; box-shadow: ${!this.modePerGame ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};">
+                ${this.t("per_40_min", "Por 40 min")}
               </button>
             </div>
           ` : ''}
         </div>
 
-        <!-- Selector de Jugadores Superior -->
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <!-- Selector de Jugadores Chips -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-            ${TranslationStore.t("select_players", "SELECCIONA JUGADORES")} (${this.selectedPlayerIds.length}/4)
-            <span style="font-size: 12px; color: #94a3b8; cursor: pointer;" title="Elige de 2 a 4 jugadores para iniciar el análisis comparativo">❓</span>
+            ${this.t("select_players", "SELECCIONA DE 2 A 4 JUGADORES")} (${this.selectedPlayerIds.length}/4 seleccionados)
           </div>
 
           <div style="display: flex; flex-wrap: wrap; gap: 8px;">
@@ -616,50 +588,30 @@ export class ComparatorView {
           </div>
         </div>
 
-        <!-- CONTENIDO PRINCIPAL: ESTADO VACÍO VS COMPARATIVA -->
         ${!hasEnoughPlayers ? `
-          <!-- ESTADO VACÍO -->
-          <div style="padding: 60px 20px; text-align: center; background: white; border-radius: 14px; border: 1px dashed #cbd5e1; margin-top: 20px;">
+          <div style="padding: 60px 20px; text-align: center; background: #ffffff; border-radius: 14px; border: 1px dashed #cbd5e1; margin-top: 20px;">
             <div style="width: 56px; height: 56px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; font-size: 26px; color: #94a3b8;">
               🔀
             </div>
             <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: #334155;">
-              ${TranslationStore.t("select_at_least_2", "Selecciona al menos 2 jugadores")}
+              ${this.selectedPlayerIds.length === 1 ? 'Selecciona 1 jugador más para comparar' : this.t("select_at_least_2", "Selecciona al menos 2 jugadores")}
             </h3>
             <p style="margin: 0; font-size: 13px; color: #64748b;">
-              ${TranslationStore.t("select_players_desc", "Elige jugadores para ver la comparación gráfica y estadística.")}
+              ${this.t("select_players_desc", "Pulsa en los botones superiores para añadir o quitar jugadores libremente.")}
             </p>
           </div>
         ` : `
-          <!-- COMPARATIVA ACTIVA -->
           <div style="display: flex; flex-direction: column; gap: 24px;">
-            
-            <!-- 1. Gráfico de Barras Convencionales -->
             ${this._renderHorizontalBarChart(statsMap)}
-
-            <!-- 2. Tabla Comparativa (TableView / CardView Dual) -->
             ${this._renderComparisonTable(statsMap)}
-
-            <!-- 3. Evolución por Partido (SVG Unificado con Eje X y Y) -->
             ${this._renderEvolutionChartSVG(statsMap)}
-
-            <!-- 4. Fortalezas Relativas -->
             ${this._renderRelativeStrengths(statsMap)}
-
           </div>
         `}
 
       </div>
-
-      <style>
-        @media (max-width: 767px) {
-          .desktop-only { display: none !important; }
-          .mobile-only { display: flex !important; }
-        }
-      </style>
     `;
 
-    // Eventos Chips de Selección
     container.querySelectorAll(".btn-select-player-chip").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = String(btn.getAttribute("data-id"));
@@ -667,7 +619,7 @@ export class ComparatorView {
           this.selectedPlayerIds = this.selectedPlayerIds.filter(pId => pId !== id);
         } else {
           if (this.selectedPlayerIds.length >= 4) {
-            alert(TranslationStore.t("max_players_comparator", "Puedes seleccionar como máximo 4 jugadores simultáneamente."));
+            alert(this.t("max_players_comparator", "Puedes seleccionar como máximo 4 jugadores simultáneamente."));
             return;
           }
           this.selectedPlayerIds.push(id);
@@ -676,7 +628,6 @@ export class ComparatorView {
       });
     });
 
-    // Eventos Toggles Modo (Por partido / Por 40 min)
     container.querySelector("#btn-mode-pergame")?.addEventListener("click", () => {
       this.modePerGame = true;
       this.render(containerId);
@@ -687,7 +638,6 @@ export class ComparatorView {
       this.render(containerId);
     });
 
-    // Evento Selector de Métrica de Evolución
     container.querySelector("#select-evolution-metric")?.addEventListener("change", (e) => {
       this.selectedMetric = e.target.value;
       this.render(containerId);

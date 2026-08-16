@@ -1,53 +1,118 @@
+/**
+ * @fileoverview Reglas Responsive y Adaptaciones Multi-dispositivo: responsive.css
+ * @description Centraliza los breakpoints oficiales para Móvil, Tablet (Portrait/Landscape),
+ * Desktop y Pantallas Grandes. Gestiona optimizaciones táctiles para iOS/Android,
+ * áreas seguras (safe-area-inset) y reglas de impresión para reportes analíticos.
+ */
+
 /* =========================================================================
-   MEDIA QUERIES CENTRALIZADOS PARA BREAKPOINTS (Móvil, Tablet, Desktop)
+   1. BREAKPOINTS GENERALES Y REJILLAS KPI
    ========================================================================= */
 
-/* Móvil: 320px - 599px */
+/* Móvil Pequeño y Estándar: <= 599px */
 @media (max-width: 599px) {
-  .desktop-only { display: none !important; }
-  .grid-kpi {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .grid-kpi,
+  .kpi-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-sm, 8px);
+    gap: var(--space-xs);
+  }
+
+  .kpi-val {
+    font-size: var(--font-size-lg);
+  }
+
+  .kpi-lbl {
+    font-size: var(--font-size-2xs);
   }
 }
 
-/* Tablet: 600px - 1023px */
-@media (min-width: 600px) and (max-width: 1023px) {
-  .grid-kpi {
+/* Tablet Portrait y Móvil Grande: 600px - 767px */
+@media (min-width: 600px) and (max-width: 767px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .grid-kpi,
+  .kpi-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-md, 16px);
+    gap: var(--space-sm);
   }
 }
 
-/* Desktop: 1024px+ */
-@media (min-width: 1024px) {
-  .mobile-only { display: none !important; }
-  .grid-kpi {
+/* Tablet Landscape: 768px - 1023px */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mobile-only,
+  .mobile-tablet-only {
+    display: none !important;
+  }
+  .desktop-only {
+    display: flex !important;
+  }
+
+  .grid-kpi,
+  .kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-lg, 24px);
+    gap: var(--space-md);
+  }
+
+  .app-sidebar {
+    width: var(--sidebar-width-tablet);
   }
 }
 
-/* Desktop Grande: 1440px+ */
+/* Desktop Estándar: 1024px - 1439px */
+@media (min-width: 1024px) {
+  .mobile-only,
+  .mobile-tablet-only {
+    display: none !important;
+  }
+  .desktop-only {
+    display: flex !important;
+  }
+
+  .grid-kpi,
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-md);
+  }
+}
+
+/* Desktop Panorámico / Pantallas Grandes: >= 1440px */
 @media (min-width: 1440px) {
-  .grid-kpi {
+  .grid-kpi,
+  .kpi-grid {
+    display: grid;
     grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-lg);
   }
 }
 
 /* =========================================================================
-   COMPONENTE: MENÚ MÓVIL Y BOTTOM SHEET "MÁS" (ACCESIBLE Y MULTINAVEGADOR)
+   2. OPTIMIZACIONES TÁCTILES Y MENÚ MÓVIL (BOTTOM SHEET)
    ========================================================================= */
 
-/* 1. Objetivos Táctiles Táctil / Safari / Edge */
+#btn-mobile-more,
 #btn-mobile-more-toggle,
+#btn-close-sheet,
 #btn-close-drawer,
 .drawer-item,
 .mobile-nav-item,
-.mobile-sheet-item {
+.mobile-sheet-item,
+.sheet-list-item {
   cursor: pointer !important;
   touch-action: manipulation !important;
   -webkit-tap-highlight-color: transparent !important;
@@ -55,7 +120,7 @@
   -webkit-user-select: none;
 }
 
-/* 2. Capa Oscura de Fondo (Overlay) - Oculta por defecto fuera de la vista */
+/* Capa Oscura Traslúcida (Overlay / Backdrop) */
 .mobile-sheet-overlay,
 .mobile-drawer-overlay {
   position: fixed !important;
@@ -68,17 +133,14 @@
   background-color: rgba(15, 23, 42, 0.75) !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 99998 !important;
-  display: flex !important;
-  align-items: flex-end !important;
+  z-index: var(--z-index-sheet-overlay) !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
-  transition: opacity 0.25s ease, visibility 0.25s ease !important;
+  transition: opacity var(--transition-base), visibility var(--transition-base) !important;
   will-change: opacity, visibility;
 }
 
-/* Estado ABIERTO del Fondo Oscuro */
 .mobile-sheet-overlay.open,
 .mobile-sheet-overlay.is-visible,
 .mobile-drawer-overlay.open,
@@ -88,7 +150,7 @@
   pointer-events: auto !important;
 }
 
-/* 3. Contenido de la Tarjeta Emergente (Bottom Sheet) - Oculto abajo por defecto */
+/* Menú Emergente Inferior (Bottom Sheet) */
 .mobile-more-sheet,
 .mobile-drawer-content {
   position: fixed !important;
@@ -96,91 +158,104 @@
   left: 0 !important;
   right: 0 !important;
   width: 100% !important;
-  background-color: #ffffff !important;
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
-  padding: 20px 16px;
-  padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
-  max-height: 80vh;
+  background-color: var(--color-surface) !important;
+  border-top-left-radius: var(--radius-2xl);
+  border-top-right-radius: var(--radius-2xl);
+  padding: var(--space-md);
+  padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 16px));
+  max-height: 85vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.3);
-  z-index: 99999 !important;
+  box-shadow: var(--shadow-sheet);
+  z-index: var(--z-index-sheet) !important;
   box-sizing: border-box;
-  transform: translateY(100%) !important; /* Totalmente escondido fuera de la vista */
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transform: translateY(100%) !important;
+  transition: transform var(--transition-smooth) !important;
   will-change: transform;
 }
 
-/* Estado ABIERTO de la Tarjeta Emergente */
-.mobile-drawer-overlay.open .mobile-drawer-content,
-.mobile-sheet-overlay.open .mobile-more-sheet,
-.mobile-drawer-overlay.is-visible .mobile-drawer-content,
-.mobile-sheet-overlay.is-visible .mobile-more-sheet {
-  transform: translateY(0) !important; /* Despliegue suave */
+.mobile-more-sheet.is-open,
+.mobile-more-sheet.open,
+.mobile-drawer-content.is-open,
+.mobile-sheet-overlay.is-visible .mobile-more-sheet,
+.mobile-drawer-overlay.open .mobile-drawer-content {
+  transform: translateY(0) !important;
 }
 
-/* Cabecera del Panel */
+/* Cabecera del Panel Móvil */
 .mobile-sheet-header,
+.sheet-header,
 .drawer-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .mobile-sheet-header h3,
+.sheet-title,
 .drawer-title {
   margin: 0;
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-text-main);
 }
 
 .mobile-sheet-close-btn,
+.sheet-close-btn,
 .drawer-close {
-  background: #f1f5f9;
+  background: var(--color-surface-hover);
   border: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  color: #0f172a;
+  font-size: var(--font-size-md);
+  color: var(--color-text-main);
   cursor: pointer;
-  font-weight: 800;
+  font-weight: var(--font-weight-extrabold);
 }
 
-/* Rejilla de Botones Táctiles de 48px mínimos */
-.mobile-sheet-grid,
-.drawer-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
+/* =========================================================================
+   3. ESTILOS DE IMPRESIÓN Y EXPORTACIÓN PDF
+   ========================================================================= */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
 
-.mobile-sheet-item,
-.drawer-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  text-decoration: none;
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 700;
-  min-height: 48px;
-  box-sizing: border-box;
-}
+  .app-sidebar,
+  .mobile-header,
+  .mobile-bottom-bar,
+  .mobile-more-sheet,
+  .mobile-sheet-overlay,
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .no-print {
+    display: none !important;
+  }
 
-.mobile-sheet-item:active,
-.drawer-item:active {
-  background-color: #e2e8f0;
+  .app-main-content,
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #cccccc !important;
+    break-inside: avoid;
+  }
+
+  .data-table th {
+    background-color: #f1f5f9 !important;
+    color: #000000 !important;
+  }
 }

@@ -1,10 +1,12 @@
 /**
  * @fileoverview Layout contenedor principal optimizado para Mobile First & Desktop (LayoutView.js).
- * Implementa la navegación agrupada en desktop, la navegación inferior PWA para móviles,
- * el selector de los 4 idiomas oficiales (ES, CA, EN, FR) presente tanto en Desktop como en Móvil,
- * y selectores dinámicos de Equipo y Temporada restringidos por los equipos asignados a cada usuario.
- * Sincronizado en tiempo real con las claves planas de la tabla 'translations' de Supabase.
- * Integra accesos directos para Mapa de Calor (Heatmap) y Registro Rápido.
+ * @description Implementa la navegación agrupada en desktop, la barra de navegación inferior para móviles,
+ * el selector de los 4 idiomas oficiales (ES, CA, EN, FR), y selectores de Equipo y Temporada.
+ * 
+ * Correcciones críticas:
+ * 1. Contraste absoluto forzado (!important) en todos los textos e iconos del sidebar.
+ * 2. Persistencia síncrona del scroll de la barra lateral entre transiciones de ruta.
+ * 3. Bottom Sheet táctil para móviles y control de accesos RBAC.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -14,7 +16,7 @@ import { APP_CONFIG } from "../config/app.config.js";
 
 export class LayoutView {
   static t(key, fallback = "") {
-    return TranslationStore.t(key, fallback);
+    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
   static _normalizeRouteKey(route) {
@@ -50,11 +52,48 @@ export class LayoutView {
   }
 
   /**
+   * Restaura la posición del scroll de la barra lateral de forma inmediata.
+   */
+  static _restoreSidebarScroll() {
+    const savedPos = sessionStorage.getItem("iq_sidebar_scroll");
+    if (savedPos !== null) {
+      const scrollPos = parseInt(savedPos, 10);
+      const sidebars = document.querySelectorAll(".sidebar-inner, .app-sidebar, #app-sidebar");
+      sidebars.forEach(s => {
+        s.scrollTop = scrollPos;
+      });
+      // Doble intento para asegurar tras pintado de layouts asíncronos
+      requestAnimationFrame(() => {
+        sidebars.forEach(s => {
+          s.scrollTop = scrollPos;
+        });
+      });
+    }
+  }
+
+  /**
+   * Vincula la escucha del scroll del sidebar para guardarlo continuamente.
+   */
+  static _bindSidebarScrollPreservation() {
+    const sidebars = document.querySelectorAll(".sidebar-inner, .app-sidebar, #app-sidebar");
+    sidebars.forEach(sidebar => {
+      sidebar.addEventListener("scroll", () => {
+        sessionStorage.setItem("iq_sidebar_scroll", sidebar.scrollTop);
+      }, { passive: true });
+    });
+  }
+
+  /**
    * Inicializa el menú desplegable táctil para móviles (Botón "Más")
-   * Totalmente compatible con Safari iOS, Edge, Chrome y PWA sin tocar datos.
    */
   static bindMobileDrawerEvents() {
+    // Restaurar inmediatamente el scroll del sidebar
+    LayoutView._restoreSidebarScroll();
+    LayoutView._bindSidebarScrollPreservation();
+
     setTimeout(() => {
+      LayoutView._restoreSidebarScroll();
+      
       const btnToggle = document.getElementById("btn-mobile-more-toggle");
       const btnClose = document.getElementById("btn-close-drawer");
       const drawerOverlay = document.getElementById("mobile-more-drawer");
@@ -83,7 +122,6 @@ export class LayoutView {
         document.body.style.overflow = "hidden";
       };
 
-      // 1. Abrir / Cerrar al pulsar "Más"
       btnToggle.onclick = (e) => {
         const isOpen = drawerOverlay.classList.contains("open") || drawerOverlay.style.display === "flex";
         if (isOpen) {
@@ -93,19 +131,16 @@ export class LayoutView {
         }
       };
 
-      // 2. Botón de cierre "X"
       if (btnClose) {
         btnClose.onclick = (e) => closeDrawer(e);
       }
 
-      // 3. Clic fuera para cerrar
       drawerOverlay.onclick = (e) => {
         if (e.target === drawerOverlay) {
           closeDrawer(e);
         }
       };
 
-      // 4. Cierre automático al hacer clic en cualquier opción
       const drawerItems = drawerOverlay.querySelectorAll("a, button, .drawer-item");
       drawerItems.forEach(item => {
         item.onclick = (e) => {
@@ -118,7 +153,6 @@ export class LayoutView {
         };
       });
 
-      // 5. Interceptador de enlaces deshabilitados en escritorio y móvil
       document.querySelectorAll(".disabled-link").forEach(link => {
         link.onclick = (e) => {
           e.preventDefault();
@@ -126,19 +160,33 @@ export class LayoutView {
           alert("⚠️ Esta función no está disponible para tu rol de usuario.");
         };
       });
-    }, 50);
+
+      // Al hacer clic en un enlace, registrar el scroll exacto antes de la navegación
+      document.querySelectorAll(".nav-link").forEach(link => {
+        link.addEventListener("click", () => {
+          const sidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
+          if (sidebar) {
+            sessionStorage.setItem("iq_sidebar_scroll", sidebar.scrollTop);
+          }
+        });
+      });
+    }, 30);
   }
 
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
+    // Guardar posición antes de sobreescribir el HTML si el sidebar ya existe
+    const existingSidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
+    if (existingSidebar && existingSidebar.scrollTop > 0) {
+      sessionStorage.setItem("iq_sidebar_scroll", existingSidebar.scrollTop);
+    }
+
     const currentActiveKey = LayoutView._normalizeRouteKey(activeRoute);
-    const currentLang = I18n.getLocale();
+    const currentLang = I18n.getLocale ? I18n.getLocale() : "es";
     const currentUserEmail = localStorage.getItem("iq_user_email") || "";
 
-    // Cargar datos dinámicos de equipos y temporadas activas
-    const currentActiveTeamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
-    const currentActiveSeason = localStorage.getItem("iq_active_season") || "2026";
+    const currentActiveTeamId = DataStore.getActiveTeamId() || localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    const currentActiveSeason = DataStore.getActiveSeason() || localStorage.getItem("iq_active_season") || "2026";
 
-    // FILTRADO ESTRICTO DE EQUIPOS ASIGNADOS SEGÚN USUARIO Y ROL
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
     const userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
     const myAssignedTeamIds = userTeamAssignments[currentUserEmail] || [];
@@ -157,12 +205,10 @@ export class LayoutView {
       { id: "s-2", name: "2025", isActive: false }
     ];
 
-    // Activar los eventos del menú flotante e interceptadores
     LayoutView.bindMobileDrawerEvents();
 
     const isJugadorRole = userRole === "JUGADOR" || userRole === "INVITADO";
 
-    // CLAVES PLANAS TRADUCIBLES DIRECTAS DE SUPABASE
     const navGroups = [
       {
         titleKey: "general",
@@ -183,20 +229,20 @@ export class LayoutView {
       },
       {
         titleKey: "advanced_stats",
-        defaultTitle: "ANÁLISIS",
+        defaultTitle: "ESTADÍSTICA AVANZADA",
         items: [
-          { key: "advanced", labelKey: "advanced_stats", fallback: "Análisis Avanzado", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
+          { key: "advanced", labelKey: "advanced_stats", fallback: "Estadística avanzada", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
           { key: "heatmap", labelKey: "heatmap_analysis", fallback: "Mapa de Calor", route: "heatmap", svg: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>' },
           { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", disabled: isJugadorRole, svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
           { key: "reports", labelKey: "reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
-          { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+          { key: "ask", labelKey: "ask_ai", fallback: "Pregúntale a tus datos", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
         ]
       },
       {
         titleKey: "profile",
-        defaultTitle: "CUENTA",
+        defaultTitle: "MI PERFIL",
         items: [
-          { key: "profile", labelKey: "profile", fallback: "Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
+          { key: "profile", labelKey: "profile", fallback: "Mi Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
           { key: "settings", labelKey: "settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
         ]
       }
@@ -242,15 +288,14 @@ export class LayoutView {
 
     return `
       <div class="app-layout">
-        
-        <!-- HEADER MÓVIL (< 768px) CON SELECTORES E ICONO DE IDIOMA INTEGRADOS -->
+
+        <!-- HEADER MÓVIL (< 768px) -->
         <header class="mobile-header mobile-only">
           <div class="mobile-brand">
             <div class="logo-box" style="width: 28px; height: 28px; font-size: 12px;">IQ</div>
-            <span class="brand-title">${APP_CONFIG.appName}</span>
+            <span class="brand-title">${APP_CONFIG.appName || "IQ Basket"}</span>
           </div>
 
-          <!-- SELECTORES DINÁMICOS MÓVILES E ICONO IDIOMA -->
           <div class="mobile-selectors-row">
             <select id="mobile-select-team" class="mobile-select">
               ${teamOptionsMarkup}
@@ -268,17 +313,14 @@ export class LayoutView {
         </header>
 
         <!-- BARRA LATERAL (DESKTOP >= 768px) -->
-        <aside class="app-sidebar desktop-only">
-          
+        <aside id="app-sidebar" class="app-sidebar desktop-only">
           <div class="sidebar-inner">
-            
-            <!-- Header Marca Unificada -->
+
             <div class="sidebar-header">
               <div class="logo-box">IQ</div>
-              <span class="logo-title">${APP_CONFIG.appName}</span>
+              <span class="logo-title">${APP_CONFIG.appName || "IQ Basket"}</span>
             </div>
 
-            <!-- Selectores Dinámicos de Equipo y Temporada -->
             <div class="sidebar-selectors">
               <div class="selector-group">
                 <label>${LayoutView.t("team", "EQUIPO").toUpperCase()}</label>
@@ -294,12 +336,10 @@ export class LayoutView {
               </div>
             </div>
 
-            <!-- Navegación Menú Agrupado -->
             <nav class="sidebar-nav">
               ${desktopNavMarkup}
             </nav>
 
-            <!-- SELECTOR DE IDIOMA Y CERRAR SESIÓN -->
             <div class="sidebar-footer">
               <div class="lang-row">
                 <span class="lang-label">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
@@ -397,7 +437,7 @@ export class LayoutView {
 
       </div>
 
-      <!-- ESTILOS Y RESPONSIVE -->
+      <!-- ESTILOS CON ALTO CONTRASTE TIPOGRÁFICO Y PROTECCIÓN DE COLORES -->
       <style>
         *, *::before, *::after {
           box-sizing: border-box;
@@ -428,18 +468,18 @@ export class LayoutView {
           filter: grayscale(0.8);
         }
 
-        /* Sidebar Escritorio */
+        /* SIDEBAR DESKTOP CON FONDO OSCURO */
         .app-sidebar {
           width: 260px;
           height: 100vh;
           position: fixed;
           top: 0;
           left: 0;
-          background-color: var(--color-secondary, #0f172a);
-          color: #ffffff;
-          padding: 16px;
+          background-color: #0b1329 !important;
+          color: #ffffff !important;
           box-sizing: border-box;
           z-index: 50;
+          border-right: 1px solid #1e293b;
         }
 
         .sidebar-inner {
@@ -448,20 +488,33 @@ export class LayoutView {
           gap: 16px;
           height: 100%;
           overflow-y: auto;
-          padding-right: 4px;
+          overflow-x: hidden;
+          padding: 20px 14px;
+          box-sizing: border-box;
+        }
+
+        .sidebar-inner::-webkit-scrollbar {
+          width: 5px;
+        }
+        .sidebar-inner::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .sidebar-inner::-webkit-scrollbar-thumb {
+          background: #334155;
+          border-radius: 4px;
         }
 
         .sidebar-header {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 0 8px;
+          padding: 0 4px;
         }
 
         .logo-box {
           width: 32px;
           height: 32px;
-          background-color: var(--color-primary, #ea580c);
+          background-color: var(--color-primary, #f97316);
           border-radius: 8px;
           display: flex;
           align-items: center;
@@ -476,34 +529,37 @@ export class LayoutView {
           font-weight: 900;
           font-size: 18px;
           letter-spacing: -0.02em;
-          color: #ffffff;
+          color: #ffffff !important;
         }
 
         .sidebar-selectors {
           display: flex;
           flex-direction: column;
           gap: 10px;
-          padding: 0 8px;
+          padding: 0 4px;
         }
 
+        /* ETIQUETAS: BLANCO NÍTIDO */
         .selector-group label {
           font-size: 10px;
           font-weight: 800;
           text-transform: uppercase;
-          color: var(--color-text-muted, #64748b);
+          color: #f1f5f9 !important;
           display: block;
           margin-bottom: 4px;
+          letter-spacing: 0.05em;
         }
 
         .sidebar-select {
           width: 100%;
-          background-color: #1e293b;
-          border: 1px solid #334155;
-          color: #ffffff;
+          background-color: #1e293b !important;
+          border: 1px solid #475569;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
           border-radius: 8px;
           padding: 8px 10px;
           font-size: 12px;
-          font-weight: 500;
+          font-weight: 600;
           outline: none;
           box-sizing: border-box;
           cursor: pointer;
@@ -512,45 +568,76 @@ export class LayoutView {
         .sidebar-nav {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 18px;
         }
 
         .nav-group {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 3px;
         }
 
+        /* TÍTULOS DE CATEGORÍA: AZUL CELESTE LUMINOSO */
         .nav-group-title {
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 800;
-          color: var(--color-text-muted, #64748b);
-          letter-spacing: 0.05em;
+          color: #60a5fa !important;
+          letter-spacing: 0.08em;
           padding-left: 10px;
-          margin-bottom: 2px;
+          margin-bottom: 4px;
+        }
+
+        /* ENLACES Y TEXTOS INACTIVOS: BLANCO HUESO (#f8fafc) CON MÁXIMO CONTRASTE */
+        .nav-link, 
+        .app-sidebar a, 
+        .app-sidebar a span,
+        .app-sidebar .nav-label {
+          color: #f8fafc !important;
+          -webkit-text-fill-color: #f8fafc !important;
         }
 
         .nav-link {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 10px 12px;
+          padding: 9px 12px;
           border-radius: 8px;
           font-size: 13px;
-          font-weight: 600;
+          font-weight: 700;
           text-decoration: none;
-          transition: all 0.2s ease;
-          color: #94a3b8;
-          min-height: 44px;
+          transition: all 0.15s ease;
+          min-height: 40px;
+        }
+
+        .nav-link .nav-svg {
+          stroke: #f8fafc !important;
+          color: #f8fafc !important;
         }
 
         .nav-link:hover {
-          background-color: #1e293b;
-          color: #ffffff;
+          background-color: rgba(255, 255, 255, 0.14) !important;
+          color: #ffffff !important;
         }
 
-        .nav-link.active {
-          background-color: var(--color-primary, #ea580c) !important;
+        .nav-link:hover .nav-svg,
+        .nav-link:hover span {
+          stroke: #ffffff !important;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+
+        /* ENLACE ACTIVO: FONDO NARANJA CON TEXTO BLANCO */
+        .nav-link.active,
+        .app-sidebar .nav-link.active span,
+        .app-sidebar .nav-link.active .nav-label {
+          background-color: var(--color-primary, #f97316) !important;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
+        }
+
+        .nav-link.active .nav-svg {
+          stroke: #ffffff !important;
           color: #ffffff !important;
         }
 
@@ -562,7 +649,7 @@ export class LayoutView {
 
         .sidebar-footer {
           border-top: 1px solid #1e293b;
-          padding-top: 12px;
+          padding-top: 14px;
           margin-top: auto;
           display: flex;
           flex-direction: column;
@@ -573,19 +660,20 @@ export class LayoutView {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 8px;
+          padding: 0 4px;
         }
 
         .lang-label {
           font-size: 11px;
           font-weight: 800;
-          color: #94a3b8;
+          color: #f1f5f9 !important;
         }
 
         .lang-select {
-          background-color: #1e293b;
-          border: 1px solid #334155;
-          color: #ffffff;
+          background-color: #1e293b !important;
+          border: 1px solid #475569;
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
           border-radius: 6px;
           padding: 4px 8px;
           font-size: 11px;
@@ -601,16 +689,29 @@ export class LayoutView {
           gap: 10px;
           padding: 8px 10px;
           font-size: 13px;
-          font-weight: 600;
-          color: #f87171;
-          background: none;
-          border: none;
+          font-weight: 700;
+          color: #fca5a5 !important;
+          background: transparent;
+          border: 1px solid #334155;
           cursor: pointer;
           border-radius: 8px;
-          min-height: 44px;
+          min-height: 40px;
+          transition: background 0.15s ease;
         }
 
-        /* Área Principal Escritorio */
+        .btn-logout .nav-svg {
+          stroke: #fca5a5 !important;
+        }
+
+        .btn-logout:hover {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ffffff !important;
+        }
+
+        .btn-logout:hover .nav-svg {
+          stroke: #ffffff !important;
+        }
+
         .app-main {
           flex: 1;
           margin-left: 260px;
@@ -629,7 +730,6 @@ export class LayoutView {
           box-sizing: border-box;
         }
 
-        /* RESPONSIVE MÓVIL (< 768px) */
         @media (max-width: 767px) {
           .desktop-only { display: none !important; }
           .mobile-only { display: flex !important; }
@@ -715,17 +815,16 @@ export class LayoutView {
             margin-left: 0;
             width: 100%;
             padding: 16px 12px;
-            padding-bottom: calc(64px + env(safe-area-inset-bottom));
+            padding-bottom: calc(64px + env(safe-area-inset-bottom, 16px));
           }
 
-          /* Bottom Bar Fija Optimizada */
           .mobile-bottom-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            height: calc(58px + env(safe-area-inset-bottom));
-            padding-bottom: env(safe-area-inset-bottom);
+            height: calc(58px + env(safe-area-inset-bottom, 0px));
+            padding-bottom: env(safe-area-inset-bottom, 0px);
             background-color: var(--color-secondary, #0f172a);
             border-top: 1px solid #1e293b;
             z-index: 1000;
@@ -740,7 +839,7 @@ export class LayoutView {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: #94a3b8;
+            color: #cbd5e1;
             text-decoration: none;
             font-size: 10px;
             font-weight: 700;
@@ -757,7 +856,7 @@ export class LayoutView {
           }
 
           .mobile-nav-item.active {
-            color: var(--color-primary, #ea580c);
+            color: var(--color-primary, #f97316);
           }
 
           .mobile-svg {
@@ -774,7 +873,6 @@ export class LayoutView {
             display: block;
           }
 
-          /* Bottom Sheet "Más" */
           .mobile-drawer-overlay {
             position: fixed;
             top: 0;
@@ -856,36 +954,43 @@ export class LayoutView {
 }
 
 // SUSCRIPCIÓN EN TIEMPO REAL
-I18n.subscribe(() => {
-  const links = document.querySelectorAll(".nav-link .nav-label");
-  if (links.length > 0) {
-    const keysMap = {
-      dashboard: "dashboard",
-      team: "team",
-      players: "players",
-      games: "games",
-      lineups: "lineups",
-      advanced: "advanced_stats",
-      heatmap: "heatmap_analysis",
-      comparator: "comparator",
-      reports: "reports",
-      ask: "ask_ai",
-      profile: "profile",
-      settings: "settings"
-    };
+if (I18n && typeof I18n.subscribe === "function") {
+  I18n.subscribe(() => {
+    const links = document.querySelectorAll(".nav-link .nav-label");
+    if (links.length > 0) {
+      const keysMap = {
+        dashboard: "dashboard",
+        team: "team",
+        players: "players",
+        games: "games",
+        lineups: "lineups",
+        advanced: "advanced_stats",
+        heatmap: "heatmap_analysis",
+        comparator: "comparator",
+        reports: "reports",
+        ask: "ask_ai",
+        profile: "profile",
+        settings: "settings"
+      };
 
-    document.querySelectorAll(".nav-link, .mobile-nav-item, .drawer-item").forEach(item => {
-      const routeKey = item.getAttribute("data-route-key") || item.getAttribute("href")?.replace("#/", "");
-      const normKey = LayoutView._normalizeRouteKey(routeKey);
-      const dictKey = keysMap[normKey];
-      if (dictKey) {
-        const labelEl = item.querySelector(".nav-label, .mobile-label, span:last-child");
-        if (labelEl) {
-          labelEl.textContent = LayoutView.t(dictKey, labelEl.textContent);
+      document.querySelectorAll(".nav-link, .mobile-nav-item, .drawer-item").forEach(item => {
+        const routeKey = item.getAttribute("data-route-key") || item.getAttribute("href")?.replace("#/", "");
+        const normKey = LayoutView._normalizeRouteKey(routeKey);
+        const dictKey = keysMap[normKey];
+        if (dictKey) {
+          const labelEl = item.querySelector(".nav-label, .mobile-label, span:last-child");
+          if (labelEl) {
+            labelEl.textContent = LayoutView.t(dictKey, labelEl.textContent);
+          }
         }
-      }
-    });
-  }
+      });
+    }
+  });
+}
+
+// Escuchar cambios de ruta globales para mantener fija la posición del scroll del sidebar
+window.addEventListener("hashchange", () => {
+  LayoutView._restoreSidebarScroll();
 });
 
 export default LayoutView;
