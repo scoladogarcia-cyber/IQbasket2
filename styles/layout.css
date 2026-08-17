@@ -20,7 +20,7 @@
 .main-content {
   flex: 1;
   padding: var(--space-md, 16px);
-  padding-bottom: calc(var(--bottom-bar-height-mobile, 60px) + var(--space-lg, 24px) + env(safe-area-inset-bottom, 16px));
+  padding-bottom: calc(var(--bottom-bar-height-mobile, 60px) + var(--space-xl, 32px) + env(safe-area-inset-bottom, 16px));
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
@@ -68,7 +68,7 @@
    ========================================================================= */
 .app-sidebar {
   width: var(--sidebar-width-desktop, 260px);
-  background-color: #0b1329 !important; /* Azul noche oscuro */
+  background-color: #0b1329 !important;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -114,30 +114,28 @@
   gap: var(--space-2xs, 4px);
 }
 
-/* TÍTULOS DE GRUPO: AZUL CELESTE LUMINOSO */
 .nav-group-title {
   display: block;
   font-size: var(--font-size-2xs, 10px);
   font-weight: var(--font-weight-extrabold, 800);
   letter-spacing: 0.08em;
-  color: #93c5fd !important; /* Celeste de alto contraste */
+  color: #93c5fd !important;
   margin-bottom: var(--space-2xs, 4px);
   padding-left: var(--space-xs, 8px);
 }
 
-/* ENLACES INACTIVOS: BLANCO HUESO (#e2e8f0) */
 .nav-item, .nav-link {
   display: flex;
   align-items: center;
   gap: var(--space-sm, 12px);
   padding: var(--space-xs, 8px) var(--space-sm, 12px);
-  color: #e2e8f0 !important; /* Blanco hueso de alto contraste */
+  color: #e2e8f0 !important;
   text-decoration: none;
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-semibold, 700);
   border-radius: var(--radius-md, 8px);
   min-height: 40px;
-  transition: background-color var(--transition-fast, 0.15s ease), color var(--transition-fast, 0.15s ease);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-item .nav-svg, .nav-link .nav-svg {
@@ -155,7 +153,6 @@
   color: #ffffff !important;
 }
 
-/* ENLACE ACTIVO: NARANJA BRILLANTE */
 .nav-item.active, .nav-link.active {
   background-color: var(--color-primary, #f97316) !important;
   color: #ffffff !important;
@@ -206,7 +203,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  transition: color var(--transition-fast, 0.15s ease);
+  transition: color 0.15s ease;
 }
 
 .mobile-nav-item.active {
@@ -221,46 +218,25 @@
 }
 
 /* =========================================================================
-   5. REJILLAS ESTRUCTURALES MAESTRAS
+   5. REGLAS ESPECÍFICAS DE CONTRASTE DEL DASHBOARD
    ========================================================================= */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-md, 16px);
-  margin-top: var(--space-md, 16px);
+.purple-leaders-banner,
+.fiba-card-purple {
+  background: #2e1065 !important;
+  color: #ffffff !important;
 }
 
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: var(--space-sm, 12px);
-  margin-bottom: var(--space-md, 16px);
-}
-
-.analytics-split-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-md, 16px);
-}
-
-.live-game-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-md, 16px);
+.purple-card-title,
+.fiba-title,
+.purple-card-title span,
+.fiba-title span {
+  color: #ffffff !important;
+  font-weight: 900 !important;
 }
 
 /* =========================================================================
    6. MEDIA QUERIES RESPONSIVE
    ========================================================================= */
-@media (min-width: 768px) {
-  .analytics-split-layout {
-    grid-template-columns: 1.1fr 0.9fr;
-  }
-  .live-game-layout {
-    grid-template-columns: 1fr 340px;
-  }
-}
-
 @media (min-width: 1024px) {
   .mobile-header,
   .mobile-bottom-bar,
@@ -277,13 +253,13 @@
     padding: var(--space-xl, 32px);
     padding-bottom: var(--space-xl, 32px);
   }
-
-  .dashboard-grid {
-    grid-template-columns: repeat(12, 1fr);
-    gap: var(--space-lg, 24px);
+}
+/* Margen inferior de seguridad para que la barra móvil no solape botones de acción */
+@media (max-width: 1023px) {
+  .app-main-content,
+  .main-content,
+  #dashboard-content-area,
+  .hud-config-wrapper {
+    padding-bottom: calc(85px + env(safe-area-inset-bottom, 16px)) !important;
   }
-
-  .dashboard-col-8 { grid-column: span 8; }
-  .dashboard-col-4 { grid-column: span 4; }
-  .dashboard-col-12 { grid-column: span 12; }
 }

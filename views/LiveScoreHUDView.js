@@ -139,7 +139,7 @@ export class LiveScoreHUDView {
     `).join("");
 
     this.container.innerHTML = `
-      <div style="max-width: 1000px; margin: 0 auto; font-family: system-ui, sans-serif; padding-bottom: 80px;">
+      <div style="max-width: 1000px; margin: 0 auto; font-family: system-ui, sans-serif; padding-bottom: 90px; box-sizing: border-box;">
         <div style="margin-bottom: 20px;">
           <h1 style="font-size: 24px; font-weight: 900; color: #0f172a; margin: 0;">🏀 Configuración Pre-Partido & Convocatoria</h1>
           <span style="font-size: 13px; color: #64748b;">Ajusta los datos del encuentro y define el quinteto inicial.</span>
@@ -186,7 +186,7 @@ export class LiveScoreHUDView {
           </div>
         </div>
 
-        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 24px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
             <h3 style="margin: 0; font-size: 14px; font-weight: 900; color: #0f172a; text-transform: uppercase;">
               📋 PLANTILLA Y CONVOCATORIA (${convokedCount} convocados · ${startersCount}/5 titulares)
@@ -209,11 +209,13 @@ export class LiveScoreHUDView {
           </table>
         </div>
 
-        <div style="position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-top: 1px solid #e2e8f0; padding: 14px 20px; display: flex; justify-content: center; z-index: 100; box-shadow: 0 -4px 12px rgba(0,0,0,0.05);">
-          <button type="button" id="btn-start-scoring" style="background: #f97316; color: #ffffff; border: none; padding: 14px 40px; border-radius: 10px; font-size: 15px; font-weight: 900; cursor: pointer; min-height: 48px; width: 100%; max-width: 400px; box-shadow: 0 4px 12px rgba(249,115,22,0.35);">
+        <!-- BOTÓN DE INICIO VISIBLE EN MÓVIL Y DESKTOP SIN TAPARSE -->
+        <div style="display: flex; justify-content: center; width: 100%; margin-top: 10px; margin-bottom: 40px;">
+          <button type="button" id="btn-start-scoring" style="background: #f97316; color: #ffffff; border: none; padding: 14px 28px; border-radius: 10px; font-size: 15px; font-weight: 900; cursor: pointer; min-height: 52px; width: 100%; max-width: 480px; box-shadow: 0 4px 14px rgba(249,115,22,0.4); text-align: center;">
             ⚡ COMENZAR ANOTACIÓN
           </button>
         </div>
+
       </div>
     `;
 
@@ -895,6 +897,8 @@ export class LiveScoreHUDView {
         const elapsedSec = Math.max(0, maxPeriodSec - this.timeRemaining);
         const minute = Math.floor(elapsedSec / 60) + 1;
 
+        const isMade = String(actionKey).endsWith("_made") || String(actionKey).includes("made");
+
         const ev = {
           id: `ev-${Date.now()}`,
           isOpponent: false,
@@ -911,6 +915,7 @@ export class LiveScoreHUDView {
           playerId,
           player_id: playerId,
           playerName,
+          made: isMade,
           onCourt: [...this.onCourtPlayerIds]
         };
 

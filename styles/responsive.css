@@ -1,12 +1,80 @@
 /**
  * @fileoverview Reglas Responsive y Adaptaciones Multi-dispositivo: responsive.css
- * @description Centraliza los breakpoints oficiales para Móvil, Tablet (Portrait/Landscape),
- * Desktop y Pantallas Grandes. Gestiona optimizaciones táctiles para iOS/Android,
- * áreas seguras (safe-area-inset) y reglas de impresión para reportes analíticos.
+ * @description Breakpoints oficiales para Móvil, Tablet, Desktop y Pantallas Grandes.
+ * Optimizado para KPI cards, shot charts y tooltips interactivos.
  */
 
 /* =========================================================================
-   1. BREAKPOINTS GENERALES Y REJILLAS KPI
+   1. TOOLTIPS FLOTANTES GLOBALES
+   ========================================================================= */
+.dash-tooltip-wrapper,
+.has-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tooltip-trigger,
+.info-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1px solid #cbd5e1;
+  color: #94a3b8;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  background: #ffffff;
+  margin-left: 4px;
+}
+
+.dash-tooltip-popup,
+.tooltip-box {
+  display: none;
+  position: absolute;
+  bottom: 135%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a !important;
+  color: #ffffff !important;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  width: max-content;
+  max-width: 240px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  z-index: 99999 !important;
+  pointer-events: none;
+  text-align: center;
+}
+
+.dash-tooltip-popup::after,
+.tooltip-box::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+}
+
+.dash-tooltip-wrapper:hover .dash-tooltip-popup,
+.dash-tooltip-wrapper:focus-within .dash-tooltip-popup,
+.has-tooltip:hover .tooltip-box,
+.has-tooltip:focus-within .tooltip-box {
+  display: block !important;
+}
+
+/* =========================================================================
+   2. BREAKPOINTS RESPONSIVE
    ========================================================================= */
 
 /* Móvil Pequeño y Estándar: <= 599px */
@@ -19,22 +87,38 @@
   }
 
   .grid-kpi,
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-xs);
+  .kpi-grid,
+  .kpi-cards-grid,
+  .kpi-responsive-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
 
-  .kpi-val {
-    font-size: var(--font-size-lg);
+  .kpi-box-card,
+  .kpi-card-custom {
+    padding: 10px 12px !important;
+    min-height: 75px !important;
   }
 
-  .kpi-lbl {
-    font-size: var(--font-size-2xs);
+  .kpi-main-number,
+  .kpi-val-big {
+    font-size: 20px !important;
+  }
+
+  .purple-leaders-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .clean-charts-grid,
+  .charts-container-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
 }
 
-/* Tablet Portrait y Móvil Grande: 600px - 767px */
+/* Tablet Portrait: 600px - 767px */
 @media (min-width: 600px) and (max-width: 767px) {
   .desktop-only {
     display: none !important;
@@ -44,10 +128,21 @@
   }
 
   .grid-kpi,
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-sm);
+  .kpi-grid,
+  .kpi-cards-grid,
+  .kpi-responsive-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .purple-leaders-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .clean-charts-grid,
+  .charts-container-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -62,18 +157,25 @@
   }
 
   .grid-kpi,
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-md);
+  .kpi-grid,
+  .kpi-cards-grid,
+  .kpi-responsive-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 12px !important;
   }
 
-  .app-sidebar {
-    width: var(--sidebar-width-tablet);
+  .purple-leaders-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  .clean-charts-grid,
+  .charts-container-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
-/* Desktop Estándar: 1024px - 1439px */
+/* Desktop Estándar: >= 1024px */
 @media (min-width: 1024px) {
   .mobile-only,
   .mobile-tablet-only {
@@ -84,27 +186,30 @@
   }
 
   .grid-kpi,
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-md);
+  .kpi-grid,
+  .kpi-cards-grid,
+  .kpi-responsive-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 14px !important;
   }
-}
 
-/* Desktop Panorámico / Pantallas Grandes: >= 1440px */
-@media (min-width: 1440px) {
-  .grid-kpi,
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: var(--space-lg);
+  .purple-leaders-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  .clean-charts-grid,
+  .charts-container-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
   }
 }
 
 /* =========================================================================
-   2. OPTIMIZACIONES TÁCTILES Y MENÚ MÓVIL (BOTTOM SHEET)
+   3. OPTIMIZACIONES TÁCTILES Y MENÚ MÓVIL
    ========================================================================= */
-
 #btn-mobile-more,
 #btn-mobile-more-toggle,
 #btn-close-sheet,
@@ -120,7 +225,6 @@
   -webkit-user-select: none;
 }
 
-/* Capa Oscura Traslúcida (Overlay / Backdrop) */
 .mobile-sheet-overlay,
 .mobile-drawer-overlay {
   position: fixed !important;
@@ -133,12 +237,11 @@
   background-color: rgba(15, 23, 42, 0.75) !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: var(--z-index-sheet-overlay) !important;
+  z-index: var(--z-index-sheet-overlay, 1100) !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
-  transition: opacity var(--transition-base), visibility var(--transition-base) !important;
-  will-change: opacity, visibility;
+  transition: opacity var(--transition-base, 0.2s), visibility var(--transition-base, 0.2s) !important;
 }
 
 .mobile-sheet-overlay.open,
@@ -150,7 +253,6 @@
   pointer-events: auto !important;
 }
 
-/* Menú Emergente Inferior (Bottom Sheet) */
 .mobile-more-sheet,
 .mobile-drawer-content {
   position: fixed !important;
@@ -158,20 +260,18 @@
   left: 0 !important;
   right: 0 !important;
   width: 100% !important;
-  background-color: var(--color-surface) !important;
-  border-top-left-radius: var(--radius-2xl);
-  border-top-right-radius: var(--radius-2xl);
-  padding: var(--space-md);
-  padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 16px));
+  background-color: var(--color-surface, #ffffff) !important;
+  border-top-left-radius: var(--radius-2xl, 16px);
+  border-top-right-radius: var(--radius-2xl, 16px);
+  padding: var(--space-md, 16px);
+  padding-bottom: calc(var(--space-lg, 24px) + env(safe-area-inset-bottom, 16px));
   max-height: 85vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  box-shadow: var(--shadow-sheet);
-  z-index: var(--z-index-sheet) !important;
+  z-index: var(--z-index-sheet, 1200) !important;
   box-sizing: border-box;
   transform: translateY(100%) !important;
-  transition: transform var(--transition-smooth) !important;
-  will-change: transform;
+  transition: transform var(--transition-smooth, 0.3s cubic-bezier(0.16, 1, 0.3, 1)) !important;
 }
 
 .mobile-more-sheet.is-open,
@@ -182,80 +282,27 @@
   transform: translateY(0) !important;
 }
 
-/* Cabecera del Panel Móvil */
-.mobile-sheet-header,
-.sheet-header,
-.drawer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
-  padding-bottom: var(--space-xs);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.mobile-sheet-header h3,
-.sheet-title,
-.drawer-title {
-  margin: 0;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-extrabold);
-  color: var(--color-text-main);
-}
-
-.mobile-sheet-close-btn,
-.sheet-close-btn,
-.drawer-close {
-  background: var(--color-surface-hover);
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-md);
-  color: var(--color-text-main);
-  cursor: pointer;
-  font-weight: var(--font-weight-extrabold);
-}
-
 /* =========================================================================
-   3. ESTILOS DE IMPRESIÓN Y EXPORTACIÓN PDF
+   4. ESTILOS DE IMPRESIÓN
    ========================================================================= */
 @media print {
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
-
   .app-sidebar,
   .mobile-header,
   .mobile-bottom-bar,
   .mobile-more-sheet,
   .mobile-sheet-overlay,
   .btn-primary,
-  .btn-secondary,
-  .btn-outline,
   .no-print {
     display: none !important;
   }
-
   .app-main-content,
   .main-content {
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
-  }
-
-  .card {
-    box-shadow: none !important;
-    border: 1px solid #cccccc !important;
-    break-inside: avoid;
-  }
-
-  .data-table th {
-    background-color: #f1f5f9 !important;
-    color: #000000 !important;
   }
 }
