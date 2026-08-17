@@ -265,7 +265,6 @@ export class SeasonDashboardView {
     const svgWidth = 600;
     const svgHeight = 170;
 
-    // 1. Gráfica NET RATING
     const minNet = -60;
     const maxNet = 60;
     const netPoints = gameMetrics.map((m, i) => {
@@ -296,7 +295,6 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 2. Gráfica PUNTOS A FAVOR VS EN CONTRA
     const maxPtsVal = Math.max(...gameMetrics.map(m => Math.max(m.ptsUs, m.ptsThem)), 100);
     const ptsBars = gameMetrics.map((m) => {
       const hUs = Math.min(100, Math.round((m.ptsUs / maxPtsVal) * 100));
@@ -327,7 +325,6 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 3. Gráfica EVOLUCIÓN eFG%
     const minEfg = 10;
     const maxEfg = 70;
     const efgPoints = gameMetrics.map((m, i) => {
@@ -359,7 +356,6 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 4. Gráfica PÉRDIDAS POR PARTIDO
     const maxTov = Math.max(...gameMetrics.map(m => m.tov), 30);
     const tovBars = gameMetrics.map((m) => {
       const hTov = Math.min(100, Math.round((m.tov / maxTov) * 100));
@@ -387,7 +383,6 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 5. Gráfica REBOTES OFENSIVOS VS DEFENSIVOS
     const maxReb = Math.max(...gameMetrics.map(m => Math.max(m.orbCount, m.drbCount)), 40);
     const reboundBars = gameMetrics.map((m) => {
       const hOrb = Math.min(100, Math.round((m.orbCount / maxReb) * 100));
@@ -416,7 +411,6 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 6. Gráfica RENDIMIENTO POR CUARTOS
     const quarters = [
       { name: "Q1", us: 16, them: 15 },
       { name: "Q2", us: 18, them: 17 },
@@ -564,6 +558,10 @@ export class SeasonDashboardView {
   }
 
   _renderTableRows(sortedGames = []) {
+    if (!sortedGames || sortedGames.length === 0) {
+      return `<tr><td colspan="8" style="padding: 20px; text-align: center; color: #64748b;">${this.t("no_games_recorded", "No hay partidos registrados para este equipo.")}</td></tr>`;
+    }
+
     return sortedGames.map((g) => {
       const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(g);
 
@@ -611,6 +609,10 @@ export class SeasonDashboardView {
   }
 
   _renderMobileCards(sortedGames = []) {
+    if (!sortedGames || sortedGames.length === 0) {
+      return `<div style="padding: 20px; text-align: center; color: #64748b; background: white; border-radius: 12px; border: 1px dashed #cbd5e1;">${this.t("no_games_recorded", "No hay partidos registrados para este equipo.")}</div>`;
+    }
+
     return sortedGames.map((g) => {
       const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(g);
       const isWin = hasPlayed && teamPts > oppPts;
@@ -828,14 +830,14 @@ export class SeasonDashboardView {
 
   async render(containerId = "dashboard-content-area", teamId = null) {
     try {
-      this.currentTeamId = teamId;
+      this.currentTeamId = teamId || DataStore.getActiveTeamId();
       const container = typeof containerId === "string" 
         ? (document.getElementById(containerId) || document.getElementById("main-content") || document.getElementById("app"))
         : containerId;
       if (!container) return;
 
-      const games = DataStore.getGames ? (DataStore.getGames() || []) : [];
-      const players = DataStore.getPlayers ? (DataStore.getPlayers() || []) : [];
+      const games = DataStore.getGames ? (DataStore.getGames(this.currentTeamId) || []) : [];
+      const players = DataStore.getPlayers ? (DataStore.getPlayers(this.currentTeamId) || []) : [];
       const playerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
 
       this.cachedGames = games;
@@ -843,7 +845,7 @@ export class SeasonDashboardView {
 
       const playersMap = new Map((players || []).map(p => [String(p.id), p]));
 
-      const activeTeamObj = DataStore.getTeamById ? (DataStore.getTeamById(teamId || DataStore.getActiveTeamId()) || {}) : {};
+      const activeTeamObj = DataStore.getTeamById ? (DataStore.getTeamById(this.currentTeamId) || {}) : {};
       const teamData = {
         teamName: activeTeamObj.name || "Equipo",
         category: activeTeamObj.category || "General",
@@ -853,7 +855,6 @@ export class SeasonDashboardView {
         playersMap: playersMap
       };
 
-      // Cálculo de KPIs usando StatsEngine
       let kpis = { wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0 };
       if (StatsEngine && typeof StatsEngine.calculateTeamDashboardKPIs === "function") {
         kpis = StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, playerStats) || kpis;
@@ -1062,249 +1063,13 @@ export class SeasonDashboardView {
           </section>
 
         </div>
-
-        <style>
-          .dashboard-root-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-lg, 24px);
-            max-width: 1400px;
-            margin: 0 auto;
-            padding-bottom: 40px;
-            width: 100%;
-          }
-
-          .cloud-status-banner {
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            color: #065f46;
-            padding: 10px 16px;
-            border-radius: var(--radius-md, 8px);
-            font-size: 12px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-          }
-
-          .status-indicator { display: flex; align-items: center; gap: 8px; }
-          .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; }
-          
-          .btn-sync {
-            background: #f97316;
-            color: white;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background-color 0.15s ease;
-          }
-
-          .btn-sync:hover {
-            background: #ea580c;
-          }
-
-          .btn-sync.disabled-sync-btn {
-            background: #94a3b8 !important;
-            color: #f1f5f9 !important;
-            opacity: 0.65 !important;
-            cursor: not-allowed !important;
-            border: 1px solid #cbd5e1 !important;
-          }
-
-          .team-title { font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
-          .team-meta { color: #64748b; font-size: 13px; margin: 6px 0 0 0; }
-
-          .kpi-responsive-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: var(--space-md, 16px);
-          }
-
-          .kpi-card-custom {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: var(--radius-lg, 12px);
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-          }
-
-          .kpi-title { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.05em; }
-          .kpi-val-big { font-size: 22px; font-weight: 900; color: #0f172a; }
-          .kpi-subtext { font-size: 11px; color: #94a3b8; font-weight: 500; }
-          
-          .text-win { color: #16a34a !important; }
-          .text-loss { color: #dc2626 !important; }
-
-          .level-2-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            gap: 12px;
-          }
-
-          .level-2-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0; }
-
-          .tab-pills-row { display: flex; gap: 8px; overflow-x: auto; }
-          
-          .tab-pill-btn {
-            background: #f1f5f9;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #64748b;
-            cursor: pointer;
-            min-height: 36px;
-            transition: background-color 0.15s ease, color 0.15s ease;
-          }
-
-          .tab-pill-btn.active {
-            background: #f97316;
-            color: white;
-          }
-
-          .kpi-subgrid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-          }
-
-          .dashboard-level-3 { display: flex; flex-direction: column; gap: 20px; }
-
-          .fiba-card-purple {
-            background: #2e1065;
-            border-radius: 14px;
-            padding: 20px;
-            color: white;
-          }
-
-          .fiba-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-          .fiba-title { margin: 0; font-size: 13px; font-weight: 800; color: #c084fc; letter-spacing: 0.05em; }
-
-          .fiba-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-          }
-
-          .fiba-leader-item {
-            background: rgba(255, 255, 255, 0.08);
-            padding: 14px;
-            border-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
-
-          .leader-badge { font-size: 10px; font-weight: 800; color: #a855f7; display: block; }
-          .leader-name { font-size: 14px; color: white; display: block; }
-          .leader-sub { font-size: 11px; color: #cbd5e1; display: block; }
-
-          .leader-score { text-align: right; }
-          .val-number { font-size: 20px; font-weight: 900; color: #facc15; display: block; }
-          .val-proj { font-size: 10px; font-weight: 700; color: #e9d5ff; display: block; }
-
-          .charts-container-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            width: 100%;
-          }
-
-          .chart-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-          }
-
-          .chart-card-header { margin: 0 0 16px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
-
-          .chart-legend { display: flex; justify-content: center; gap: 16px; margin-top: 12px; font-size: 11px; font-weight: 600; }
-          .legend-item { display: flex; align-items: center; gap: 4px; }
-          .legend-color { width: 10px; height: 10px; border-radius: 2px; }
-          .legend-blue { background: #1e3a8a; }
-          .legend-orange { background: #f97316; }
-
-          .games-block-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; }
-          .block-title { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; }
-
-          .games-table { width: 100%; border-collapse: collapse; text-align: left; }
-          .table-header-row { border-bottom: 2px solid #f1f5f9; font-size: 11px; font-weight: 800; color: #64748b; }
-          .table-header-row th { padding: 10px 12px; }
-
-          .sortable-th { cursor: pointer; user-select: none; }
-          .sortable-th:hover { color: #f97316; }
-
-          .game-row-item { border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-          .game-row-item td { padding: 14px 12px; }
-
-          .venue-badge { padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 11px; }
-          .badge-home { background: #dbeafe; color: #1e40af; }
-          .badge-away { background: #f1f5f9; color: #475569; }
-
-          .action-link { color: #f97316; text-decoration: none; font-weight: 700; }
-
-          .mobile-cards-grid { display: flex; flex-direction: column; gap: 12px; }
-          .mobile-game-card { padding: 14px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #e2e8f0; border-radius: 8px; }
-          .mobile-card-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-          .score-pill { padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 11px; }
-          .pill-win { background: #dcfce7; color: #15803d; }
-          .pill-loss { background: #fee2e2; color: #b91c1c; }
-          .pill-pending { background: #f1f5f9; color: #64748b; }
-          
-          .mobile-card-body { display: flex; justify-content: space-between; align-items: center; }
-          .opponent-name { font-size: 15px; color: #0f172a; }
-          .btn-primary-sm { background: #f97316; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; display: inline-block; }
-
-          .has-tooltip { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-          .info-badge { background: #e2e8f0; color: #475569; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
-          .tooltip-box { visibility: hidden; opacity: 0; width: 220px; background-color: #0f172a; color: #ffffff; text-align: center; border-radius: 6px; padding: 8px 10px; position: absolute; z-index: 100; bottom: 125%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500; transition: opacity 0.2s ease; pointer-events: none; line-height: 1.4; }
-          .has-tooltip:hover .tooltip-box { visibility: visible; opacity: 1; }
-
-          @media (max-width: 1023px) {
-            .charts-container-grid {
-              grid-template-columns: 1fr !important;
-            }
-            .desktop-only { display: none !important; }
-            .mobile-only { display: flex !important; }
-          }
-        </style>
       `;
 
       this._attachSortEventListeners(container);
       this._attachLevel2TabsListener(container, kpis);
-      this._attachSyncButtonListener(container, teamId);
+      this._attachSyncButtonListener(container, this.currentTeamId);
     } catch (err) {
       console.error("[SeasonDashboardView] Error renderizando dashboard:", err);
-      const container = typeof containerId === "string" 
-        ? (document.getElementById(containerId) || document.getElementById("main-content") || document.getElementById("app"))
-        : containerId;
-      if (container) {
-        container.innerHTML = `
-          <div style="padding: 24px; background: white; border-radius: 12px; border: 1px solid #fee2e2; color: #991b1b;">
-            <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 800;">⚠️ Error al cargar el Dashboard</h3>
-            <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">${err.message || "Error inesperado"}</p>
-            <button onclick="window.location.reload()" style="background: #1e3a8a; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer;">
-              🔄 Recargar Aplicación
-            </button>
-          </div>
-        `;
-      }
     }
   }
 }

@@ -21,6 +21,16 @@ class DataStoreService {
     this.isLoading = false;
   }
 
+  _generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
   // =========================================================================
   // 1. NORMALIZACIÓN DE ENTIDADES
   // =========================================================================
@@ -32,9 +42,9 @@ class DataStoreService {
       id: String(t.id),
       club_id: t.club_id || t.clubId || null,
       clubId: t.club_id || t.clubId || null,
-      name: t.name || "JMJ Manyanet Sant Andreu",
-      category: t.category || "Sénior Masculino",
-      competition: t.competition || "B1",
+      name: t.name || "Equipo",
+      category: t.category || "General",
+      competition: t.competition || "Liga",
       coach_name: t.coach_name || t.coachName || t.coach || "Por definir",
       coachName: t.coach_name || t.coachName || t.coach || "Por definir",
       coach: t.coach_name || t.coachName || t.coach || "Por definir",
@@ -46,7 +56,7 @@ class DataStoreService {
     if (!p) return p;
     const fName = p.first_name || p.firstName || "";
     const lName = p.last_name || p.lastName || "";
-    const jersey = p.jersey !== undefined && p.jersey !== null ? String(p.jersey) : (p.number || "?");
+    const jersey = p.jersey !== undefined && p.jersey !== null ? String(p.jersey) : (p.number ? String(p.number) : "?");
     const pos = p.primary_position || p.primaryPosition || p.position || "Alero";
 
     return {
@@ -93,7 +103,7 @@ class DataStoreService {
       opp_score: oppScore,
       date: g.date || "",
       venue: g.venue || "Local",
-      status: g.status || "completed"
+      status: g.status || "Finalizado"
     };
   }
 
@@ -114,7 +124,9 @@ class DataStoreService {
     const tov = Number(s.turnovers ?? s.tov ?? 0);
     const fouls = Number(s.fouls_committed ?? s.foulsCommitted ?? s.fouls ?? 0);
     const foulsDrawn = Number(s.fouls_drawn ?? s.foulsDrawn ?? s.fouls_received ?? 0);
-    
+    const plusMinus = Number(s.plus_minus ?? s.plusMinus ?? 0);
+    const isStarter = Boolean(s.starter || s.isStarter);
+
     const points = (s.points !== undefined && s.points !== null && Number(s.points) > 0)
       ? Number(s.points)
       : (fg2m * 2 + fg3m * 3 + ftm);
@@ -131,6 +143,7 @@ class DataStoreService {
       gameId: String(s.game_id || s.gameId),
       player_id: String(s.player_id || s.playerId),
       playerId: String(s.player_id || s.playerId),
+      starter: isStarter,
       minutes: Number(s.minutes ?? s.minutesPlayed ?? 0),
       minutesPlayed: Number(s.minutes ?? s.minutesPlayed ?? 0),
       points,
@@ -156,12 +169,14 @@ class DataStoreService {
       steals: stl,
       stl,
       blocks: blk,
+      blocks_made: blk,
       turnovers: tov,
       tov,
       fouls_committed: fouls,
       fouls,
       fouls_drawn: foulsDrawn,
       foulsDrawn,
+      plus_minus: plusMinus,
       evaluation: Number(s.evaluation ?? val),
       val: Number(s.evaluation ?? val),
       pir: Number(s.evaluation ?? val)
@@ -169,7 +184,7 @@ class DataStoreService {
   }
 
   // =========================================================================
-  // 2. INICIALIZACIÓN ROBUSTA Y AUTO-DETECCIÓN DE EQUIPO ACTIVO
+  // 2. INICIALIZACIÓN Y CARGA DE DATOS
   // =========================================================================
 
   async init(teamId = null, forceRefresh = false) {
@@ -178,6 +193,10 @@ class DataStoreService {
 
     this.isLoading = true;
 
+    if (teamId) {
+      this.setActiveTeamAndSeason(teamId, null);
+    }
+
     try {
       if (typeof localStorage !== "undefined") {
         const cTeams = localStorage.getItem("iq_cache_teams");
@@ -185,50 +204,38 @@ class DataStoreService {
         const cGames = localStorage.getItem("iq_cache_games");
         const cStats = localStorage.getItem("iq_cache_stats");
         const cPeriods = localStorage.getItem("iq_cache_periods");
+        const cEvents = localStorage.getItem("iq_cache_events");
 
         if (cTeams) this.teams = JSON.parse(cTeams).map(t => this._normalizeTeam(t));
         if (cPlayers) this.players = JSON.parse(cPlayers).map(p => this._normalizePlayer(p));
         if (cGames) this.games = JSON.parse(cGames).map(g => this._normalizeGame(g));
         if (cStats) this.playerGameStats = JSON.parse(cStats).map(s => this._normalizeStat(s));
         if (cPeriods) this.gamePeriodScores = JSON.parse(cPeriods);
+        if (cEvents) this.gameEvents = JSON.parse(cEvents);
       }
 
       if (supabase) {
-        const [cRes, tRes, pRes, gRes, sRes, statsRes, psRes] = await Promise.all([
+        const [cRes, tRes, pRes, gRes, sRes, statsRes, psRes, evRes] = await Promise.allSettled([
           supabase.from("clubs").select("*"),
           supabase.from("teams").select("*"),
           supabase.from("players").select("*"),
           supabase.from("games").select("*").order("date", { ascending: false }),
           supabase.from("seasons").select("*").order("created_at", { ascending: false }),
           supabase.from("player_game_stats").select("*"),
-          supabase.from("game_period_scores").select("*")
+          supabase.from("game_period_scores").select("*"),
+          supabase.from("game_events").select("*")
         ]);
 
-        if (cRes.data) this.clubs = cRes.data;
-        if (tRes.data && tRes.data.length > 0) this.teams = tRes.data.map(t => this._normalizeTeam(t));
-        if (pRes.data && pRes.data.length > 0) this.players = pRes.data.map(p => this._normalizePlayer(p));
-        if (gRes.data && gRes.data.length > 0) this.games = gRes.data.map(g => this._normalizeGame(g));
-        if (sRes.data) this.seasons = sRes.data;
-        if (statsRes.data && statsRes.data.length > 0) this.playerGameStats = statsRes.data.map(s => this._normalizeStat(s));
-        if (psRes.data && psRes.data.length > 0) this.gamePeriodScores = psRes.data;
+        if (cRes.status === "fulfilled" && cRes.value.data) this.clubs = cRes.value.data;
+        if (tRes.status === "fulfilled" && tRes.value.data?.length > 0) this.teams = tRes.value.data.map(t => this._normalizeTeam(t));
+        if (pRes.status === "fulfilled" && pRes.value.data?.length > 0) this.players = pRes.value.data.map(p => this._normalizePlayer(p));
+        if (gRes.status === "fulfilled" && gRes.value.data?.length > 0) this.games = gRes.value.data.map(g => this._normalizeGame(g));
+        if (sRes.status === "fulfilled" && sRes.value.data) this.seasons = sRes.value.data;
+        if (statsRes.status === "fulfilled" && statsRes.value.data?.length > 0) this.playerGameStats = statsRes.value.data.map(s => this._normalizeStat(s));
+        if (psRes.status === "fulfilled" && psRes.value.data?.length > 0) this.gamePeriodScores = psRes.value.data;
+        if (evRes.status === "fulfilled" && evRes.value.data?.length > 0) this.gameEvents = evRes.value.data;
 
-        // Auto-detección: si el ID activo no tiene partidos ni jugadores, fijar el que sí los tiene
-        const currentActive = this.getActiveTeamId();
-        const hasData = this.games.some(g => String(g.team_id).toLowerCase() === String(currentActive).toLowerCase());
-        
-        if (!hasData && this.games.length > 0 && this.games[0].team_id) {
-          this.setActiveTeamAndSeason(this.games[0].team_id, this.getActiveSeason());
-        } else if (!hasData && this.players.length > 0 && this.players[0].team_id) {
-          this.setActiveTeamAndSeason(this.players[0].team_id, this.getActiveSeason());
-        }
-
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("iq_cache_teams", JSON.stringify(this.teams));
-          localStorage.setItem("iq_cache_players", JSON.stringify(this.players));
-          localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
-          localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
-          localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
-        }
+        this._persistToStorage();
       }
     } catch (err) {
       console.warn("[DataStore] Inicialización local:", err.message);
@@ -236,6 +243,20 @@ class DataStoreService {
       this.isLoaded = true;
       this.isLoading = false;
       this._notifyListeners();
+    }
+  }
+
+  _persistToStorage() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem("iq_cache_teams", JSON.stringify(this.teams));
+      localStorage.setItem("iq_cache_players", JSON.stringify(this.players));
+      localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
+      localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
+      localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
+      localStorage.setItem("iq_cache_events", JSON.stringify(this.gameEvents));
+    } catch (e) {
+      console.warn("[DataStore] Error persistiendo en LocalStorage:", e.message);
     }
   }
 
@@ -249,13 +270,14 @@ class DataStoreService {
       if (stored) return stored;
     }
     if (this.teams.length > 0) return String(this.teams[0].id);
-    if (this.games.length > 0 && this.games[0].team_id) return String(this.games[0].team_id);
-    if (this.players.length > 0 && this.players[0].team_id) return String(this.players[0].team_id);
-    return "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    return "8a75c9a8-f933-42fa-8bb4-22b3cf2db845";
   }
 
   getActiveSeason() {
-    return localStorage.getItem("iq_active_season") || "2026";
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("iq_active_season") || "2026";
+    }
+    return "2026";
   }
 
   getActiveSeasonId() {
@@ -264,13 +286,15 @@ class DataStoreService {
       const sName = String(s.name || "").trim().toLowerCase();
       return sName === activeSeasonName || activeSeasonName.includes(sName);
     });
-    return matchedSeason ? matchedSeason.id : "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d";
+    if (matchedSeason) return matchedSeason.id;
+    if (this.seasons && this.seasons.length > 0) return this.seasons[0].id;
+    return "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d";
   }
 
   setActiveTeamAndSeason(teamId, season) {
     if (typeof localStorage !== "undefined") {
-      if (teamId) localStorage.setItem("iq_active_team_id", teamId);
-      if (season) localStorage.setItem("iq_active_season", season);
+      if (teamId) localStorage.setItem("iq_active_team_id", String(teamId));
+      if (season) localStorage.setItem("iq_active_season", String(season));
     }
     this._notifyListeners();
   }
@@ -279,9 +303,7 @@ class DataStoreService {
   // 4. GETTERS Y SELECTORES DE DOMINIO
   // =========================================================================
 
-  getClubs() {
-    return this.clubs || [];
-  }
+  getClubs() { return this.clubs || []; }
 
   getClubById(id) {
     if (!id) return null;
@@ -292,9 +314,9 @@ class DataStoreService {
     if (!this.teams || this.teams.length === 0) {
       return [{
         id: this.getActiveTeamId(),
-        name: "JMJ Manyanet Sant Andreu",
-        category: "Sénior Masculino",
-        competition: "B1",
+        name: "Equipo Principal",
+        category: "Sénior",
+        competition: "Liga",
         coachName: "Por definir",
         color: "#1e3a8a"
       }];
@@ -309,12 +331,9 @@ class DataStoreService {
 
   getPlayers(teamId = null) {
     const all = this.players || [];
-    if (all.length === 0) return [];
     const targetTeamId = String(teamId || this.getActiveTeamId()).toLowerCase();
-
-    const filtered = all.filter((p) => String(p.team_id || "").toLowerCase() === targetTeamId);
-    const result = filtered.length > 0 ? filtered : all;
-    return [...result].sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+    const filtered = all.filter((p) => String(p.team_id || p.teamId || "").toLowerCase() === targetTeamId);
+    return [...filtered].sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
   }
 
   getPlayerById(id) {
@@ -324,12 +343,9 @@ class DataStoreService {
 
   getGames(teamId = null) {
     const all = this.games || [];
-    if (all.length === 0) return [];
     const targetTeamId = String(teamId || this.getActiveTeamId()).toLowerCase();
-
-    const filtered = all.filter((g) => String(g.team_id || "").toLowerCase() === targetTeamId);
-    const result = filtered.length > 0 ? filtered : all;
-    return [...result].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    const filtered = all.filter((g) => String(g.team_id || g.teamId || "").toLowerCase() === targetTeamId);
+    return [...filtered].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   }
 
   getGameById(id) {
@@ -352,7 +368,7 @@ class DataStoreService {
     if (!gameId) return [];
     return (this.gamePeriodScores || [])
       .filter((p) => String(p.game_id || p.gameId) === String(gameId))
-      .sort((a, b) => Number(a.period_number) - Number(b.period_number));
+      .sort((a, b) => Number(a.period_number ?? a.periodNumber ?? 1) - Number(b.period_number ?? b.periodNumber ?? 1));
   }
 
   getGameEvents(gameId = null) {
@@ -361,44 +377,143 @@ class DataStoreService {
   }
 
   // =========================================================================
-  // 5. GUARDADO Y PERSISTENCIA ATÓMICA
+  // 5. GUARDADO ATÓMICO Y SINCRONIZACIÓN EXACTA CON SUPABASE
   // =========================================================================
 
   async saveGameAndStats(gameData, statsList = [], periodScores = [], liveEvents = []) {
-    const gId = gameData.id || "g-" + Date.now();
-    const normalizedGame = this._normalizeGame({ ...gameData, id: gId });
+    // Validar UUID
+    const isValidUUID = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const gId = (gameData.id && isValidUUID(gameData.id)) ? gameData.id : this._generateUUID();
 
+    const targetTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
+    const targetSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId();
+
+    const normalizedGame = this._normalizeGame({
+      ...gameData,
+      id: gId,
+      team_id: targetTeamId,
+      season_id: targetSeasonId
+    });
+
+    // 1. Estado en memoria local
     const gIdx = this.games.findIndex((g) => String(g.id) === String(gId));
     if (gIdx >= 0) this.games[gIdx] = normalizedGame;
     else this.games.unshift(normalizedGame);
 
-    if (statsList.length > 0) {
-      this.playerGameStats = this.playerGameStats.filter((s) => String(s.game_id || s.gameId) !== String(gId));
-      const formattedStats = statsList.map((st) => this._normalizeStat({ ...st, game_id: gId }));
-      this.playerGameStats.push(...formattedStats);
-    }
+    const formattedStats = statsList.map((st) => this._normalizeStat({ ...st, game_id: gId }));
+    this.playerGameStats = this.playerGameStats.filter((s) => String(s.game_id || s.gameId) !== String(gId));
+    this.playerGameStats.push(...formattedStats);
 
-    if (periodScores.length > 0) {
-      this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gId));
-      const formattedPeriods = periodScores.map((p) => ({ ...p, game_id: gId }));
-      this.gamePeriodScores.push(...formattedPeriods);
-    }
+    const formattedPeriods = periodScores.map((p) => ({
+      id: p.id && isValidUUID(p.id) ? p.id : this._generateUUID(),
+      game_id: gId,
+      period_type: p.period_type || (p.is_overtime ? 'overtime' : 'quarter'),
+      period_number: Number(p.period_number ?? p.periodNumber ?? 1),
+      team_score: Number(p.team_score ?? p.teamScore ?? 0),
+      opponent_score: Number(p.opponent_score ?? p.opponentScore ?? 0),
+      is_overtime: Boolean(p.is_overtime ?? p.isOvertime ?? false)
+    }));
+    this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gId));
+    this.gamePeriodScores.push(...formattedPeriods);
 
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
-      localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
-      localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
-    }
+    const formattedEvents = liveEvents.map((ev, idx) => {
+      const pId = ev.player_id || ev.playerId || null;
+      const act = ev.action_type || ev.action || ev.event_type || 'fg2_attempted';
+      const cX = ev.coord_x !== undefined && ev.coord_x !== null ? parseFloat(Number(ev.coord_x).toFixed(2)) : (ev.coordinates?.x !== undefined ? parseFloat(Number(ev.coordinates.x).toFixed(2)) : null);
+      const cY = ev.coord_y !== undefined && ev.coord_y !== null ? parseFloat(Number(ev.coord_y).toFixed(2)) : (ev.coordinates?.y !== undefined ? parseFloat(Number(ev.coordinates.y).toFixed(2)) : null);
 
+      return {
+        id: ev.id && isValidUUID(ev.id) ? ev.id : this._generateUUID(),
+        game_id: gId,
+        player_id: pId && isValidUUID(pId) ? pId : null,
+        team_id: targetTeamId,
+        period: Number(ev.period || 1),
+        game_clock: ev.game_clock || ev.timeRemaining ? String(ev.game_clock || '10:00') : '10:00',
+        action_type: act,
+        points: Number(ev.points || 0),
+        made: Boolean(ev.made ?? ev.coordinates?.made ?? false),
+        coord_x: cX,
+        coord_y: cY
+      };
+    });
+    this.gameEvents = this.gameEvents.filter((e) => String(e.game_id || e.gameId) !== String(gId));
+    this.gameEvents.push(...formattedEvents);
+
+    this._persistToStorage();
+
+    // 2. Persistencia remota en Supabase
     if (supabase) {
       try {
-        await supabase.from("games").upsert([normalizedGame]);
-        if (statsList.length > 0) {
-          const dbStats = statsList.map((st) => this._normalizeStat({ ...st, game_id: gId }));
-          await supabase.from("player_game_stats").upsert(dbStats, { onConflict: "game_id,player_id" });
+        const dbGamePayload = {
+          id: gId,
+          team_id: targetTeamId,
+          season_id: targetSeasonId,
+          date: normalizedGame.date || new Date().toISOString().split("T")[0],
+          time: gameData.time || "18:00",
+          opponent: normalizedGame.opponent || "Rival",
+          competition: gameData.competition || "Liga",
+          round: gameData.round || "Jornada 1",
+          venue: normalizedGame.venue || "Local",
+          venue_name: gameData.venue_name || "",
+          periods_count: 4,
+          period_minutes: 10,
+          status: normalizedGame.status || "Finalizado",
+          periods: formattedPeriods,
+          team_score: normalizedGame.team_score,
+          opponent_score: normalizedGame.opponent_score,
+          starter_ids: Array.isArray(gameData.starter_ids) ? gameData.starter_ids : [],
+          notes: gameData.notes || "",
+          video_url: gameData.video_url || ""
+        };
+
+        const { error: gErr } = await supabase.from("games").upsert([dbGamePayload]);
+        if (gErr) throw new Error(`[games] ${gErr.message}`);
+
+        if (formattedStats.length > 0) {
+          const dbStatsPayload = formattedStats.map(st => ({
+            game_id: gId,
+            player_id: st.player_id,
+            starter: Boolean(st.starter),
+            minutes: Number(st.minutes || 0),
+            fg2_made: Number(st.fg2_made || 0),
+            fg2_attempted: Number(st.fg2_attempted || 0),
+            fg3_made: Number(st.fg3_made || 0),
+            fg3_attempted: Number(st.fg3_attempted || 0),
+            ft_made: Number(st.ft_made || 0),
+            ft_attempted: Number(st.ft_attempted || 0),
+            off_reb: Number(st.off_reb || 0),
+            def_reb: Number(st.def_reb || 0),
+            assists: Number(st.assists || 0),
+            steals: Number(st.steals || 0),
+            blocks: Number(st.blocks || 0),
+            blocks_made: Number(st.blocks_made || 0),
+            blocks_received: Number(st.blocks_received || 0),
+            turnovers: Number(st.turnovers || 0),
+            fouls_committed: Number(st.fouls_committed || 0),
+            fouls_drawn: Number(st.fouls_drawn || 0),
+            plus_minus: Number(st.plus_minus || 0),
+            evaluation: Number(st.evaluation || 0),
+            points: Number(st.points || 0)
+          }));
+
+          const { error: sErr } = await supabase.from("player_game_stats").upsert(dbStatsPayload, { onConflict: "game_id,player_id" });
+          if (sErr) throw new Error(`[player_game_stats] ${sErr.message}`);
+        }
+
+        if (formattedPeriods.length > 0) {
+          await supabase.from("game_period_scores").delete().eq("game_id", gId);
+          const { error: pErr } = await supabase.from("game_period_scores").insert(formattedPeriods);
+          if (pErr) throw new Error(`[game_period_scores] ${pErr.message}`);
+        }
+
+        if (formattedEvents.length > 0) {
+          await supabase.from("game_events").delete().eq("game_id", gId);
+          const { error: evErr } = await supabase.from("game_events").insert(formattedEvents);
+          if (evErr) throw new Error(`[game_events] ${evErr.message}`);
         }
       } catch (err) {
-        console.warn("[DataStore] Guardado en segundo plano:", err.message);
+        console.error("[DataStore] Error guardando en Supabase:", err);
+        throw err;
       }
     }
 
@@ -411,18 +526,17 @@ class DataStoreService {
     this.games = this.games.filter((g) => String(g.id) !== String(gameId));
     this.playerGameStats = this.playerGameStats.filter((s) => String(s.game_id || s.gameId) !== String(gameId));
     this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gameId));
+    this.gameEvents = this.gameEvents.filter((e) => String(e.game_id || e.gameId) !== String(gameId));
 
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
-      localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
-    }
+    this._persistToStorage();
 
     if (supabase) {
       try {
         await Promise.allSettled([
           supabase.from("games").delete().eq("id", gameId),
           supabase.from("player_game_stats").delete().eq("game_id", gameId),
-          supabase.from("game_period_scores").delete().eq("game_id", gameId)
+          supabase.from("game_period_scores").delete().eq("game_id", gameId),
+          supabase.from("game_events").delete().eq("game_id", gameId)
         ]);
       } catch (err) {
         console.warn("[DataStore] Error en borrado remoto:", err.message);
@@ -437,9 +551,7 @@ class DataStoreService {
     const idx = this.players.findIndex((p) => String(p.id) === String(playerId));
     if (idx >= 0) {
       this.players[idx] = this._normalizePlayer({ ...this.players[idx], ...updates });
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("iq_cache_players", JSON.stringify(this.players));
-      }
+      this._persistToStorage();
     }
     if (supabase) {
       try {

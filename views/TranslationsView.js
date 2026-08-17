@@ -253,6 +253,111 @@ export class TranslationsView {
     }
   }
 
+  _renderMarketTable(container) {
+    const tableContainer = container.querySelector("#market-modal-table-container");
+    if (!tableContainer) return;
+
+    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.getPlayers() || []);
+    const activeTeamId = DataStore.getActiveTeamId();
+
+    const filteredPlayers = sourcePlayersList.filter(p => {
+      const fullName = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.toLowerCase();
+      const teamName = (p.team_name || p.teamName || '').toLowerCase();
+      const query = this.marketSearchQuery.toLowerCase();
+      return fullName.includes(query) || teamName.includes(query);
+    });
+
+    const totalPages = Math.ceil(filteredPlayers.length / this.marketItemsPerPage) || 1;
+    if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
+
+    const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
+    const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
+
+    tableContainer.innerHTML = `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Jugador</th>
+              <th>Posición</th>
+              <th>Equipo Actual</th>
+              <th style="text-align: right;">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paginatedPlayers.length > 0 ? paginatedPlayers.map(p => {
+              const isMyTeam = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
+              const existingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === "PENDIENTE");
+
+              return `
+                <tr>
+                  <td><strong>#${p.jersey ?? p.number ?? '-'} ${p.first_name || ''} ${p.last_name || ''}</strong></td>
+                  <td><span class="badge-category">${p.primary_position || p.position || 'Alero'}</span></td>
+                  <td>${p.team_name || 'Otro Equipo'}</td>
+                  <td style="text-align: right;">
+                    ${isMyTeam ? `
+                      <span class="badge-active-team">En tu plantilla</span>
+                    ` : (existingTransfer ? `
+                      <span class="badge-pending">⏳ Solicitado</span>
+                    ` : `
+                      <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name || ''} ${p.last_name || ''}" data-team-origin="${p.team_id}">
+                        ⚡ Fichar
+                      </button>
+                    `)}
+                  </td>
+                </tr>
+              `;
+            }).join("") : `<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 20px;">No se encontraron jugadores que coincidan con la búsqueda.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+        <span style="font-size: 12px; color: #64748b;">Página ${this.marketCurrentPage} de ${totalPages} (${filteredPlayers.length} jugadores)</span>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" id="btn-market-prev" class="btn-outline-sm" ${this.marketCurrentPage <= 1 ? 'disabled' : ''}>← Anterior</button>
+          <button type="button" id="btn-market-next" class="btn-outline-sm" ${this.marketCurrentPage >= totalPages ? 'disabled' : ''}>Siguiente →</button>
+        </div>
+      </div>
+    `;
+
+    tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const playerId = e.currentTarget.getAttribute("data-id");
+        const playerName = e.currentTarget.getAttribute("data-name");
+        const originTeamId = e.currentTarget.getAttribute("data-team-origin");
+
+        this.transfers.push({
+          id: "tr-" + Date.now(),
+          playerId,
+          playerName,
+          originTeamId,
+          targetTeamId: activeTeamId,
+          status: "PENDIENTE",
+          date: new Date().toLocaleDateString()
+        });
+        this._saveTransfersLocal();
+
+        alert(`✅ Solicitud de fichaje enviada para ${playerName}.`);
+        this._renderMarketTable(container);
+      });
+    });
+
+    tableContainer.querySelector("#btn-market-prev")?.addEventListener("click", () => {
+      if (this.marketCurrentPage > 1) {
+        this.marketCurrentPage--;
+        this._renderMarketTable(container);
+      }
+    });
+
+    tableContainer.querySelector("#btn-market-next")?.addEventListener("click", () => {
+      if (this.marketCurrentPage < totalPages) {
+        this.marketCurrentPage++;
+        this._renderMarketTable(container);
+      }
+    });
+  }
+
   async render(containerId = "dashboard-content-area") {
     const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
@@ -274,36 +379,18 @@ export class TranslationsView {
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const currentActiveSeasonName = DataStore.getActiveSeason() || "2026";
 
-    // Pestaña por defecto para Jugador e Invitado
     if (["JUGADOR", "INVITADO"].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
       this.activeTab = "requests";
     }
 
-    // LISTA DE EQUIPOS QUE EL USUARIO ACTUAL TIENE PERMITIDO VER
     const myAssignedTeamIds = this.userTeamAssignments[currentUserEmail] || [];
     const allowedSelectableTeams = (effectiveRole === "SUPERADMIN")
       ? realTeams 
       : realTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
 
-    // Perfiles visibles en la tabla según la jerarquía
     const visibleProfiles = (effectiveRole === "SUPERADMIN")
       ? this.profilesList 
       : this.profilesList.filter(p => p.role !== "SUPERADMIN");
-
-    // Filtrado y paginación del Mercado
-    const sourcePlayersList = this.allMarketPlayers.length > 0 ? this.allMarketPlayers : (DataStore.getPlayers() || []);
-    const filteredPlayers = sourcePlayersList.filter(p => {
-      const fullName = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.toLowerCase();
-      const teamName = (p.team_name || p.teamName || '').toLowerCase();
-      const query = this.marketSearchQuery.toLowerCase();
-      return fullName.includes(query) || teamName.includes(query);
-    });
-
-    const totalPages = Math.ceil(filteredPlayers.length / this.marketItemsPerPage) || 1;
-    if (this.marketCurrentPage > totalPages) this.marketCurrentPage = totalPages;
-
-    const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
-    const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
 
     const canModifyActiveRole = this._can("MODIFY_ACTIVE_ROLE");
 
@@ -637,7 +724,7 @@ export class TranslationsView {
                   ${players.length > 0 ? players.map(p => `
                     <div class="player-card ${p.status === 'TRASPASADO' ? 'player-transferred' : ''}">
                       <div>
-                        <strong>#${p.jersey ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+                        <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
                         <div style="font-size: 11px; color: #64748b;">
                           ${p.primary_position || p.position || 'Jugador'} • ${p.status === 'TRASPASADO' ? '⚠️ Traspasado (Histórico)' : 'Activo'}
                         </div>
@@ -1013,6 +1100,306 @@ export class TranslationsView {
       });
     });
 
+    // 1. CREAR CLUB (SUPERADMIN)
+    const formCreateClub = container.querySelector("#form-create-club");
+    if (formCreateClub) {
+      formCreateClub.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = container.querySelector("#club-new-name")?.value.trim();
+        const coordinator = container.querySelector("#club-new-coordinator")?.value.trim();
+        const phone = container.querySelector("#club-new-phone")?.value.trim();
+        const address = container.querySelector("#club-new-address")?.value.trim();
+
+        if (!name) return alert("Introduce el nombre del club.");
+
+        this.showSyncOverlay("⚡ Creando nuevo club en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { data, error } = await supabase.from("clubs").insert([{
+            name,
+            coordinator_name: coordinator,
+            phone,
+            address
+          }]).select().single();
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          alert(`✅ Club "${name}" creado exitosamente.`);
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error creando club:", err);
+          alert(`❌ Error al crear club: ${err.message || err}`);
+        }
+      });
+    }
+
+    // 2. CREAR EQUIPO (SUPERADMIN)
+    const formCreateTeam = container.querySelector("#form-create-team");
+    if (formCreateTeam) {
+      formCreateTeam.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const clubId = container.querySelector("#team-new-club-id")?.value;
+        const name = container.querySelector("#team-new-name")?.value.trim();
+        const category = container.querySelector("#team-new-category")?.value.trim();
+        const competition = container.querySelector("#team-new-competition")?.value.trim();
+        const coach = container.querySelector("#team-new-coach")?.value.trim();
+        const color = container.querySelector("#team-new-color")?.value || "#ea580c";
+
+        if (!name || !clubId) return alert("Introduce los campos obligatorios del equipo.");
+
+        this.showSyncOverlay("⚡ Creando nuevo equipo en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { data, error } = await supabase.from("teams").insert([{
+            club_id: clubId,
+            name,
+            category,
+            competition,
+            coach_name: coach,
+            color
+          }]).select().single();
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(data.id, true);
+          this.hideSyncOverlay();
+          alert(`✅ Equipo "${name}" creado exitosamente.`);
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error creando equipo:", err);
+          alert(`❌ Error al crear equipo: ${err.message || err}`);
+        }
+      });
+    }
+
+    // 3. EDITAR CLUB / CONFIGURAR EQUIPO
+    container.querySelectorAll(".btn-edit-club").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        this.selectedClubForEdit = realClubs.find(c => String(c.id) === String(id));
+        this.clubSubView = "edit-club";
+        this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-edit-team").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        this.selectedTeamForEdit = realTeams.find(t => String(t.id) === String(id));
+        this.clubSubView = "edit-team";
+        this.render(containerId);
+      });
+    });
+
+    container.querySelectorAll(".btn-back-to-list").forEach(btn => {
+      btn.addEventListener("click", () => {
+        this.clubSubView = "list";
+        this.render(containerId);
+      });
+    });
+
+    // Guardar Edición de Equipo
+    const formEditTeam = container.querySelector("#form-edit-team");
+    if (formEditTeam) {
+      formEditTeam.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const id = this.selectedTeamForEdit?.id;
+        const name = container.querySelector("#edit-team-name")?.value.trim();
+        const category = container.querySelector("#edit-team-category")?.value.trim();
+        const competition = container.querySelector("#edit-team-competition")?.value.trim();
+        const coach = container.querySelector("#edit-team-coach")?.value.trim();
+        const color = container.querySelector("#edit-team-color")?.value;
+
+        this.showSyncOverlay("💾 Actualizando equipo en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { error } = await supabase.from("teams").update({
+            name, category, competition, coach_name: coach, color
+          }).eq("id", id);
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          alert("✅ Datos del equipo guardados correctamente.");
+          this.clubSubView = "list";
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error guardando equipo:", err);
+          alert(`❌ Error al guardar equipo: ${err.message}`);
+        }
+      });
+    }
+
+    // Guardar Edición de Club
+    const formEditClub = container.querySelector("#form-edit-club");
+    if (formEditClub) {
+      formEditClub.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const id = this.selectedClubForEdit?.id;
+        const name = container.querySelector("#edit-club-name")?.value.trim();
+        const coordinator = container.querySelector("#edit-club-coordinator")?.value.trim();
+        const phone = container.querySelector("#edit-club-phone")?.value.trim();
+        const address = container.querySelector("#edit-club-address")?.value.trim();
+
+        this.showSyncOverlay("💾 Actualizando club en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { error } = await supabase.from("clubs").update({
+            name, coordinator_name: coordinator, phone, address
+          }).eq("id", id);
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          alert("✅ Datos del club guardados correctamente.");
+          this.clubSubView = "list";
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error guardando club:", err);
+          alert(`❌ Error al guardar club: ${err.message}`);
+        }
+      });
+    }
+
+    // 4. AÑADIR JUGADOR A PLANTILLA ACTIVA
+    const formAddPlayer = container.querySelector("#form-add-player");
+    if (formAddPlayer) {
+      formAddPlayer.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const firstName = container.querySelector("#add-p-name")?.value.trim();
+        const lastName = container.querySelector("#add-p-lastname")?.value.trim();
+        const jersey = Number(container.querySelector("#add-p-number")?.value || 0);
+        const position = container.querySelector("#add-p-position")?.value || "Alero";
+
+        if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
+
+        this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { error } = await supabase.from("players").insert([{
+            team_id: activeTeamId,
+            first_name: firstName,
+            last_name: lastName,
+            jersey: jersey,
+            primary_position: position,
+            status: "Activo"
+          }]);
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          alert(`✅ Jugador #${jersey} ${firstName} ${lastName} añadido con éxito.`);
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error añadiendo jugador:", err);
+          alert(`❌ Error al añadir jugador: ${err.message}`);
+        }
+      });
+    }
+
+    // 5. EDITAR JUGADOR (MODAL)
+    container.querySelectorAll(".btn-edit-player-modal").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        const player = players.find(p => String(p.id) === String(id));
+        if (!player) return;
+
+        container.querySelector("#edit-p-id").value = player.id;
+        container.querySelector("#edit-p-name").value = player.first_name || player.firstName || "";
+        container.querySelector("#edit-p-lastname").value = player.last_name || player.lastName || "";
+        container.querySelector("#edit-p-number").value = player.jersey ?? player.number ?? "";
+        container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
+        container.querySelector("#edit-p-status").value = player.status || "Activo";
+
+        const modal = container.querySelector("#modal-edit-player");
+        if (modal) modal.style.display = "flex";
+      });
+    });
+
+    container.querySelector("#btn-close-edit-player-modal")?.addEventListener("click", () => {
+      container.querySelector("#modal-edit-player").style.display = "none";
+    });
+    container.querySelector("#btn-cancel-edit-player")?.addEventListener("click", () => {
+      container.querySelector("#modal-edit-player").style.display = "none";
+    });
+
+    const formEditPlayer = container.querySelector("#form-edit-player-modal");
+    if (formEditPlayer) {
+      formEditPlayer.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const pId = container.querySelector("#edit-p-id")?.value;
+        const firstName = container.querySelector("#edit-p-name")?.value.trim();
+        const lastName = container.querySelector("#edit-p-lastname")?.value.trim();
+        const jersey = Number(container.querySelector("#edit-p-number")?.value || 0);
+        const position = container.querySelector("#edit-p-position")?.value;
+        const status = container.querySelector("#edit-p-status")?.value;
+
+        this.showSyncOverlay("💾 Guardando cambios del jugador en Supabase...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          const { error } = await supabase.from("players").update({
+            first_name: firstName,
+            last_name: lastName,
+            jersey: jersey,
+            primary_position: position,
+            status: status
+          }).eq("id", pId);
+
+          if (error) throw error;
+
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.hideSyncOverlay();
+          alert("✅ Jugador actualizado correctamente.");
+          container.querySelector("#modal-edit-player").style.display = "none";
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error actualizando jugador:", err);
+          alert(`❌ Error al actualizar jugador: ${err.message}`);
+        }
+      });
+    }
+
+    // 6. MERCADO DE FICHAJES (MODAL Y TABLA)
+    container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
+      this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
+      await this._fetchAllMarketPlayers(true);
+      this.hideSyncOverlay();
+
+      const modal = container.querySelector("#modal-market-global");
+      if (modal) {
+        modal.style.display = "flex";
+        this._renderMarketTable(container);
+      }
+    });
+
+    container.querySelector("#btn-close-market-modal")?.addEventListener("click", () => {
+      const modal = container.querySelector("#modal-market-global");
+      if (modal) modal.style.display = "none";
+    });
+
+    container.querySelector("#input-market-search")?.addEventListener("input", (e) => {
+      this.marketSearchQuery = e.target.value;
+      this.marketCurrentPage = 1;
+      this._renderMarketTable(container);
+    });
+
     // BINDING FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO
     const renderUserCardContent = (userProf) => {
       const modalContent = container.querySelector("#user-card-modal-content");
@@ -1307,7 +1694,7 @@ export class TranslationsView {
 
           this.hideSyncOverlay();
           alert(`✅ Rol actualizado a "${newRole}" correctamente.`);
-          window.location.reload();
+          await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
           console.error("Error al actualizar rol:", err);
@@ -1390,21 +1777,6 @@ export class TranslationsView {
       });
     });
 
-    // MODAL MERCADO
-    container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
-      this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
-      await this._fetchAllMarketPlayers(true);
-      this.hideSyncOverlay();
-
-      const modal = container.querySelector("#modal-market-global");
-      if (modal) modal.style.display = "flex";
-    });
-
-    container.querySelector("#btn-close-market-modal")?.addEventListener("click", () => {
-      const modal = container.querySelector("#modal-market-global");
-      if (modal) modal.style.display = "none";
-    });
-
     // GESTIÓN DE TEMPORADAS
     const formCreateSeason = container.querySelector("#form-create-season");
     if (formCreateSeason) {
@@ -1422,8 +1794,7 @@ export class TranslationsView {
           const { data, error } = await supabase
             .from("seasons")
             .insert([{ name: seasonName, team_id: activeTeamId }])
-            .select()
-            .single();
+            .select().single();
 
           if (error) {
             this.hideSyncOverlay();
@@ -1446,6 +1817,42 @@ export class TranslationsView {
         }
       });
     }
+
+    container.querySelectorAll(".btn-save-season-name").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const id = e.currentTarget.getAttribute("data-id");
+        const inp = container.querySelector(`.input-season-edit[data-id="${id}"]`);
+        const newName = inp?.value.trim();
+        if (!newName) return;
+
+        this.showSyncOverlay("💾 Actualizando temporada...");
+        try {
+          if (!supabase) throw new Error("Supabase no configurado");
+          await supabase.from("seasons").update({ name: newName }).eq("id", id);
+          const sObj = this.seasonsList.find(s => String(s.id) === String(id));
+          if (sObj) sObj.name = newName;
+          this._saveSeasonsLocal();
+          this.hideSyncOverlay();
+          alert("✅ Nombre de temporada actualizado.");
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          alert(`❌ Error: ${err.message}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-activate-season").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const name = e.currentTarget.getAttribute("data-name");
+        localStorage.setItem("iq_active_season", name);
+        if (typeof DataStore.setActiveTeamAndSeason === "function") {
+          DataStore.setActiveTeamAndSeason(null, name);
+        }
+        alert(`🟢 Temporada "${name}" activada.`);
+        await this.render(containerId);
+      });
+    });
 
     container.querySelectorAll(".btn-delete-season").forEach(btn => {
       btn.addEventListener("click", async (e) => {
@@ -1472,6 +1879,31 @@ export class TranslationsView {
       });
     });
 
+    // PESTAÑA IDIOMAS: GUARDAR EN SUPABASE
+    if (this.activeTab === "translations") {
+      this.languageSettingsView.bindEvents(container);
+
+      container.querySelectorAll("button, .btn-primary, .btn-save-translations").forEach(btn => {
+        if (btn.textContent.includes("Guardar Traducciones")) {
+          btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            this.showSyncOverlay("💾 Guardando diccionario completo en Supabase...");
+            try {
+              if (TranslationStore && typeof TranslationStore.saveAllToSupabase === "function") {
+                await TranslationStore.saveAllToSupabase();
+              }
+              this.hideSyncOverlay();
+              alert("✅ ¡Traducciones guardadas exitosamente en la base de datos!");
+            } catch (err) {
+              this.hideSyncOverlay();
+              console.error("Error guardando traducciones:", err);
+              alert(`❌ Error al guardar traducciones: ${err.message || err}`);
+            }
+          });
+        }
+      });
+    }
+
     // SIMULACIÓN DE ROLES (EXCLUSIVO SUPERADMIN)
     container.querySelectorAll(".btn-simulate-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
@@ -1482,7 +1914,7 @@ export class TranslationsView {
         localStorage.setItem("iq_user_role", roleToSimulate);
 
         alert(`🎭 Simulación activada: La app muestra la interfaz de '${roleToSimulate}'.`);
-        window.location.reload();
+        await this.render(containerId);
       });
     });
 
@@ -1494,17 +1926,17 @@ export class TranslationsView {
         localStorage.setItem("iq_user_role", "SUPERADMIN");
 
         alert("🔴 Simulación desactivada. Volviendo a control total de SUPERADMIN.");
-        window.location.reload();
+        await this.render(containerId);
       });
     }
 
     if (canModifyActiveRole) {
-      container.querySelector("#select-demo-role")?.addEventListener("change", (e) => {
+      container.querySelector("#select-demo-role")?.addEventListener("change", async (e) => {
         this.currentUserRole = e.target.value;
         this.simulatedRole = null;
         localStorage.removeItem("iq_simulated_role");
         localStorage.setItem("iq_user_role", this.currentUserRole);
-        window.location.reload();
+        await this.render(containerId);
       });
     }
   }

@@ -5,9 +5,9 @@
  * 
  * Optimizaciones:
  * 1. Vinculación estricta al teamId activo para no perder datos al cambiar de equipo.
- * 2. Matriz On/Off con cálculo exacto de partidos disputados (min > 0) y minutos OFF con prórrogas.
- * 3. Selector reactivo y radar individual en Informe de Jugador sin bloqueos.
- * 4. Normalización integral de coordenadas espaciales (coord_x, coordinates.x).
+ * 2. Detección unificada de tiros anotados/fallados independientemente del origen (Live HUD o Registro Rápido).
+ * 3. Matriz On/Off con cálculo exacto de minutos y posesiones.
+ * 4. Normalización integral de coordenadas espaciales.
  */
 
 import { supabase } from "../config/database.config.js";
@@ -18,11 +18,6 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
 
 export class HeatmapAnalysisView {
-  /**
-   * Crea una instancia de HeatmapAnalysisView.
-   * @param {Object} [supabaseClient=null] - Cliente Supabase.
-   * @param {Object} [authController=null] - Controlador de autenticación.
-   */
   constructor(supabaseClient = null, authController = null) {
     this.supabase = supabaseClient || supabase;
     this.auth = authController;
@@ -52,6 +47,33 @@ export class HeatmapAnalysisView {
       totalMinutes += 40 + (overtimes * 5);
     });
     return totalMinutes || (games.length * 40) || 40;
+  }
+
+  _parseIsMade(ev) {
+    const act = String(ev.action_type ?? ev.action ?? ev.event_type ?? '').toLowerCase();
+    
+    if (act.includes("attempted") || act.includes("fallo") || act.includes("missed") || act.includes("out")) {
+      return false;
+    }
+    if (act.includes("made") || act.includes("anotad") || act.includes("in") || Number(ev.points || 0) > 0) {
+      return true;
+    }
+    if (ev.made !== undefined && ev.made !== null) {
+      return Boolean(ev.made);
+    }
+    if (ev.coordinates?.made !== undefined && ev.coordinates?.made !== null) {
+      return Boolean(ev.coordinates.made);
+    }
+    return false;
+  }
+
+  _isShotEvent(ev) {
+    const act = String(ev.action_type ?? ev.action ?? ev.event_type ?? '').toLowerCase();
+    if (ev.is_opponent || ev.isOpponent || act.startsWith("opp_")) return false;
+    
+    return act.includes("fg") || act.includes("shot") || act.includes("t2") || act.includes("t3") || 
+           act.includes("triple") || act.includes("canasta") || act.includes("tiro") ||
+           act.includes("made") || act.includes("attempted");
   }
 
   async render(containerId = "dashboard-content-area", teamId = null) {
@@ -84,7 +106,6 @@ export class HeatmapAnalysisView {
       const gameIds = new Set(this.games.map(g => String(g.id)));
       let rawEvents = DataStore.getGameEvents() || [];
 
-      // Si se selecciona un partido concreto
       if (this.selectedGameId !== "all") {
         rawEvents = rawEvents.filter(ev => String(ev.game_id ?? ev.gameId) === String(this.selectedGameId));
         
@@ -97,26 +118,23 @@ export class HeatmapAnalysisView {
           if (!error && data) rawEvents = data;
         }
       } else {
-        // Filtrar solo eventos de los partidos del equipo activo
         rawEvents = rawEvents.filter(ev => {
           const gId = String(ev.game_id ?? ev.gameId ?? "");
           return gameIds.has(gId);
         });
       }
 
-      // Filtrar por jugador si está seleccionado
       if (this.selectedPlayerId && this.selectedPlayerId !== "all") {
         rawEvents = rawEvents.filter(ev => String(ev.player_id ?? ev.playerId) === String(this.selectedPlayerId));
       }
 
       this.events = rawEvents
+        .filter(ev => this._isShotEvent(ev))
         .map(ev => ({
           ...ev,
           coord_x: Number(ev.coord_x ?? ev.coordX ?? ev.coordinates?.x ?? ev.x ?? 0),
           coord_y: Number(ev.coord_y ?? ev.coordY ?? ev.coordinates?.y ?? ev.y ?? 0),
-          made: ev.made !== undefined 
-            ? Boolean(ev.made) 
-            : (ev.coordinates?.made !== undefined ? Boolean(ev.coordinates.made) : String(ev.action_type ?? ev.action ?? '').includes("made"))
+          made: this._parseIsMade(ev)
         }))
         .filter(ev => ev.coord_x > 0 || ev.coord_y > 0);
     } catch (err) {
@@ -127,7 +145,8 @@ export class HeatmapAnalysisView {
 
   _getFilteredEvents() {
     return this.events.filter(ev => {
-      if (this.selectedPeriod !== "all" && String(ev.period) !== String(this.selectedPeriod)) {
+      const pNum = String(ev.period || '1').replace(/[^\d]/g, "");
+      if (this.selectedPeriod !== "all" && pNum !== String(this.selectedPeriod)) {
         return false;
       }
       if (this.selectedShotType === "made" && !ev.made) return false;
@@ -512,7 +531,6 @@ export class HeatmapAnalysisView {
         pmOn += Number(s.plus_minus ?? s.plusMinus ?? 0);
       });
 
-      // Minutos OFF con desglose exacto
       const minOff = Math.max(0, totalTeamMinutes - minOn);
 
       const possOn = Math.max(1, Math.round(minOn * 1.9));
@@ -632,31 +650,26 @@ export class HeatmapAnalysisView {
     };
 
     return `
-      <!-- PINTURA -->
       <div style="position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); padding: 3px 6px; border-radius: 6px; font-size: 9px; font-weight: 900; ${getBadgeStyle(paint.pct, paint.total)}; box-shadow: 0 2px 4px rgba(0,0,0,0.3); text-align: center; z-index: 3;">
         <div>${this.t("heatmap.paint_badge", "PINTURA")}</div>
         <div>${paint.made}/${paint.total} (${paint.pct}%)</div>
       </div>
 
-      <!-- MEDIA DISTANCIA -->
       <div style="position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%); padding: 3px 6px; border-radius: 6px; font-size: 9px; font-weight: 900; ${getBadgeStyle(midRange.pct, midRange.total)}; box-shadow: 0 2px 4px rgba(0,0,0,0.3); text-align: center; z-index: 3;">
         <div>${this.t("heatmap.mid_badge", "MEDIA DIST.")}</div>
         <div>${midRange.made}/${midRange.total} (${midRange.pct}%)</div>
       </div>
 
-      <!-- TRIPLE FRONTAL -->
       <div style="position: absolute; left: 50%; top: 82%; transform: translate(-50%, -50%); padding: 3px 6px; border-radius: 6px; font-size: 9px; font-weight: 900; ${getBadgeStyle(topThree.pct, topThree.total)}; box-shadow: 0 2px 4px rgba(0,0,0,0.3); text-align: center; z-index: 3;">
         <div>${this.t("heatmap.top_three_badge", "TRIPLE FRONTAL")}</div>
         <div>${topThree.made}/${topThree.total} (${topThree.pct}%)</div>
       </div>
 
-      <!-- ESQUINA IZQ -->
       <div style="position: absolute; left: 11%; top: 18%; transform: translate(-50%, -50%); padding: 2px 5px; border-radius: 6px; font-size: 8.5px; font-weight: 900; ${getBadgeStyle(leftCorner.pct, leftCorner.total)}; box-shadow: 0 2px 4px rgba(0,0,0,0.3); text-align: center; z-index: 3;">
         <div>${this.t("heatmap.left_corner_badge", "ESQ. IZQ")}</div>
         <div>${leftCorner.made}/${leftCorner.total}</div>
       </div>
 
-      <!-- ESQUINA DER -->
       <div style="position: absolute; left: 89%; top: 18%; transform: translate(-50%, -50%); padding: 2px 5px; border-radius: 6px; font-size: 8.5px; font-weight: 900; ${getBadgeStyle(rightCorner.pct, rightCorner.total)}; box-shadow: 0 2px 4px rgba(0,0,0,0.3); text-align: center; z-index: 3;">
         <div>${this.t("heatmap.right_corner_badge", "ESQ. DER")}</div>
         <div>${rightCorner.made}/${rightCorner.total}</div>

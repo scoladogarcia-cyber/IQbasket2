@@ -10,11 +10,6 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 
 export class TeamStatsView {
-  /**
-   * Crea una instancia de TeamStatsView.
-   * @param {Object} [supabaseClient=null] - Cliente de Supabase.
-   * @param {Object} [authController=null] - Controlador de autenticación y permisos.
-   */
   constructor(supabaseClient = null, authController = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
@@ -34,22 +29,16 @@ export class TeamStatsView {
   _fetchTeamData(teamId) {
     try {
       const activeTeamId = teamId || DataStore.getActiveTeamId();
-      const activeTeam = DataStore.getTeamById(activeTeamId) || DataStore.getTeams()[0] || {};
+      const activeTeam = DataStore.getTeamById(activeTeamId) || {};
       
-      // Obtener partidos con fallback si el filtro por teamId devuelve vacío
-      let games = DataStore.getGames(activeTeamId);
-      if (!games || games.length === 0) games = DataStore.getGames() || [];
-
-      // Obtener jugadores con fallback si el filtro por teamId devuelve vacío
-      let players = DataStore.getPlayers(activeTeamId);
-      if (!players || players.length === 0) players = DataStore.getPlayers() || [];
-
+      const games = DataStore.getGames(activeTeamId) || [];
+      const players = DataStore.getPlayers(activeTeamId) || [];
       const playerStats = DataStore.getPlayerGameStats() || [];
 
       const team = {
-        name: activeTeam.name || "JMJ Manyanet Sant Andreu",
-        category: activeTeam.category || "Sénior Masculino",
-        competition: activeTeam.competition || "B1",
+        name: activeTeam.name || "Equipo",
+        category: activeTeam.category || "General",
+        competition: activeTeam.competition || "Liga",
         coach_name: activeTeam.coach_name || activeTeam.coachName || activeTeam.coach || "Por definir",
         periods_count: activeTeam.periods_count || 4,
         period_minutes: activeTeam.period_minutes || 10,
@@ -264,9 +253,9 @@ export class TeamStatsView {
     const tableRowsMarkup = this._renderPlayerRows(sortedPlayers);
     const mobileCardsMarkup = this._renderPlayerCardsMobile(sortedPlayers);
 
-    const teamName = team.name || "JMJ Manyanet Sant Andreu";
-    const teamCategory = team.category || "Sénior Masculino";
-    const teamCompetition = team.competition || "B1";
+    const teamName = team.name || "Equipo";
+    const teamCategory = team.category || "General";
+    const teamCompetition = team.competition || "Liga";
     const teamCoach = team.coach_name || "Por definir";
     const teamPeriods = team.periods_count ? `${team.periods_count} × ${team.period_minutes || 10} min` : "4 × 10 min";
     const teamColor = team.color || "#1e3a8a";
