@@ -1,7 +1,7 @@
 /**
  * @fileoverview Vista de Estadística Avanzada y Four Factors: AdvancedStatsView.js
  * @description Presenta los 4 factores de Dean Oliver (eFG%, TOV%, ORB%, FT Rate) y métricas analíticas.
- * Recupera directamente las métricas persistidas en base de datos (evaluation, ortg, drtg, efg_pct).
+ * Fórmulas oficiales FIBA/ACB calculadas sobre partidos disputados (MIN > 0).
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
@@ -30,6 +30,37 @@ export class AdvancedStatsView {
 
   t(key, fallback = "") {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
+  }
+
+  _calculateFibaVal(st = {}) {
+    if (BoxScoreCalculator && typeof BoxScoreCalculator.calculatePlayerBoxScore === "function") {
+      const comp = BoxScoreCalculator.calculatePlayerBoxScore(st);
+      return Number(comp.pir ?? comp.evaluation ?? comp.val ?? 0);
+    }
+
+    const pts = Number(st.points ?? (Number(st.fg2_made ?? st.fg2Made ?? 0) * 2 + Number(st.fg3_made ?? st.fg3Made ?? 0) * 3 + Number(st.ft_made ?? st.ftMade ?? 0)));
+    const oreb = Number(st.off_reb ?? st.offReb ?? st.rebounds_offensive ?? 0);
+    const dreb = Number(st.def_reb ?? st.defReb ?? st.rebounds_defensive ?? 0);
+    const reb = Number(st.rebounds ?? (oreb + dreb));
+    const ast = Number(st.assists ?? st.ast ?? 0);
+    const stl = Number(st.steals ?? st.stl ?? 0);
+    const blk = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+    const foulsDrawn = Number(st.fouls_drawn ?? st.foulsDrawn ?? st.fouls_received ?? 0);
+
+    const fg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
+    const fg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
+    const fg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
+    const fg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
+    const ftm = Number(st.ft_made ?? st.ftMade ?? 0);
+    const fta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
+
+    const missedFg = Math.max(0, (fg2a + fg3a) - (fg2m + fg3m));
+    const missedFt = Math.max(0, fta - ftm);
+    const tov = Number(st.turnovers ?? st.tov ?? 0);
+    const blkAgainst = Number(st.blocks_received ?? st.blocksReceived ?? 0);
+    const foulsCommitted = Number(st.fouls_committed ?? st.fouls ?? 0);
+
+    return (pts + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + blkAgainst + foulsCommitted);
   }
 
   async render(containerId = "dashboard-content-area") {
@@ -73,12 +104,12 @@ export class AdvancedStatsView {
     const totFgm = totFg2m + totFg3m;
     const totFga = totFg2a + totFg3a;
 
-    const efg = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "34.5";
+    const efg = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "0.0";
     const poss = (totFga + 0.44 * totFta + totTo) || (totalTeamGamesCount * 70) || 70;
-    const tovPct = poss > 0 ? ((totTo / poss) * 100).toFixed(1) : "32.1";
+    const tovPct = poss > 0 ? ((totTo / poss) * 100).toFixed(1) : "0.0";
     const estimatedOppDefReb = (totOffReb * 1.5) || 30;
-    const orbPct = (totOffReb + estimatedOppDefReb) > 0 ? ((totOffReb / (totOffReb + estimatedOppDefReb)) * 100).toFixed(1) : "40.0";
-    const ftRate = totFga > 0 ? (totFtm / totFga).toFixed(2) : "0.06";
+    const orbPct = (totOffReb + estimatedOppDefReb) > 0 ? ((totOffReb / (totOffReb + estimatedOppDefReb)) * 100).toFixed(1) : "0.0";
+    const ftRate = totFga > 0 ? (totFtm / totFga).toFixed(2) : "0.00";
 
     const getSortArrow = (field, currentField, isAsc) => {
       if (currentField !== field) return `<span style="color:#cbd5e1;">↕</span>`;
@@ -185,28 +216,28 @@ export class AdvancedStatsView {
               <th class="th-sort-team" data-field="efg" style="padding: 12px; text-align: center; color: #7c3aed; cursor: pointer;">
                 <span class="has-tooltip">
                   eFG% <span class="info-badge">?</span>
-                  <span class="tooltip-box">Effective Field Goal %: Porcentaje de tiro efectivo ajustado premiando los triples [(FGM + 0.5 * 3PM) / FGA].</span>
+                  <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de tiro premiando en un 50% el triple. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
                 </span>
                 ${getSortArrow('efg', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="tovPct" style="padding: 12px; text-align: center; color: #dc2626; cursor: pointer;">
                 <span class="has-tooltip">
                   TOV% <span class="info-badge">?</span>
-                  <span class="tooltip-box">Turnover Ratio: Porcentaje estimado de posesiones que terminan en pérdida [TOV / Posesiones].</span>
+                  <span class="tooltip-box">Turnover Ratio: Porcentaje estimado de posesiones que terminan en pérdida de balón. Fórmula: [TOV / Posesiones].</span>
                 </span>
                 ${getSortArrow('tovPct', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="offReb" style="padding: 12px; text-align: center; color: #2563eb; cursor: pointer;">
                 <span class="has-tooltip">
                   REB OFF <span class="info-badge">?</span>
-                  <span class="tooltip-box">Rebotes Ofensivos capturados por el equipo en el partido.</span>
+                  <span class="tooltip-box">Rebotes ofensivos capturados por el equipo en el partido.</span>
                 </span>
                 ${getSortArrow('offReb', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="ftRate" style="padding: 12px; text-align: center; color: #16a34a; cursor: pointer;">
                 <span class="has-tooltip">
                   FT RATE <span class="info-badge">?</span>
-                  <span class="tooltip-box">Free Throw Rate: Tiros libres convertidos por cada tiro de campo lanzado [FTM / FGA].</span>
+                  <span class="tooltip-box">Free Throw Rate: Tiros libres convertidos en relación con los tiros de campo intentados. Fórmula: [FTM / FGA].</span>
                 </span>
                 ${getSortArrow('ftRate', this.teamSortField, this.teamSortAsc)}
               </th>
@@ -232,13 +263,15 @@ export class AdvancedStatsView {
       `).join("");
 
     } else {
-      // VISTA DE JUGADORES (CÁLCULO EXACTO SINCRONIZADO CON DASHBOARD)
+      // VISTA DE JUGADORES (CÁLCULO EXACTO BASADO EN PARTIDOS DISPUTADOS MIN > 0)
       const playerDataList = players.map(p => {
         const pStats = (allStats || []).filter(s => String(s.player_id ?? s.playerId) === String(p.id));
+        const activeStats = pStats.filter(s => Number(s.minutes ?? s.minutesPlayed ?? 0) > 0);
+        const gp = activeStats.length;
         
         let pPts = 0, pFg2m = 0, pFg2a = 0, pFg3m = 0, pFg3a = 0, pAst = 0, pTo = 0, pVal = 0;
         
-        pStats.forEach(s => {
+        activeStats.forEach(s => {
           const fg2m = Number(s.fg2_made ?? s.fg2Made ?? 0);
           const fg2a = Number(s.fg2_attempted ?? s.fg2Attempted ?? 0);
           const fg3m = Number(s.fg3_made ?? s.fg3Made ?? 0);
@@ -253,15 +286,7 @@ export class AdvancedStatsView {
           pTo   += Number(s.turnovers ?? s.tov ?? 0);
           
           pPts += (s.points !== undefined && s.points !== null && Number(s.points) > 0) ? Number(s.points) : (fg2m * 2 + fg3m * 3 + ftm);
-          
-          // Leer la columna evaluation guardada o calcular box score
-          const valDirect = Number(s.evaluation ?? s.val ?? null);
-          if (valDirect !== null && !isNaN(valDirect)) {
-            pVal += valDirect;
-          } else {
-            const box = BoxScoreCalculator.calculatePlayerBoxScore(s);
-            pVal += (box.pir || 0);
-          }
+          pVal += this._calculateFibaVal(s);
         });
 
         const pFga = pFg2a + pFg3a;
@@ -269,8 +294,8 @@ export class AdvancedStatsView {
         const pEfgNum = pFga > 0 ? Number((((pFgm + 0.5 * pFg3m) / pFga) * 100).toFixed(1)) : 0.0;
         const astToNum = pTo > 0 ? Number((pAst / pTo).toFixed(1)) : pAst;
         
-        // La valoración media por partido oficial del equipo (coincide exactamente con el Dashboard: 5.8, 4.7, etc.)
-        const valAvgNum = Number((pVal / totalTeamGamesCount).toFixed(1));
+        // VAL / PJ calculado sobre partidos disputados (MIN > 0)
+        const valAvgNum = gp > 0 ? Number((pVal / gp).toFixed(1)) : 0.0;
 
         const fullName = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.trim() || p.name || 'Jugador';
         const jerseyNum = p.jersey !== undefined && p.jersey !== null ? Number(p.jersey) : 99;
@@ -280,7 +305,7 @@ export class AdvancedStatsView {
           jerseyNum,
           fullName,
           position: p.primary_position || p.primaryPosition || 'Jugador',
-          gp: pStats.length,
+          gp,
           pts: pPts,
           efg: pEfgNum,
           valAvg: valAvgNum,
@@ -322,35 +347,35 @@ export class AdvancedStatsView {
               <th class="th-sort-player" data-field="pts" style="padding: 12px; text-align: center; cursor: pointer;">
                 <span class="has-tooltip">
                   ${this.t("total_points", "PTS TOTALES").toUpperCase()} <span class="info-badge">?</span>
-                  <span class="tooltip-box">Puntos totales acumulados en la temporada.</span>
+                  <span class="tooltip-box">Puntos totales acumulados: 2×T2C + 3×T3C + TLC.</span>
                 </span>
                 ${getSortArrow('pts', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="efg" style="padding: 12px; text-align: center; color: #7c3aed; cursor: pointer;">
                 <span class="has-tooltip">
                   eFG% ACUM. <span class="info-badge">?</span>
-                  <span class="tooltip-box">Porcentaje de tiro efectivo acumulado [(FGM + 0.5 * 3PM) / FGA].</span>
+                  <span class="tooltip-box">Porcentaje de tiro efectivo acumulado. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
                 </span>
                 ${getSortArrow('efg', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="valAvg" style="padding: 12px; text-align: center; color: #a855f7; cursor: pointer;">
                 <span class="has-tooltip">
                   VAL / PJ <span class="info-badge">?</span>
-                  <span class="tooltip-box">Valoración Oficial FIBA por Partido: Total valoración dividida entre los partidos oficiales del equipo (${totalTeamGamesCount} PJ). Coincide 100% con el Dashboard.</span>
+                  <span class="tooltip-box">Valoración Oficial FIBA por Partido: (PTS + REB + AST + ROB + TAP + FP_REC) - (TC_FALL + TL_FALL + PER + TAP_REC + FP_COM) dividido entre los partidos disputados (MIN > 0).</span>
                 </span>
                 ${getSortArrow('valAvg', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="astTo" style="padding: 12px; text-align: center; color: #166534; cursor: pointer;">
                 <span class="has-tooltip">
                   RATIO AST/TO <span class="info-badge">?</span>
-                  <span class="tooltip-box">Asistencias repartidas por cada pérdida cometida [AST / TOV].</span>
+                  <span class="tooltip-box">Ratio de pase: Asistencias repartidas por cada pérdida de balón cometida. Fórmula: [AST / TOV].</span>
                 </span>
                 ${getSortArrow('astTo', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="tov" style="padding: 12px; text-align: center; color: #dc2626; cursor: pointer;">
                 <span class="has-tooltip">
                   ${this.t("turnovers", "PÉRDIDAS").toUpperCase()} <span class="info-badge">?</span>
-                  <span class="tooltip-box">Total de pérdidas de balón acumuladas en la temporada.</span>
+                  <span class="tooltip-box">Total acumulado de pérdidas de balón en la temporada.</span>
                 </span>
                 ${getSortArrow('tov', this.playerSortField, this.playerSortAsc)}
               </th>
@@ -407,7 +432,7 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 EFECTIVE FG (eFG%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de lanzamiento bonificando en un 50% el valor de los triples anotados [(FGM + 0.5 * 3PM) / FGA].</span>
+                <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de tiro bonificando en un 50% los triples anotados. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #7c3aed; margin-top: 4px;">${efg}%</div>
@@ -418,7 +443,7 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 TURNOVER RATIO (TOV%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Turnover Percentage: Porcentaje de posesiones que concluyen en pérdida de balón [TOV / Posesiones].</span>
+                <span class="tooltip-box">Turnover Percentage: Porcentaje de posesiones propias que terminan en pérdida de balón. Fórmula: [TOV / Posesiones].</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${tovPct}%</div>
@@ -429,7 +454,7 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 REBOTE OFENSIVO (ORB%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Offensive Rebound %: Porcentaje de rebotes ofensivos capturados sobre los rechaces en ataque disponibles [ORB / (ORB + Opp DRB)].</span>
+                <span class="tooltip-box">Offensive Rebound %: Porcentaje de rebotes ofensivos capturados sobre los rechaces en ataque disponibles. Fórmula: [ORB / (ORB + Opp DRB)].</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #2563eb; margin-top: 4px;">${orbPct}%</div>
@@ -440,7 +465,7 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 FREE THROW RATE (FTR) <span class="info-badge">?</span>
-                <span class="tooltip-box">Free Throw Rate: Capacidad de generar puntos desde el tiro libre por cada tiro de campo lanzado [FTM / FGA].</span>
+                <span class="tooltip-box">Free Throw Rate: Capacidad de generar puntos desde el tiro libre por cada tiro de campo lanzado. Fórmula: [FTM / FGA].</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #16a34a; margin-top: 4px;">${ftRate}</div>
@@ -484,7 +509,6 @@ export class AdvancedStatsView {
           background: #f97316;
           color: #ffffff;
         }
-        /* Posicionamiento flotante del tooltip sin corte de overflow */
         .tooltip-box {
           visibility: hidden;
           opacity: 0;

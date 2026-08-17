@@ -7,6 +7,7 @@
  * 1. Contraste absoluto forzado (!important) en todos los textos e iconos del sidebar.
  * 2. Persistencia síncrona del scroll de la barra lateral entre transiciones de ruta.
  * 3. Bottom Sheet táctil para móviles y control de accesos RBAC.
+ * 4. Integración completa del nuevo módulo Familias & Bienestar (family-advisor).
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -32,6 +33,7 @@ export class LayoutView {
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
     if (['reports', 'informes', 'informe'].includes(r)) return 'reports';
+    if (['family-advisor', 'family', 'familia', 'familias', 'bienestar', 'advisor'].includes(r)) return 'family-advisor';
     if (['ask', 'pregunta', 'preguntale', 'ai', 'ia', 'ask-ai'].includes(r)) return 'ask';
     if (['profile', 'perfil'].includes(r)) return 'profile';
     return r || 'dashboard';
@@ -62,7 +64,6 @@ export class LayoutView {
       sidebars.forEach(s => {
         s.scrollTop = scrollPos;
       });
-      // Doble intento para asegurar tras pintado de layouts asíncronos
       requestAnimationFrame(() => {
         sidebars.forEach(s => {
           s.scrollTop = scrollPos;
@@ -87,7 +88,6 @@ export class LayoutView {
    * Inicializa el menú desplegable táctil para móviles (Botón "Más")
    */
   static bindMobileDrawerEvents() {
-    // Restaurar inmediatamente el scroll del sidebar
     LayoutView._restoreSidebarScroll();
     LayoutView._bindSidebarScrollPreservation();
 
@@ -161,7 +161,6 @@ export class LayoutView {
         };
       });
 
-      // Al hacer clic en un enlace, registrar el scroll exacto antes de la navegación
       document.querySelectorAll(".nav-link").forEach(link => {
         link.addEventListener("click", () => {
           const sidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
@@ -174,7 +173,6 @@ export class LayoutView {
   }
 
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
-    // Guardar posición antes de sobreescribir el HTML si el sidebar ya existe
     const existingSidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
     if (existingSidebar && existingSidebar.scrollTop > 0) {
       sessionStorage.setItem("iq_sidebar_scroll", existingSidebar.scrollTop);
@@ -231,11 +229,18 @@ export class LayoutView {
         titleKey: "advanced_stats",
         defaultTitle: "ESTADÍSTICA AVANZADA",
         items: [
-          { key: "advanced", labelKey: "advanced_stats", fallback: "Estadística avanzada", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
+          { key: "advanced", labelKey: "advanced_stats", fallback: "Stats Avanzadas", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
           { key: "heatmap", labelKey: "heatmap_analysis", fallback: "Mapa de Calor", route: "heatmap", svg: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>' },
           { key: "comparator", labelKey: "comparator", fallback: "Comparador", route: "comparator", disabled: isJugadorRole, svg: '<path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path>' },
           { key: "reports", labelKey: "reports", fallback: "Informes", route: "reports", svg: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line>' },
-          { key: "ask", labelKey: "ask_ai", fallback: "Pregúntale a tus datos", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+          { key: "ask", labelKey: "ask_ai", fallback: "Asistente IQ", route: "ask", disabled: isJugadorRole, svg: '<path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.5 7.5"></path><path d="M12 12v10"></path>' }
+        ]
+      },
+      {
+        titleKey: "welfare",
+        defaultTitle: "BIENESTAR",
+        items: [
+          { key: "family-advisor", labelKey: "family_advisor", fallback: "Familias & Bienestar", route: "family-advisor", svg: '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>' }
         ]
       },
       {
@@ -273,11 +278,11 @@ export class LayoutView {
       </option>
     `).join("") : `<option value="" disabled selected>⚠️ Sin equipos asignados</option>`;
 
-    const seasonOptionsMarkup = seasons.map(s => `
+    const seasonOptionsMarkup = seasons.length > 0 ? seasons.map(s => `
       <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
         ${s.name}
       </option>
-    `).join("");
+    `).join("") : `<option value="2026" selected>2026</option>`;
 
     const langOptionsMarkup = `
       <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
@@ -418,6 +423,10 @@ export class LayoutView {
               <a href="#/reports" class="drawer-item">
                 <span class="drawer-icon">📄</span>
                 <span>${LayoutView.t("reports", "Informes")}</span>
+              </a>
+              <a href="#/family-advisor" class="drawer-item">
+                <span class="drawer-icon">👨‍👩‍👧‍👦</span>
+                <span>${LayoutView.t("family_advisor", "Familias & Bienestar")}</span>
               </a>
               <a href="${isJugadorRole ? 'javascript:void(0);' : '#/ask'}" class="drawer-item ${isJugadorRole ? 'disabled-link' : ''}">
                 <span class="drawer-icon">🤖</span>
@@ -968,6 +977,7 @@ if (I18n && typeof I18n.subscribe === "function") {
         heatmap: "heatmap_analysis",
         comparator: "comparator",
         reports: "reports",
+        "family-advisor": "family_advisor",
         ask: "ask_ai",
         profile: "profile",
         settings: "settings"
@@ -988,7 +998,7 @@ if (I18n && typeof I18n.subscribe === "function") {
   });
 }
 
-// Escuchar cambios de ruta globales para mantener fija la posición del scroll del sidebar
+// Mantener la posición del scroll de la barra lateral al cambiar de ruta
 window.addEventListener("hashchange", () => {
   LayoutView._restoreSidebarScroll();
 });

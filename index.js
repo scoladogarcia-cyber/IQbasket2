@@ -8,7 +8,8 @@
  * 3. Integración de la suite completa de LiveScoreHUDView (Anotación Pro en Vivo).
  * 4. Gestión y filtrado de equipos autorizados por usuario.
  * 5. Sincronización en tiempo real de idioma (ES, CA, EN, FR) en Desktop y Móvil vía TranslationStore e I18n.
- * 6. Control de cambios sin guardar y preservación de estados en tiempo de ejecución.
+ * 6. Integración del nuevo módulo formativo y familiar: FamilyAdvisorView.
+ * 7. Control de cambios sin guardar y preservación de estados en tiempo de ejecución.
  */
 
 import { supabase } from "./config/database.config.js";
@@ -34,6 +35,7 @@ import { ReportsView } from "./views/ReportsView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
 import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
+import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -84,6 +86,7 @@ export class IQBasketApp {
       lineups: new LineupsView(this.authController),
       comparator: new ComparatorView(this.authController),
       reports: new ReportsView(this.authController),
+      familyadvisor: new FamilyAdvisorView(this.authController),
       settings: new TranslationsView(this.authController),
       ask: new AskAIView(this.authController),
       profile: new ProfileView(this.authController),
@@ -586,7 +589,7 @@ export class IQBasketApp {
         if (this.views.team) await this.views.team.render(contentArea, this.teamId);
         break;
 
-      // NUEVO MODO ANOTACIÓN EN VIVO (HUD PRO)
+      // MODO ANOTACIÓN EN VIVO (HUD PRO)
       case "live":
       case "hud":
       case "live-hud":
@@ -646,6 +649,16 @@ export class IQBasketApp {
         if (this.views.reports) await this.views.reports.render(contentArea);
         break;
 
+      // NUEVO MÓDULO FAMILIAS & BIENESTAR
+      case "family-advisor":
+      case "family":
+      case "familia":
+      case "familias":
+      case "bienestar":
+      case "advisor":
+        if (this.views.familyadvisor) await this.views.familyadvisor.render(contentArea);
+        break;
+
       case "ask":
       case "ask-ai":
       case "pregunta":
@@ -679,3 +692,5 @@ document.addEventListener("DOMContentLoaded", () => {
   app.parseHashRoute();
   app.render();
 });
+
+export default IQBasketApp;

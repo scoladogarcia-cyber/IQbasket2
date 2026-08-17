@@ -5,6 +5,9 @@
  */
 
 import { StatsEngine } from "../engine/StatsEngine.js";
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+import { AdvancedTeamStatsCalculator } from "../domain/stats/AdvancedTeamStatsCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
@@ -60,6 +63,32 @@ export class SeasonDashboardView {
   _formatDateES(dateStr) {
     if (!dateStr || dateStr === "-") return "-";
     return I18n && typeof I18n.formatDate === "function" ? I18n.formatDate(dateStr) : dateStr;
+  }
+
+  _calculateFibaVal(st = {}) {
+    const pts = Number(st.points ?? (Number(st.fg2_made ?? st.fg2Made ?? 0) * 2 + Number(st.fg3_made ?? st.fg3Made ?? 0) * 3 + Number(st.ft_made ?? st.ftMade ?? 0)));
+    const oreb = Number(st.off_reb ?? st.offReb ?? st.rebounds_offensive ?? 0);
+    const dreb = Number(st.def_reb ?? st.defReb ?? st.rebounds_defensive ?? 0);
+    const reb = Number(st.rebounds ?? (oreb + dreb));
+    const ast = Number(st.assists ?? st.ast ?? 0);
+    const stl = Number(st.steals ?? st.stl ?? 0);
+    const blk = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+    const foulsDrawn = Number(st.fouls_drawn ?? st.foulsDrawn ?? st.fouls_received ?? 0);
+
+    const fg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
+    const fg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
+    const fg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
+    const fg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
+    const ftm = Number(st.ft_made ?? st.ftMade ?? 0);
+    const fta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
+
+    const missedFg = Math.max(0, (fg2a + fg3a) - (fg2m + fg3m));
+    const missedFt = Math.max(0, fta - ftm);
+    const tov = Number(st.turnovers ?? st.tov ?? 0);
+    const blkAgainst = Number(st.blocks_received ?? st.blocksReceived ?? 0);
+    const foulsCommitted = Number(st.fouls_committed ?? st.fouls ?? 0);
+
+    return (pts + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + blkAgainst + foulsCommitted);
   }
 
   _normalizeGameScore(g) {
@@ -129,11 +158,12 @@ export class SeasonDashboardView {
           ? `#${pInfo.jersey}` 
           : (pInfo.number ? `#${pInfo.number}` : "");
 
-        let val = Number(row.evaluation ?? row.val ?? 0);
-        if (!val && StatsEngine && typeof StatsEngine.calculatePlayerStats === "function") {
-          val = StatsEngine.calculatePlayerStats(row).evaluation || 0;
-        }
         const minutes = Number(row.minutes || row.minutesPlayed || 0);
+
+        // SOLO SE CONTABILIZA SI EL JUGADOR DISPUTÓ MINUTOS (> 0)
+        if (minutes <= 0) return;
+
+        const val = this._calculateFibaVal(row);
 
         if (!map[pId]) {
           map[pId] = {

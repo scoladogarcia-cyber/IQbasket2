@@ -469,25 +469,59 @@ export class ComparatorView {
   }
 
   /**
-   * Genera el módulo de Fortalezas Relativas
+   * Genera el módulo de Fortalezas Relativas basado en los datos reales del grupo
    */
   _renderRelativeStrengths(statsMap) {
-    const cardsMarkup = this.selectedPlayerIds.map(pId => {
-      const pData = statsMap.get(pId);
-      if (!pData) return "";
+    const metricsToCompare = [
+      { key: "pts", label: this.t("points", "Puntos"), unit: "pts", isInverse: false },
+      { key: "reb", label: this.t("rebounds", "Rebotes"), unit: "reb", isInverse: false },
+      { key: "ast", label: this.t("assists", "Asistencias"), unit: "ast", isInverse: false },
+      { key: "stl", label: this.t("steals", "Robos"), unit: "rob", isInverse: false },
+      { key: "blk", label: this.t("blocks", "Tapones"), unit: "tap", isInverse: false },
+      { key: "efg", label: "Tiro Efectivo", unit: "%", isInverse: false },
+      { key: "val", label: "Valoración FIBA", unit: "val", isInverse: false },
+      { key: "tov", label: "Control de Pérdidas", unit: "per", isInverse: true }
+    ];
 
+    const playersList = this.selectedPlayerIds.map(pId => statsMap.get(pId)).filter(Boolean);
+
+    const cardsMarkup = playersList.map(pData => {
       const name = `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim();
-      const bestAttr = parseFloat(pData.val) > 5 ? this.t("valuation", "Valoración") : (parseFloat(pData.pts) > 4 ? this.t("points", "Puntos") : this.t("reb_def", "Reb. def."));
-      const worstAttr = this.t("blocks", "Tapones");
+
+      const metricScores = metricsToCompare.map(m => {
+        const allValues = playersList.map(other => parseFloat(other[m.key] || 0));
+        const maxV = Math.max(...allValues);
+        const minV = Math.min(...allValues);
+        const currentV = parseFloat(pData[m.key] || 0);
+
+        let relativeScore = 0.5;
+        if (maxV !== minV) {
+          relativeScore = m.isInverse ? (maxV - currentV) / (maxV - minV) : (currentV - minV) / (maxV - minV);
+        }
+
+        return {
+          label: m.label,
+          val: currentV,
+          unit: m.unit,
+          score: relativeScore
+        };
+      });
+
+      const sortedByBest = [...metricScores].sort((a, b) => b.score - a.score);
+      const best = sortedByBest[0];
+      const worst = sortedByBest[sortedByBest.length - 1];
+
+      const bestText = `${best.label} (${best.val}${best.unit === '%' ? '%' : ''})`;
+      const worstText = `${worst.label} (${worst.val}${worst.unit === '%' ? '%' : ''})`;
 
       return `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; flex-wrap: wrap; gap: 8px;">
           <span style="font-weight: 800; font-size: 13px; color: #0f172a;">${name}</span>
-          <div style="font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-            <span>Mejor en</span> 
-            <span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 6px;">${bestAttr}</span>
-            <span>· Peor en</span> 
-            <span style="background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 6px;">${worstAttr}</span>
+          <div style="font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span style="color: #64748b;">Mejor en</span> 
+            <span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 6px; border: 1px solid #bbf7d0;">${bestText}</span>
+            <span style="color: #64748b;">· Peor en</span> 
+            <span style="background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 6px; border: 1px solid #fecaca;">${worstText}</span>
           </div>
         </div>
       `;
@@ -496,7 +530,7 @@ export class ComparatorView {
     return `
       <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">
-          ⚡ FORTALEZAS RELATIVAS
+          ⚡ FORTALEZAS RELATIVAS (COMPARATIVA DINÁMICA DE GRUPO)
         </div>
         <div style="display: flex; flex-direction: column; gap: 10px;">
           ${cardsMarkup}

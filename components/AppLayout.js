@@ -7,7 +7,7 @@
  * - Identidad visual oficial: Logo SVG balón de baloncesto con acento naranja (#f97316) y fondo oscuro (#0f172a).
  * - Sincronización reactiva con `I18n` e `I18nService` (soporta claves planas y jerárquicas sin fallos).
  * - Resaltado dinámico de ruta activa y autocierre táctil del menú "Más".
- * - Soporte para insignia/marcador del partido contextual activo.
+ * - Acceso directo integrado al nuevo módulo de Familias & Bienestar (`#/family-advisor`).
  */
 
 import { I18n } from "../services/I18nService.js";
@@ -162,6 +162,17 @@ export class AppLayout {
               </a>
             </div>
 
+            <!-- GRUPO FAMILIAS & FORMACIÓN -->
+            <div class="nav-group">
+              <span class="nav-group-title" data-i18n="navigation.groups.welfare">BIENESTAR</span>
+              <a href="#/family-advisor" class="nav-item" data-hash="#/family-advisor">
+                <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
+                </svg>
+                <span class="nav-text" data-i18n="navigation.familyAdvisor">Familias & Bienestar</span>
+              </a>
+            </div>
+
             <!-- GRUPO CUENTA -->
             <div class="nav-group">
               <span class="nav-group-title" data-i18n="navigation.groups.account">SISTEMA</span>
@@ -211,6 +222,7 @@ export class AppLayout {
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="16" y1="2" x2="16" y2="6"></line>
               <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
             <span class="mobile-label" data-i18n="navigation.games">Partidos</span>
           </a>
@@ -260,6 +272,11 @@ export class AppLayout {
             <a href="#/reports" class="sheet-list-item" data-hash="#/reports">
               <span class="sheet-icon">📄</span>
               <span class="sheet-text" data-i18n="navigation.reports">Informes</span>
+              <span class="sheet-arrow">➔</span>
+            </a>
+            <a href="#/family-advisor" class="sheet-list-item" data-hash="#/family-advisor">
+              <span class="sheet-icon">👨‍👩‍👧‍👦</span>
+              <span class="sheet-text" data-i18n="navigation.familyAdvisor">Familias & Bienestar</span>
               <span class="sheet-arrow">➔</span>
             </a>
             <a href="#/ask-ai" class="sheet-list-item" data-hash="#/ask-ai">
@@ -725,7 +742,6 @@ export class AppLayout {
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const key = el.getAttribute("data-i18n");
       if (key) {
-        // Soporta resolución plana y anidada
         const translated = I18n.t(key, {}, null);
         if (translated && translated !== key) {
           el.textContent = translated;
