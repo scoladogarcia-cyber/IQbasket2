@@ -34,6 +34,29 @@ const LEGACY_PERMISSION_ALIASES = Object.freeze({
   DELETE_TEAM: Permission.MANAGE_TEAMS
 });
 
+const CONTEXT_ROLE_TO_PERMISSION_ROLE = Object.freeze({
+  ADMIN: UserRole.ADMIN,
+  COORDINADOR: UserRole.ADMIN,
+  DIRECTOR_DEPORTIVO: UserRole.ADMIN,
+  ENTRENADOR: UserRole.ENTRENADOR,
+  AYUDANTE: UserRole.ENTRENADOR,
+  ANALISTA: UserRole.ANALISTA,
+  PREPARADOR_FISICO: UserRole.PREPARADOR_FISICO,
+  JUGADOR: UserRole.JUGADOR,
+  FAMILIA_TUTOR: UserRole.FAMILIA_TUTOR,
+  VISOR: UserRole.VISOR
+});
+
+const CONTEXT_ROLE_PRIORITY = Object.freeze([
+  UserRole.ADMIN,
+  UserRole.ENTRENADOR,
+  UserRole.ANALISTA,
+  UserRole.PREPARADOR_FISICO,
+  UserRole.JUGADOR,
+  UserRole.FAMILIA_TUTOR,
+  UserRole.VISOR
+]);
+
 function parseArray(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(String);
@@ -141,11 +164,49 @@ export class PermissionService {
     return this.currentUser?.role || UserRole.INVITADO;
   }
 
-  getEffectiveRole() {
-    if (this.getAuthenticatedRole() === UserRole.SUPERADMIN && this.previewRole) {
-      return this.previewRole;
+  getEffectiveRole(context = {}) {
+    return this.getRoleForContext(context, { preview: true });
+  }
+
+  getRoleForContext(context = {}, { preview = false } = {}) {
+    const authenticatedRole = this.getAuthenticatedRole();
+
+    if (authenticatedRole === UserRole.SUPERADMIN) {
+      if (preview && this.previewRole) return this.previewRole;
+      return UserRole.SUPERADMIN;
     }
-    return this.getAuthenticatedRole();
+
+    if (String(this.currentUser?.globalRole || "").toUpperCase() === "ADMIN") {
+      return UserRole.ADMIN;
+    }
+
+    const contextualRole = this._resolveContextualRole(context);
+    return contextualRole || authenticatedRole;
+  }
+
+  _resolveContextualRole(context = {}) {
+    if (!this.currentUser?.contextualMemberships?.length) return null;
+
+    const targetTeamSeasonId = context.teamSeasonId ? String(context.teamSeasonId) : "";
+    const targetTeamId = context.teamId ? String(context.teamId) : "";
+
+    const mappedRoles = this.currentUser.contextualMemberships
+      .filter((membership) => {
+        if (String(membership.status || "ACTIVE").toUpperCase() !== "ACTIVE") return false;
+        if (targetTeamSeasonId) {
+          return String(membership.teamSeasonId || "") === targetTeamSeasonId;
+        }
+        if (targetTeamId) {
+          return String(membership.teamId || "") === targetTeamId;
+        }
+        return false;
+      })
+      .map((membership) => CONTEXT_ROLE_TO_PERMISSION_ROLE[
+        String(membership.role || "").toUpperCase()
+      ])
+      .filter(Boolean);
+
+    return CONTEXT_ROLE_PRIORITY.find(role => mappedRoles.includes(role)) || null;
   }
 
   isAuthenticated() {
@@ -169,7 +230,7 @@ export class PermissionService {
 
   can(permissionKey, context = {}) {
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
-    const role = this.getAuthenticatedRole();
+    const role = this.getRoleForContext(context);
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
     return this._passesScope(context);
@@ -177,10 +238,10 @@ export class PermissionService {
 
   canPreview(permissionKey, context = {}) {
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
-    const role = this.getEffectiveRole();
+    const role = this.getRoleForContext(context, { preview: true });
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
-    return this._passesScope(context, { preview: true });
+    return this._passesScope(context);
   }
 
   getAiMonthlyLimit({ preview = false } = {}) {
