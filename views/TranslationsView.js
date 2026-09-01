@@ -244,6 +244,12 @@ export class TranslationsView {
     }
 
     const normalizedIds = [...new Set((teamIds || []).map(String))];
+    for (const teamId of normalizedIds) {
+      if (!this.auth.can(Permission.APPROVE_TEAM_ACCESS, { teamId })) {
+        throw new Error("No puedes asignar uno o más equipos fuera de tu alcance.");
+      }
+    }
+
     const targetProfile = this.profilesList.find(p => String(p.email || "").toLowerCase() === String(email || "").toLowerCase());
     if (targetProfile?.club_id && !this.auth.can(Permission.APPROVE_TEAM_ACCESS, { clubId: targetProfile.club_id })) {
       throw new Error("No puedes gestionar usuarios de otro club.");
