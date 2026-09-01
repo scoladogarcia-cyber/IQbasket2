@@ -146,8 +146,9 @@ export class PermissionService {
     return this._passesScope(context, { preview: true });
   }
 
-  getAiMonthlyLimit() {
-    return AI_MONTHLY_LIMITS[this.getAuthenticatedRole()] ?? 0;
+  getAiMonthlyLimit({ preview = false } = {}) {
+    const role = preview ? this.getEffectiveRole() : this.getAuthenticatedRole();
+    return AI_MONTHLY_LIMITS[role] ?? 0;
   }
 
   setPreviewRole(role) {
