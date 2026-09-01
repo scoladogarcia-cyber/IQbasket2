@@ -19,6 +19,8 @@ import { supabase } from "../config/database.config.js";
 import { LanguageSettingsView } from "./LanguageSettingsView.js";
 import { I18n } from "../services/I18nService.js";
 import { Permission, UserRole, UNIQUE_SUPERADMIN_EMAIL } from "../security/PermissionService.js";
+import { TeamAccessRequestService } from "../services/TeamAccessRequestService.js";
+import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
 
 export class TranslationsView {
   /**
@@ -63,9 +65,11 @@ export class TranslationsView {
     // Temporadas
     this.seasonsList = [];
 
-    // Solicitudes de adhesión a equipos
-    const storedRequests = localStorage.getItem("iq_team_join_requests");
-    this.joinRequests = storedRequests ? JSON.parse(storedRequests) : [];
+    // Solicitudes de adhesión multiusuario (Supabase es la fuente de verdad).
+    this.joinRequests = [];
+    this.teamDirectory = [];
+    this.accessRequestService = new TeamAccessRequestService(supabase);
+    this.staffAssignmentService = new StaffAssignmentService(supabase);
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
@@ -224,6 +228,50 @@ export class TranslationsView {
     } catch (e) {
       console.warn("Error leyendo temporadas de Supabase:", e);
     }
+  }
+
+  async _fetchTeamDirectory() {
+    try {
+      this.teamDirectory = await this.accessRequestService.listTeamDirectory();
+    } catch (e) {
+      console.warn("Error cargando directorio de equipos:", e);
+      this.teamDirectory = [];
+    }
+  }
+
+  async _fetchJoinRequests() {
+    try {
+      this.joinRequests = await this.accessRequestService.listRequests();
+      this._saveRequestsLocal();
+    } catch (e) {
+      console.warn("Error cargando solicitudes de acceso:", e);
+      this.joinRequests = [];
+    }
+  }
+
+  async _requestTeamAccess(teamId) {
+    await this.accessRequestService.requestAccess(teamId);
+    await this._fetchJoinRequests();
+  }
+
+  async _reviewTeamAccess(requestId, approve) {
+    await this.accessRequestService.reviewRequest(requestId, approve);
+    await Promise.all([
+      this._fetchJoinRequests(),
+      this._fetchProfiles()
+    ]);
+  }
+
+  async _saveStaffAssignment({ clubId = null, teamId = null, seasonName, role, staffName }) {
+    const assignment = await this.staffAssignmentService.upsertAssignment({
+      clubId,
+      teamId,
+      seasonName,
+      role,
+      staffName
+    });
+    DataStore.setStaffAssignmentLocal?.(assignment);
+    return assignment;
   }
 
   _saveSeasonsLocal() {
@@ -428,7 +476,12 @@ export class TranslationsView {
     if (!container) return;
 
     if (this.seasonsList.length === 0) await this._fetchSeasons();
-    if (this.activeTab === "users") await this._fetchProfiles();
+    if (this.activeTab === "users") {
+      await Promise.all([this._fetchProfiles(), this._fetchJoinRequests()]);
+    }
+    if (this.activeTab === "requests") {
+      await Promise.all([this._fetchTeamDirectory(), this._fetchJoinRequests()]);
+    }
     if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
 
     const effectiveRole = this.getEffectiveRole();
@@ -439,6 +492,8 @@ export class TranslationsView {
     const players = DataStore.getPlayers() || [];
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
+    const directoryTeams = this.teamDirectory.length > 0 ? this.teamDirectory : realTeams;
+    const myAssignedTeamIds = this.auth?.getCurrentUser?.()?.allowedTeamIds || [];
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
@@ -590,13 +645,13 @@ export class TranslationsView {
                       </tr>
                     </thead>
                     <tbody>
-                      ${realTeams.length > 0 ? realTeams.map(team => {
+                      ${directoryTeams.length > 0 ? directoryTeams.map(team => {
                         const existingReq = this.joinRequests.find(r => r.userEmail === currentUserEmail && String(r.teamId) === String(team.id));
                         const isAlreadyAssigned = myAssignedTeamIds.includes(String(team.id));
 
                         return `
                           <tr>
-                            <td><strong>${team.name}</strong></td>
+                            <td><strong>${team.name}</strong>${team.club_name ? `<div style="font-size:10px;color:#64748b;">${team.club_name}</div>` : ''}</td>
                             <td><span class="badge-category">${team.category || 'General'}</span></td>
                             <td>${team.competition || 'Oficial'}</td>
                             <td>
@@ -636,7 +691,7 @@ export class TranslationsView {
                   <div class="card-title"><span>👑</span> CREAR UN NUEVO CLUB (EXCLUSIVO SUPERADMIN)</div>
                   <form id="form-create-club" class="grid-2-cols">
                     <div class="form-group"><label>Nombre del Club *</label><input type="text" id="club-new-name" placeholder="Ej. CB Sants" required /></div>
-                    <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
+                    <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
                     <div class="form-group"><label>Teléfono</label><input type="text" id="club-new-phone" placeholder="Ej. +34 600 000 000" /></div>
                     <div class="form-group"><label>Dirección</label><input type="text" id="club-new-address" placeholder="Ej. Av. de Roma 12" /></div>
                     <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Club</button></div>
@@ -652,7 +707,7 @@ export class TranslationsView {
                     <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="team-new-name" placeholder="Ej. Mini Femení B" required /></div>
                     <div class="form-group"><label>Categoría *</label><input type="text" id="team-new-category" placeholder="Ej. Mini / Alevín" required /></div>
                     <div class="form-group"><label>Competición *</label><input type="text" id="team-new-competition" placeholder="Ej. B1 / Preferente" required /></div>
-                    <div class="form-group"><label>Entrenador Principal *</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" required /></div>
+                    <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" /></div>
                     <div class="form-group"><label>Color Principal</label><input type="color" id="team-new-color" value="#ea580c" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
                     <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Equipo Completo</button></div>
                   </form>
@@ -664,7 +719,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Nombre del Club</th><th>Coordinador</th><th>Teléfono</th><th>Dirección</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${c.coordinator_name || 'No asignado'}</td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
+                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${DataStore.getClubCoordinator?.(c.id, currentActiveSeasonName) || c.coordinator_name || 'No asignado'}<div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -674,7 +729,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
+                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${DataStore.getTeamCoach?.(t.id, currentActiveSeasonName) || t.coach_name || t.coach || 'Por definir'}</strong><div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -692,7 +747,7 @@ export class TranslationsView {
                   <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
                   <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Entrenador Principal</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-team-coach" value="${DataStore.getTeamCoach?.(this.selectedTeamForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
                   ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
                 </form>
@@ -708,7 +763,7 @@ export class TranslationsView {
 
                 <form id="form-edit-club" class="grid-2-cols">
                   <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-club-coordinator" value="${DataStore.getClubCoordinator?.(this.selectedClubForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Teléfono</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
@@ -1202,6 +1257,15 @@ export class TranslationsView {
 
           if (error) throw error;
 
+          if (coordinator !== undefined) {
+            await this._saveStaffAssignment({
+              clubId: data.id,
+              seasonName: currentActiveSeasonName,
+              role: StaffRole.COORDINATOR,
+              staffName: coordinator
+            });
+          }
+
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
           this.hideSyncOverlay();
@@ -1243,6 +1307,14 @@ export class TranslationsView {
           }]).select().single();
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId,
+            teamId: data.id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.HEAD_COACH,
+            staffName: coach
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(data.id, true);
@@ -1300,10 +1372,18 @@ export class TranslationsView {
         try {
           if (!supabase) throw new Error("Supabase no configurado");
           const { error } = await supabase.from("teams").update({
-            name, category, competition, coach_name: coach, color
+            name, category, competition, color
           }).eq("id", id);
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId: this.selectedTeamForEdit?.club_id || this.selectedTeamForEdit?.clubId || null,
+            teamId: id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.HEAD_COACH,
+            staffName: coach
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1335,10 +1415,17 @@ export class TranslationsView {
         try {
           if (!supabase) throw new Error("Supabase no configurado");
           const { error } = await supabase.from("clubs").update({
-            name, coordinator_name: coordinator, phone, address
+            name, phone, address
           }).eq("id", id);
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId: id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.COORDINATOR,
+            staffName: coordinator
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1544,14 +1631,8 @@ export class TranslationsView {
           const email = e.currentTarget.getAttribute("data-email");
           const teamId = e.currentTarget.getAttribute("data-team-id");
 
-          const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-          if (reqObj) reqObj.status = "APROBADO";
-          this._saveRequestsLocal();
-
-          const nextIds = [...(this.userTeamAssignments[email] || [])];
-          if (!nextIds.includes(String(teamId))) nextIds.push(String(teamId));
           try {
-            await this._persistUserTeamAssignments(email, nextIds);
+            await this._reviewTeamAccess(reqId, true);
           } catch (err) {
             return alert(`❌ No se pudo conceder el acceso: ${err.message}`);
           }
@@ -1598,14 +1679,8 @@ export class TranslationsView {
           return;
         }
 
-        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-        if (reqObj) reqObj.status = "APROBADO";
-        this._saveRequestsLocal();
-
-        const nextIds = [...(this.userTeamAssignments[email] || [])];
-        if (!nextIds.includes(String(teamId))) nextIds.push(String(teamId));
         try {
-          await this._persistUserTeamAssignments(email, nextIds);
+          await this._reviewTeamAccess(reqId, true);
         } catch (err) {
           alert(`❌ No se pudo conceder el acceso: ${err.message}`);
           return;
@@ -1625,9 +1700,12 @@ export class TranslationsView {
           return;
         }
 
-        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-        if (reqObj) reqObj.status = "RECHAZADO";
-        this._saveRequestsLocal();
+        try {
+          await this._reviewTeamAccess(reqId, false);
+        } catch (err) {
+          alert(`❌ No se pudo rechazar la solicitud: ${err.message}`);
+          return;
+        }
 
         alert("🔴 Solicitud de adhesión rechazada.");
         await this.render(containerId);
@@ -1679,24 +1757,17 @@ export class TranslationsView {
 
     // Evento Solicitar unirse a equipo
     container.querySelectorAll(".btn-request-join-team").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         const teamId = e.currentTarget.getAttribute("data-id");
         const teamName = e.currentTarget.getAttribute("data-name");
 
-        const requestObj = {
-          id: "req-" + Date.now(),
-          userEmail: currentUserEmail,
-          teamId: teamId,
-          teamName: teamName,
-          status: "PENDIENTE",
-          date: new Date().toLocaleDateString()
-        };
-
-        this.joinRequests.push(requestObj);
-        this._saveRequestsLocal();
-
-        alert(`✉️ Solicitud enviada correctamente para unirse a ${teamName}. La solicitud ha sido notificada al Superadmin y a los Administradores.`);
-        this.render(containerId);
+        try {
+          await this._requestTeamAccess(teamId);
+          alert(`✉️ Solicitud enviada correctamente para unirse a ${teamName}. La solicitud ya es visible para los administradores autorizados y el Superadmin.`);
+          await this.render(containerId);
+        } catch (err) {
+          alert(`❌ No se pudo registrar la solicitud: ${err.message}`);
+        }
       });
     });
 
