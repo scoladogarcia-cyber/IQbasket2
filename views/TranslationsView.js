@@ -1727,35 +1727,30 @@ export class TranslationsView {
 
         try {
           if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: email,
-            password: tempPassword,
-            options: {
-              data: {
-                first_name: firstName,
-                last_name: lastName,
-                role: role
-              }
+          const activeTeam = DataStore.getTeamById(activeTeamId);
+          const { data: functionData, error: functionError } = await supabase.functions.invoke("admin-users", {
+            body: {
+              action: "create-user",
+              email,
+              password: tempPassword,
+              firstName,
+              lastName,
+              role,
+              clubId: activeTeam?.club_id || activeTeam?.clubId || null,
+              teamIds: activeTeamId ? [activeTeamId] : []
             }
           });
 
-          if (authError) {
+          if (functionError || functionData?.error) {
             this.hideSyncOverlay();
-            alert(`❌ Error al crear cuenta en Supabase Auth: ${authError.message}`);
+            alert(`❌ Error al crear usuario: ${functionData?.error || functionError?.message || "Error desconocido"}`);
             return;
-          }
-
-          if (authData?.user) {
-            await supabase
-              .from("user_profiles")
-              .update({ role: role, first_name: firstName, last_name: lastName })
-              .eq("email", email);
           }
 
           await this._fetchProfiles();
           this.hideSyncOverlay();
 
-          alert(`✅ Usuario "${fullName}" (${role}) registrado con éxito con la contraseña temporal "${tempPassword}".`);
+          alert(`✅ Usuario "${fullName}" (${role}) registrado con éxito.`);
           await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
