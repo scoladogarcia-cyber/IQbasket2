@@ -44,7 +44,9 @@ export const DATABASE_CONFIG = {
 
     TRANSLATIONS: "translations",
 
-    // Modelo v3 (borrador; no usar en runtime hasta migración validada).
+    // Modelo v3 Fase 1: estructura y backfill ya validados.
+    // El runtime adopta estas colecciones progresivamente con compatibilidad legacy;
+    // RLS permanece desactivado hasta la fase de seguridad.
     SEASON_CATALOG: "season_catalog",
     TEAM_SEASONS: "team_seasons",
     ROSTER_MEMBERSHIPS: "roster_memberships",
