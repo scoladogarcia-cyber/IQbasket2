@@ -84,6 +84,9 @@ export class GameLiveEditorView {
 
   async _renderGamesList(container, teamId) {
     this.games = DataStore.getGames(teamId) || [];
+    const canCreateGame = Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId }));
+    const canRecordLive = Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId }));
+    const canEditGame = Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId }));
 
     const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const pCodeMap = new Map();
@@ -155,8 +158,8 @@ export class GameLiveEditorView {
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button class="btn-open-court-direct" data-id="${g.id}" style="background: #0284c7; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
-              🏀 Pista / Edición
+            <button class="btn-open-court-direct" data-id="${g.id}" aria-disabled="${!canEditGame}" style="background: ${canEditGame ? '#0284c7' : '#e2e8f0'}; color: ${canEditGame ? '#ffffff' : '#64748b'}; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canEditGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
+              🏀 Pista / Edición${canEditGame ? '' : ' 🔒'}
             </button>
             <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📋 Boxscore</button>
             <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 Informe</button>
@@ -175,10 +178,10 @@ export class GameLiveEditorView {
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button id="btn-create-game-hud" style="background: #f97316; color: #ffffff; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(249,115,22,0.3);">
-              ⚡ Nueva Anotación en Vivo (HUD Pro)
+            <button id="btn-create-game-hud" aria-disabled="${!canRecordLive}" style="background: ${canRecordLive ? '#f97316' : '#e2e8f0'}; color: ${canRecordLive ? '#ffffff' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: ${canRecordLive ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: ${canRecordLive ? '0 4px 10px rgba(249,115,22,0.3)' : 'none'};">
+              ⚡ Nueva Anotación en Vivo (HUD Pro)${canRecordLive ? '' : ' 🔒'}
             </button>
-            <button id="btn-create-game" style="background: #0f172a; color: #ffffff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="btn-create-game" aria-disabled="${!canCreateGame}" style="background: ${canCreateGame ? '#0f172a' : '#e2e8f0'}; color: ${canCreateGame ? '#ffffff' : '#64748b'}; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: ${canCreateGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
               + 🏀 Registro Rápido
             </button>
           </div>
@@ -205,18 +208,30 @@ export class GameLiveEditorView {
     `;
 
     container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
+      if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId })) {
+        alert("⚠️ Tu perfil puede consultar partidos, pero no registrar una anotación en vivo.");
+        return;
+      }
       new LiveScoreHUDView(this.auth).render("dashboard-content-area");
     });
 
     container.querySelectorAll(".btn-open-court-direct").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.getAttribute("data-id");
+        if (!this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId })) {
+          alert("⚠️ Tu perfil puede consultar el partido y su BoxScore, pero no editarlo.");
+          return;
+        }
         this.entrySubMode = "court";
         this._openEditForm(id, container);
       });
     });
 
     container.querySelector("#btn-create-game")?.addEventListener("click", () => {
+      if (!this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId })) {
+        alert("⚠️ Tu perfil no tiene permiso para registrar nuevos partidos.");
+        return;
+      }
       const activeTeam = DataStore.getTeamById(teamId) || {};
       const newGameId = this._generateUUID();
       this.currentGame = {
