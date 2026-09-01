@@ -12,6 +12,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -43,14 +44,13 @@ export class GameLiveEditorView {
   }
 
   _canEditFullBoxScore() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME));
+  }
+
+  _canDeleteGame(game = null) {
+    const teamId = game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId();
+    const seasonId = game?.season_id || game?.seasonId || null;
+    return Boolean(this.auth?.canPreview?.(Permission.DELETE_GAME, { teamId, seasonId }));
   }
 
   _generateUUID() {
@@ -160,7 +160,7 @@ export class GameLiveEditorView {
             </button>
             <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📋 Boxscore</button>
             <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 Informe</button>
-            <button class="btn-delete-game-direct" data-id="${g.id}" style="background: #fee2e2; border: 1px solid #fca5a5; font-size: 18px; cursor: pointer; color: #dc2626; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Eliminar partido">🗑️</button>
+            <button class="btn-delete-game-direct" data-id="${g.id}" ${!this._canDeleteGame(g) ? 'disabled' : ''} style="background: ${this._canDeleteGame(g) ? '#fee2e2' : '#f1f5f9'}; border: 1px solid ${this._canDeleteGame(g) ? '#fca5a5' : '#cbd5e1'}; font-size: 18px; cursor: ${this._canDeleteGame(g) ? 'pointer' : 'not-allowed'}; color: ${this._canDeleteGame(g) ? '#dc2626' : '#94a3b8'}; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="${this._canDeleteGame(g) ? 'Eliminar partido' : 'Tu rol no puede eliminar partidos'}">🗑️</button>
           </div>
         </div>
       `;
@@ -261,6 +261,14 @@ export class GameLiveEditorView {
         
         const id = e.currentTarget.getAttribute("data-id");
         if (!id) return;
+        const game = this.games.find(g => String(g.id) === String(id));
+        if (!this.auth?.can?.(Permission.DELETE_GAME, {
+          teamId: game?.team_id || game?.teamId || teamId,
+          seasonId: game?.season_id || game?.seasonId || null
+        })) {
+          alert("⚠️ Tu rol no puede eliminar partidos.");
+          return;
+        }
 
         if (!confirm(this.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas, cuartos y jugadas asociadas."))) {
           return;
