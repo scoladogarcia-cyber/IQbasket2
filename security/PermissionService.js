@@ -198,17 +198,19 @@ export class PermissionService {
   }
 
   canAssignRole(targetRole, targetEmail = "") {
-    const normalizedTargetRole = normalizeRole(targetRole, targetEmail);
+    const requestedRole = canonicalRoleName(targetRole);
     const targetIsUniqueSuperadmin = isUniqueSuperadmin(targetEmail);
 
-    if (targetIsUniqueSuperadmin) {
-      return this.getAuthenticatedRole() === UserRole.SUPERADMIN
-        && normalizedTargetRole === UserRole.SUPERADMIN;
+    // La intención de asignar SUPERADMIN se valida antes de cualquier normalización.
+    if (requestedRole === UserRole.SUPERADMIN) {
+      return targetIsUniqueSuperadmin
+        && this.getAuthenticatedRole() === UserRole.SUPERADMIN;
     }
 
-    if (normalizedTargetRole === UserRole.SUPERADMIN) return false;
+    // La cuenta maestra no puede degradarse a otro rol.
+    if (targetIsUniqueSuperadmin) return false;
 
-    if (normalizedTargetRole === UserRole.ADMIN) {
+    if (requestedRole === UserRole.ADMIN) {
       return this.can(Permission.ASSIGN_PRIVILEGED_ROLES);
     }
 
