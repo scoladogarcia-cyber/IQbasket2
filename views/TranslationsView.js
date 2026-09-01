@@ -185,7 +185,10 @@ export class TranslationsView {
         return;
       }
 
-      let query = supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
+      let query = supabase
+        .from("user_profiles")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
+        .order("created_at", { ascending: false });
       const currentUser = this.auth.getCurrentUser?.();
       if (this.auth.getAuthenticatedRole?.() === UserRole.ADMIN && currentUser?.clubId) {
         query = query.eq("club_id", currentUser.clubId);
@@ -239,7 +242,7 @@ export class TranslationsView {
 
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
         .eq("email", current.email)
         .maybeSingle();
 
