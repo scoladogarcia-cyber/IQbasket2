@@ -265,6 +265,20 @@ alter table public.reports
 create index if not exists idx_reports_team_season_id
     on public.reports(team_season_id);
 
+-- Requests become explicitly scoped to a team-season. The existing team_id
+-- remains during transition for compatibility and auditability.
+alter table public.team_join_requests
+    add column if not exists team_season_id uuid
+    references public.team_seasons(id) on delete restrict;
+
+create index if not exists idx_team_join_requests_team_season_id
+    on public.team_join_requests(team_season_id);
+
+create unique index if not exists uq_team_join_requests_pending_scope
+    on public.team_join_requests(user_id, team_season_id)
+    where team_season_id is not null
+      and lower(coalesce(status, 'pending')) in ('pending', 'pendiente');
+
 -- Separate global security role from contextual sporting functions.
 -- No value is backfilled automatically in this draft.
 alter table public.user_profiles
