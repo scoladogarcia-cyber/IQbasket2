@@ -72,14 +72,21 @@ export class PermissionService {
       role,
       clubId: user.clubId ?? user.club_id ?? null,
       allowedTeamIds: parseArray(
-        user.allowedTeamIds ?? user.allowed_team_ids ?? user.team_ids ?? (user.team_id ? [user.team_id] : [])
+        user.allowedTeamIds
+          ?? user.assigned_team_ids
+          ?? user.allowed_team_ids
+          ?? user.team_ids
+          ?? (user.team_id ? [user.team_id] : [])
       ),
       allowedSeasonIds: parseArray(
         user.allowedSeasonIds ?? user.allowed_season_ids ?? user.season_ids ?? []
       ),
-      playerId: user.playerId ?? user.player_id ?? null,
+      playerId: user.playerId ?? user.player_id ?? user.linked_player_id ?? null,
       linkedPlayerIds: parseArray(
-        user.linkedPlayerIds ?? user.linked_player_ids ?? user.player_ids ?? []
+        user.linkedPlayerIds
+          ?? user.linked_player_ids
+          ?? user.player_ids
+          ?? (user.linked_player_id ? [user.linked_player_id] : [])
       ),
       status: String(user.status || "Activo")
     };
