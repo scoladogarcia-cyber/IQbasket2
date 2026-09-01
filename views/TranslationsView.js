@@ -214,7 +214,9 @@ export class TranslationsView {
     try {
       const activeTeamId = DataStore.getActiveTeamId();
       if (!supabase) return;
-      const { data, error } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
+      let query = supabase.from("seasons").select("*").order("created_at", { ascending: false });
+      if (activeTeamId) query = query.eq("team_id", activeTeamId);
+      const { data, error } = await query;
       
       if (!error && data && data.length > 0) {
         this.seasonsList = data;
@@ -336,23 +338,33 @@ export class TranslationsView {
       throw new Error("No puedes gestionar usuarios de otro club.");
     }
 
+    let finalIds = normalizedIds;
+    if (this.auth?.getAuthenticatedRole?.() === UserRole.ADMIN) {
+      const ownClubTeamIds = new Set((DataStore.getTeams() || []).map(t => String(t.id)));
+      const existingIds = Array.isArray(targetProfile?.allowed_team_ids)
+        ? targetProfile.allowed_team_ids.map(String)
+        : (targetProfile?.team_id ? [String(targetProfile.team_id)] : []);
+      const externalIds = existingIds.filter(id => !ownClubTeamIds.has(id));
+      finalIds = [...new Set([...externalIds, ...normalizedIds])];
+    }
+
     // Preferencia v2: allowed_team_ids. Compatibilidad: team_id singular.
     let { error } = await supabase
       .from("user_profiles")
-      .update({ allowed_team_ids: normalizedIds })
+      .update({ allowed_team_ids: finalIds })
       .eq("email", email);
 
     if (error) {
       const fallback = await supabase
         .from("user_profiles")
-        .update({ team_id: normalizedIds[0] || null })
+        .update({ team_id: finalIds[0] || null })
         .eq("email", email);
       error = fallback.error;
     }
 
     if (error) throw error;
 
-    this.userTeamAssignments[email] = normalizedIds;
+    this.userTeamAssignments[email] = finalIds;
     this._saveAssignmentsLocal();
   }
 
