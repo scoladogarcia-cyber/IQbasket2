@@ -103,6 +103,24 @@ Deno.serve(async (req) => {
     ? (payload.clubId || null)
     : (callerProfile?.club_id || null);
 
+  if (callerRole === "ADMIN" && requestedTeamIds.length > 0) {
+    const { data: requestedTeams, error: teamsError } = await adminClient
+      .from("teams")
+      .select("id, club_id")
+      .in("id", requestedTeamIds);
+
+    if (teamsError) return json({ error: teamsError.message }, 400);
+
+    const validIds = new Set((requestedTeams || []).map((t) => String(t.id)));
+    const containsForeignTeam = (requestedTeams || []).some(
+      (t) => String(t.club_id || "") !== String(callerProfile?.club_id || "")
+    );
+
+    if (validIds.size !== requestedTeamIds.length || containsForeignTeam) {
+      return json({ error: "Un administrador solo puede asignar equipos de su propio club." }, 403);
+    }
+  }
+
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
     password,
@@ -110,7 +128,7 @@ Deno.serve(async (req) => {
     user_metadata: {
       first_name: firstName,
       last_name: lastName,
-      role: requestedRole
+      role: "INVITADO"
     }
   });
 
