@@ -33,13 +33,17 @@ export function normalizeEmail(email = "") {
   return String(email || "").trim().toLowerCase();
 }
 
-export function normalizeRole(role, email = "") {
-  const normalizedEmail = normalizeEmail(email);
+export function canonicalRoleName(role) {
   const rawRole = String(role || UserRole.INVITADO).trim().toUpperCase();
   const aliasedRole = LEGACY_ROLE_ALIASES[rawRole] || rawRole;
-  const knownRole = Object.values(UserRole).includes(aliasedRole)
+  return Object.values(UserRole).includes(aliasedRole)
     ? aliasedRole
     : UserRole.INVITADO;
+}
+
+export function normalizeRole(role, email = "") {
+  const normalizedEmail = normalizeEmail(email);
+  const knownRole = canonicalRoleName(role);
 
   // Regla de seguridad: solo una identidad concreta puede ser SUPERADMIN.
   if (knownRole === UserRole.SUPERADMIN && normalizedEmail !== UNIQUE_SUPERADMIN_EMAIL) {
