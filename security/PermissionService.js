@@ -52,6 +52,7 @@ export class PermissionService {
   constructor(currentUser = null) {
     this.currentUser = null;
     this.previewRole = null;
+    this.teamClubMap = new Map();
     if (currentUser) this.setCurrentUser(currentUser);
   }
 
@@ -94,6 +95,18 @@ export class PermissionService {
   clear() {
     this.currentUser = null;
     this.previewRole = null;
+    this.teamClubMap.clear();
+  }
+
+  setTeamCatalog(teams = []) {
+    this.teamClubMap.clear();
+    (teams || []).forEach((team) => {
+      if (!team?.id) return;
+      this.teamClubMap.set(
+        String(team.id),
+        String(team.club_id ?? team.clubId ?? "")
+      );
+    });
   }
 
   getCurrentUser() {
@@ -169,7 +182,14 @@ export class PermissionService {
 
   canAccessTeam(teamId) {
     if (!teamId || !this.currentUser) return false;
-    if (this.getAuthenticatedRole() === UserRole.SUPERADMIN) return true;
+    const role = this.getAuthenticatedRole();
+    if (role === UserRole.SUPERADMIN) return true;
+
+    if (role === UserRole.ADMIN && this.currentUser.clubId) {
+      const teamClubId = this.teamClubMap.get(String(teamId));
+      if (teamClubId && teamClubId === String(this.currentUser.clubId)) return true;
+    }
+
     return this.currentUser.allowedTeamIds.includes(String(teamId));
   }
 
