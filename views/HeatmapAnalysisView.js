@@ -104,19 +104,20 @@ export class HeatmapAnalysisView {
   async _fetchEvents() {
     try {
       const gameIds = new Set(this.games.map(g => String(g.id)));
-      let rawEvents = DataStore.getGameEvents() || [];
+      const requestedGameIds = this.selectedGameId !== "all"
+        ? [String(this.selectedGameId)]
+        : [...gameIds];
+
+      // Los eventos son datos granulares: se cargan solo al entrar al heatmap
+      // y únicamente para los partidos que el usuario está analizando.
+      let rawEvents = typeof DataStore.loadGameEvents === "function"
+        ? await DataStore.loadGameEvents(requestedGameIds)
+        : (DataStore.getGameEvents() || []);
 
       if (this.selectedGameId !== "all") {
-        rawEvents = rawEvents.filter(ev => String(ev.game_id ?? ev.gameId) === String(this.selectedGameId));
-        
-        if (rawEvents.length === 0 && this.supabase) {
-          const { data, error } = await this.supabase
-            .from("game_events")
-            .select("*")
-            .eq("game_id", this.selectedGameId);
-
-          if (!error && data) rawEvents = data;
-        }
+        rawEvents = rawEvents.filter(ev =>
+          String(ev.game_id ?? ev.gameId) === String(this.selectedGameId)
+        );
       } else {
         rawEvents = rawEvents.filter(ev => {
           const gId = String(ev.game_id ?? ev.gameId ?? "");
