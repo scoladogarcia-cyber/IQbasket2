@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     email,
     first_name: firstName,
     last_name: lastName,
-    role: requestedRole,
+    role: "INVITADO",
     club_id: targetClubId,
     allowed_team_ids: requestedTeamIds,
     team_id: requestedTeamIds[0] || null,
@@ -165,6 +165,21 @@ Deno.serve(async (req) => {
   if (profileError) {
     await adminClient.auth.admin.deleteUser(created.user.id);
     return json({ error: profileError.message }, 400);
+  }
+
+  const { error: roleUpdateError } = await adminClient
+    .from("user_profiles")
+    .update({
+      role: requestedRole,
+      club_id: targetClubId,
+      allowed_team_ids: requestedTeamIds,
+      team_id: requestedTeamIds[0] || null
+    })
+    .eq("email", email);
+
+  if (roleUpdateError) {
+    await adminClient.auth.admin.deleteUser(created.user.id);
+    return json({ error: roleUpdateError.message }, 400);
   }
 
   return json({
