@@ -145,11 +145,7 @@ export class StatsImportEngine {
         const seasonTotals = StatsAggregator.aggregatePlayerSeasonStats(rows);
         if (!seasonTotals) return;
 
-        const ppg = seasonTotals.averages?.ppg || 0;
-        const rpg = seasonTotals.averages?.rpg || 0;
-        const apg = seasonTotals.averages?.apg || 0;
-        const pir = seasonTotals.averages?.pir || seasonTotals.averages?.valuation || 0;
-        const gp = seasonTotals.totals?.gp || rows.length;
+        const ppg = seasonTotals.perGame?.ppg || 0;
 
         // El esquema actual de players solo dispone de `ppg` como agregado.
         // RPG/APG/PIR/GP se persistirán en las tablas de métricas v3, no en columnas
