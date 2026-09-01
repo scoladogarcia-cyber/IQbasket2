@@ -1,3 +1,20 @@
+-- ============================================================================
+-- DEPRECATED / DO NOT EXECUTE
+-- ============================================================================
+-- Esta migración fue preparada antes de auditar el esquema real de Supabase.
+-- NO corresponde exactamente con la base actual de IQBasket y NO debe aplicarse.
+-- Se conserva únicamente como referencia histórica del trabajo RBAC v2.
+--
+-- La migración definitiva será una v3 aditiva y no destructiva, basada en:
+--   * auth.users -> public.user_profiles
+--   * temporadas globales + team_seasons
+--   * roster_memberships para histórico de jugadores
+--   * funciones/alcances de usuario por equipo + temporada
+--   * RLS reconstruido contra el esquema real
+--
+-- No ejecutar este archivo en ningún entorno.
+-- ============================================================================
+
 -- IQ Basket RBAC v2 + RLS
 -- Fecha: 2026-09-01
 -- IMPORTANTE: revisar en staging antes de aplicar en producción.
