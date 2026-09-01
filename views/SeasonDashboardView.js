@@ -692,6 +692,7 @@ export class SeasonDashboardView {
       const teamCategory = activeTeamObj.category || "Cadete Masculino";
       const teamCompetition = activeTeamObj.competition || "B1";
       const activeSeason = DataStore.getActiveSeason ? (DataStore.getActiveSeason() || "2026") : "2026";
+      const canSyncPreview = this._canSync(this.currentTeamId);
 
       let kpis = { wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0 };
       if (StatsEngine && typeof StatsEngine.calculateTeamDashboardKPIs === "function") {
@@ -865,8 +866,8 @@ export class SeasonDashboardView {
             </div>
 
             <div class="dash-top-actions">
-              <button id="btn-sync-data" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                🔄 Sincronizar
+              <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
+                🔄 Sincronizar${canSyncPreview ? '' : ' 🔒'}
               </button>
               <select class="season-select-pill">
                 <option value="${activeSeason}">${activeSeason}</option>
