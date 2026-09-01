@@ -140,9 +140,31 @@ export class TeamAccessRequestService {
     return data;
   }
 
-  async reviewRequest() {
+  async reviewRequest(requestId, approve) {
+    if (!this.supabase || !requestId) {
+      throw new Error("Solicitud no especificada.");
+    }
+
+    // Rechazar es una única escritura sobre la propia solicitud y no concede
+    // privilegios, por lo que puede ejecutarse con el esquema actual.
+    if (!approve) {
+      const { data, error } = await this.supabase
+        .from("team_join_requests")
+        .update({ status: "rejected" })
+        .eq("id", requestId)
+        .select("id,user_id,team_id,requested_role,status,notes,created_at")
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+
+    // Aprobar implica dos efectos que deben ser atómicos:
+    // 1) marcar la solicitud aprobada;
+    // 2) conceder el alcance/membresía correspondiente.
+    // Hasta disponer del RPC v3 no se permite una aprobación parcial.
     throw new Error(
-      "La aprobación de solicitudes queda bloqueada temporalmente hasta desplegar la operación transaccional v3. No se concederá acceso con una escritura parcial."
+      "La aprobación queda temporalmente bloqueada hasta desplegar la operación transaccional v3. La solicitud puede mantenerse pendiente o rechazarse sin riesgo."
     );
   }
 }
