@@ -13,6 +13,7 @@
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { AdvancedTeamStatsCalculator } from "../domain/stats/AdvancedTeamStatsCalculator.js";
+import { Permission } from "../security/PermissionService.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
 
 export class StatsSyncService {
@@ -20,8 +21,15 @@ export class StatsSyncService {
    * Crea una instancia de StatsSyncService.
    * @param {Object} supabaseClient - Cliente Supabase JS configurado.
    */
-  constructor(supabaseClient) {
+  constructor(supabaseClient, authController = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient || (typeof window !== "undefined" ? window.supabase : null);
+    this.auth = authController;
+  }
+
+  _assertCanSync(teamId = null) {
+    if (this.auth && !this.auth.can?.(Permission.SYNC_DATA, { teamId })) {
+      throw new Error("Permisos insuficientes para sincronizar o auditar datos.");
+    }
   }
 
   // =========================================================================
@@ -126,6 +134,10 @@ export class StatsSyncService {
    */
   async persistGameTotals(gameId, totals = {}) {
     if (!this.supabase || !gameId) return;
+    if (this.auth) {
+      const game = typeof this.auth?.getCurrentUser === "function" ? null : null;
+      this._assertCanSync(null);
+    }
 
     try {
       await this.supabase
@@ -149,6 +161,7 @@ export class StatsSyncService {
    * @returns {Promise<{ success: boolean, statsFixed: number, ppgFixed: number, error?: string }>}
    */
   async runFullAuditAndSync(teamId = null, memoryRows = null) {
+    this._assertCanSync(teamId);
     if (!this.supabase) {
       return { success: false, statsFixed: 0, ppgFixed: 0, error: "Sin conexión a Supabase." };
     }
