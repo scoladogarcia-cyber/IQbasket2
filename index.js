@@ -16,6 +16,7 @@ import { supabase } from "./config/database.config.js";
 import { DataStore } from "./services/DataStore.js";
 import { TranslationStore } from "./services/TranslationStore.js";
 import { I18n } from "./services/I18nService.js";
+import { AuthorizationContextService } from "./services/security/AuthorizationContextService.js";
 import { PermissionService, Permission, UserRole } from "./security/PermissionService.js";
 import { ROUTE_PERMISSIONS } from "./security/permissions.js";
 
@@ -46,12 +47,13 @@ export class IQBasketApp {
     this.userRole = UserRole.INVITADO;
     this.currentRoute = "dashboard";
     this.routeParams = {};
-    this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    this.teamId = localStorage.getItem("iq_active_team_id") || "";
     this.translationsLoaded = false;
 
     // Única fuente de verdad para autorización. localStorage queda solo como caché de UI.
     this.permissionService = new PermissionService();
     this.authController = this.permissionService;
+    this.authorizationContextService = new AuthorizationContextService(supabase);
 
     // Se elimina el bypass histórico { can: () => true }.
     this.gameController = new GameController(
@@ -198,6 +200,21 @@ export class IQBasketApp {
     return normalizedUser;
   }
 
+  async _enrichAuthenticatedProfile(authUser, profileData = null) {
+    const baseProfile = {
+      ...(profileData || {}),
+      id: authUser?.id || profileData?.id || null,
+      email: authUser?.email || profileData?.email || ""
+    };
+
+    try {
+      return await this.authorizationContextService.enrichProfile(baseProfile);
+    } catch (error) {
+      console.warn("[RBAC] No se pudo cargar el contexto v3; se mantiene compatibilidad legacy:", error.message);
+      return baseProfile;
+    }
+  }
+
   /**
    * Restaura una sesión Supabase válida al recargar la SPA.
    */
@@ -215,7 +232,8 @@ export class IQBasketApp {
         .eq("email", email)
         .maybeSingle();
 
-      this._applyAuthenticatedUser(authUser, profileData);
+      const enrichedProfile = await this._enrichAuthenticatedProfile(authUser, profileData);
+      this._applyAuthenticatedUser(authUser, enrichedProfile);
       return true;
     } catch (err) {
       console.warn("[RBAC] No se pudo restaurar la sesión:", err);
@@ -313,7 +331,8 @@ export class IQBasketApp {
             .eq("email", emailInput)
             .maybeSingle();
 
-          const normalizedUser = this._applyAuthenticatedUser(authData.user, profileData);
+          const enrichedProfile = await this._enrichAuthenticatedProfile(authData.user, profileData);
+          const normalizedUser = this._applyAuthenticatedUser(authData.user, enrichedProfile);
           if (!normalizedUser) {
             throw new Error("No se pudo resolver el perfil de autorización.");
           }
@@ -536,7 +555,11 @@ export class IQBasketApp {
     
     // Guarda centralizada por permiso. En modo simulación usa el rol de previsualización.
     const requiredPermission = ROUTE_PERMISSIONS[targetRoute];
-    if (requiredPermission && this.isAuthenticated && !this.permissionService.canPreview(requiredPermission)) {
+    const routeContext = {
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    };
+    if (requiredPermission && this.isAuthenticated && !this.permissionService.canPreview(requiredPermission, routeContext)) {
       alert("⚠️ Tu perfil no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
       window.location.hash = "#/dashboard";
       this.currentRoute = "dashboard";
@@ -579,8 +602,11 @@ export class IQBasketApp {
       return;
     }
 
-    // 1. Determinar rol efectivo para UI; la autorización real conserva el rol autenticado.
-    this.userRole = this.permissionService.getEffectiveRole();
+    // 1. El rol visual se resolverá de nuevo tras cargar el contexto activo.
+    this.userRole = this.permissionService.getEffectiveRole({
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    });
     const userEmail = this.permissionService.getCurrentUser()?.email || "";
 
     // 2. Equipos visibles según alcance autenticado (no según localStorage).
@@ -605,6 +631,11 @@ export class IQBasketApp {
       this.showLoadingOverlay("preload_title");
       await DataStore.init(this.teamId, true);
     }
+
+    this.userRole = this.permissionService.getEffectiveRole({
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    });
 
     appContainer.innerHTML = LayoutView.wrap(
       `<div id="dashboard-content-area"></div>`, 
