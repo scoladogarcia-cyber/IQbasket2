@@ -611,41 +611,37 @@ class DataStoreService {
   }
 
   getActiveSeason() {
-    if (typeof localStorage !== "undefined") {
-      const stored = localStorage.getItem("iq_active_season");
-      if (stored) return stored;
-    }
-
-    const activeTeamId = this.getActiveTeamId();
-    const firstSeason = (this.seasons || []).find(s =>
-      !activeTeamId || String(s.team_id || s.teamId || "") === String(activeTeamId)
-    );
-
-    return firstSeason?.name ? String(firstSeason.name) : "";
+    const targetTeamId = this.getActiveTeamId();
+    const stored = typeof localStorage !== "undefined"
+      ? localStorage.getItem("iq_active_season")
+      : null;
+    const context = this._resolveSeasonContext(stored, targetTeamId);
+    return context?.name ? String(context.name) : "";
   }
 
-  getActiveSeasonId(teamId = null) {
-    const activeSeasonName = String(this.getActiveSeason()).trim().toLowerCase();
+  getActiveSeasonContext(teamId = null) {
     const targetTeamId = String(teamId || this.getActiveTeamId() || "");
+    const stored = typeof localStorage !== "undefined"
+      ? localStorage.getItem("iq_active_season")
+      : null;
+    return this._resolveSeasonContext(stored, targetTeamId);
+  }
 
-    const teamSeasons = (this.seasons || []).filter((s) => {
-      const seasonTeamId = String(s.team_id || s.teamId || "");
-      return !seasonTeamId || !targetTeamId || seasonTeamId === targetTeamId;
-    });
+  // Compatibilidad: games.season_id sigue apuntando a public.seasons durante
+  // la transición, por lo que este getter devuelve el ID legacy.
+  getActiveSeasonId(teamId = null) {
+    const context = this.getActiveSeasonContext(teamId);
+    return context?.legacy_season_id || context?.legacySeasonId || context?.id || null;
+  }
 
-    const matchedSeason = teamSeasons.find((s) => {
-      const sName = String(s.name || "").trim().toLowerCase();
-      return sName === activeSeasonName
-        || activeSeasonName.includes(sName)
-        || sName.includes(activeSeasonName);
-    });
+  getActiveTeamSeasonId(teamId = null) {
+    const context = this.getActiveSeasonContext(teamId);
+    return context?.team_season_id || context?.teamSeasonId || null;
+  }
 
-    if (matchedSeason) return matchedSeason.id;
-
-    const firstTeamSeason = teamSeasons[0];
-    if (firstTeamSeason) return firstTeamSeason.id;
-
-    return null;
+  getActiveGlobalSeasonId(teamId = null) {
+    const context = this.getActiveSeasonContext(teamId);
+    return context?.global_season_id || context?.globalSeasonId || null;
   }
 
   setActiveTeamAndSeason(teamId, season) {
