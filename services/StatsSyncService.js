@@ -52,14 +52,17 @@ export class StatsSyncService {
       if (teamId) {
         const { data: teamData, error: tErr } = await this.supabase
           .from("teams")
-          .select("*")
+          .select("id,club_id,name,category,competition,color,logo_url,periods_count,period_minutes,coach_name,created_at")
           .eq("id", teamId)
           .maybeSingle();
 
         if (tErr) throw tErr;
         team = teamData;
       } else {
-        const { data: teamsList, error: tListErr } = await this.supabase.from("teams").select("*").limit(1);
+        const { data: teamsList, error: tListErr } = await this.supabase
+          .from("teams")
+          .select("id,club_id,name,category,competition,color,logo_url,periods_count,period_minutes,coach_name,created_at")
+          .limit(1);
         if (tListErr) throw tListErr;
         team = teamsList && teamsList.length > 0 ? teamsList[0] : null;
       }
@@ -67,7 +70,10 @@ export class StatsSyncService {
       const activeTeamId = teamId || team?.id;
 
       // 2. Obtener partidos de 'games'
-      let gamesQuery = this.supabase.from("games").select("*").order("date", { ascending: true });
+      let gamesQuery = this.supabase
+        .from("games")
+        .select("id,team_id,season_id,date,time,opponent,competition,round,venue,venue_name,status,team_score,opponent_score,created_at")
+        .order("date", { ascending: true });
       if (activeTeamId) gamesQuery = gamesQuery.eq("team_id", activeTeamId);
       const { data: games, error: gErr } = await gamesQuery;
       if (gErr) throw gErr;
@@ -88,7 +94,9 @@ export class StatsSyncService {
       }
 
       // 4. Obtener plantilla de 'players'
-      let playersQuery = this.supabase.from("players").select("*");
+      let playersQuery = this.supabase
+        .from("players")
+        .select("id,team_id,first_name,last_name,jersey,primary_position,secondary_positions,birth_date,height_cm,weight_kg,dominant_hand,status,photo_url,season_id,ppg");
       if (activeTeamId) playersQuery = playersQuery.eq("team_id", activeTeamId);
       const { data: players, error: pErr } = await playersQuery;
       if (pErr) throw pErr;
@@ -169,10 +177,33 @@ export class StatsSyncService {
       // 1. Obtener filas de player_game_stats
       let rowsToProcess = memoryRows;
       if (!rowsToProcess || !Array.isArray(rowsToProcess) || rowsToProcess.length === 0) {
+        let targetGameIds = [];
+
+        if (teamId) {
+          const { data: teamGames, error: teamGamesErr } = await this.supabase
+            .from("games")
+            .select("id")
+            .eq("team_id", teamId);
+
+          if (teamGamesErr) throw teamGamesErr;
+          targetGameIds = (teamGames || []).map(g => g.id).filter(Boolean);
+        }
+
         let pgsQuery = this.supabase.from("player_game_stats").select("*");
-        const { data: allPlayerStats, error: pgsErr } = await pgsQuery;
-        if (pgsErr) throw pgsErr;
-        rowsToProcess = allPlayerStats || [];
+        if (teamId) {
+          if (targetGameIds.length === 0) {
+            rowsToProcess = [];
+          } else {
+            pgsQuery = pgsQuery.in("game_id", targetGameIds);
+            const { data: scopedPlayerStats, error: pgsErr } = await pgsQuery;
+            if (pgsErr) throw pgsErr;
+            rowsToProcess = scopedPlayerStats || [];
+          }
+        } else {
+          const { data: allPlayerStats, error: pgsErr } = await pgsQuery;
+          if (pgsErr) throw pgsErr;
+          rowsToProcess = allPlayerStats || [];
+        }
       }
 
       const playerRowsMap = {};
@@ -188,13 +219,8 @@ export class StatsSyncService {
             game_id: row.game_id,
             player_id: row.player_id,
             points: computed.points,
-            pts: computed.points,
             evaluation: computed.pir,
-            val: computed.pir,
-            pir: computed.pir,
-            efficiency: computed.efficiency,
             game_score: computed.gameScore,
-            offensive_rating: computed.indOrtg,
             true_shooting_pct: computed.tsPct,
             efg_pct: computed.eFG
           });
@@ -223,7 +249,16 @@ export class StatsSyncService {
       }
 
       // 3. Recalcular métricas colectivas en `team_game_stats`
-      const { data: allTeamStats, error: tgFetchErr } = await this.supabase.from("team_game_stats").select("*");
+      const auditGameIds = [...new Set((rowsToProcess || []).map(r => r.game_id).filter(Boolean))];
+      let teamStatsQuery = this.supabase.from("team_game_stats").select("*");
+      if (auditGameIds.length > 0) {
+        teamStatsQuery = teamStatsQuery.in("game_id", auditGameIds);
+      } else if (teamId) {
+        // Un equipo sin estadísticas individuales no debe provocar una auditoría global.
+        teamStatsQuery = teamStatsQuery.limit(0);
+      }
+
+      const { data: allTeamStats, error: tgFetchErr } = await teamStatsQuery;
       if (!tgFetchErr && Array.isArray(allTeamStats) && allTeamStats.length > 0) {
         const updatedTeamStatsBatch = allTeamStats.map((tRow) => {
           const computedTeam = AdvancedTeamStatsCalculator.calculateAdvancedTeamMetrics(tRow, {
@@ -244,10 +279,7 @@ export class StatsSyncService {
             ortg: computedTeam.offensiveRating,
             drtg: computedTeam.defensiveRating,
             net_rating: computedTeam.netRating,
-            efg: computedTeam.fourFactors?.team?.eFG || 0,
-            tov_pct: computedTeam.fourFactors?.team?.tovPct || 0,
-            orb_pct: computedTeam.fourFactors?.team?.orbPct || 0,
-            ft_rate: computedTeam.fourFactors?.team?.ftRate || 0
+            efg: computedTeam.fourFactors?.team?.eFG || 0
           };
         });
 
@@ -275,14 +307,7 @@ export class StatsSyncService {
 
         const { error: updateErr } = await this.supabase
           .from("players")
-          .update({
-            ppg,
-            rpg,
-            apg,
-            val,
-            games_played: gp,
-            updated_at: new Date().toISOString()
-          })
+          .update({ ppg })
           .eq("id", p.id);
 
         if (!updateErr) updatedPlayersCount++;
