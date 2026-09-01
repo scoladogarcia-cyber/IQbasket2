@@ -16,6 +16,18 @@ alter table if exists public.user_profiles
   add column if not exists linked_player_ids uuid[] not null default '{}'::uuid[],
   add column if not exists status text not null default 'Activo';
 
+-- Backfill no destructivo desde el esquema legacy.
+update public.user_profiles
+set allowed_team_ids = array[team_id]
+where team_id is not null
+  and coalesce(array_length(allowed_team_ids, 1), 0) = 0;
+
+update public.user_profiles up
+set club_id = t.club_id
+from public.teams t
+where up.club_id is null
+  and up.team_id = t.id;
+
 -- Normalización de roles legacy.
 update public.user_profiles
 set role = 'ANALISTA'
