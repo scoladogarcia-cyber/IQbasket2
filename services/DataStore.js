@@ -189,6 +189,8 @@ class DataStoreService {
       teamId: g.team_id || g.teamId || null,
       season_id: g.season_id || g.seasonId || null,
       seasonId: g.season_id || g.seasonId || null,
+      team_season_id: g.team_season_id || g.teamSeasonId || null,
+      teamSeasonId: g.team_season_id || g.teamSeasonId || null,
       opponent: oppName,
       opponent_name: oppName,
       opponentName: oppName,
