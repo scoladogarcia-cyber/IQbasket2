@@ -191,11 +191,10 @@ export class LayoutView {
     // localStorage no participa en la autorización.
     const teamsToRender = allTeams;
 
-    const storedSeasons = localStorage.getItem("iq_seasons");
-    const seasons = storedSeasons ? JSON.parse(storedSeasons) : [
-      { id: "s-1", name: "2026", isActive: true },
-      { id: "s-2", name: "2025", isActive: false }
-    ];
+    const seasons = DataStore.getSeasons?.(currentActiveTeamId) || [];
+    const seasonsToRender = seasons.length > 0
+      ? seasons
+      : [{ id: "fallback-active-season", name: currentActiveSeason, isActive: true }];
 
     LayoutView.bindMobileDrawerEvents();
 
@@ -273,7 +272,7 @@ export class LayoutView {
       </option>
     `).join("") : `<option value="" disabled selected>⚠️ Sin equipos asignados</option>`;
 
-    const seasonOptionsMarkup = seasons.length > 0 ? seasons.map(s => `
+    const seasonOptionsMarkup = seasonsToRender.length > 0 ? seasonsToRender.map(s => `
       <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
         ${s.name}
       </option>
