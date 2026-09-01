@@ -506,7 +506,7 @@ class DataStoreService {
       if (stored) return stored;
     }
     if (this.teams.length > 0) return String(this.teams[0].id);
-    return "8a75c9a8-f933-42fa-8bb4-22b3cf2db845";
+    return "";
   }
 
   getSeasons(teamId = null) {
@@ -519,9 +519,16 @@ class DataStoreService {
 
   getActiveSeason() {
     if (typeof localStorage !== "undefined") {
-      return localStorage.getItem("iq_active_season") || "2026";
+      const stored = localStorage.getItem("iq_active_season");
+      if (stored) return stored;
     }
-    return "2026";
+
+    const activeTeamId = this.getActiveTeamId();
+    const firstSeason = (this.seasons || []).find(s =>
+      !activeTeamId || String(s.team_id || s.teamId || "") === String(activeTeamId)
+    );
+
+    return firstSeason?.name ? String(firstSeason.name) : "";
   }
 
   getActiveSeasonId(teamId = null) {
@@ -606,13 +613,27 @@ class DataStoreService {
 
   getTeamCoach(teamId = null, seasonName = null) {
     const targetTeamId = teamId || this.getActiveTeamId();
-    const targetSeason = seasonName || this.getActiveSeason();
+    const targetSeasonName = String(seasonName || this.getActiveSeason() || "").trim().toLowerCase();
+
+    // Fuente real auditada: seasons.coach_name permite entrenador por temporada.
+    const season = (this.seasons || []).find(s => {
+      const sameTeam = String(s.team_id || s.teamId || "") === String(targetTeamId || "");
+      const name = String(s.name || "").trim().toLowerCase();
+      return sameTeam && (!targetSeasonName || name === targetSeasonName);
+    });
+
+    if (season?.coach_name || season?.coachName) {
+      return season.coach_name || season.coachName;
+    }
+
+    // Compatibilidad temporal con asignaciones experimentales en caché.
     const assignment = this.getStaffAssignments({
       teamId: targetTeamId,
-      seasonName: targetSeason,
+      seasonName: seasonName || this.getActiveSeason(),
       role: "HEAD_COACH"
     })[0];
     if (assignment) return assignment.staff_name || assignment.staffName || "Por definir";
+
     const team = this.getTeamById(targetTeamId);
     return team?.coach_name || team?.coachName || team?.coach || "Por definir";
   }
