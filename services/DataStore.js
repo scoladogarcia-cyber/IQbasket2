@@ -282,6 +282,87 @@ class DataStoreService {
     };
   }
 
+  async _loadSeasonContexts(teamId) {
+    if (!teamId || !supabase) {
+      this.seasons = [];
+      this.legacySeasons = [];
+      return null;
+    }
+
+    const { data: legacyRows, error: legacyError } = await supabase
+      .from("seasons")
+      .select("id,team_id,name,start_date,end_date,coach_name,created_at")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    if (legacyError) {
+      console.warn("[DataStore] No se pudieron cargar temporadas legacy:", legacyError.message);
+      this.legacySeasons = [];
+    } else {
+      this.legacySeasons = legacyRows || [];
+    }
+
+    try {
+      const contexts = this.seasonContextService
+        ? await this.seasonContextService.listByTeam(teamId, { status: "ACTIVE" })
+        : [];
+
+      if (contexts.length > 0) {
+        const legacyMap = new Map(
+          (this.legacySeasons || []).map(season => [String(season.id), season])
+        );
+
+        this.seasons = contexts.map((context) => {
+          const legacy = legacyMap.get(String(context.legacy_season_id || ""));
+          return {
+            ...context,
+            coach_name: legacy?.coach_name || null,
+            legacy_name: legacy?.name || null
+          };
+        });
+      } else {
+        this.seasons = this.legacySeasons || [];
+      }
+    } catch (error) {
+      console.warn("[DataStore] Contexto v3 no disponible; se mantiene compatibilidad legacy:", error.message);
+      this.seasons = this.legacySeasons || [];
+    }
+
+    const storedSeason = typeof localStorage !== "undefined"
+      ? localStorage.getItem("iq_active_season")
+      : null;
+    const activeContext = this._resolveSeasonContext(storedSeason, teamId);
+
+    if (activeContext?.name && typeof localStorage !== "undefined") {
+      localStorage.setItem("iq_active_season", String(activeContext.name));
+    }
+
+    return activeContext;
+  }
+
+  _resolveSeasonContext(seasonRef = null, teamId = null) {
+    const contexts = this.getSeasons(teamId);
+    if (contexts.length === 0) return null;
+
+    if (this.seasonContextService && contexts.some(s => s.source === "v3")) {
+      return this.seasonContextService.resolve(contexts, seasonRef);
+    }
+
+    if (!seasonRef) return contexts[0];
+
+    const normalize = (value) => String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    const target = normalize(seasonRef);
+
+    return contexts.find((season) => {
+      const refs = [season.id, season.name].map(normalize).filter(Boolean);
+      return refs.includes(target)
+        || refs.some(ref => ref.includes(target) || target.includes(ref));
+    }) || contexts[0];
+  }
+
   // =========================================================================
   // 2. INICIALIZACIÓN Y CARGA DE DATOS
   // =========================================================================
