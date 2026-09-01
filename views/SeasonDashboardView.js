@@ -12,12 +12,13 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
-    this.syncService = new StatsSyncService(this.supabase);
+    this.syncService = new StatsSyncService(this.supabase, this.auth);
 
     this.sortState = {
       column: "date",
@@ -50,14 +51,10 @@ export class SeasonDashboardView {
     return text;
   }
 
-  _canSync() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+  _canSync(teamId = null) {
+    return Boolean(this.auth?.canPreview?.(Permission.SYNC_DATA, {
+      teamId: teamId || this.currentTeamId || null
+    }));
   }
 
   _formatDateES(dateStr) {
