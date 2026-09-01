@@ -30,14 +30,8 @@ export class GameBoxScoreView {
   }
 
   _canEdit() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+    // El BoxScore es una vista de consulta para todos los roles.
+    return false;
   }
 
   async render(containerId = "dashboard-content-area", targetGameId = null) {
