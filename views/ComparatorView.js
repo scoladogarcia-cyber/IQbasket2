@@ -9,6 +9,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class ComparatorView {
   /**
@@ -31,9 +32,7 @@ export class ComparatorView {
   }
 
   _canAccess() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    const role = (localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN").toUpperCase();
-    return role !== "JUGADOR";
+    return Boolean(this.auth?.canPreview?.(Permission.USE_COMPARATOR));
   }
 
   /**
