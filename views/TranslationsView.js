@@ -376,9 +376,18 @@ export class TranslationsView {
     try {
       if (!supabase) return;
       const normLang = langCode === "cat" ? "ca" : langCode;
-      const { data, error } = await supabase.from("translations").select("*");
+
+      let query = supabase
+        .from("translations")
+        .select("key,language_code,translation,created_at,updated_at");
+
+      query = normLang === "ca"
+        ? query.in("language_code", ["ca", "cat"])
+        : query.eq("language_code", normLang);
+
+      const { data, error } = await query;
       if (!error && data) {
-        this.dbTranslations = data.filter(d => d.language_code === normLang || d.language_code === langCode);
+        this.dbTranslations = data;
       }
     } catch (e) {
       console.warn("Error cargando traducciones de Supabase:", e);
