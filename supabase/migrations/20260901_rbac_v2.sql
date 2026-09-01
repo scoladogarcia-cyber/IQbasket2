@@ -481,20 +481,29 @@ begin
     if to_regclass('public.' || table_name) is not null then
       execute format('alter table public.%I enable row level security', table_name);
 
-      execute format('drop policy if exists iq_%I_select on public.%I', table_name, table_name);
       execute format(
-        'create policy iq_%I_select on public.%I for select using (
+        'drop policy if exists %I on public.%I',
+        'iq_' || table_name || '_select',
+        table_name
+      );
+      execute format(
+        'create policy %I on public.%I for select using (
           exists (
             select 1 from public.games g
             where g.id = game_id and public.iq_can_access_team(g.team_id)
           )
         )',
-        table_name, table_name
+        'iq_' || table_name || '_select',
+        table_name
       );
 
-      execute format('drop policy if exists iq_%I_write on public.%I', table_name, table_name);
       execute format(
-        'create policy iq_%I_write on public.%I for all using (
+        'drop policy if exists %I on public.%I',
+        'iq_' || table_name || '_write',
+        table_name
+      );
+      execute format(
+        'create policy %I on public.%I for all using (
           exists (
             select 1 from public.games g
             where g.id = game_id and public.iq_can_manage_game(g.team_id)
@@ -505,7 +514,8 @@ begin
             where g.id = game_id and public.iq_can_manage_game(g.team_id)
           )
         )',
-        table_name, table_name
+        'iq_' || table_name || '_write',
+        table_name
       );
     end if;
   end loop;
