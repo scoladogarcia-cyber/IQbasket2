@@ -1,0 +1,2 @@
+This file is intentionally used only to trigger the encrypted database backup workflow.
+Do not store credentials here.
