@@ -25,12 +25,33 @@ export class TeamAccessRequestService {
 
     const { data, error } = await this.supabase
       .from("user_profiles")
-      .select("id,email,role,status,assigned_team_ids")
+      .select("id,email,role,global_role,status,assigned_team_ids")
       .eq("id", authData.user.id)
       .maybeSingle();
 
     if (error) throw error;
     return data || null;
+  }
+
+  async _resolveTeamSeasonId(teamId, explicitTeamSeasonId = null) {
+    if (!this.supabase || !teamId) return null;
+    if (explicitTeamSeasonId) return explicitTeamSeasonId;
+
+    const { data, error } = await this.supabase
+      .from("team_seasons")
+      .select("id,team_id,status,created_at")
+      .eq("team_id", teamId)
+      .eq("status", "ACTIVE")
+      .order("created_at", { ascending: false })
+      .limit(2);
+
+    if (error) throw error;
+    if (!Array.isArray(data) || data.length === 0) return null;
+    if (data.length > 1) {
+      throw new Error("Hay más de una temporada activa para este equipo; selecciona la temporada antes de solicitar acceso.");
+    }
+
+    return data[0].id;
   }
 
   async listTeamDirectory() {
@@ -53,7 +74,7 @@ export class TeamAccessRequestService {
 
     let query = this.supabase
       .from("team_join_requests")
-      .select("id,user_id,team_id,requested_role,status,notes,created_at")
+      .select("id,user_id,team_id,team_season_id,requested_role,status,notes,created_at")
       .order("created_at", { ascending: false });
 
     const role = String(profile.role || "").toUpperCase();
@@ -108,17 +129,22 @@ export class TeamAccessRequestService {
     });
   }
 
-  async requestAccess(teamId, requestedRole = DEFAULT_REQUESTED_ROLE) {
+  async requestAccess(teamId, requestedRole = DEFAULT_REQUESTED_ROLE, teamSeasonId = null) {
     if (!this.supabase || !teamId) throw new Error("Equipo no especificado.");
 
     const profile = await this._getCurrentProfile();
     if (!profile?.id) throw new Error("Usuario no autenticado.");
 
+    const resolvedTeamSeasonId = await this._resolveTeamSeasonId(teamId, teamSeasonId);
+    if (!resolvedTeamSeasonId) {
+      throw new Error("No existe un contexto equipo-temporada activo para esta solicitud.");
+    }
+
     const { data: existing, error: existingError } = await this.supabase
       .from("team_join_requests")
-      .select("id,status")
+      .select("id,status,team_season_id")
       .eq("user_id", profile.id)
-      .eq("team_id", teamId)
+      .eq("team_season_id", resolvedTeamSeasonId)
       .in("status", ["pending", "PENDING", "pendiente", "PENDIENTE"])
       .limit(1);
 
@@ -130,6 +156,7 @@ export class TeamAccessRequestService {
       .insert([{
         user_id: profile.id,
         team_id: teamId,
+        team_season_id: resolvedTeamSeasonId,
         requested_role: requestedRole || DEFAULT_REQUESTED_ROLE,
         status: "pending"
       }])
