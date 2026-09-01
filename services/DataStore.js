@@ -361,7 +361,12 @@ class DataStoreService {
 
         // 3. Datos operativos: filtrar en servidor, nunca descargar todo para filtrar después.
         let playersQuery = supabase.from("players").select("*");
-        let gamesQuery = supabase.from("games").select("*").order("date", { ascending: false });
+        // Excluye `games.events` del arranque: es un JSONB potencialmente pesado y
+        // la fuente operativa de eventos es `game_events`, que se carga bajo demanda.
+        let gamesQuery = supabase
+          .from("games")
+          .select("id,team_id,season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
+          .order("date", { ascending: false });
         let seasonsQuery = supabase.from("seasons").select("*").order("created_at", { ascending: false });
 
         if (scopeTeamId) {
