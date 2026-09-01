@@ -82,6 +82,22 @@ export class PermissionService {
       allowedSeasonIds: parseArray(
         user.allowedSeasonIds ?? user.allowed_season_ids ?? user.season_ids ?? []
       ),
+      allowedTeamSeasonIds: parseArray(
+        user.allowedTeamSeasonIds ?? user.allowed_team_season_ids ?? []
+      ),
+      allowedGlobalSeasonIds: parseArray(
+        user.allowedGlobalSeasonIds ?? user.allowed_global_season_ids ?? []
+      ),
+      contextualMemberships: Array.isArray(user.contextualMemberships)
+        ? user.contextualMemberships.map((membership) => ({
+            ...membership,
+            teamSeasonId: membership.teamSeasonId ?? membership.team_season_id ?? null,
+            teamId: membership.teamId ?? membership.team_id ?? null,
+            globalSeasonId: membership.globalSeasonId ?? membership.season_id ?? null,
+            role: String(membership.role ?? membership.function_role ?? "").trim().toUpperCase(),
+            status: String(membership.status || "ACTIVE").trim().toUpperCase()
+          }))
+        : [],
       playerId: user.playerId ?? user.player_id ?? user.linked_player_id ?? null,
       linkedPlayerIds: parseArray(
         user.linkedPlayerIds
@@ -208,6 +224,31 @@ export class PermissionService {
     return this.currentUser.allowedSeasonIds.includes(String(seasonId));
   }
 
+  canAccessTeamSeason(teamSeasonId) {
+    if (!teamSeasonId || !this.currentUser) return false;
+    if (this.getAuthenticatedRole() === UserRole.SUPERADMIN) return true;
+
+    const target = String(teamSeasonId);
+    if (this.currentUser.allowedTeamSeasonIds.includes(target)) return true;
+
+    return this.currentUser.contextualMemberships.some((membership) =>
+      String(membership.teamSeasonId || "") === target
+      && String(membership.status || "ACTIVE").toUpperCase() === "ACTIVE"
+    );
+  }
+
+  getContextRoles(teamSeasonId) {
+    if (!teamSeasonId || !this.currentUser) return [];
+    const target = String(teamSeasonId);
+    return this.currentUser.contextualMemberships
+      .filter((membership) =>
+        String(membership.teamSeasonId || "") === target
+        && String(membership.status || "ACTIVE").toUpperCase() === "ACTIVE"
+      )
+      .map((membership) => String(membership.role || "").toUpperCase())
+      .filter(Boolean);
+  }
+
   canAccessPlayer(playerId, playerTeamId = null) {
     if (!playerId || !this.currentUser) return false;
     const role = this.getAuthenticatedRole();
@@ -249,6 +290,7 @@ export class PermissionService {
     if (!context || Object.keys(context).length === 0) return true;
     if (context.clubId && !this.canAccessClub(context.clubId)) return false;
     if (context.teamId && !this.canAccessTeam(context.teamId)) return false;
+    if (context.teamSeasonId && !this.canAccessTeamSeason(context.teamSeasonId)) return false;
     if (context.seasonId && !this.canAccessSeason(context.seasonId)) return false;
     if (context.playerId && !this.canAccessPlayer(context.playerId, context.playerTeamId || context.teamId)) return false;
     return true;
