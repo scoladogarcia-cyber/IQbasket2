@@ -6,8 +6,10 @@
  * - usuarios: public.user_profiles
  * - equipos: public.teams
  *
- * La aprobación definitiva se moverá a una función transaccional v3 para que
- * aprobar solicitud + conceder membresía sea una única operación atómica.
+ * El flujo v3 usa RPCs SECURITY DEFINER para que:
+ * - solicitar acceso sea una operación validada en backend;
+ * - aprobar/rechazar sea atómico;
+ * - ninguna concesión dependa de escrituras parciales desde el navegador.
  */
 
 const DEFAULT_REQUESTED_ROLE = "VISOR";
@@ -77,7 +79,7 @@ export class TeamAccessRequestService {
       .select("id,user_id,team_id,team_season_id,requested_role,status,notes,created_at")
       .order("created_at", { ascending: false });
 
-    const role = String(profile.role || "").toUpperCase();
+    const role = String(profile.global_role || profile.role || "").toUpperCase();
     if (role !== "SUPERADMIN" && role !== "ADMIN") {
       query = query.eq("user_id", profile.id);
     } else if (role === "ADMIN") {
@@ -140,31 +142,13 @@ export class TeamAccessRequestService {
       throw new Error("No existe un contexto equipo-temporada activo para esta solicitud.");
     }
 
-    const { data: existing, error: existingError } = await this.supabase
-      .from("team_join_requests")
-      .select("id,status,team_season_id")
-      .eq("user_id", profile.id)
-      .eq("team_season_id", resolvedTeamSeasonId)
-      .in("status", ["pending", "PENDING", "pendiente", "PENDIENTE"])
-      .limit(1);
-
-    if (existingError) throw existingError;
-    if (existing?.length) return existing[0];
-
-    const { data, error } = await this.supabase
-      .from("team_join_requests")
-      .insert([{
-        user_id: profile.id,
-        team_id: teamId,
-        team_season_id: resolvedTeamSeasonId,
-        requested_role: requestedRole || DEFAULT_REQUESTED_ROLE,
-        status: "pending"
-      }])
-      .select("id,user_id,team_id,requested_role,status,notes,created_at")
-      .single();
+    const { data, error } = await this.supabase.rpc("iq_v3_request_team_access", {
+      target_team_season_id: resolvedTeamSeasonId,
+      requested_function_role: requestedRole || DEFAULT_REQUESTED_ROLE
+    });
 
     if (error) throw error;
-    return data;
+    return Array.isArray(data) ? (data[0] || null) : data;
   }
 
   async reviewRequest(requestId, approve) {
@@ -172,27 +156,13 @@ export class TeamAccessRequestService {
       throw new Error("Solicitud no especificada.");
     }
 
-    // Rechazar es una única escritura sobre la propia solicitud y no concede
-    // privilegios, por lo que puede ejecutarse con el esquema actual.
-    if (!approve) {
-      const { data, error } = await this.supabase
-        .from("team_join_requests")
-        .update({ status: "rejected" })
-        .eq("id", requestId)
-        .select("id,user_id,team_id,requested_role,status,notes,created_at")
-        .single();
+    const { data, error } = await this.supabase.rpc("iq_v3_review_team_access", {
+      request_id: requestId,
+      approve_request: Boolean(approve)
+    });
 
-      if (error) throw error;
-      return data;
-    }
-
-    // Aprobar implica dos efectos que deben ser atómicos:
-    // 1) marcar la solicitud aprobada;
-    // 2) conceder el alcance/membresía correspondiente.
-    // Hasta disponer del RPC v3 no se permite una aprobación parcial.
-    throw new Error(
-      "La aprobación queda temporalmente bloqueada hasta desplegar la operación transaccional v3. La solicitud puede mantenerse pendiente o rechazarse sin riesgo."
-    );
+    if (error) throw error;
+    return Array.isArray(data) ? (data[0] || null) : data;
   }
 }
 
