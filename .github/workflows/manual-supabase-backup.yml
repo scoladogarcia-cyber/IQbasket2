@@ -23,21 +23,28 @@ jobs:
 
     steps:
       - name: Check required secrets
+        id: check
         shell: bash
         run: |
-          set -euo pipefail
-          test -n "$SUPABASE_DB_URL" || { echo "Missing SUPABASE_DB_URL"; exit 1; }
-          test -n "$BACKUP_ENCRYPTION_PASSWORD" || { echo "Missing BACKUP_ENCRYPTION_PASSWORD"; exit 1; }
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_ENCRYPTION_PASSWORD" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Backup skipped: repository secrets are not configured yet."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout
+        if: steps.check.outputs.ready == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Supabase CLI
+        if: steps.check.outputs.ready == 'true'
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
       - name: Create logical backup
+        if: steps.check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -59,6 +66,7 @@ jobs:
           sha256sum             iqbasket-backup/roles.sql             iqbasket-backup/schema.sql             iqbasket-backup/data.sql             > iqbasket-backup/SHA256SUMS.txt
 
       - name: Encrypt backup
+        if: steps.check.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -71,6 +79,7 @@ jobs:
           rm -rf iqbasket-backup iqbasket-backup.tar.gz
 
       - name: Upload encrypted backup only
+        if: steps.check.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: IQBasket-pre-v3-encrypted-backup
