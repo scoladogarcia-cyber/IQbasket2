@@ -25,6 +25,38 @@ begin
     end if;
 end $$;
 
+-- 0) Separate global security role from contextual sporting role.
+-- Only the audited master account becomes SUPERADMIN globally.
+-- Existing role/status columns are not changed.
+update public.user_profiles
+set
+    global_role = case
+        when lower(email) = 'scolado@nechigroup.com' then 'SUPERADMIN'
+        when upper(coalesce(role, '')) = 'ADMIN' then 'ADMIN'
+        else 'USER'
+    end
+where global_role is distinct from case
+        when lower(email) = 'scolado@nechigroup.com' then 'SUPERADMIN'
+        when upper(coalesce(role, '')) = 'ADMIN' then 'ADMIN'
+        else 'USER'
+    end;
+
+-- Guard validation in rehearsal.
+select
+    'global_superadmin_count' as check_name,
+    count(*) as actual,
+    1 as expected
+from public.user_profiles
+where upper(coalesce(global_role, '')) = 'SUPERADMIN';
+
+select
+    'master_is_global_superadmin' as check_name,
+    count(*) as actual,
+    1 as expected
+from public.user_profiles
+where lower(email) = 'scolado@nechigroup.com'
+  and upper(coalesce(global_role, '')) = 'SUPERADMIN';
+
 -- 1) Create the single global season represented by the two legacy rows.
 insert into public.season_catalog (
     code,
