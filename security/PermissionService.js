@@ -9,6 +9,7 @@ import {
   UNIQUE_SUPERADMIN_EMAIL,
   normalizeEmail,
   normalizeRole,
+  canonicalRoleName,
   isUniqueSuperadmin
 } from "./roles.js";
 import {
@@ -16,6 +17,22 @@ import {
   ROLE_PERMISSIONS,
   AI_MONTHLY_LIMITS
 } from "./permissions.js";
+
+const LEGACY_PERMISSION_ALIASES = Object.freeze({
+  EDIT_PLAY_BY_PLAY: Permission.EDIT_GAME,
+  VALIDATE_CHANGE_REQUESTS: Permission.APPROVE_TEAM_ACCESS,
+  VIEW_REPORTS: Permission.GENERATE_REPORT,
+  EXPORT_REPORTS: Permission.EXPORT_REPORT,
+  VIEW_TEAM_STATS: Permission.VIEW_ADVANCED_TEAM_STATS,
+  VIEW_ALL_PLAYER_STATS: Permission.VIEW_ADVANCED_PLAYER_STATS,
+  MANAGE_USERS: Permission.VIEW_USERS,
+  CREATE_PLAYER: Permission.MANAGE_ROSTER,
+  EDIT_PLAYER: Permission.MANAGE_ROSTER,
+  DELETE_PLAYER: Permission.MANAGE_ROSTER,
+  CREATE_TEAM: Permission.MANAGE_TEAMS,
+  EDIT_TEAM: Permission.MANAGE_TEAMS,
+  DELETE_TEAM: Permission.MANAGE_TEAMS
+});
 
 function parseArray(value) {
   if (!value) return [];
@@ -110,20 +127,22 @@ export class PermissionService {
   hasRole(roleOrRoles, { preview = true } = {}) {
     const currentRole = preview ? this.getEffectiveRole() : this.getAuthenticatedRole();
     const targets = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
-    return targets.some(role => normalizeRole(role, this.currentUser?.email) === currentRole);
+    return targets.some(role => canonicalRoleName(role) === currentRole);
   }
 
   can(permissionKey, context = {}) {
+    const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
     const role = this.getAuthenticatedRole();
     const allowed = ROLE_PERMISSIONS[role] || [];
-    if (!allowed.includes(permissionKey)) return false;
+    if (!allowed.includes(normalizedPermission)) return false;
     return this._passesScope(context);
   }
 
   canPreview(permissionKey, context = {}) {
+    const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
     const role = this.getEffectiveRole();
     const allowed = ROLE_PERMISSIONS[role] || [];
-    if (!allowed.includes(permissionKey)) return false;
+    if (!allowed.includes(normalizedPermission)) return false;
     return this._passesScope(context, { preview: true });
   }
 
@@ -133,11 +152,7 @@ export class PermissionService {
 
   setPreviewRole(role) {
     if (this.getAuthenticatedRole() !== UserRole.SUPERADMIN) return false;
-    const normalized = normalizeRole(role, "preview@iqbasket.local");
-    // normalizeRole bloquearía SUPERADMIN para emails distintos; se gestiona explícitamente.
-    this.previewRole = String(role || "").toUpperCase() === UserRole.SUPERADMIN
-      ? UserRole.SUPERADMIN
-      : normalized;
+    this.previewRole = canonicalRoleName(role);
     return true;
   }
 
