@@ -189,25 +189,29 @@ declare
   target_email text := lower(coalesce(new.email, ''));
   is_service boolean := coalesce(auth.role(), '') = 'service_role';
 begin
-  if is_service then
-    return new;
-  end if;
-
-  -- La identidad maestra no puede perder SUPERADMIN.
+  -- Invariante global: la identidad maestra siempre es SUPERADMIN.
   if target_email = 'scolado@nechigroup.com' then
-    if actor_email <> 'scolado@nechigroup.com' then
+    if not is_service and actor_email <> 'scolado@nechigroup.com' then
       raise exception 'Solo el Superadmin único puede modificar su perfil privilegiado';
     end if;
     new.role := 'SUPERADMIN';
     return new;
   end if;
 
-  -- Nadie más puede ser SUPERADMIN.
+  -- Invariante global: nadie más puede ser SUPERADMIN, ni siquiera mediante service_role.
   if upper(coalesce(new.role, 'INVITADO')) = 'SUPERADMIN' then
     raise exception 'SUPERADMIN está reservado a scolado@nechigroup.com';
   end if;
 
   if tg_op = 'INSERT' then
+    -- Los perfiles creados automáticamente por Auth nacen siempre sin privilegios.
+    -- Las elevaciones administrativas seguras se realizan después mediante una
+    -- operación service_role explícita (Edge Function).
+    if is_service then
+      new.role := 'INVITADO';
+      return new;
+    end if;
+
     -- Registro público: únicamente perfil propio INVITADO.
     if actor_role <> 'SUPERADMIN' then
       if actor_email <> target_email then
@@ -215,6 +219,12 @@ begin
       end if;
       new.role := 'INVITADO';
     end if;
+    return new;
+  end if;
+
+  -- Las operaciones administrativas internas con service_role pueden mantener
+  -- roles estándar/ADMIN, pero nunca vulnerar la unicidad de SUPERADMIN.
+  if is_service then
     return new;
   end if;
 
@@ -245,6 +255,26 @@ begin
 
     if old.club_id is distinct from public.iq_current_club_id() then
       raise exception 'Un administrador solo puede gestionar usuarios de su club';
+    end if;
+
+    -- Un ADMIN no puede conceder alcance a equipos externos a su club.
+    if exists (
+      select 1
+      from unnest(coalesce(new.allowed_team_ids, '{}'::uuid[])) as requested_team_id
+      left join public.teams t on t.id = requested_team_id
+      where t.id is null
+         or t.club_id is distinct from public.iq_current_club_id()
+    ) then
+      raise exception 'No puedes asignar equipos de otro club';
+    end if;
+
+    if new.team_id is not null and not exists (
+      select 1
+      from public.teams t
+      where t.id = new.team_id
+        and t.club_id = public.iq_current_club_id()
+    ) then
+      raise exception 'El equipo principal asignado no pertenece a tu club';
     end if;
   end if;
 
