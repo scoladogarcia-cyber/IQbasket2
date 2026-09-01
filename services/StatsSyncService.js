@@ -299,11 +299,7 @@ export class StatsSyncService {
         const pRows = playerRowsMap[p.id] || [];
         const seasonAgg = StatsAggregator.aggregatePlayerSeasonStats(pRows);
 
-        const ppg = seasonAgg ? seasonAgg.averages.ppg : 0.0;
-        const rpg = seasonAgg ? seasonAgg.averages.rpg : 0.0;
-        const apg = seasonAgg ? seasonAgg.averages.apg : 0.0;
-        const val = seasonAgg ? seasonAgg.averages.pir : 0.0;
-        const gp = seasonAgg ? seasonAgg.totals.gp : 0;
+        const ppg = seasonAgg ? seasonAgg.perGame.ppg : 0.0;
 
         const { error: updateErr } = await this.supabase
           .from("players")
