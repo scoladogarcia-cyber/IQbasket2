@@ -18,6 +18,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { supabase } from "../config/database.config.js";
 import { LanguageSettingsView } from "./LanguageSettingsView.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission, UserRole, UNIQUE_SUPERADMIN_EMAIL } from "../security/PermissionService.js";
 
 export class TranslationsView {
   /**
@@ -26,13 +27,13 @@ export class TranslationsView {
    */
   constructor(authController = null) {
     this.auth = authController;
-    this.currentUserRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
+    this.currentUserRole = this.auth?.getAuthenticatedRole?.() || UserRole.INVITADO;
+    this.simulatedRole = this.auth?.previewRole || null;
 
     const effectiveRole = this.getEffectiveRole();
-    this.activeTab = ["JUGADOR", "INVITADO"].includes(effectiveRole) 
-      ? "requests" 
-      : (["ENTRENADOR", "ANALISTA", "SCOUT"].includes(effectiveRole) ? "players" : "club");
+    this.activeTab = [UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole)
+      ? "requests"
+      : ([UserRole.ENTRENADOR, UserRole.ANALISTA, UserRole.PREPARADOR_FISICO].includes(effectiveRole) ? "players" : "club");
       
     this.clubSubView = "list"; // 'list' | 'edit-club' | 'edit-team'
     this.selectedTeamForEdit = null;
@@ -84,7 +85,9 @@ export class TranslationsView {
   }
 
   getEffectiveRole() {
-    return this.simulatedRole || this.currentUserRole;
+    this.currentUserRole = this.auth?.getAuthenticatedRole?.() || this.currentUserRole || UserRole.INVITADO;
+    this.simulatedRole = this.auth?.previewRole || null;
+    return this.auth?.getEffectiveRole?.() || this.simulatedRole || this.currentUserRole;
   }
 
   showSyncOverlay(message = "⚡ Sincronizando con Supabase...") {
@@ -114,64 +117,89 @@ export class TranslationsView {
     if (overlay) overlay.style.display = "none";
   }
 
+  _permissionForAction(action) {
+    const map = {
+      VIEW_TAB_CLUB: Permission.VIEW_CLUBS,
+      MANAGE_CLUB_DATA: Permission.MANAGE_CLUBS,
+      CREATE_TEAM: Permission.MANAGE_TEAMS,
+      VIEW_TAB_USERS: Permission.VIEW_USERS,
+      INVITE_USERS: Permission.INVITE_USERS,
+      MANAGE_ROLES: Permission.ASSIGN_STANDARD_ROLES,
+      ASSIGN_TEAMS_TO_USER: Permission.APPROVE_TEAM_ACCESS,
+      APPROVE_JOIN_REQUESTS: Permission.APPROVE_TEAM_ACCESS,
+      VIEW_TAB_PLAYERS: Permission.VIEW_ROSTER,
+      MANAGE_PLAYERS: Permission.MANAGE_ROSTER,
+      APPROVE_TRANSFERS: Permission.APPROVE_TEAM_ACCESS,
+      VIEW_TAB_SEASONS: Permission.VIEW_SEASONS,
+      CREATE_SEASON: Permission.MANAGE_SEASONS,
+      VIEW_TAB_REQUESTS: Permission.REQUEST_TEAM_ACCESS,
+      REQUEST_JOIN_CLUB: Permission.REQUEST_TEAM_ACCESS,
+      EDIT_DATA: Permission.MANAGE_ROSTER
+    };
+    return map[action] || null;
+  }
+
   _can(action) {
-    const role = this.getEffectiveRole();
-    switch (action) {
-      case "VIEW_TAB_TRANSLATIONS":
-      case "CREATE_CLUB":
-      case "ASSIGN_ADMIN_ROLE":
-      case "DELETE_SEASON":
-      case "DELETE_CLUB":
-      case "DELETE_TEAM":
-      case "VIEW_TAB_SIMULATION":
-      case "MODIFY_ACTIVE_ROLE":
-        return role === "SUPERADMIN";
+    const effectiveRole = this.getEffectiveRole();
 
-      case "VIEW_TAB_CLUB":
-      case "MANAGE_CLUB_DATA":
-        return ["SUPERADMIN", "ADMIN"].includes(role);
-
-      case "CREATE_TEAM":
-        return role === "SUPERADMIN";
-
-      case "VIEW_TAB_USERS":
-      case "INVITE_USERS":
-      case "MANAGE_ROLES":
-      case "ASSIGN_TEAMS_TO_USER":
-      case "APPROVE_JOIN_REQUESTS":
-        return ["SUPERADMIN", "ADMIN"].includes(role);
-
-      case "VIEW_TAB_PLAYERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "MANAGE_PLAYERS":
-      case "APPROVE_TRANSFERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      case "VIEW_TAB_SEASONS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "CREATE_SEASON":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      case "VIEW_TAB_REQUESTS":
-      case "REQUEST_JOIN_CLUB":
-        return ["ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "EDIT_DATA":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      default:
-        return false;
+    if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
+      return effectiveRole === UserRole.SUPERADMIN;
     }
+
+    if (action === "ASSIGN_ADMIN_ROLE") {
+      return Boolean(this.auth?.canPreview?.(Permission.ASSIGN_PRIVILEGED_ROLES));
+    }
+
+    if (action === "EDIT_DATA") {
+      return Boolean(
+        this.auth?.canPreview?.(Permission.MANAGE_CLUBS) ||
+        this.auth?.canPreview?.(Permission.MANAGE_ROSTER) ||
+        this.auth?.canPreview?.(Permission.MANAGE_SEASONS) ||
+        this.auth?.canPreview?.(Permission.EDIT_GAME)
+      );
+    }
+
+    const permission = this._permissionForAction(action);
+    return permission ? Boolean(this.auth?.canPreview?.(permission)) : false;
+  }
+
+  _canReal(action, context = {}) {
+    if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
+      return this.auth?.getAuthenticatedRole?.() === UserRole.SUPERADMIN;
+    }
+    if (action === "ASSIGN_ADMIN_ROLE") {
+      return Boolean(this.auth?.can?.(Permission.ASSIGN_PRIVILEGED_ROLES, context));
+    }
+    const permission = this._permissionForAction(action);
+    return permission ? Boolean(this.auth?.can?.(permission, context)) : false;
   }
 
   async _fetchProfiles() {
     try {
-      if (!supabase) return;
-      const { data, error } = await supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
+      if (!supabase || !this.auth?.can?.(Permission.VIEW_USERS)) {
+        this.profilesList = [];
+        return;
+      }
+
+      let query = supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
+      const currentUser = this.auth.getCurrentUser?.();
+      if (this.auth.getAuthenticatedRole?.() === UserRole.ADMIN && currentUser?.clubId) {
+        query = query.eq("club_id", currentUser.clubId);
+      }
+
+      const { data, error } = await query;
       if (!error && data) {
-        this.profilesList = data;
+        this.profilesList = this.auth.getAuthenticatedRole?.() === UserRole.SUPERADMIN
+          ? data
+          : data.filter(p => String(p.email || "").toLowerCase() !== UNIQUE_SUPERADMIN_EMAIL);
+
+        this.profilesList.forEach(profile => {
+          const ids = Array.isArray(profile.allowed_team_ids)
+            ? profile.allowed_team_ids.map(String)
+            : (profile.team_id ? [String(profile.team_id)] : []);
+          this.userTeamAssignments[profile.email] = ids;
+        });
+        this._saveAssignmentsLocal();
       }
     } catch (e) {
       console.warn("Error leyendo perfiles:", e);
@@ -208,6 +236,37 @@ export class TranslationsView {
 
   _saveAssignmentsLocal() {
     localStorage.setItem("iq_user_teams_map", JSON.stringify(this.userTeamAssignments));
+  }
+
+  async _persistUserTeamAssignments(email, teamIds = []) {
+    if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+      throw new Error("No tienes permiso para asignar equipos a usuarios.");
+    }
+
+    const normalizedIds = [...new Set((teamIds || []).map(String))];
+    const targetProfile = this.profilesList.find(p => String(p.email || "").toLowerCase() === String(email || "").toLowerCase());
+    if (targetProfile?.club_id && !this.auth.can(Permission.APPROVE_TEAM_ACCESS, { clubId: targetProfile.club_id })) {
+      throw new Error("No puedes gestionar usuarios de otro club.");
+    }
+
+    // Preferencia v2: allowed_team_ids. Compatibilidad: team_id singular.
+    let { error } = await supabase
+      .from("user_profiles")
+      .update({ allowed_team_ids: normalizedIds })
+      .eq("email", email);
+
+    if (error) {
+      const fallback = await supabase
+        .from("user_profiles")
+        .update({ team_id: normalizedIds[0] || null })
+        .eq("email", email);
+      error = fallback.error;
+    }
+
+    if (error) throw error;
+
+    this.userTeamAssignments[email] = normalizedIds;
+    this._saveAssignmentsLocal();
   }
 
   _saveTransfersLocal() {
@@ -369,7 +428,7 @@ export class TranslationsView {
     const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
     const activeTeamId = DataStore.getActiveTeamId();
-    const currentUserEmail = localStorage.getItem("iq_user_email") || "";
+    const currentUserEmail = this.auth?.getCurrentUser?.()?.email || "";
     
     const players = DataStore.getPlayers() || [];
     const realClubs = DataStore.getClubs() || [];
@@ -379,18 +438,13 @@ export class TranslationsView {
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const currentActiveSeasonName = DataStore.getActiveSeason() || "2026";
 
-    if (["JUGADOR", "INVITADO"].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
+    if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
       this.activeTab = "requests";
     }
 
-    const myAssignedTeamIds = this.userTeamAssignments[currentUserEmail] || [];
-    const allowedSelectableTeams = (effectiveRole === "SUPERADMIN")
-      ? realTeams 
-      : realTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+    const allowedSelectableTeams = realTeams;
 
-    const visibleProfiles = (effectiveRole === "SUPERADMIN")
-      ? this.profilesList 
-      : this.profilesList.filter(p => p.role !== "SUPERADMIN");
+    const visibleProfiles = this.profilesList;
 
     const canModifyActiveRole = this._can("MODIFY_ACTIVE_ROLE");
 
@@ -420,8 +474,11 @@ export class TranslationsView {
                 <option value="ADMIN" ${effectiveRole === 'ADMIN' ? 'selected' : ''}>🔑 Admin Club</option>
                 <option value="ENTRENADOR" ${effectiveRole === 'ENTRENADOR' ? 'selected' : ''}>📋 Entrenador</option>
                 <option value="ANALISTA" ${effectiveRole === 'ANALISTA' ? 'selected' : ''}>📈 Analista</option>
+                <option value="PREPARADOR_FISICO" ${effectiveRole === 'PREPARADOR_FISICO' ? 'selected' : ''}>💪 Preparador físico</option>
                 <option value="JUGADOR" ${effectiveRole === 'JUGADOR' ? 'selected' : ''}>👤 Jugador</option>
-                <option value="INVITADO" ${effectiveRole === 'INVITADO' ? 'selected' : ''}>👁️ Invitado (Demo)</option>
+                <option value="FAMILIA_TUTOR" ${effectiveRole === 'FAMILIA_TUTOR' ? 'selected' : ''}>👪 Familia / Tutor</option>
+                <option value="VISOR" ${effectiveRole === 'VISOR' ? 'selected' : ''}>👁️ Visor</option>
+                <option value="INVITADO" ${effectiveRole === 'INVITADO' ? 'selected' : ''}>🧪 Invitado (Demo)</option>
               </select>
             </div>
           </div>
@@ -850,16 +907,19 @@ export class TranslationsView {
                   <div class="form-group">
                     <label>Rol Asignado *</label>
                     <select id="new-user-role">
-                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="SUPERADMIN">Superadmin</option><option value="ADMIN">Administrador de Club</option>` : ''}
+                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="ADMIN">Administrador de Club</option>` : ''}
                       <option value="ENTRENADOR" selected>Entrenador</option>
                       <option value="ANALISTA">Analista</option>
+                      <option value="PREPARADOR_FISICO">Preparador físico</option>
                       <option value="JUGADOR">Jugador</option>
-                      <option value="INVITADO">Invitado (Solo Lectura)</option>
+                      <option value="FAMILIA_TUTOR">Familia / Tutor</option>
+                      <option value="VISOR">Visor (Solo Lectura)</option>
+                      <option value="INVITADO">Invitado (Demo)</option>
                     </select>
                   </div>
                   <div class="form-group">
                     <label>🔑 Contraseña Temporal *</label>
-                    <input type="text" id="new-user-pass" value="BasketIQ2026" required />
+                    <input type="password" id="new-user-pass" placeholder="Contraseña temporal segura" autocomplete="new-password" required />
                   </div>
                   <div style="grid-column: 1 / -1; text-align: right;">
                     <button type="submit" id="btn-submit-create-user" class="btn-primary">✉️ Dar de Alta e Invitar Usuario</button>
@@ -888,6 +948,9 @@ export class TranslationsView {
                           .map(t => t.name);
 
                         const userHasPending = this.joinRequests.some(r => r.userEmail === prof.email && r.status === 'PENDIENTE');
+                        const isUniqueSuperadmin = String(prof.email || "").toLowerCase() === UNIQUE_SUPERADMIN_EMAIL;
+                        const isProtectedAdmin = prof.role === UserRole.ADMIN && !this._can("ASSIGN_ADMIN_ROLE");
+                        const roleSelectDisabled = isUniqueSuperadmin || isProtectedAdmin;
 
                         return `
                           <tr>
@@ -897,24 +960,29 @@ export class TranslationsView {
                             </td>
                             <td>${prof.email || '-'}</td>
                             <td>
-                              <select class="select-user-role" data-id="${prof.id}" ${(!this._can("ASSIGN_ADMIN_ROLE") && prof.role === 'SUPERADMIN') ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
-                                ${effectiveRole === 'SUPERADMIN' ? `<option value="SUPERADMIN" ${prof.role === 'SUPERADMIN' ? 'selected' : ''}>Superadmin</option>` : ''}
-                                <option value="ADMIN" ${prof.role === 'ADMIN' ? 'selected' : ''}>Administrador de Club</option>
-                                <option value="ENTRENADOR" ${prof.role === 'ENTRENADOR' ? 'selected' : ''}>Entrenador</option>
-                                <option value="ANALISTA" ${prof.role === 'ANALISTA' ? 'selected' : ''}>Analista</option>
-                                <option value="JUGADOR" ${prof.role === 'JUGADOR' ? 'selected' : ''}>Jugador</option>
-                                <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Solo Lectura)</option>
+                              <select class="select-user-role" data-id="${prof.id}" ${roleSelectDisabled ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+                                ${isUniqueSuperadmin ? `<option value="SUPERADMIN" selected>Superadmin único</option>` : ''}
+                                ${!isUniqueSuperadmin && this._can("ASSIGN_ADMIN_ROLE") ? `<option value="ADMIN" ${prof.role === 'ADMIN' ? 'selected' : ''}>Administrador de Club</option>` : ''}
+                                ${!isUniqueSuperadmin ? `
+                                  <option value="ENTRENADOR" ${prof.role === 'ENTRENADOR' ? 'selected' : ''}>Entrenador</option>
+                                  <option value="ANALISTA" ${['ANALISTA','SCOUT'].includes(prof.role) ? 'selected' : ''}>Analista</option>
+                                  <option value="PREPARADOR_FISICO" ${prof.role === 'PREPARADOR_FISICO' ? 'selected' : ''}>Preparador físico</option>
+                                  <option value="JUGADOR" ${prof.role === 'JUGADOR' ? 'selected' : ''}>Jugador</option>
+                                  <option value="FAMILIA_TUTOR" ${prof.role === 'FAMILIA_TUTOR' ? 'selected' : ''}>Familia / Tutor</option>
+                                  <option value="VISOR" ${['VISOR','VIEWER'].includes(prof.role) ? 'selected' : ''}>Visor</option>
+                                  <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Demo)</option>
+                                ` : ''}
                               </select>
                             </td>
                             <td>
-                              ${prof.role === 'SUPERADMIN' 
+                              ${isUniqueSuperadmin
                                 ? '<span class="badge-active-team">🌍 Todos los Equipos</span>' 
                                 : (assignedTeamNames.length > 0 
                                     ? `<span class="badge-category">${assignedTeamNames.join(', ')}</span>` 
                                     : '<span class="badge-inactive">Sin Equipos</span>')}
                             </td>
                             <td style="text-align: right; display: flex; justify-content: flex-end; gap: 6px;">
-                              <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}" title="Guardar Rol">💾 Guardar Rol</button>
+                              <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}" title="Guardar Rol" ${roleSelectDisabled ? 'disabled style="opacity:.5;cursor:not-allowed;"' : ''}>💾 Guardar Rol</button>
                               <button type="button" class="btn-open-user-card btn-outline-sm" data-email="${prof.email}">📇 Ver Ficha / Equipos</button>
                             </td>
                           </tr>
@@ -1012,8 +1080,11 @@ export class TranslationsView {
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ADMIN" style="padding: 14px; text-align: left; font-weight: 800;">🔑 Simular ADMIN CLUB</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ENTRENADOR" style="padding: 14px; text-align: left; font-weight: 800;">📋 Simular ENTRENADOR</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ANALISTA" style="padding: 14px; text-align: left; font-weight: 800;">📈 Simular ANALISTA</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="PREPARADOR_FISICO" style="padding: 14px; text-align: left; font-weight: 800;">💪 Simular PREPARADOR FÍSICO</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="JUGADOR" style="padding: 14px; text-align: left; font-weight: 800;">👤 Simular JUGADOR</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular INVITADO (Demo)</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="FAMILIA_TUTOR" style="padding: 14px; text-align: left; font-weight: 800;">👪 Simular FAMILIA / TUTOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="VISOR" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular VISOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">🧪 Simular INVITADO (Demo)</button>
               </div>
 
               ${this.simulatedRole ? `
@@ -1105,6 +1176,7 @@ export class TranslationsView {
     if (formCreateClub) {
       formCreateClub.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!this._canReal("CREATE_CLUB")) return alert("⚠️ Solo el Superadmin puede crear clubes.");
         const name = container.querySelector("#club-new-name")?.value.trim();
         const coordinator = container.querySelector("#club-new-coordinator")?.value.trim();
         const phone = container.querySelector("#club-new-phone")?.value.trim();
@@ -1150,6 +1222,7 @@ export class TranslationsView {
         const color = container.querySelector("#team-new-color")?.value || "#ea580c";
 
         if (!name || !clubId) return alert("Introduce los campos obligatorios del equipo.");
+        if (!this.auth?.can?.(Permission.MANAGE_TEAMS, { clubId })) return alert("⚠️ No tienes permiso para crear equipos en este club.");
 
         this.showSyncOverlay("⚡ Creando nuevo equipo en Supabase...");
         try {
@@ -1215,6 +1288,7 @@ export class TranslationsView {
         const competition = container.querySelector("#edit-team-competition")?.value.trim();
         const coach = container.querySelector("#edit-team-coach")?.value.trim();
         const color = container.querySelector("#edit-team-color")?.value;
+        if (!this.auth?.can?.(Permission.MANAGE_TEAMS, { teamId: id })) return alert("⚠️ No tienes permiso para modificar este equipo.");
 
         this.showSyncOverlay("💾 Actualizando equipo en Supabase...");
         try {
@@ -1249,6 +1323,7 @@ export class TranslationsView {
         const coordinator = container.querySelector("#edit-club-coordinator")?.value.trim();
         const phone = container.querySelector("#edit-club-phone")?.value.trim();
         const address = container.querySelector("#edit-club-address")?.value.trim();
+        if (!this.auth?.can?.(Permission.MANAGE_CLUBS, { clubId: id })) return alert("⚠️ No tienes permiso para modificar este club.");
 
         this.showSyncOverlay("💾 Actualizando club en Supabase...");
         try {
@@ -1284,6 +1359,7 @@ export class TranslationsView {
         const position = container.querySelector("#add-p-position")?.value || "Alero";
 
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
         this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla en Supabase...");
         try {
@@ -1348,6 +1424,7 @@ export class TranslationsView {
         const jersey = Number(container.querySelector("#edit-p-number")?.value || 0);
         const position = container.querySelector("#edit-p-position")?.value;
         const status = container.querySelector("#edit-p-status")?.value;
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
 
         this.showSyncOverlay("💾 Guardando cambios del jugador en Supabase...");
         try {
@@ -1455,7 +1532,8 @@ export class TranslationsView {
       `;
 
       modalContent.querySelectorAll(".btn-approve-join-req").forEach(btn => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
+          if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) return alert("⚠️ No tienes permiso para aprobar accesos.");
           const reqId = e.currentTarget.getAttribute("data-id");
           const email = e.currentTarget.getAttribute("data-email");
           const teamId = e.currentTarget.getAttribute("data-team-id");
@@ -1464,10 +1542,12 @@ export class TranslationsView {
           if (reqObj) reqObj.status = "APROBADO";
           this._saveRequestsLocal();
 
-          if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
-          if (!this.userTeamAssignments[email].includes(String(teamId))) {
-            this.userTeamAssignments[email].push(String(teamId));
-            this._saveAssignmentsLocal();
+          const nextIds = [...(this.userTeamAssignments[email] || [])];
+          if (!nextIds.includes(String(teamId))) nextIds.push(String(teamId));
+          try {
+            await this._persistUserTeamAssignments(email, nextIds);
+          } catch (err) {
+            return alert(`❌ No se pudo conceder el acceso: ${err.message}`);
           }
 
           alert(`🟢 Solicitud aprobada. Se ha concedido acceso a ${email}.`);
@@ -1476,15 +1556,23 @@ export class TranslationsView {
         });
       });
 
-      modalContent.querySelector("#form-save-user-teams-assignment")?.addEventListener("submit", (e) => {
+      modalContent.querySelector("#form-save-user-teams-assignment")?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+          alert("⚠️ No tienes permiso para asignar equipos.");
+          return;
+        }
         const selectedIds = [];
         modalContent.querySelectorAll(".chk-assign-team:checked").forEach(chk => {
           selectedIds.push(chk.value);
         });
 
-        this.userTeamAssignments[userProf.email] = selectedIds;
-        this._saveAssignmentsLocal();
+        try {
+          await this._persistUserTeamAssignments(userProf.email, selectedIds);
+        } catch (err) {
+          alert(`❌ No se pudo guardar la asignación: ${err.message}`);
+          return;
+        }
 
         alert(`✅ Equipos actualizados correctamente para ${userProf.email}.`);
         container.querySelector("#modal-user-card").style.display = "none";
@@ -1499,15 +1587,22 @@ export class TranslationsView {
         const reqId = e.currentTarget.getAttribute("data-id");
         const email = e.currentTarget.getAttribute("data-email");
         const teamId = e.currentTarget.getAttribute("data-team-id");
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS, { teamId })) {
+          alert("⚠️ No tienes permiso para aprobar accesos a este equipo.");
+          return;
+        }
 
         const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
         if (reqObj) reqObj.status = "APROBADO";
         this._saveRequestsLocal();
 
-        if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
-        if (!this.userTeamAssignments[email].includes(String(teamId))) {
-          this.userTeamAssignments[email].push(String(teamId));
-          this._saveAssignmentsLocal();
+        const nextIds = [...(this.userTeamAssignments[email] || [])];
+        if (!nextIds.includes(String(teamId))) nextIds.push(String(teamId));
+        try {
+          await this._persistUserTeamAssignments(email, nextIds);
+        } catch (err) {
+          alert(`❌ No se pudo conceder el acceso: ${err.message}`);
+          return;
         }
 
         alert(`🟢 Solicitud aprobada. Se ha concedido acceso al equipo a ${email}.`);
@@ -1519,6 +1614,10 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         const reqId = e.currentTarget.getAttribute("data-id");
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+          alert("⚠️ No tienes permiso para rechazar solicitudes.");
+          return;
+        }
 
         const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
         if (reqObj) reqObj.status = "RECHAZADO";
@@ -1604,11 +1703,19 @@ export class TranslationsView {
 
         const fullName = container.querySelector("#new-user-name")?.value.trim() || "";
         const email = container.querySelector("#new-user-email")?.value.trim();
-        const role = container.querySelector("#new-user-role")?.value || "ENTRENADOR";
-        const tempPassword = container.querySelector("#new-user-pass")?.value || "BasketIQ2026";
+        const role = container.querySelector("#new-user-role")?.value || UserRole.ENTRENADOR;
+        const tempPassword = container.querySelector("#new-user-pass")?.value || "";
 
         if (!fullName || !email || !tempPassword) {
           alert("⚠️ Completa los campos obligatorios para dar de alta al usuario.");
+          return;
+        }
+        if (!this.auth?.can?.(Permission.INVITE_USERS)) {
+          alert("⚠️ No tienes permiso para invitar usuarios.");
+          return;
+        }
+        if (!this.auth?.canAssignRole?.(role, email)) {
+          alert("⚠️ No tienes permiso para asignar ese rol. Solo scolado@nechigroup.com puede ser Superadmin.");
           return;
         }
 
@@ -1667,6 +1774,17 @@ export class TranslationsView {
         if (!selectEl) return;
 
         const newRole = selectEl.value;
+        const userObj = this.profilesList.find(p => String(p.id) === String(userId));
+        const activeUserEmail = this.auth?.getCurrentUser?.()?.email || "";
+        if (!userObj) return;
+        if (String(userObj.email || "").toLowerCase() === String(activeUserEmail).toLowerCase()) {
+          alert("⚠️ No puedes modificar tu propio rol.");
+          return;
+        }
+        if (!this.auth?.canAssignRole?.(newRole, userObj.email)) {
+          alert("⚠️ No tienes permiso para asignar ese rol.");
+          return;
+        }
         this.showSyncOverlay("💾 Actualizando rol del usuario...");
 
         try {
@@ -1682,14 +1800,8 @@ export class TranslationsView {
             return;
           }
 
-          const userObj = this.profilesList.find(p => String(p.id) === String(userId));
           if (userObj) {
             userObj.role = newRole;
-            const activeUserEmail = localStorage.getItem("iq_user_email");
-            if (userObj.email === activeUserEmail) {
-              localStorage.setItem("iq_user_role", newRole);
-              localStorage.removeItem("iq_simulated_role");
-            }
           }
 
           this.hideSyncOverlay();
@@ -1710,6 +1822,10 @@ export class TranslationsView {
         const trId = e.currentTarget.getAttribute("data-id");
         const playerId = e.currentTarget.getAttribute("data-player-id");
         const targetTeamId = e.currentTarget.getAttribute("data-target-team");
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS, { teamId: targetTeamId })) {
+          alert("⚠️ No tienes permiso para aprobar este traspaso.");
+          return;
+        }
 
         this.showSyncOverlay("⚡ Procesando y aprobando traspaso en Supabase...");
 
@@ -1750,6 +1866,10 @@ export class TranslationsView {
         e.preventDefault();
         const teamId = e.currentTarget.getAttribute("data-id");
         if (!teamId) return;
+        if (!this.auth?.can?.(Permission.SELECT_TEAM, { teamId })) {
+          alert("⚠️ No tienes permiso para activar este equipo.");
+          return;
+        }
 
         this.showSyncOverlay("⚡ Activando equipo en el sistema...");
 
@@ -1786,6 +1906,10 @@ export class TranslationsView {
         const seasonName = inputName?.value.trim();
 
         if (!seasonName) return;
+        if (!this.auth?.can?.(Permission.MANAGE_SEASONS, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para crear temporadas en este equipo.");
+          return;
+        }
 
         this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
 
@@ -1824,6 +1948,10 @@ export class TranslationsView {
         const inp = container.querySelector(`.input-season-edit[data-id="${id}"]`);
         const newName = inp?.value.trim();
         if (!newName) return;
+        if (!this.auth?.can?.(Permission.MANAGE_SEASONS, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para modificar temporadas.");
+          return;
+        }
 
         this.showSyncOverlay("💾 Actualizando temporada...");
         try {
@@ -1857,6 +1985,10 @@ export class TranslationsView {
     container.querySelectorAll(".btn-delete-season").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         const seasonId = e.currentTarget.getAttribute("data-id");
+        if (!this._canReal("DELETE_SEASON")) {
+          alert("⚠️ Solo el Superadmin puede eliminar temporadas.");
+          return;
+        }
         if (confirm("⚠️ ¿Estás seguro de eliminar esta temporada de Supabase?")) {
           this.showSyncOverlay("🗑️ Eliminando temporada en Supabase...");
           try {
@@ -1887,6 +2019,10 @@ export class TranslationsView {
         if (btn.textContent.includes("Guardar Traducciones")) {
           btn.addEventListener("click", async (e) => {
             e.preventDefault();
+            if (!this.auth?.can?.(Permission.MANAGE_TRANSLATIONS)) {
+              alert("⚠️ No tienes permiso para modificar traducciones.");
+              return;
+            }
             this.showSyncOverlay("💾 Guardando diccionario completo en Supabase...");
             try {
               if (TranslationStore && typeof TranslationStore.saveAllToSupabase === "function") {
@@ -1909,9 +2045,12 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         const roleToSimulate = e.currentTarget.getAttribute("data-role");
         
-        this.simulatedRole = roleToSimulate;
+        if (!this.auth?.setPreviewRole?.(roleToSimulate)) {
+          alert("⚠️ Solo el Superadmin puede simular roles.");
+          return;
+        }
+        this.simulatedRole = this.auth.previewRole;
         localStorage.setItem("iq_simulated_role", roleToSimulate);
-        localStorage.setItem("iq_user_role", roleToSimulate);
 
         alert(`🎭 Simulación activada: La app muestra la interfaz de '${roleToSimulate}'.`);
         await this.render(containerId);
@@ -1921,9 +2060,10 @@ export class TranslationsView {
     const resetSimBtn = container.querySelector("#btn-reset-simulation") || container.querySelector("#btn-stop-simulation");
     if (resetSimBtn) {
       resetSimBtn.addEventListener("click", async () => {
+        this.auth?.clearPreviewRole?.();
         this.simulatedRole = null;
+        this.currentUserRole = this.auth?.getAuthenticatedRole?.() || UserRole.INVITADO;
         localStorage.removeItem("iq_simulated_role");
-        localStorage.setItem("iq_user_role", "SUPERADMIN");
 
         alert("🔴 Simulación desactivada. Volviendo a control total de SUPERADMIN.");
         await this.render(containerId);
@@ -1932,10 +2072,10 @@ export class TranslationsView {
 
     if (canModifyActiveRole) {
       container.querySelector("#select-demo-role")?.addEventListener("change", async (e) => {
-        this.currentUserRole = e.target.value;
-        this.simulatedRole = null;
-        localStorage.removeItem("iq_simulated_role");
-        localStorage.setItem("iq_user_role", this.currentUserRole);
+        const previewRole = e.target.value;
+        if (!this.auth?.setPreviewRole?.(previewRole)) return;
+        this.simulatedRole = this.auth.previewRole;
+        localStorage.setItem("iq_simulated_role", previewRole);
         await this.render(containerId);
       });
     }
