@@ -31,15 +31,23 @@ export class TeamStatsView {
       const activeTeamId = teamId || DataStore.getActiveTeamId();
       const activeTeam = DataStore.getTeamById(activeTeamId) || {};
       
-      const games = DataStore.getGames(activeTeamId) || [];
+      const activeSeason = DataStore.getActiveSeason ? DataStore.getActiveSeason() : "2026";
+      const activeSeasonId = DataStore.getActiveSeasonId?.(activeTeamId) || null;
+      const allGames = DataStore.getGames(activeTeamId) || [];
+      const games = activeSeasonId
+        ? allGames.filter(g => String(g.season_id || g.seasonId || "") === String(activeSeasonId))
+        : allGames;
       const players = DataStore.getPlayers(activeTeamId) || [];
-      const playerStats = DataStore.getPlayerGameStats() || [];
+      const gameIds = new Set(games.map(g => String(g.id)));
+      const allPlayerStats = DataStore.getPlayerGameStats() || [];
+      const playerStats = allPlayerStats.filter(s => gameIds.has(String(s.game_id || s.gameId || "")));
 
       const team = {
+        id: activeTeamId,
         name: activeTeam.name || "Equipo",
         category: activeTeam.category || "General",
         competition: activeTeam.competition || "Liga",
-        coach_name: activeTeam.coach_name || activeTeam.coachName || activeTeam.coach || "Por definir",
+        coach_name: DataStore.getTeamCoach?.(activeTeamId, activeSeason) || activeTeam.coach_name || activeTeam.coachName || activeTeam.coach || "Por definir",
         periods_count: activeTeam.periods_count || 4,
         period_minutes: activeTeam.period_minutes || 10,
         color: activeTeam.primary_color || activeTeam.color || "#1e3a8a"
@@ -256,10 +264,10 @@ export class TeamStatsView {
     const teamName = team.name || "Equipo";
     const teamCategory = team.category || "General";
     const teamCompetition = team.competition || "Liga";
-    const teamCoach = team.coach_name || "Por definir";
+    const activeSeason = DataStore.getActiveSeason ? DataStore.getActiveSeason() : "2026";
+    const teamCoach = DataStore.getTeamCoach?.(team.id || teamId, activeSeason) || team.coach_name || "Por definir";
     const teamPeriods = team.periods_count ? `${team.periods_count} × ${team.period_minutes || 10} min` : "4 × 10 min";
     const teamColor = team.color || "#1e3a8a";
-    const activeSeason = DataStore.getActiveSeason ? DataStore.getActiveSeason() : "2026";
 
     container.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 24px; font-family: var(--font-family-base, system-ui); max-width: 1400px; margin: 0 auto; padding-bottom: 40px;">
