@@ -5,6 +5,7 @@
  */
 
 import { supabase } from "../config/database.config.js";
+import { Permission, UserRole } from "../security/PermissionService.js";
 
 class DataStoreService {
   constructor() {
@@ -19,6 +20,66 @@ class DataStoreService {
     this.listeners = new Set();
     this.isLoaded = false;
     this.isLoading = false;
+    this.permissionService = null;
+  }
+
+  setPermissionService(permissionService) {
+    this.permissionService = permissionService || null;
+  }
+
+  _assertPermission(permissionKey, context = {}, message = "Acceso denegado.") {
+    if (!this.permissionService) {
+      throw new Error("Seguridad no inicializada: no se permite escribir datos.");
+    }
+    if (!this.permissionService.can(permissionKey, context)) {
+      throw new Error(message);
+    }
+  }
+
+  _filterAuthorizedData() {
+    const auth = this.permissionService;
+    if (!auth || auth.getAuthenticatedRole() === UserRole.SUPERADMIN) return;
+
+    const user = auth.getCurrentUser();
+    const allowedTeamIds = new Set((user?.allowedTeamIds || []).map(String));
+    const linkedPlayerIds = new Set((user?.linkedPlayerIds || []).map(String));
+
+    this.teams = (this.teams || []).filter(t => allowedTeamIds.has(String(t.id)));
+
+    const visiblePlayerIds = new Set();
+    this.players = (this.players || []).filter(p => {
+      const teamAllowed = allowedTeamIds.has(String(p.team_id || p.teamId || ""));
+      const isOwn = user?.playerId && String(user.playerId) === String(p.id);
+      const isLinked = linkedPlayerIds.has(String(p.id));
+      const visible = teamAllowed || isOwn || isLinked;
+      if (visible) visiblePlayerIds.add(String(p.id));
+      return visible;
+    });
+
+    const visibleGameIds = new Set();
+    this.games = (this.games || []).filter(g => {
+      const visible = allowedTeamIds.has(String(g.team_id || g.teamId || ""));
+      if (visible) visibleGameIds.add(String(g.id));
+      return visible;
+    });
+
+    this.playerGameStats = (this.playerGameStats || []).filter(s =>
+      visibleGameIds.has(String(s.game_id || s.gameId || "")) ||
+      visiblePlayerIds.has(String(s.player_id || s.playerId || ""))
+    );
+    this.gamePeriodScores = (this.gamePeriodScores || []).filter(p =>
+      visibleGameIds.has(String(p.game_id || p.gameId || ""))
+    );
+    this.gameEvents = (this.gameEvents || []).filter(e =>
+      visibleGameIds.has(String(e.game_id || e.gameId || ""))
+    );
+
+    if (user?.clubId) {
+      this.clubs = (this.clubs || []).filter(c => String(c.id) === String(user.clubId));
+    } else {
+      const visibleClubIds = new Set(this.teams.map(t => String(t.club_id || t.clubId || "")));
+      this.clubs = (this.clubs || []).filter(c => visibleClubIds.has(String(c.id)));
+    }
   }
 
   _generateUUID() {
@@ -235,8 +296,10 @@ class DataStoreService {
         if (psRes.status === "fulfilled" && psRes.value.data?.length > 0) this.gamePeriodScores = psRes.value.data;
         if (evRes.status === "fulfilled" && evRes.value.data?.length > 0) this.gameEvents = evRes.value.data;
 
+        this._filterAuthorizedData();
         this._persistToStorage();
       }
+      this._filterAuthorizedData();
     } catch (err) {
       console.warn("[DataStore] Inicialización local:", err.message);
     } finally {
@@ -292,11 +355,16 @@ class DataStoreService {
   }
 
   setActiveTeamAndSeason(teamId, season) {
+    if (teamId && this.permissionService && !this.permissionService.canAccessTeam(teamId)) {
+      console.warn("[DataStore] Intento de seleccionar un equipo no autorizado:", teamId);
+      return false;
+    }
     if (typeof localStorage !== "undefined") {
       if (teamId) localStorage.setItem("iq_active_team_id", String(teamId));
       if (season) localStorage.setItem("iq_active_season", String(season));
     }
     this._notifyListeners();
+    return true;
   }
 
   // =========================================================================
@@ -312,6 +380,9 @@ class DataStoreService {
 
   getTeams() {
     if (!this.teams || this.teams.length === 0) {
+      if (this.permissionService && this.permissionService.getAuthenticatedRole() !== UserRole.SUPERADMIN) {
+        return [];
+      }
       return [{
         id: this.getActiveTeamId(),
         name: "Equipo Principal",
@@ -381,6 +452,20 @@ class DataStoreService {
   // =========================================================================
 
   async saveGameAndStats(gameData, statsList = [], periodScores = [], liveEvents = []) {
+    const requestedTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
+    const requestedSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId();
+    const existingGame = gameData.id
+      ? this.games.find(g => String(g.id) === String(gameData.id))
+      : null;
+    const permissionKey = existingGame ? Permission.EDIT_GAME : Permission.CREATE_GAME;
+    this._assertPermission(
+      permissionKey,
+      { teamId: requestedTeamId, seasonId: requestedSeasonId },
+      existingGame
+        ? "No tienes permiso para modificar este partido."
+        : "No tienes permiso para crear partidos en este equipo."
+    );
+
     // Validar UUID
     const isValidUUID = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const gId = (gameData.id && isValidUUID(gameData.id)) ? gameData.id : this._generateUUID();
@@ -523,6 +608,12 @@ class DataStoreService {
 
   async deleteGame(gameId) {
     if (!gameId) return false;
+    const existingGame = this.games.find(g => String(g.id) === String(gameId));
+    this._assertPermission(
+      Permission.DELETE_GAME,
+      { teamId: existingGame?.team_id || existingGame?.teamId || this.getActiveTeamId(), seasonId: existingGame?.season_id || existingGame?.seasonId || null },
+      "No tienes permiso para borrar este partido."
+    );
     this.games = this.games.filter((g) => String(g.id) !== String(gameId));
     this.playerGameStats = this.playerGameStats.filter((s) => String(s.game_id || s.gameId) !== String(gameId));
     this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gameId));
@@ -547,7 +638,13 @@ class DataStoreService {
     return true;
   }
 
-  async updatePlayer(playerId, updates) {
+  async updatePlayer(playerId, updates, permissionKey = Permission.EDIT_PLAYER_MASTER) {
+    const existingPlayer = this.players.find((p) => String(p.id) === String(playerId));
+    this._assertPermission(
+      permissionKey,
+      { playerId, playerTeamId: existingPlayer?.team_id || existingPlayer?.teamId || null },
+      "No tienes permiso para modificar los datos de este jugador."
+    );
     const idx = this.players.findIndex((p) => String(p.id) === String(playerId));
     if (idx >= 0) {
       this.players[idx] = this._normalizePlayer({ ...this.players[idx], ...updates });
