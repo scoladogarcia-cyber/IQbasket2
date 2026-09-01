@@ -70,7 +70,7 @@ export class ProfileView {
       if (!supabase) return;
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
         .eq("email", email)
         .maybeSingle();
 
