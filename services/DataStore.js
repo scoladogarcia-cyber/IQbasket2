@@ -855,7 +855,11 @@ class DataStoreService {
     const permissionKey = existingGame ? Permission.EDIT_GAME : Permission.CREATE_GAME;
     this._assertPermission(
       permissionKey,
-      { teamId: requestedTeamId, seasonId: requestedSeasonId },
+      {
+        teamId: requestedTeamId,
+        seasonId: requestedSeasonId,
+        teamSeasonId: requestedTeamSeasonId
+      },
       existingGame
         ? "No tienes permiso para modificar este partido."
         : "No tienes permiso para crear partidos en este equipo."
@@ -1016,7 +1020,11 @@ class DataStoreService {
     const existingGame = this.games.find(g => String(g.id) === String(gameId));
     this._assertPermission(
       Permission.DELETE_GAME,
-      { teamId: existingGame?.team_id || existingGame?.teamId || this.getActiveTeamId(), seasonId: existingGame?.season_id || existingGame?.seasonId || null },
+      {
+        teamId: existingGame?.team_id || existingGame?.teamId || this.getActiveTeamId(),
+        seasonId: existingGame?.season_id || existingGame?.seasonId || null,
+        teamSeasonId: existingGame?.team_season_id || existingGame?.teamSeasonId || this.getActiveTeamSeasonId()
+      },
       "No tienes permiso para borrar este partido."
     );
     this.games = this.games.filter((g) => String(g.id) !== String(gameId));
@@ -1047,7 +1055,12 @@ class DataStoreService {
     const existingPlayer = this.players.find((p) => String(p.id) === String(playerId));
     this._assertPermission(
       permissionKey,
-      { playerId, playerTeamId: existingPlayer?.team_id || existingPlayer?.teamId || null },
+      {
+        playerId,
+        playerTeamId: existingPlayer?.team_id || existingPlayer?.teamId || null,
+        teamId: existingPlayer?.team_id || existingPlayer?.teamId || null,
+        teamSeasonId: this.getActiveTeamSeasonId(existingPlayer?.team_id || existingPlayer?.teamId || null)
+      },
       "No tienes permiso para modificar los datos de este jugador."
     );
     const idx = this.players.findIndex((p) => String(p.id) === String(playerId));
