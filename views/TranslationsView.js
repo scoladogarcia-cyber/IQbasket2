@@ -230,6 +230,39 @@ export class TranslationsView {
     }
   }
 
+  async _refreshCurrentAuthorizationProfile() {
+    try {
+      const current = this.auth?.getCurrentUser?.();
+      if (!supabase || !current?.email) return false;
+
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("email", current.email)
+        .maybeSingle();
+
+      if (error || !data) return false;
+
+      const beforeIds = (current.allowedTeamIds || []).map(String).sort().join(",");
+      const refreshed = this.auth.setCurrentUser?.({
+        ...current,
+        ...data,
+        email: current.email
+      });
+      const afterIds = (refreshed?.allowedTeamIds || []).map(String).sort().join(",");
+
+      if (beforeIds !== afterIds) {
+        DataStore.setPermissionService?.(this.auth);
+        DataStore.isLoaded = false;
+        await DataStore.init(null, true);
+      }
+      return true;
+    } catch (e) {
+      console.warn("No se pudo refrescar el alcance del usuario:", e);
+      return false;
+    }
+  }
+
   async _fetchTeamDirectory() {
     try {
       this.teamDirectory = await this.accessRequestService.listTeamDirectory();
@@ -476,11 +509,18 @@ export class TranslationsView {
     if (!container) return;
 
     if (this.seasonsList.length === 0) await this._fetchSeasons();
-    if (this.activeTab === "users") {
-      await Promise.all([this._fetchProfiles(), this._fetchJoinRequests()]);
+
+    if (this._can("APPROVE_JOIN_REQUESTS") || this.activeTab === "requests") {
+      await this._fetchJoinRequests();
     }
+
+    if (this.activeTab === "users") {
+      await this._fetchProfiles();
+    }
+
     if (this.activeTab === "requests") {
-      await Promise.all([this._fetchTeamDirectory(), this._fetchJoinRequests()]);
+      await this._refreshCurrentAuthorizationProfile();
+      await this._fetchTeamDirectory();
     }
     if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
 
