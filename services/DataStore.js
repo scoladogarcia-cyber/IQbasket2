@@ -375,15 +375,28 @@ class DataStoreService {
     return "2026";
   }
 
-  getActiveSeasonId() {
+  getActiveSeasonId(teamId = null) {
     const activeSeasonName = String(this.getActiveSeason()).trim().toLowerCase();
-    const matchedSeason = (this.seasons || []).find((s) => {
-      const sName = String(s.name || "").trim().toLowerCase();
-      return sName === activeSeasonName || activeSeasonName.includes(sName);
+    const targetTeamId = String(teamId || this.getActiveTeamId() || "");
+
+    const teamSeasons = (this.seasons || []).filter((s) => {
+      const seasonTeamId = String(s.team_id || s.teamId || "");
+      return !seasonTeamId || !targetTeamId || seasonTeamId === targetTeamId;
     });
+
+    const matchedSeason = teamSeasons.find((s) => {
+      const sName = String(s.name || "").trim().toLowerCase();
+      return sName === activeSeasonName
+        || activeSeasonName.includes(sName)
+        || sName.includes(activeSeasonName);
+    });
+
     if (matchedSeason) return matchedSeason.id;
-    if (this.seasons && this.seasons.length > 0) return this.seasons[0].id;
-    return "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d";
+
+    const firstTeamSeason = teamSeasons[0];
+    if (firstTeamSeason) return firstTeamSeason.id;
+
+    return null;
   }
 
   setActiveTeamAndSeason(teamId, season) {
@@ -537,7 +550,7 @@ class DataStoreService {
 
   async saveGameAndStats(gameData, statsList = [], periodScores = [], liveEvents = []) {
     const requestedTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
-    const requestedSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId();
+    const requestedSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId(requestedTeamId);
     const existingGame = gameData.id
       ? this.games.find(g => String(g.id) === String(gameData.id))
       : null;
@@ -555,7 +568,7 @@ class DataStoreService {
     const gId = (gameData.id && isValidUUID(gameData.id)) ? gameData.id : this._generateUUID();
 
     const targetTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
-    const targetSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId();
+    const targetSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId(targetTeamId);
 
     const normalizedGame = this._normalizeGame({
       ...gameData,
