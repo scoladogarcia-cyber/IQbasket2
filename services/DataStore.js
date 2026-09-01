@@ -18,6 +18,9 @@ class DataStoreService {
     this.playerGameStats = [];
     this.gamePeriodScores = [];
     this.gameEvents = [];
+    // IDs de partidos cuyos eventos ya se han consultado en esta sesión.
+    // Evita descargar game_events en cada arranque o render.
+    this.loadedGameEventIds = new Set();
     this.listeners = new Set();
     this.isLoaded = false;
     this.isLoading = false;
@@ -275,6 +278,17 @@ class DataStoreService {
   // 2. INICIALIZACIÓN Y CARGA DE DATOS
   // =========================================================================
 
+  /**
+   * Carga el contexto de trabajo con consultas acotadas al equipo activo.
+   *
+   * Regla de rendimiento:
+   * - clubs/teams son catálogos pequeños y se cargan completos.
+   * - players/games/seasons se filtran en Supabase por team_id.
+   * - stats/periods se cargan únicamente para los game_id visibles.
+   * - game_events NO se precargan; se solicitan bajo demanda.
+   *
+   * Esto evita descargar toda la base para después filtrarla en el navegador.
+   */
   async init(teamId = null, forceRefresh = false) {
     if (this.isLoaded && !forceRefresh) return;
     if (this.isLoading) return;
@@ -286,6 +300,7 @@ class DataStoreService {
     }
 
     try {
+      // 1. Hidratación inmediata desde caché local.
       if (typeof localStorage !== "undefined") {
         const cTeams = localStorage.getItem("iq_cache_teams");
         const cPlayers = localStorage.getItem("iq_cache_players");
@@ -301,35 +316,106 @@ class DataStoreService {
         if (cStaffAssignments) this.staffAssignments = JSON.parse(cStaffAssignments).map(a => this._normalizeStaffAssignment(a));
         if (cStats) this.playerGameStats = JSON.parse(cStats).map(s => this._normalizeStat(s));
         if (cPeriods) this.gamePeriodScores = JSON.parse(cPeriods);
-        if (cEvents) this.gameEvents = JSON.parse(cEvents);
+        if (cEvents) {
+          this.gameEvents = JSON.parse(cEvents);
+          this.gameEvents.forEach(ev => {
+            const gameId = ev?.game_id || ev?.gameId;
+            if (gameId) this.loadedGameEventIds.add(String(gameId));
+          });
+        }
       }
 
       if (supabase) {
-        const [cRes, tRes, pRes, gRes, sRes, staffRes, statsRes, psRes, evRes] = await Promise.allSettled([
-          supabase.from("clubs").select("*"),
-          supabase.from("teams").select("*"),
-          supabase.from("players").select("*"),
-          supabase.from("games").select("*").order("date", { ascending: false }),
-          supabase.from("seasons").select("*").order("created_at", { ascending: false }),
-          supabase.from("staff_assignments").select("*"),
-          supabase.from("player_game_stats").select("*"),
-          supabase.from("game_period_scores").select("*"),
-          supabase.from("game_events").select("*")
+        // 2. Catálogos mínimos necesarios para resolver el contexto.
+        const [clubsRes, teamsRes] = await Promise.allSettled([
+          supabase
+            .from("clubs")
+            .select("id,name,logo_url,created_by,created_at,phone,address,coordinator_name"),
+          supabase
+            .from("teams")
+            .select("id,club_id,name,category,competition,color,logo_url,periods_count,period_minutes,coach_name,created_at")
         ]);
 
-        if (cRes.status === "fulfilled" && cRes.value.data) this.clubs = cRes.value.data;
-        if (tRes.status === "fulfilled" && tRes.value.data?.length > 0) this.teams = tRes.value.data.map(t => this._normalizeTeam(t));
-        if (pRes.status === "fulfilled" && pRes.value.data?.length > 0) this.players = pRes.value.data.map(p => this._normalizePlayer(p));
-        if (gRes.status === "fulfilled" && gRes.value.data?.length > 0) this.games = gRes.value.data.map(g => this._normalizeGame(g));
-        if (sRes.status === "fulfilled" && sRes.value.data) this.seasons = sRes.value.data;
-        if (staffRes.status === "fulfilled" && staffRes.value.data) this.staffAssignments = staffRes.value.data.map(a => this._normalizeStaffAssignment(a));
-        if (statsRes.status === "fulfilled" && statsRes.value.data?.length > 0) this.playerGameStats = statsRes.value.data.map(s => this._normalizeStat(s));
-        if (psRes.status === "fulfilled" && psRes.value.data?.length > 0) this.gamePeriodScores = psRes.value.data;
-        if (evRes.status === "fulfilled" && evRes.value.data?.length > 0) this.gameEvents = evRes.value.data;
+        if (clubsRes.status === "fulfilled" && !clubsRes.value.error && Array.isArray(clubsRes.value.data)) {
+          this.clubs = clubsRes.value.data;
+        }
+        if (teamsRes.status === "fulfilled" && !teamsRes.value.error && Array.isArray(teamsRes.value.data)) {
+          this.teams = teamsRes.value.data.map(t => this._normalizeTeam(t));
+        }
+
+        this.permissionService?.setTeamCatalog?.(this.teams || []);
+
+        const storedTeamId = typeof localStorage !== "undefined"
+          ? localStorage.getItem("iq_active_team_id")
+          : null;
+        const requestedTeamId = String(teamId || storedTeamId || "").trim();
+        const requestedExists = requestedTeamId
+          && (this.teams || []).some(t => String(t.id) === requestedTeamId);
+        const scopeTeamId = requestedExists
+          ? requestedTeamId
+          : ((this.teams || [])[0]?.id ? String(this.teams[0].id) : requestedTeamId);
+
+        if (scopeTeamId && typeof localStorage !== "undefined") {
+          localStorage.setItem("iq_active_team_id", scopeTeamId);
+        }
+
+        // 3. Datos operativos: filtrar en servidor, nunca descargar todo para filtrar después.
+        let playersQuery = supabase.from("players").select("*");
+        let gamesQuery = supabase.from("games").select("*").order("date", { ascending: false });
+        let seasonsQuery = supabase.from("seasons").select("*").order("created_at", { ascending: false });
+
+        if (scopeTeamId) {
+          playersQuery = playersQuery.eq("team_id", scopeTeamId);
+          gamesQuery = gamesQuery.eq("team_id", scopeTeamId);
+          // Compatibilidad con el esquema actual. En v3 seasons será global + team_seasons.
+          seasonsQuery = seasonsQuery.eq("team_id", scopeTeamId);
+        }
+
+        const [playersRes, gamesRes, seasonsRes] = await Promise.allSettled([
+          playersQuery,
+          gamesQuery,
+          seasonsQuery
+        ]);
+
+        if (playersRes.status === "fulfilled" && !playersRes.value.error) {
+          this.players = (playersRes.value.data || []).map(p => this._normalizePlayer(p));
+        }
+        if (gamesRes.status === "fulfilled" && !gamesRes.value.error) {
+          this.games = (gamesRes.value.data || []).map(g => this._normalizeGame(g));
+        }
+        if (seasonsRes.status === "fulfilled" && !seasonsRes.value.error) {
+          this.seasons = seasonsRes.value.data || [];
+        }
+
+        // 4. Las tablas dependientes se consultan solo para los partidos visibles.
+        const visibleGameIds = (this.games || []).map(g => String(g.id)).filter(Boolean);
+        if (visibleGameIds.length > 0) {
+          const [statsRows, periodRows] = await Promise.all([
+            this._fetchRowsByGameIds("player_game_stats", visibleGameIds),
+            this._fetchRowsByGameIds("game_period_scores", visibleGameIds)
+          ]);
+
+          this.playerGameStats = statsRows.map(s => this._normalizeStat(s));
+          this.gamePeriodScores = periodRows;
+        } else {
+          this.playerGameStats = [];
+          this.gamePeriodScores = [];
+        }
+
+        // Eventos de pista: conservar únicamente caché del contexto actual.
+        // La descarga remota se hace bajo demanda desde loadGameEvents().
+        const visibleGameSet = new Set(visibleGameIds);
+        this.gameEvents = (this.gameEvents || []).filter(ev =>
+          visibleGameSet.has(String(ev.game_id || ev.gameId || ""))
+        );
+        this.loadedGameEventIds = new Set(
+          [...this.loadedGameEventIds].filter(id => visibleGameSet.has(String(id)))
+        );
 
         this._filterAuthorizedData();
         this._persistToStorage();
       }
+
       this._filterAuthorizedData();
     } catch (err) {
       console.warn("[DataStore] Inicialización local:", err.message);
@@ -338,6 +424,36 @@ class DataStoreService {
       this.isLoading = false;
       this._notifyListeners();
     }
+  }
+
+  /**
+   * Recupera filas de una tabla dependiente de game_id en lotes pequeños.
+   * Evita URLs excesivas y permite escalar a historiales mayores.
+   */
+  async _fetchRowsByGameIds(tableName, gameIds = [], selectColumns = "*") {
+    if (!supabase) return [];
+
+    const ids = [...new Set((gameIds || []).map(String).filter(Boolean))];
+    if (ids.length === 0) return [];
+
+    const chunkSize = 100;
+    const rows = [];
+
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const { data, error } = await supabase
+        .from(tableName)
+        .select(selectColumns)
+        .in("game_id", chunk);
+
+      if (error) {
+        console.warn(`[DataStore] Error cargando ${tableName} por game_id:`, error.message);
+        continue;
+      }
+      if (Array.isArray(data)) rows.push(...data);
+    }
+
+    return rows;
   }
 
   _persistToStorage() {
@@ -550,6 +666,42 @@ class DataStoreService {
   getGameEvents(gameId = null) {
     if (!gameId) return this.gameEvents || [];
     return (this.gameEvents || []).filter((e) => String(e.game_id || e.gameId) === String(gameId));
+  }
+
+  /**
+   * Carga eventos únicamente para los partidos solicitados.
+   * Los eventos son el conjunto de datos más granular y no deben viajar en el arranque.
+   */
+  async loadGameEvents(gameIds = [], forceRefresh = false) {
+    const ids = [...new Set(
+      (Array.isArray(gameIds) ? gameIds : [gameIds])
+        .map(String)
+        .filter(Boolean)
+    )];
+
+    if (ids.length === 0 || !supabase) return [];
+
+    const idsToFetch = forceRefresh
+      ? ids
+      : ids.filter(id => !this.loadedGameEventIds.has(id));
+
+    if (idsToFetch.length > 0) {
+      const remoteRows = await this._fetchRowsByGameIds("game_events", idsToFetch);
+
+      const replacingIds = new Set(idsToFetch);
+      const retained = (this.gameEvents || []).filter(ev =>
+        !replacingIds.has(String(ev.game_id || ev.gameId || ""))
+      );
+
+      this.gameEvents = [...retained, ...remoteRows];
+      idsToFetch.forEach(id => this.loadedGameEventIds.add(String(id)));
+      this._persistToStorage();
+    }
+
+    const requested = new Set(ids);
+    return (this.gameEvents || []).filter(ev =>
+      requested.has(String(ev.game_id || ev.gameId || ""))
+    );
   }
 
   // =========================================================================
