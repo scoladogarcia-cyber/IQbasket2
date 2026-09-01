@@ -317,23 +317,13 @@ create unique index if not exists uq_user_profiles_single_global_superadmin
     on public.user_profiles ((upper(global_role)))
     where upper(coalesce(global_role, '')) = 'SUPERADMIN';
 
-do $
-begin
-    if not exists (
-        select 1
-        from pg_constraint
-        where conname = 'user_profiles_superadmin_email_guard'
-          and conrelid = 'public.user_profiles'::regclass
-    ) then
-        alter table public.user_profiles
-            add constraint user_profiles_superadmin_email_guard
-            check (
-                upper(coalesce(global_role, 'USER')) <> 'SUPERADMIN'
-                or lower(email) = 'scolado@nechigroup.com'
-            )
-            not valid;
-    end if;
-end $;
+alter table public.user_profiles
+    add constraint user_profiles_superadmin_email_guard
+    check (
+        upper(coalesce(global_role, 'USER')) <> 'SUPERADMIN'
+        or lower(email) = 'scolado@nechigroup.com'
+    )
+    not valid;
 
 -- IMPORTANT:
 -- No legacy data is backfilled in this draft.
