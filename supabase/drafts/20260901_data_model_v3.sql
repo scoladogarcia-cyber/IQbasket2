@@ -148,7 +148,9 @@ create table if not exists public.analytics_runs (
     status text not null default 'COMPLETED',
     started_at timestamptz not null default now(),
     completed_at timestamptz,
-    created_by uuid references public.user_profiles(id) on delete set null
+    created_by uuid references public.user_profiles(id) on delete set null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_analytics_runs_scope_version
@@ -176,6 +178,8 @@ create table if not exists public.player_season_metrics (
     net_rating numeric,
     metrics jsonb not null default '{}'::jsonb,
     calculated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint player_season_metrics_unique
         unique (team_season_id, player_id, calculation_version)
 );
@@ -203,6 +207,8 @@ create table if not exists public.team_season_metrics (
     efg_pct numeric,
     metrics jsonb not null default '{}'::jsonb,
     calculated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint team_season_metrics_unique
         unique (team_season_id, calculation_version)
 );
@@ -230,6 +236,8 @@ create table if not exists public.lineup_season_metrics (
     net_rating numeric,
     metrics jsonb not null default '{}'::jsonb,
     calculated_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint lineup_season_metrics_unique
         unique (team_season_id, lineup_key, calculation_version)
 );
@@ -240,6 +248,27 @@ create index if not exists idx_lineup_season_metrics_players_gin
     on public.lineup_season_metrics using gin(lineup_player_ids);
 create index if not exists idx_lineup_season_metrics_metrics_gin
     on public.lineup_season_metrics using gin(metrics);
+
+-- 11) Additive bridge columns on existing tables ------------------------------
+-- Nullable columns only: existing rows remain untouched until explicit backfill.
+alter table public.games
+    add column if not exists team_season_id uuid
+    references public.team_seasons(id) on delete restrict;
+
+create index if not exists idx_games_team_season_id
+    on public.games(team_season_id);
+
+alter table public.reports
+    add column if not exists team_season_id uuid
+    references public.team_seasons(id) on delete restrict;
+
+create index if not exists idx_reports_team_season_id
+    on public.reports(team_season_id);
+
+-- Separate global security role from contextual sporting functions.
+-- No value is backfilled automatically in this draft.
+alter table public.user_profiles
+    add column if not exists global_role text;
 
 -- IMPORTANT:
 -- No legacy data is backfilled in this draft.
