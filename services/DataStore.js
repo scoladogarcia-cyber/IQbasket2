@@ -449,7 +449,7 @@ class DataStoreService {
       seasonName: targetSeason,
       role: "HEAD_COACH"
     })[0];
-    if (assignment?.staff_name || assignment?.staffName) return assignment.staff_name || assignment.staffName;
+    if (assignment) return assignment.staff_name || assignment.staffName || "Por definir";
     const team = this.getTeamById(targetTeamId);
     return team?.coach_name || team?.coachName || team?.coach || "Por definir";
   }
@@ -461,7 +461,7 @@ class DataStoreService {
       seasonName: targetSeason,
       role: "COORDINATOR"
     }).find(a => !(a.team_id || a.teamId));
-    if (assignment?.staff_name || assignment?.staffName) return assignment.staff_name || assignment.staffName;
+    if (assignment) return assignment.staff_name || assignment.staffName || "No asignado";
     const club = this.getClubById(clubId);
     return club?.coordinator_name || club?.coordinatorName || "No asignado";
   }
