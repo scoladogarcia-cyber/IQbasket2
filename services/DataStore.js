@@ -368,6 +368,14 @@ class DataStoreService {
     return "8a75c9a8-f933-42fa-8bb4-22b3cf2db845";
   }
 
+  getSeasons(teamId = null) {
+    const targetTeamId = String(teamId || this.getActiveTeamId() || "");
+    return (this.seasons || []).filter((s) => {
+      const seasonTeamId = String(s.team_id || s.teamId || "");
+      return !seasonTeamId || !targetTeamId || seasonTeamId === targetTeamId;
+    });
+  }
+
   getActiveSeason() {
     if (typeof localStorage !== "undefined") {
       return localStorage.getItem("iq_active_season") || "2026";
