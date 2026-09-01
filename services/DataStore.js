@@ -14,6 +14,7 @@ class DataStoreService {
     this.players = [];
     this.games = [];
     this.seasons = [];
+    this.staffAssignments = [];
     this.playerGameStats = [];
     this.gamePeriodScores = [];
     this.gameEvents = [];
@@ -74,6 +75,13 @@ class DataStoreService {
       visibleGameIds.has(String(e.game_id || e.gameId || ""))
     );
 
+    this.staffAssignments = (this.staffAssignments || []).filter(a => {
+      const teamId = String(a.team_id || a.teamId || "");
+      const clubId = String(a.club_id || a.clubId || "");
+      return (teamId && allowedTeamIds.has(teamId))
+        || (user?.clubId && clubId === String(user.clubId));
+    });
+
     if (user?.clubId) {
       this.clubs = (this.clubs || []).filter(c => String(c.id) === String(user.clubId));
     } else {
@@ -110,6 +118,24 @@ class DataStoreService {
       coachName: t.coach_name || t.coachName || t.coach || "Por definir",
       coach: t.coach_name || t.coachName || t.coach || "Por definir",
       color: t.color || "#1e3a8a"
+    };
+  }
+
+  _normalizeStaffAssignment(a) {
+    if (!a) return a;
+    return {
+      ...a,
+      id: String(a.id),
+      club_id: a.club_id || a.clubId || null,
+      clubId: a.club_id || a.clubId || null,
+      team_id: a.team_id || a.teamId || null,
+      teamId: a.team_id || a.teamId || null,
+      season_name: a.season_name || a.seasonName || "",
+      seasonName: a.season_name || a.seasonName || "",
+      staff_role: a.staff_role || a.staffRole || "",
+      staffRole: a.staff_role || a.staffRole || "",
+      staff_name: a.staff_name || a.staffName || "",
+      staffName: a.staff_name || a.staffName || ""
     };
   }
 
@@ -263,6 +289,7 @@ class DataStoreService {
         const cTeams = localStorage.getItem("iq_cache_teams");
         const cPlayers = localStorage.getItem("iq_cache_players");
         const cGames = localStorage.getItem("iq_cache_games");
+        const cStaffAssignments = localStorage.getItem("iq_cache_staff_assignments");
         const cStats = localStorage.getItem("iq_cache_stats");
         const cPeriods = localStorage.getItem("iq_cache_periods");
         const cEvents = localStorage.getItem("iq_cache_events");
@@ -270,18 +297,20 @@ class DataStoreService {
         if (cTeams) this.teams = JSON.parse(cTeams).map(t => this._normalizeTeam(t));
         if (cPlayers) this.players = JSON.parse(cPlayers).map(p => this._normalizePlayer(p));
         if (cGames) this.games = JSON.parse(cGames).map(g => this._normalizeGame(g));
+        if (cStaffAssignments) this.staffAssignments = JSON.parse(cStaffAssignments).map(a => this._normalizeStaffAssignment(a));
         if (cStats) this.playerGameStats = JSON.parse(cStats).map(s => this._normalizeStat(s));
         if (cPeriods) this.gamePeriodScores = JSON.parse(cPeriods);
         if (cEvents) this.gameEvents = JSON.parse(cEvents);
       }
 
       if (supabase) {
-        const [cRes, tRes, pRes, gRes, sRes, statsRes, psRes, evRes] = await Promise.allSettled([
+        const [cRes, tRes, pRes, gRes, sRes, staffRes, statsRes, psRes, evRes] = await Promise.allSettled([
           supabase.from("clubs").select("*"),
           supabase.from("teams").select("*"),
           supabase.from("players").select("*"),
           supabase.from("games").select("*").order("date", { ascending: false }),
           supabase.from("seasons").select("*").order("created_at", { ascending: false }),
+          supabase.from("staff_assignments").select("*"),
           supabase.from("player_game_stats").select("*"),
           supabase.from("game_period_scores").select("*"),
           supabase.from("game_events").select("*")
@@ -292,6 +321,7 @@ class DataStoreService {
         if (pRes.status === "fulfilled" && pRes.value.data?.length > 0) this.players = pRes.value.data.map(p => this._normalizePlayer(p));
         if (gRes.status === "fulfilled" && gRes.value.data?.length > 0) this.games = gRes.value.data.map(g => this._normalizeGame(g));
         if (sRes.status === "fulfilled" && sRes.value.data) this.seasons = sRes.value.data;
+        if (staffRes.status === "fulfilled" && staffRes.value.data) this.staffAssignments = staffRes.value.data.map(a => this._normalizeStaffAssignment(a));
         if (statsRes.status === "fulfilled" && statsRes.value.data?.length > 0) this.playerGameStats = statsRes.value.data.map(s => this._normalizeStat(s));
         if (psRes.status === "fulfilled" && psRes.value.data?.length > 0) this.gamePeriodScores = psRes.value.data;
         if (evRes.status === "fulfilled" && evRes.value.data?.length > 0) this.gameEvents = evRes.value.data;
@@ -315,6 +345,7 @@ class DataStoreService {
       localStorage.setItem("iq_cache_teams", JSON.stringify(this.teams));
       localStorage.setItem("iq_cache_players", JSON.stringify(this.players));
       localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
+      localStorage.setItem("iq_cache_staff_assignments", JSON.stringify(this.staffAssignments));
       localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
       localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
       localStorage.setItem("iq_cache_events", JSON.stringify(this.gameEvents));
@@ -398,6 +429,58 @@ class DataStoreService {
   getTeamById(id) {
     const targetId = String(id || this.getActiveTeamId()).toLowerCase();
     return this.getTeams().find(t => String(t.id).toLowerCase() === targetId) || this.getTeams()[0];
+  }
+
+  getStaffAssignments({ clubId = null, teamId = null, seasonName = null, role = null } = {}) {
+    return (this.staffAssignments || []).filter((a) => {
+      if (clubId && String(a.club_id || a.clubId || "") !== String(clubId)) return false;
+      if (teamId && String(a.team_id || a.teamId || "") !== String(teamId)) return false;
+      if (seasonName && String(a.season_name || a.seasonName || "").trim().toLowerCase() !== String(seasonName).trim().toLowerCase()) return false;
+      if (role && String(a.staff_role || a.staffRole || "").toUpperCase() !== String(role).toUpperCase()) return false;
+      return true;
+    });
+  }
+
+  getTeamCoach(teamId = null, seasonName = null) {
+    const targetTeamId = teamId || this.getActiveTeamId();
+    const targetSeason = seasonName || this.getActiveSeason();
+    const assignment = this.getStaffAssignments({
+      teamId: targetTeamId,
+      seasonName: targetSeason,
+      role: "HEAD_COACH"
+    })[0];
+    if (assignment?.staff_name || assignment?.staffName) return assignment.staff_name || assignment.staffName;
+    const team = this.getTeamById(targetTeamId);
+    return team?.coach_name || team?.coachName || team?.coach || "Por definir";
+  }
+
+  getClubCoordinator(clubId, seasonName = null) {
+    const targetSeason = seasonName || this.getActiveSeason();
+    const assignment = this.getStaffAssignments({
+      clubId,
+      seasonName: targetSeason,
+      role: "COORDINATOR"
+    }).find(a => !(a.team_id || a.teamId));
+    if (assignment?.staff_name || assignment?.staffName) return assignment.staff_name || assignment.staffName;
+    const club = this.getClubById(clubId);
+    return club?.coordinator_name || club?.coordinatorName || "No asignado";
+  }
+
+  setStaffAssignmentLocal(assignment) {
+    const normalized = this._normalizeStaffAssignment(assignment);
+    const idx = (this.staffAssignments || []).findIndex(a =>
+      String(a.id) === String(normalized.id)
+      || (
+        String(a.team_id || a.teamId || "") === String(normalized.team_id || normalized.teamId || "")
+        && String(a.club_id || a.clubId || "") === String(normalized.club_id || normalized.clubId || "")
+        && String(a.season_name || a.seasonName || "").toLowerCase() === String(normalized.season_name || normalized.seasonName || "").toLowerCase()
+        && String(a.staff_role || a.staffRole || "").toUpperCase() === String(normalized.staff_role || normalized.staffRole || "").toUpperCase()
+      )
+    );
+    if (idx >= 0) this.staffAssignments[idx] = normalized;
+    else this.staffAssignments.push(normalized);
+    this._persistToStorage();
+    this._notifyListeners();
   }
 
   getPlayers(teamId = null) {
