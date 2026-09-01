@@ -136,7 +136,7 @@ export class DatabaseInterface {
    * @abstract
    * @param {string} collection - Nombre de la colección.
    * @param {Object} queryObj - Criterios de coincidencia clave-valor.
-   * @param {Object} [options={}] - Opciones de consulta (limit, offset, orderBy, ascending).
+   * @param {Object} [options={}] - Opciones de consulta (columns, limit, offset, orderBy, ascending).
    * @returns {Promise<Array<Object>>} Lista de registros coincidentes.
    */
   async query(collection, queryObj, options = {}) {
