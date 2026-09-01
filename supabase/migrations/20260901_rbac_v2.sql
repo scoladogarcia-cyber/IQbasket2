@@ -566,4 +566,342 @@ for all
 using (public.iq_current_role() = 'SUPERADMIN')
 with check (public.iq_current_role() = 'SUPERADMIN');
 
+-- ---------------------------------------------------------------------------
+-- 12. SOLICITUDES MULTIUSUARIO DE ACCESO A EQUIPOS
+-- ---------------------------------------------------------------------------
+create table if not exists public.team_access_requests (
+  id uuid primary key default gen_random_uuid(),
+  requester_user_id uuid null,
+  requester_email text not null,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  target_club_id uuid not null references public.clubs(id) on delete cascade,
+  team_name text null,
+  status text not null default 'PENDIENTE'
+    check (status in ('PENDIENTE','APROBADO','RECHAZADO','CANCELADO')),
+  requested_at timestamptz not null default now(),
+  reviewed_at timestamptz null,
+  reviewed_by_email text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_team_access_requests_requester
+  on public.team_access_requests (lower(requester_email), status);
+
+create index if not exists idx_team_access_requests_club_status
+  on public.team_access_requests (target_club_id, status);
+
+create unique index if not exists uq_team_access_requests_pending
+  on public.team_access_requests (lower(requester_email), team_id)
+  where status = 'PENDIENTE';
+
+alter table public.team_access_requests enable row level security;
+
+drop policy if exists iq_team_access_requests_select on public.team_access_requests;
+create policy iq_team_access_requests_select on public.team_access_requests
+for select
+using (
+  lower(requester_email) = public.iq_current_email()
+  or public.iq_current_role() = 'SUPERADMIN'
+  or (
+    public.iq_current_role() = 'ADMIN'
+    and target_club_id = public.iq_current_club_id()
+  )
+);
+
+-- Las escrituras se realizan mediante RPC SECURITY DEFINER para que la revisión
+-- y la concesión de allowed_team_ids sean atómicas.
+revoke insert, update, delete on public.team_access_requests from anon, authenticated;
+grant select on public.team_access_requests to authenticated;
+
+create or replace function public.iq_list_team_directory()
+returns table (
+  id uuid,
+  club_id uuid,
+  club_name text,
+  name text,
+  category text,
+  competition text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    t.id,
+    t.club_id,
+    c.name as club_name,
+    t.name,
+    t.category,
+    t.competition
+  from public.teams t
+  left join public.clubs c on c.id = t.club_id
+  order by c.name nulls last, t.name;
+$$;
+
+revoke all on function public.iq_list_team_directory() from public, anon;
+grant execute on function public.iq_list_team_directory() to authenticated;
+
+create or replace function public.iq_request_team_access(target_team_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_email text := public.iq_current_email();
+  actor_user_id uuid := auth.uid();
+  target_team public.teams%rowtype;
+  existing_id uuid;
+  current_ids uuid[];
+begin
+  if actor_user_id is null or actor_email = '' then
+    raise exception 'Usuario no autenticado';
+  end if;
+
+  select * into target_team
+  from public.teams
+  where id = target_team_id;
+
+  if not found then
+    raise exception 'Equipo no encontrado';
+  end if;
+
+  select coalesce(allowed_team_ids, '{}'::uuid[])
+         || case when team_id is null then '{}'::uuid[] else array[team_id] end
+    into current_ids
+  from public.user_profiles
+  where lower(email) = actor_email
+  limit 1;
+
+  if target_team_id = any(coalesce(current_ids, '{}'::uuid[])) then
+    raise exception 'Ya tienes acceso a este equipo';
+  end if;
+
+  select id into existing_id
+  from public.team_access_requests
+  where lower(requester_email) = actor_email
+    and team_id = target_team_id
+    and status = 'PENDIENTE'
+  limit 1;
+
+  if existing_id is not null then
+    return existing_id;
+  end if;
+
+  insert into public.team_access_requests (
+    requester_user_id,
+    requester_email,
+    team_id,
+    target_club_id,
+    team_name,
+    status
+  )
+  values (
+    actor_user_id,
+    actor_email,
+    target_team.id,
+    target_team.club_id,
+    target_team.name,
+    'PENDIENTE'
+  )
+  returning id into existing_id;
+
+  return existing_id;
+end;
+$$;
+
+revoke all on function public.iq_request_team_access(uuid) from public, anon;
+grant execute on function public.iq_request_team_access(uuid) to authenticated;
+
+create or replace function public.iq_review_team_access(
+  request_id uuid,
+  approve_request boolean
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_email text := public.iq_current_email();
+  actor_role text := public.iq_current_role();
+  req public.team_access_requests%rowtype;
+begin
+  if auth.uid() is null or actor_email = '' then
+    raise exception 'Usuario no autenticado';
+  end if;
+
+  select * into req
+  from public.team_access_requests
+  where id = request_id
+  for update;
+
+  if not found then
+    raise exception 'Solicitud no encontrada';
+  end if;
+
+  if req.status <> 'PENDIENTE' then
+    raise exception 'La solicitud ya ha sido resuelta';
+  end if;
+
+  if actor_role = 'ADMIN' and req.target_club_id is distinct from public.iq_current_club_id() then
+    raise exception 'No puedes revisar solicitudes de otro club';
+  end if;
+
+  if actor_role not in ('SUPERADMIN','ADMIN') then
+    raise exception 'Permisos insuficientes para revisar solicitudes';
+  end if;
+
+  if approve_request then
+    update public.user_profiles
+    set
+      allowed_team_ids = case
+        when req.team_id = any(coalesce(allowed_team_ids, '{}'::uuid[]))
+          then coalesce(allowed_team_ids, '{}'::uuid[])
+        else array_append(coalesce(allowed_team_ids, '{}'::uuid[]), req.team_id)
+      end,
+      team_id = coalesce(team_id, req.team_id)
+    where lower(email) = lower(req.requester_email);
+
+    if not found then
+      raise exception 'No existe perfil para el usuario solicitante';
+    end if;
+  end if;
+
+  update public.team_access_requests
+  set
+    status = case when approve_request then 'APROBADO' else 'RECHAZADO' end,
+    reviewed_at = now(),
+    reviewed_by_email = actor_email,
+    updated_at = now()
+  where id = request_id;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.iq_review_team_access(uuid, boolean) from public, anon;
+grant execute on function public.iq_review_team_access(uuid, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 13. STAFF / RESPONSABLES POR TEMPORADA
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff_assignments (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid null references public.clubs(id) on delete cascade,
+  team_id uuid null references public.teams(id) on delete cascade,
+  season_name text not null,
+  staff_role text not null
+    check (staff_role in (
+      'HEAD_COACH',
+      'COORDINATOR',
+      'ASSISTANT_COACH',
+      'PHYSICAL_TRAINER',
+      'TEAM_MANAGER',
+      'SPORTS_DIRECTOR'
+    )),
+  staff_name text null,
+  user_profile_id uuid null,
+  starts_at date null,
+  ends_at date null,
+  notes text null,
+  scope_key text generated always as (
+    case
+      when team_id is not null then 'team:' || team_id::text
+      when club_id is not null then 'club:' || club_id::text
+      else 'invalid'
+    end
+  ) stored,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (club_id is not null or team_id is not null)
+);
+
+create unique index if not exists uq_staff_assignment_scope_season_role
+  on public.staff_assignments (scope_key, season_name, staff_role);
+
+create index if not exists idx_staff_assignment_team_season
+  on public.staff_assignments (team_id, season_name);
+
+create index if not exists idx_staff_assignment_club_season
+  on public.staff_assignments (club_id, season_name);
+
+alter table public.staff_assignments enable row level security;
+
+drop policy if exists iq_staff_assignments_select on public.staff_assignments;
+create policy iq_staff_assignments_select on public.staff_assignments
+for select
+using (
+  public.iq_current_role() = 'SUPERADMIN'
+  or (
+    team_id is not null
+    and public.iq_can_access_team(team_id)
+  )
+  or (
+    team_id is null
+    and club_id is not null
+    and public.iq_can_access_club(club_id)
+  )
+);
+
+drop policy if exists iq_staff_assignments_insert on public.staff_assignments;
+create policy iq_staff_assignments_insert on public.staff_assignments
+for insert
+with check (
+  public.iq_current_role() = 'SUPERADMIN'
+  or (
+    public.iq_current_role() = 'ADMIN'
+    and (
+      (team_id is not null and public.iq_can_access_team(team_id))
+      or (team_id is null and club_id = public.iq_current_club_id())
+    )
+  )
+);
+
+drop policy if exists iq_staff_assignments_update on public.staff_assignments;
+create policy iq_staff_assignments_update on public.staff_assignments
+for update
+using (
+  public.iq_current_role() = 'SUPERADMIN'
+  or (
+    public.iq_current_role() = 'ADMIN'
+    and (
+      (team_id is not null and public.iq_can_access_team(team_id))
+      or (team_id is null and club_id = public.iq_current_club_id())
+    )
+  )
+)
+with check (
+  public.iq_current_role() = 'SUPERADMIN'
+  or (
+    public.iq_current_role() = 'ADMIN'
+    and (
+      (team_id is not null and public.iq_can_access_team(team_id))
+      or (team_id is null and club_id = public.iq_current_club_id())
+    )
+  )
+);
+
+drop policy if exists iq_staff_assignments_delete on public.staff_assignments;
+create policy iq_staff_assignments_delete on public.staff_assignments
+for delete
+using (
+  public.iq_current_role() = 'SUPERADMIN'
+  or (
+    public.iq_current_role() = 'ADMIN'
+    and (
+      (team_id is not null and public.iq_can_access_team(team_id))
+      or (team_id is null and club_id = public.iq_current_club_id())
+    )
+  )
+);
+
+grant select, insert, update, delete on public.staff_assignments to authenticated;
+
+-- No se realiza backfill automático de coach_name/coordinator_name.
+-- La aplicación usa esos campos como fallback legacy hasta poder auditar la
+-- base de datos real y decidir a qué temporada histórica pertenece cada valor.
+
 commit;
