@@ -26,6 +26,16 @@ export class SeasonCatalogRepository {
     return this.db.getById(this.collection, id);
   }
 
+  async getByIds(ids = []) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    if (typeof this.db.getByIds === "function") {
+      return this.db.getByIds(this.collection, ids);
+    }
+
+    const rows = await Promise.all(ids.map(id => this.getById(id)));
+    return rows.filter(Boolean);
+  }
+
   async getByCode(code) {
     if (!code) return null;
     const rows = await this.db.query(this.collection, { code }, { limit: 1 });
