@@ -846,6 +846,9 @@ class DataStoreService {
   async saveGameAndStats(gameData, statsList = [], periodScores = [], liveEvents = []) {
     const requestedTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
     const requestedSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId(requestedTeamId);
+    const requestedTeamSeasonId = gameData.team_season_id
+      || gameData.teamSeasonId
+      || this.getActiveTeamSeasonId(requestedTeamId);
     const existingGame = gameData.id
       ? this.games.find(g => String(g.id) === String(gameData.id))
       : null;
@@ -864,12 +867,21 @@ class DataStoreService {
 
     const targetTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
     const targetSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId(targetTeamId);
+    const targetTeamSeasonId = gameData.team_season_id
+      || gameData.teamSeasonId
+      || requestedTeamSeasonId
+      || this.getActiveTeamSeasonId(targetTeamId);
+
+    if (!targetTeamSeasonId) {
+      throw new Error("No se pudo resolver el contexto equipo-temporada v3 para guardar el partido.");
+    }
 
     const normalizedGame = this._normalizeGame({
       ...gameData,
       id: gId,
       team_id: targetTeamId,
-      season_id: targetSeasonId
+      season_id: targetSeasonId,
+      team_season_id: targetTeamSeasonId
     });
 
     // 1. Estado en memoria local
@@ -925,6 +937,7 @@ class DataStoreService {
           id: gId,
           team_id: targetTeamId,
           season_id: targetSeasonId,
+          team_season_id: targetTeamSeasonId,
           date: normalizedGame.date || new Date().toISOString().split("T")[0],
           time: gameData.time || "18:00",
           opponent: normalizedGame.opponent || "Rival",
