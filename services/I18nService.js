@@ -141,7 +141,7 @@ class I18nService {
 
       const { data, error } = await supabaseClient
         .from("translations")
-        .select("*")
+        .select("key,language_code,translation,updated_at")
         .or(`language_code.eq.${current},language_code.eq.${queryLang}`);
 
       if (!error && Array.isArray(data) && data.length > 0) {
