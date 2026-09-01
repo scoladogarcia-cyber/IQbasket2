@@ -352,15 +352,13 @@ async _openEditForm(gameId, container) {
 
     let loadedEvents = DataStore.getGameEvents(gameId);
 
-    if ((!loadedEvents || loadedEvents.length === 0) && gameId && this.supabase) {
+    if ((!loadedEvents || loadedEvents.length === 0) && gameId) {
       try {
-        const { data, error } = await this.supabase
-          .from("game_events")
-          .select("*")
-          .eq("game_id", gameId)
-          .order("created_at", { ascending: true });
+        const data = typeof DataStore.loadGameEvents === "function"
+          ? await DataStore.loadGameEvents([gameId])
+          : [];
 
-        if (!error && data && data.length > 0) {
+        if (data && data.length > 0) {
           loadedEvents = data.map(ev => {
             const pObj = this.players.find(p => String(p.id) === String(ev.player_id));
             return {
@@ -372,7 +370,9 @@ async _openEditForm(gameId, container) {
               period: Number(ev.period || 1),
               isOvertime: Number(ev.period || 1) > 4,
               isOpponent: !ev.player_id && String(ev.action_type || '').includes("opp"),
-              coordinates: (ev.coord_x !== null && ev.coord_y !== null) ? { x: Number(ev.coord_x), y: Number(ev.coord_y), made: ev.made } : null
+              coordinates: (ev.coord_x !== null && ev.coord_y !== null)
+                ? { x: Number(ev.coord_x), y: Number(ev.coord_y), made: ev.made }
+                : null
             };
           });
         }
