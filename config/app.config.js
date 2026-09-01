@@ -26,7 +26,7 @@ export const APP_CONFIG = {
   // =========================================================================
   // MATRIZ OFICIAL DE CONTROL DE ACCESO BASADO EN ROLES (RBAC)
   // =========================================================================
-  permissions: PERMISSIONS_BY_ACTION
+  permissions: PERMISSIONS_BY_ACTION,
 
   // =========================================================================
   // PARÁMETROS REGLAMENTARIOS DE BALONCESTO (FIBA)
