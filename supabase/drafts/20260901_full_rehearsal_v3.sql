@@ -1943,7 +1943,95 @@ order by tablename, policyname;
 -- ============================================================================
 
 -- =============================================================================
--- E. FINAL REHEARSAL VALIDATION
+-- E. ROLE-SCOPE RLS REHEARSAL USING EXISTING AUDITED AUTH USERS
+-- =============================================================================
+
+-- Give the existing ANALISTA user a temporary Manyanet team-season membership
+-- ONLY inside this rollback transaction. This tests contextual scope without
+-- changing production data.
+insert into public.team_season_memberships (
+    user_id,
+    team_season_id,
+    function_role,
+    status,
+    valid_from
+)
+select
+    'f4d94bdd-7460-4a04-9919-bf528f73cf98'::uuid,
+    ts.id,
+    'ANALISTA',
+    'ACTIVE',
+    now()
+from public.team_seasons ts
+join public.season_catalog sc on sc.id = ts.season_id
+where ts.team_id = 'e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22'::uuid
+  and sc.code = '2025-2026'
+on conflict (user_id, team_season_id, function_role)
+do update set status = 'ACTIVE', updated_at = now();
+
+-- ANALISTA: must see only the assigned team-season sporting data.
+set local role authenticated;
+select set_config(
+    'request.jwt.claims',
+    '{"sub":"f4d94bdd-7460-4a04-9919-bf528f73cf98","email":"scoladogarcia@gmail.com","role":"authenticated"}',
+    true
+);
+
+select
+    'ANALISTA' as actor,
+    public.iq_v3_is_superadmin() as is_superadmin,
+    (select count(*) from public.games) as visible_games,
+    (select count(*) from public.players) as visible_players,
+    (
+        select count(*)
+        from public.games
+        where team_id <> 'e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22'::uuid
+    ) as foreign_team_games_visible;
+
+reset role;
+
+-- INVITADO without memberships: catalog is discoverable, sporting data is not.
+set local role authenticated;
+select set_config(
+    'request.jwt.claims',
+    '{"sub":"4a3340f6-3e97-4f0f-a3ae-c5481ddb3606","email":"test@test.com","role":"authenticated"}',
+    true
+);
+
+select
+    'INVITADO' as actor,
+    public.iq_v3_is_superadmin() as is_superadmin,
+    (select count(*) from public.teams) as visible_team_catalog,
+    (select count(*) from public.team_seasons) as visible_team_season_catalog,
+    (select count(*) from public.games) as visible_games,
+    (select count(*) from public.players) as visible_players;
+
+reset role;
+
+-- Unique master SUPERADMIN: must see all sporting data.
+set local role authenticated;
+select set_config(
+    'request.jwt.claims',
+    '{"sub":"afdf727e-8aa4-43b2-8ee4-bfc63a715a51","email":"scolado@nechigroup.com","role":"authenticated"}',
+    true
+);
+
+select
+    'SUPERADMIN' as actor,
+    public.iq_v3_is_superadmin() as is_superadmin,
+    (select count(*) from public.games) as visible_games,
+    (select count(*) from public.players) as visible_players,
+    (select count(*) from public.user_profiles) as visible_user_profiles;
+
+reset role;
+
+-- Remove the temporary RLS-test membership before object-count validation.
+delete from public.team_season_memberships
+where user_id = 'f4d94bdd-7460-4a04-9919-bf528f73cf98'::uuid
+  and function_role = 'ANALISTA';
+
+-- =============================================================================
+-- F. FINAL REHEARSAL VALIDATION
 -- =============================================================================
 
 -- Source tables must keep the same row counts.
@@ -2059,7 +2147,7 @@ where schemaname = 'public'
 order by tablename, policyname;
 
 -- =============================================================================
--- F. NOTHING PERSISTS
+-- G. NOTHING PERSISTS
 -- =============================================================================
 
 rollback;
