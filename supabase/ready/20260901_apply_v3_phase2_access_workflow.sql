@@ -59,59 +59,41 @@ stable
 security definer
 set search_path = ''
 as $$
-    with caller as (
-        select
-            up.id,
-            upper(coalesce(up.global_role, up.role, 'USER')) as global_role
-        from public.user_profiles up
-        where up.id = auth.uid()
-    ),
-    target as (
-        select
-            ts.id,
-            ts.team_id,
-            ts.season_id,
-            t.club_id
-        from public.team_seasons ts
-        join public.teams t on t.id = ts.team_id
-        where ts.id = target_team_season_id
-    )
-    select exists (
-        select 1
-        from caller c
-        where c.global_role = 'SUPERADMIN'
-           or (
-               c.global_role = 'ADMIN'
-               and (
-                   exists (
-                       select 1
-                       from public.team_season_memberships m
-                       where m.user_id = c.id
-                         and m.team_season_id = target_team_season_id
-                         and upper(m.status) = 'ACTIVE'
-                         and upper(m.function_role) in (
-                             'ADMIN',
-                             'COORDINADOR',
-                             'DIRECTOR_DEPORTIVO'
-                         )
-                   )
-                   or exists (
-                       select 1
-                       from target x
-                       join public.club_season_memberships cm
-                         on cm.club_id = x.club_id
-                        and cm.season_id = x.season_id
-                       where cm.user_id = c.id
-                         and upper(cm.status) = 'ACTIVE'
-                         and upper(cm.function_role) in (
-                             'ADMIN',
-                             'COORDINADOR',
-                             'DIRECTOR_DEPORTIVO'
-                         )
-                   )
-               )
-           )
-    );
+    select
+        exists (
+            select 1
+            from public.user_profiles up
+            where up.id = auth.uid()
+              and upper(coalesce(up.global_role, up.role, 'USER')) = 'SUPERADMIN'
+        )
+        or exists (
+            select 1
+            from public.team_season_memberships m
+            where m.user_id = auth.uid()
+              and m.team_season_id = target_team_season_id
+              and upper(m.status) = 'ACTIVE'
+              and upper(m.function_role) in (
+                  'ADMIN',
+                  'COORDINADOR',
+                  'DIRECTOR_DEPORTIVO'
+              )
+        )
+        or exists (
+            select 1
+            from public.team_seasons ts
+            join public.teams t on t.id = ts.team_id
+            join public.club_season_memberships cm
+              on cm.club_id = t.club_id
+             and cm.season_id = ts.season_id
+            where ts.id = target_team_season_id
+              and cm.user_id = auth.uid()
+              and upper(cm.status) = 'ACTIVE'
+              and upper(cm.function_role) in (
+                  'ADMIN',
+                  'COORDINADOR',
+                  'DIRECTOR_DEPORTIVO'
+              )
+        );
 $$;
 
 revoke all on function public.iq_v3_can_manage_team_season(uuid) from public;
@@ -159,6 +141,16 @@ begin
         raise exception 'TEAM_SEASON_NOT_FOUND';
     end if;
 
+    if exists (
+        select 1
+        from public.team_season_memberships m
+        where m.user_id = caller_id
+          and m.team_season_id = target_team_season_id
+          and upper(m.status) = 'ACTIVE'
+    ) then
+        raise exception 'ACCESS_ALREADY_GRANTED';
+    end if;
+
     select r.*
       into existing_request
       from public.team_join_requests r
@@ -194,6 +186,8 @@ $$;
 
 revoke all on function public.iq_v3_request_team_access(uuid, text) from public;
 grant execute on function public.iq_v3_request_team_access(uuid, text) to authenticated;
+
+
 
 create or replace function public.iq_v3_review_team_access(
     request_id uuid,
