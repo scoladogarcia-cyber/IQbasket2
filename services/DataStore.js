@@ -42,14 +42,15 @@ class DataStoreService {
     if (!auth || auth.getAuthenticatedRole() === UserRole.SUPERADMIN) return;
 
     const user = auth.getCurrentUser();
+    auth.setTeamCatalog?.(this.teams || []);
     const allowedTeamIds = new Set((user?.allowedTeamIds || []).map(String));
     const linkedPlayerIds = new Set((user?.linkedPlayerIds || []).map(String));
 
-    this.teams = (this.teams || []).filter(t => allowedTeamIds.has(String(t.id)));
+    this.teams = (this.teams || []).filter(t => auth.canAccessTeam(String(t.id)));
 
     const visiblePlayerIds = new Set();
     this.players = (this.players || []).filter(p => {
-      const teamAllowed = allowedTeamIds.has(String(p.team_id || p.teamId || ""));
+      const teamAllowed = auth.canAccessTeam(String(p.team_id || p.teamId || ""));
       const isOwn = user?.playerId && String(user.playerId) === String(p.id);
       const isLinked = linkedPlayerIds.has(String(p.id));
       const visible = teamAllowed || isOwn || isLinked;
@@ -59,7 +60,7 @@ class DataStoreService {
 
     const visibleGameIds = new Set();
     this.games = (this.games || []).filter(g => {
-      const visible = allowedTeamIds.has(String(g.team_id || g.teamId || ""));
+      const visible = auth.canAccessTeam(String(g.team_id || g.teamId || ""));
       if (visible) visibleGameIds.add(String(g.id));
       return visible;
     });
@@ -78,7 +79,7 @@ class DataStoreService {
     this.staffAssignments = (this.staffAssignments || []).filter(a => {
       const teamId = String(a.team_id || a.teamId || "");
       const clubId = String(a.club_id || a.clubId || "");
-      return (teamId && allowedTeamIds.has(teamId))
+      return (teamId && auth.canAccessTeam(teamId))
         || (user?.clubId && clubId === String(user.clubId));
     });
 
