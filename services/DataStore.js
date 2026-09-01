@@ -5,6 +5,8 @@
  */
 
 import { supabase } from "../config/database.config.js";
+import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
+import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 
 class DataStoreService {
@@ -14,6 +16,7 @@ class DataStoreService {
     this.players = [];
     this.games = [];
     this.seasons = [];
+    this.legacySeasons = [];
     this.staffAssignments = [];
     this.playerGameStats = [];
     this.gamePeriodScores = [];
@@ -25,6 +28,9 @@ class DataStoreService {
     this.isLoaded = false;
     this.isLoading = false;
     this.permissionService = null;
+    this.seasonContextService = supabase
+      ? new SeasonContextService(new SupabaseAdapter(supabase))
+      : null;
   }
 
   setPermissionService(permissionService) {
