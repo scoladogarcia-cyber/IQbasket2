@@ -42,7 +42,19 @@ export const DATABASE_CONFIG = {
     // y no debe usarse hasta que el modelo v3 defina el flujo definitivo.
     CHANGE_REQUESTS: "change_requests",
 
-    TRANSLATIONS: "translations"
+    TRANSLATIONS: "translations",
+
+    // Modelo v3 (borrador; no usar en runtime hasta migración validada).
+    SEASON_CATALOG: "season_catalog",
+    TEAM_SEASONS: "team_seasons",
+    ROSTER_MEMBERSHIPS: "roster_memberships",
+    TEAM_SEASON_MEMBERSHIPS: "team_season_memberships",
+    CLUB_SEASON_MEMBERSHIPS: "club_season_memberships",
+    USER_PLAYER_LINKS: "user_player_links",
+    ANALYTICS_RUNS: "analytics_runs",
+    PLAYER_SEASON_METRICS: "player_season_metrics",
+    TEAM_SEASON_METRICS: "team_season_metrics",
+    LINEUP_SEASON_METRICS: "lineup_season_metrics"
   }
 };
 
