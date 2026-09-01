@@ -70,6 +70,7 @@ export class PermissionService {
       id: user.id || user.user_id || null,
       email,
       role,
+      globalRole: String(user.globalRole ?? user.global_role ?? "").trim().toUpperCase() || null,
       clubId: user.clubId ?? user.club_id ?? null,
       allowedTeamIds: parseArray(
         user.allowedTeamIds
