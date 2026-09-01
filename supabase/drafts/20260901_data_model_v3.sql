@@ -20,6 +20,7 @@ create table if not exists public.season_catalog (
     status text not null default 'ACTIVE',
     is_test boolean not null default false,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint season_catalog_code_key unique (code)
 );
 
@@ -35,6 +36,7 @@ create table if not exists public.team_seasons (
     status text not null default 'ACTIVE',
     data_status text not null default 'ACTIVE',
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint team_seasons_team_season_key unique (team_id, season_id)
 );
 
@@ -60,6 +62,7 @@ create table if not exists public.roster_memberships (
     joined_at timestamptz,
     left_at timestamptz,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint roster_memberships_player_team_season_key
         unique (player_id, team_season_id)
 );
@@ -82,6 +85,7 @@ create table if not exists public.team_season_memberships (
     valid_from timestamptz,
     valid_until timestamptz,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint team_season_memberships_unique
         unique (user_id, team_season_id, function_role)
 );
@@ -105,6 +109,7 @@ create table if not exists public.club_season_memberships (
     valid_from timestamptz,
     valid_until timestamptz,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint club_season_memberships_unique
         unique (user_id, club_id, season_id, function_role)
 );
@@ -124,6 +129,7 @@ create table if not exists public.user_player_links (
     valid_from timestamptz,
     valid_until timestamptz,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     constraint user_player_links_unique unique (user_id, player_id, relation_type)
 );
 
