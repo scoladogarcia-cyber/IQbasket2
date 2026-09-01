@@ -135,11 +135,17 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $
   select
     public.iq_current_role() = 'SUPERADMIN'
-    or target_club_id = public.iq_current_club_id();
-$$;
+    or target_club_id = public.iq_current_club_id()
+    or exists (
+      select 1
+      from public.teams t
+      where t.club_id = target_club_id
+        and t.id = any(coalesce(public.iq_allowed_team_ids(), '{}'::uuid[]))
+    );
+$;
 
 create or replace function public.iq_can_access_team(target_team_id uuid)
 returns boolean
@@ -265,28 +271,66 @@ begin
       end if;
     end if;
 
-    if old.club_id is distinct from public.iq_current_club_id() then
-      raise exception 'Un administrador solo puede gestionar usuarios de su club';
+    -- El ADMIN puede gestionar el alcance de SU club incluso si el usuario
+    -- también participa en otros clubes. No puede tocar permisos ajenos.
+    if new.role is distinct from old.role
+       and coalesce(old.club_id, new.club_id) is distinct from public.iq_current_club_id() then
+      raise exception 'No puedes cambiar el rol de un usuario cuyo club principal es otro';
     end if;
 
-    -- Un ADMIN no puede conceder alcance a equipos externos a su club.
+    if new.club_id is distinct from old.club_id then
+      if old.club_id is not null
+         or new.club_id is distinct from public.iq_current_club_id() then
+        raise exception 'No puedes cambiar el club principal de este usuario';
+      end if;
+    end if;
+
+    -- Solo los IDs añadidos por este cambio deben pertenecer al club del Admin.
     if exists (
       select 1
-      from unnest(coalesce(new.allowed_team_ids, '{}'::uuid[])) as requested_team_id
-      left join public.teams t on t.id = requested_team_id
+      from (
+        select unnest(coalesce(new.allowed_team_ids, '{}'::uuid[])) as team_id
+        except
+        select unnest(coalesce(old.allowed_team_ids, '{}'::uuid[])) as team_id
+      ) added
+      left join public.teams t on t.id = added.team_id
       where t.id is null
          or t.club_id is distinct from public.iq_current_club_id()
     ) then
-      raise exception 'No puedes asignar equipos de otro club';
+      raise exception 'No puedes añadir equipos de otro club';
     end if;
 
-    if new.team_id is not null and not exists (
+    -- Tampoco puede retirar accesos pertenecientes a otro club.
+    if exists (
       select 1
-      from public.teams t
-      where t.id = new.team_id
-        and t.club_id = public.iq_current_club_id()
+      from (
+        select unnest(coalesce(old.allowed_team_ids, '{}'::uuid[])) as team_id
+        except
+        select unnest(coalesce(new.allowed_team_ids, '{}'::uuid[])) as team_id
+      ) removed
+      left join public.teams t on t.id = removed.team_id
+      where t.id is null
+         or t.club_id is distinct from public.iq_current_club_id()
     ) then
-      raise exception 'El equipo principal asignado no pertenece a tu club';
+      raise exception 'No puedes retirar equipos de otro club';
+    end if;
+
+    if new.team_id is distinct from old.team_id then
+      if new.team_id is not null and not exists (
+        select 1 from public.teams t
+        where t.id = new.team_id
+          and t.club_id = public.iq_current_club_id()
+      ) then
+        raise exception 'El nuevo equipo principal no pertenece a tu club';
+      end if;
+
+      if old.team_id is not null and not exists (
+        select 1 from public.teams t
+        where t.id = old.team_id
+          and t.club_id = public.iq_current_club_id()
+      ) then
+        raise exception 'No puedes modificar un equipo principal de otro club';
+      end if;
     end if;
   end if;
 
@@ -769,6 +813,7 @@ begin
   if approve_request then
     update public.user_profiles
     set
+      club_id = coalesce(club_id, req.target_club_id),
       allowed_team_ids = case
         when req.team_id = any(coalesce(allowed_team_ids, '{}'::uuid[]))
           then coalesce(allowed_team_ids, '{}'::uuid[])
