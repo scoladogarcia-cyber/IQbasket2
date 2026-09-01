@@ -370,36 +370,46 @@ class DataStoreService {
         }
 
         // 3. Datos operativos: filtrar en servidor, nunca descargar todo para filtrar después.
-        let playersQuery = supabase.from("players").select("*");
-        // Excluye `games.events` del arranque: es un JSONB potencialmente pesado y
-        // la fuente operativa de eventos es `game_events`, que se carga bajo demanda.
-        let gamesQuery = supabase
-          .from("games")
-          .select("id,team_id,season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
-          .order("date", { ascending: false });
-        let seasonsQuery = supabase.from("seasons").select("*").order("created_at", { ascending: false });
+        // Un usuario autenticado sin ningún equipo autorizado NO debe caer en una
+        // consulta global por ausencia de filtro.
+        const restrictedWithoutScope = Boolean(auth && !isSuperadmin && !scopeTeamId);
 
-        if (scopeTeamId) {
-          playersQuery = playersQuery.eq("team_id", scopeTeamId);
-          gamesQuery = gamesQuery.eq("team_id", scopeTeamId);
-          // Compatibilidad con el esquema actual. En v3 seasons será global + team_seasons.
-          seasonsQuery = seasonsQuery.eq("team_id", scopeTeamId);
-        }
+        if (restrictedWithoutScope) {
+          this.players = [];
+          this.games = [];
+          this.seasons = [];
+        } else {
+          let playersQuery = supabase.from("players").select("*");
+          // Excluye `games.events` del arranque: es un JSONB potencialmente pesado y
+          // la fuente operativa de eventos es `game_events`, que se carga bajo demanda.
+          let gamesQuery = supabase
+            .from("games")
+            .select("id,team_id,season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
+            .order("date", { ascending: false });
+          let seasonsQuery = supabase.from("seasons").select("*").order("created_at", { ascending: false });
 
-        const [playersRes, gamesRes, seasonsRes] = await Promise.allSettled([
-          playersQuery,
-          gamesQuery,
-          seasonsQuery
-        ]);
+          if (scopeTeamId) {
+            playersQuery = playersQuery.eq("team_id", scopeTeamId);
+            gamesQuery = gamesQuery.eq("team_id", scopeTeamId);
+            // Compatibilidad con el esquema actual. En v3 seasons será global + team_seasons.
+            seasonsQuery = seasonsQuery.eq("team_id", scopeTeamId);
+          }
 
-        if (playersRes.status === "fulfilled" && !playersRes.value.error) {
-          this.players = (playersRes.value.data || []).map(p => this._normalizePlayer(p));
-        }
-        if (gamesRes.status === "fulfilled" && !gamesRes.value.error) {
-          this.games = (gamesRes.value.data || []).map(g => this._normalizeGame(g));
-        }
-        if (seasonsRes.status === "fulfilled" && !seasonsRes.value.error) {
-          this.seasons = seasonsRes.value.data || [];
+          const [playersRes, gamesRes, seasonsRes] = await Promise.allSettled([
+            playersQuery,
+            gamesQuery,
+            seasonsQuery
+          ]);
+
+          if (playersRes.status === "fulfilled" && !playersRes.value.error) {
+            this.players = (playersRes.value.data || []).map(p => this._normalizePlayer(p));
+          }
+          if (gamesRes.status === "fulfilled" && !gamesRes.value.error) {
+            this.games = (gamesRes.value.data || []).map(g => this._normalizeGame(g));
+          }
+          if (seasonsRes.status === "fulfilled" && !seasonsRes.value.error) {
+            this.seasons = seasonsRes.value.data || [];
+          }
         }
 
         // 4. Las tablas dependientes se consultan solo para los partidos visibles.
