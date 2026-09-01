@@ -467,27 +467,34 @@ class DataStoreService {
           this.players = [];
           this.games = [];
           this.seasons = [];
+          this.legacySeasons = [];
         } else {
+          // v3-first: temporada global + team_season. Si falla, _loadSeasonContexts
+          // conserva automáticamente el comportamiento legacy.
+          await this._loadSeasonContexts(scopeTeamId);
+
           let playersQuery = supabase.from("players").select("*");
-          // Excluye `games.events` del arranque: es un JSONB potencialmente pesado y
-          // la fuente operativa de eventos es `game_events`, que se carga bajo demanda.
+
+          // Excluye `games.events` del arranque e incorpora únicamente el nuevo
+          // bridge `team_season_id`, manteniendo los FKs legacy.
           let gamesQuery = supabase
             .from("games")
-            .select("id,team_id,season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
+            .select("id,team_id,season_id,team_season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
             .order("date", { ascending: false });
-          let seasonsQuery = supabase.from("seasons").select("*").order("created_at", { ascending: false });
 
           if (scopeTeamId) {
             playersQuery = playersQuery.eq("team_id", scopeTeamId);
             gamesQuery = gamesQuery.eq("team_id", scopeTeamId);
-            // Compatibilidad con el esquema actual. En v3 seasons será global + team_seasons.
-            seasonsQuery = seasonsQuery.eq("team_id", scopeTeamId);
           }
 
-          const [playersRes, gamesRes, seasonsRes] = await Promise.allSettled([
+          const activeTeamSeasonId = this.getActiveTeamSeasonId(scopeTeamId);
+          if (activeTeamSeasonId) {
+            gamesQuery = gamesQuery.eq("team_season_id", activeTeamSeasonId);
+          }
+
+          const [playersRes, gamesRes] = await Promise.allSettled([
             playersQuery,
-            gamesQuery,
-            seasonsQuery
+            gamesQuery
           ]);
 
           if (playersRes.status === "fulfilled" && !playersRes.value.error) {
@@ -495,9 +502,6 @@ class DataStoreService {
           }
           if (gamesRes.status === "fulfilled" && !gamesRes.value.error) {
             this.games = (gamesRes.value.data || []).map(g => this._normalizeGame(g));
-          }
-          if (seasonsRes.status === "fulfilled" && !seasonsRes.value.error) {
-            this.seasons = seasonsRes.value.data || [];
           }
         }
 
