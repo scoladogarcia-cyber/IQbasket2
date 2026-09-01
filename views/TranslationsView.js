@@ -190,8 +190,14 @@ export class TranslationsView {
         .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
         .order("created_at", { ascending: false });
       const currentUser = this.auth.getCurrentUser?.();
-      if (this.auth.getAuthenticatedRole?.() === UserRole.ADMIN && currentUser?.clubId) {
-        query = query.eq("club_id", currentUser.clubId);
+
+      if (this.auth.getAuthenticatedRole?.() === UserRole.ADMIN) {
+        const adminTeamIds = (currentUser?.allowedTeamIds || []).map(String).filter(Boolean);
+        if (adminTeamIds.length === 0) {
+          this.profilesList = [];
+          return;
+        }
+        query = query.overlaps("assigned_team_ids", adminTeamIds);
       }
 
       const { data, error } = await query;
@@ -201,9 +207,9 @@ export class TranslationsView {
           : data.filter(p => String(p.email || "").toLowerCase() !== UNIQUE_SUPERADMIN_EMAIL);
 
         this.profilesList.forEach(profile => {
-          const ids = Array.isArray(profile.allowed_team_ids)
-            ? profile.allowed_team_ids.map(String)
-            : (profile.team_id ? [String(profile.team_id)] : []);
+          const ids = Array.isArray(profile.assigned_team_ids)
+            ? profile.assigned_team_ids.map(String)
+            : [];
           this.userTeamAssignments[profile.email] = ids;
         });
         this._saveAssignmentsLocal();
@@ -224,10 +230,11 @@ export class TranslationsView {
       if (!error && data && data.length > 0) {
         this.seasonsList = data;
       } else {
+        const dataStoreSeasons = DataStore.getSeasons?.(activeTeamId) || [];
         const storedSeasons = localStorage.getItem("iq_seasons");
-        this.seasonsList = storedSeasons ? JSON.parse(storedSeasons) : [
-          { id: "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d", name: "2026", team_id: activeTeamId }
-        ];
+        this.seasonsList = dataStoreSeasons.length > 0
+          ? dataStoreSeasons
+          : (storedSeasons ? JSON.parse(storedSeasons) : []);
       }
       this._saveSeasonsLocal();
     } catch (e) {
@@ -344,26 +351,17 @@ export class TranslationsView {
     let finalIds = normalizedIds;
     if (this.auth?.getAuthenticatedRole?.() === UserRole.ADMIN) {
       const ownClubTeamIds = new Set((DataStore.getTeams() || []).map(t => String(t.id)));
-      const existingIds = Array.isArray(targetProfile?.allowed_team_ids)
-        ? targetProfile.allowed_team_ids.map(String)
-        : (targetProfile?.team_id ? [String(targetProfile.team_id)] : []);
+      const existingIds = Array.isArray(targetProfile?.assigned_team_ids)
+        ? targetProfile.assigned_team_ids.map(String)
+        : [];
       const externalIds = existingIds.filter(id => !ownClubTeamIds.has(id));
       finalIds = [...new Set([...externalIds, ...normalizedIds])];
     }
 
-    // Preferencia v2: allowed_team_ids. Compatibilidad: team_id singular.
-    let { error } = await supabase
+    const { error } = await supabase
       .from("user_profiles")
-      .update({ allowed_team_ids: finalIds })
+      .update({ assigned_team_ids: finalIds })
       .eq("email", email);
-
-    if (error) {
-      const fallback = await supabase
-        .from("user_profiles")
-        .update({ team_id: finalIds[0] || null })
-        .eq("email", email);
-      error = fallback.error;
-    }
 
     if (error) throw error;
 
