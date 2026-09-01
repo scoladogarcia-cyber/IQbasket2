@@ -1,0 +1,81 @@
+name: Manual encrypted Supabase backup
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/rbac-permissions-v2
+    paths:
+      - ".github/backup-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Create encrypted database backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+
+    steps:
+      - name: Check required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_DB_URL" || { echo "Missing SUPABASE_DB_URL"; exit 1; }
+          test -n "$BACKUP_ENCRYPTION_PASSWORD" || { echo "Missing BACKUP_ENCRYPTION_PASSWORD"; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create logical backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p iqbasket-backup
+
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f iqbasket-backup/roles.sql --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f iqbasket-backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f iqbasket-backup/data.sql --data-only --use-copy
+
+          cat > iqbasket-backup/backup-info.txt <<EOF
+          Project: IQBasket2
+          Created UTC: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          Git branch: ${GITHUB_REF_NAME}
+          Git commit: ${GITHUB_SHA}
+          Backup method: Supabase CLI logical dump
+          Encryption: AES-256-CBC / PBKDF2
+          EOF
+
+          sha256sum             iqbasket-backup/roles.sql             iqbasket-backup/schema.sql             iqbasket-backup/data.sql             > iqbasket-backup/SHA256SUMS.txt
+
+      - name: Encrypt backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf iqbasket-backup.tar.gz iqbasket-backup
+
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 250000             -in iqbasket-backup.tar.gz             -out IQBasket_pre_v3_backup.tar.gz.enc             -pass env:BACKUP_ENCRYPTION_PASSWORD
+
+          sha256sum IQBasket_pre_v3_backup.tar.gz.enc > IQBasket_pre_v3_backup.tar.gz.enc.sha256
+
+          rm -rf iqbasket-backup iqbasket-backup.tar.gz
+
+      - name: Upload encrypted backup only
+        uses: actions/upload-artifact@v4
+        with:
+          name: IQBasket-pre-v3-encrypted-backup
+          path: |
+            IQBasket_pre_v3_backup.tar.gz.enc
+            IQBasket_pre_v3_backup.tar.gz.enc.sha256
+          if-no-files-found: error
+          retention-days: 1
