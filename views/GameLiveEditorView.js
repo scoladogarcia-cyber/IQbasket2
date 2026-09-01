@@ -237,7 +237,7 @@ export class GameLiveEditorView {
       this.currentGame = {
         id: newGameId,
         team_id: teamId,
-        season_id: DataStore.getActiveSeasonId(),
+        season_id: DataStore.getActiveSeasonId(teamId),
         date: new Date().toISOString().split("T")[0],
         time: "18:00",
         opponent: "",
