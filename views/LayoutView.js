@@ -182,8 +182,8 @@ export class LayoutView {
     const currentLang = I18n.getLocale ? I18n.getLocale() : "es";
     const currentUserEmail = localStorage.getItem("iq_user_email") || "";
 
-    const currentActiveTeamId = DataStore.getActiveTeamId() || localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
-    const currentActiveSeason = DataStore.getActiveSeason() || localStorage.getItem("iq_active_season") || "2026";
+    const currentActiveTeamId = DataStore.getActiveTeamId() || localStorage.getItem("iq_active_team_id") || "";
+    const currentActiveSeason = DataStore.getActiveSeason() || localStorage.getItem("iq_active_season") || "";
 
     const allTeams = DataStore.getTeams() || [];
 
@@ -194,7 +194,9 @@ export class LayoutView {
     const seasons = DataStore.getSeasons?.(currentActiveTeamId) || [];
     const seasonsToRender = seasons.length > 0
       ? seasons
-      : [{ id: "fallback-active-season", name: currentActiveSeason, isActive: true }];
+      : (currentActiveSeason
+        ? [{ id: "fallback-active-season", name: currentActiveSeason, isActive: true }]
+        : []);
 
     LayoutView.bindMobileDrawerEvents();
 
@@ -276,7 +278,7 @@ export class LayoutView {
       <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
         ${s.name}
       </option>
-    `).join("") : `<option value="2026" selected>2026</option>`;
+    `).join("") : `<option value="" disabled selected>⚠️ Sin temporadas</option>`;
 
     const langOptionsMarkup = `
       <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
