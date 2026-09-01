@@ -134,10 +134,7 @@ export class StatsSyncService {
    */
   async persistGameTotals(gameId, totals = {}) {
     if (!this.supabase || !gameId) return;
-    if (this.auth) {
-      const game = typeof this.auth?.getCurrentUser === "function" ? null : null;
-      this._assertCanSync(null);
-    }
+    if (this.auth) this._assertCanSync(null);
 
     try {
       await this.supabase
