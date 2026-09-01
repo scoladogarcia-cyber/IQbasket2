@@ -351,9 +351,19 @@ class DataStoreService {
         const requestedTeamId = String(teamId || storedTeamId || "").trim();
         const requestedExists = requestedTeamId
           && (this.teams || []).some(t => String(t.id) === requestedTeamId);
-        const scopeTeamId = requestedExists
+
+        const auth = this.permissionService;
+        const isSuperadmin = auth?.getAuthenticatedRole?.() === UserRole.SUPERADMIN;
+        const requestedAllowed = requestedExists
+          && (!auth || isSuperadmin || auth.canAccessTeam(requestedTeamId));
+
+        const firstAllowedTeam = (this.teams || []).find(t =>
+          !auth || isSuperadmin || auth.canAccessTeam(String(t.id))
+        );
+
+        const scopeTeamId = requestedAllowed
           ? requestedTeamId
-          : ((this.teams || [])[0]?.id ? String(this.teams[0].id) : requestedTeamId);
+          : (firstAllowedTeam?.id ? String(firstAllowedTeam.id) : "");
 
         if (scopeTeamId && typeof localStorage !== "undefined") {
           localStorage.setItem("iq_active_team_id", scopeTeamId);
