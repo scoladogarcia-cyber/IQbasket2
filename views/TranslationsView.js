@@ -179,6 +179,7 @@ export class TranslationsView {
       APPROVE_JOIN_REQUESTS: Permission.APPROVE_TEAM_ACCESS,
       VIEW_TAB_PLAYERS: Permission.VIEW_ROSTER,
       MANAGE_PLAYERS: Permission.MANAGE_ROSTER,
+      REQUEST_TRANSFERS: Permission.REQUEST_TRANSFER,
       APPROVE_TRANSFERS: Permission.APPROVE_TRANSFER,
       VIEW_TAB_SEASONS: Permission.VIEW_SEASONS,
       CREATE_SEASON: Permission.MANAGE_SEASONS,
@@ -537,6 +538,11 @@ export class TranslationsView {
 
     tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
       btn.addEventListener("click", (e) => {
+        if (!this.auth?.can?.(Permission.REQUEST_TRANSFER, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para solicitar traspasos.");
+          return;
+        }
+
         const playerId = e.currentTarget.getAttribute("data-id");
         const playerName = e.currentTarget.getAttribute("data-name");
         const originTeamId = e.currentTarget.getAttribute("data-team-origin");
@@ -967,6 +973,7 @@ export class TranslationsView {
               ` : ''}
 
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
+              ${this._can("REQUEST_TRANSFERS") ? `
               <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
                   <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
@@ -976,6 +983,7 @@ export class TranslationsView {
                   🔍 Abrir Mercado / Fichar Jugador
                 </button>
               </div>
+              ` : ''}
 
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
               ${this._can("MANAGE_PLAYERS") ? `
