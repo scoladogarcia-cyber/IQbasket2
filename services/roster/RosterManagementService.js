@@ -63,8 +63,12 @@ export class RosterManagementService {
     referenceDate = null
   ) {
     const effectiveReferenceDate = toIsoDate(referenceDate) || todayIso();
+    const referenceStint = stints
+      .filter(stint => this._isDateInsideStint(stint, effectiveReferenceDate))
+      .sort((a, b) => String(b.valid_from || "").localeCompare(String(a.valid_from || "")))[0]
+      || null;
     const activeNow = stints.length > 0
-      ? stints.some(stint => this._isDateInsideStint(stint, effectiveReferenceDate))
+      ? Boolean(referenceStint)
       : ["ACTIVE", "ACTIVO"].includes(String(membership?.status || "").toUpperCase());
 
     return {
@@ -75,6 +79,8 @@ export class RosterManagementService {
       rosterActiveNow: activeNow,
       rosterReferenceDate: effectiveReferenceDate,
       rosterStints: stints,
+      rosterCurrentFrom: toIsoDate(referenceStint?.valid_from),
+      rosterCurrentUntil: toIsoDate(referenceStint?.valid_until),
       rosterFirstFrom: stints.length
         ? [...stints].map(stint => toIsoDate(stint.valid_from)).filter(Boolean).sort()[0] || null
         : toIsoDate(membership?.joined_at),
