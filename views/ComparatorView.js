@@ -416,6 +416,31 @@ export class ComparatorView {
       `;
     });
 
+    const gameReferenceMarkup = allGames.map((game, index) => {
+      const rawDate = game.date || game.game_date || null;
+      const date = rawDate
+        ? (I18n && typeof I18n.formatDate === "function" ? I18n.formatDate(rawDate) : rawDate)
+        : "-";
+      const opponent = game.opponent || "Rival no informado";
+      const venueRaw = String(game.venue || "").trim().toLowerCase();
+      const venue = venueRaw.includes("visit") ? "Visitante" : venueRaw.includes("local") ? "Local" : (game.venue || "-");
+      const teamScore = game.team_score ?? game.teamScore ?? game.our_score ?? null;
+      const opponentScore = game.opponent_score ?? game.opponentScore ?? game.opp_score ?? null;
+      const score = teamScore !== null && opponentScore !== null
+        ? `${teamScore}-${opponentScore}`
+        : "-";
+
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 9px 10px; font-weight: 900; color: #1e3a8a; white-space: nowrap;">P${index + 1}</td>
+          <td style="padding: 9px 10px; color: #475569; white-space: nowrap;">${date}</td>
+          <td style="padding: 9px 10px; font-weight: 700; color: #0f172a;">${opponent}</td>
+          <td style="padding: 9px 10px; color: #475569; white-space: nowrap;">${venue}</td>
+          <td style="padding: 9px 10px; font-weight: 800; color: #0f172a; white-space: nowrap;">${score}</td>
+        </tr>
+      `;
+    }).join("");
+
     const legendMarkup = this.selectedPlayerIds.map((pId, idx) => {
       const pData = statsMap.get(pId);
       const name = pData ? `${pData.player.first_name || pData.player.firstName || ''} ${pData.player.last_name || pData.player.lastName || ''}`.trim() : 'Jugador';
@@ -462,6 +487,28 @@ export class ComparatorView {
 
         <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
           ${legendMarkup}
+        </div>
+
+        <div style="margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 14px;">
+          <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;">
+            🗓️ REFERENCIA DE PARTIDOS DEL EJE X
+          </div>
+          <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 11px;">
+              <thead>
+                <tr style="background: #f8fafc; color: #64748b; text-align: left;">
+                  <th style="padding: 9px 10px;">Ref.</th>
+                  <th style="padding: 9px 10px;">Fecha</th>
+                  <th style="padding: 9px 10px;">Rival</th>
+                  <th style="padding: 9px 10px;">Sede</th>
+                  <th style="padding: 9px 10px;">Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${gameReferenceMarkup || `<tr><td colspan="5" style="padding: 14px; text-align: center; color: #64748b;">Sin partidos en el contexto activo.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     `;
