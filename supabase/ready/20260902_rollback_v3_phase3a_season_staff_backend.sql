@@ -26,4 +26,4 @@ drop function if exists public.iq_v3_is_global_superadmin();
 
 drop table if exists public.team_season_staff_assignments;
 
-rollback;
+commit;
