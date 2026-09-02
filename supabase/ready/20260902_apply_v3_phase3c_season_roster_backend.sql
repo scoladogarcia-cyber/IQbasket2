@@ -239,9 +239,10 @@ grant execute on function public.iq_v3_player_participated_in_team_season(uuid,u
 -- 4B. Historical validation: current data must remain eligible.
 -- Any mismatch aborts the whole migration before triggers are installed.
 -- -----------------------------------------------------------------------------
-do $
+do $$
 declare
   invalid_count bigint;
+  invalid_event_count bigint;
 begin
   select count(*)
     into invalid_count
@@ -257,7 +258,25 @@ begin
   if invalid_count <> 0 then
     raise exception 'EXISTING_STATS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_count;
   end if;
-end $;
+
+  if to_regclass('public.game_events') is not null then
+    select count(*)
+      into invalid_event_count
+    from public.game_events ge
+    join public.games g on g.id = ge.game_id
+    where ge.player_id is not null
+      and g.team_season_id is not null
+      and not public.iq_v3_player_eligible_on_date(
+        ge.player_id,
+        g.team_season_id,
+        g.date::date
+      );
+
+    if invalid_event_count <> 0 then
+      raise exception 'EXISTING_EVENTS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_event_count;
+    end if;
+  end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- 5. Capabilities
@@ -273,6 +292,7 @@ as $$
     'ready', auth.uid() is not null,
     'roster_write_model', 'TEAM_SEASON_TEMPORAL_ROSTER_V2',
     'supports_multiple_stints', true,
+    'supports_seed_exclusion', true,
     'game_date_eligibility', true
   );
 $$;
@@ -626,6 +646,120 @@ revoke all on function public.iq_v3_set_roster_member(uuid,uuid,text,integer,tex
 grant execute on function public.iq_v3_set_roster_member(uuid,uuid,text,integer,text,date) to authenticated;
 
 -- -----------------------------------------------------------------------------
+-- 7B. Semantic removal from a team-season.
+--
+-- Automatic season seeds can be excluded without inventing a fake participation
+-- interval when the player has no statistics in that team-season. Real/manual
+-- participation always closes the current stint on an explicit inclusive date.
+-- -----------------------------------------------------------------------------
+create or replace function public.iq_v3_remove_roster_member(
+  p_team_season_id uuid,
+  p_player_id uuid,
+  p_last_eligible_date date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  membership_row public.roster_memberships;
+  effective_date date := coalesce(p_last_eligible_date, current_date);
+  has_stats boolean := false;
+  has_any_stint boolean := false;
+  has_non_seed_stint boolean := false;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if not public.iq_v3_can_manage_team_season(p_team_season_id) then
+    raise exception 'TEAM_SEASON_MANAGE_DENIED';
+  end if;
+
+  if not exists (
+    select 1
+    from public.roster_memberships rm0
+    where rm0.team_season_id = p_team_season_id
+  ) then
+    perform public.iq_v3_seed_team_season_roster(p_team_season_id, null);
+  end if;
+
+  select rm.*
+    into membership_row
+  from public.roster_memberships rm
+  where rm.team_season_id = p_team_season_id
+    and rm.player_id = p_player_id
+  for update;
+
+  if membership_row.id is null then
+    raise exception 'ROSTER_MEMBERSHIP_NOT_FOUND';
+  end if;
+
+  select exists (
+    select 1
+    from public.player_game_stats pgs
+    join public.games g on g.id = pgs.game_id
+    where pgs.player_id = p_player_id
+      and g.team_season_id = p_team_season_id
+  ) into has_stats;
+
+  select exists (
+    select 1
+    from public.roster_membership_stints rs
+    where rs.roster_membership_id = membership_row.id
+  ) into has_any_stint;
+
+  select exists (
+    select 1
+    from public.roster_membership_stints rs
+    where rs.roster_membership_id = membership_row.id
+      and upper(coalesce(rs.source, '')) not in ('SEASON_SEED','LEGACY_TEAM_SEED')
+  ) into has_non_seed_stint;
+
+  if not has_stats and (not has_any_stint or not has_non_seed_stint) then
+    delete from public.roster_membership_stints
+    where roster_membership_id = membership_row.id;
+
+    update public.roster_memberships
+       set status = 'INACTIVE',
+           joined_at = null,
+           left_at = null,
+           updated_at = now()
+     where id = membership_row.id
+     returning * into membership_row;
+
+    return jsonb_build_object(
+      'mode', 'EXCLUDED_FROM_SEASON',
+      'player_id', p_player_id,
+      'team_season_id', p_team_season_id,
+      'membership_id', membership_row.id
+    );
+  end if;
+
+  perform public.iq_v3_set_roster_member(
+    p_team_season_id,
+    p_player_id,
+    'INACTIVE',
+    null,
+    null,
+    effective_date
+  );
+
+  return jsonb_build_object(
+    'mode', 'CLOSED_TEMPORAL_STINT',
+    'player_id', p_player_id,
+    'team_season_id', p_team_season_id,
+    'membership_id', membership_row.id,
+    'last_eligible_date', effective_date
+  );
+end;
+$$;
+
+revoke all on function public.iq_v3_remove_roster_member(uuid,uuid,date) from public;
+grant execute on function public.iq_v3_remove_roster_member(uuid,uuid,date) to authenticated;
+
+-- -----------------------------------------------------------------------------
 -- 8. Create player identity + seasonal membership atomically.
 -- players.team_id remains a legacy/current-team hint; historical truth lives in roster.
 -- -----------------------------------------------------------------------------
@@ -825,7 +959,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   target_team_id uuid;
   source_team_id uuid;
@@ -905,7 +1039,7 @@ begin
     'first_date_to', p_first_date_to
   );
 end;
-$;
+$$;
 
 revoke all on function public.iq_v3_transfer_player(uuid,uuid,uuid,date,date,integer,text) from public;
 grant execute on function public.iq_v3_transfer_player(uuid,uuid,uuid,date,date,integer,text) to authenticated;
@@ -954,6 +1088,51 @@ before insert or update of game_id, player_id
 on public.player_game_stats
 for each row
 execute function public.iq_v3_validate_player_game_stat_eligibility();
+
+create or replace function public.iq_v3_validate_game_event_eligibility()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  game_team_season_id uuid;
+  game_date date;
+begin
+  if new.player_id is null then
+    return new;
+  end if;
+
+  select g.team_season_id, g.date::date
+    into game_team_season_id, game_date
+  from public.games g
+  where g.id = new.game_id;
+
+  if game_team_season_id is null then
+    return new;
+  end if;
+
+  if not public.iq_v3_player_eligible_on_date(
+    new.player_id,
+    game_team_season_id,
+    game_date
+  ) then
+    raise exception 'PLAYER_NOT_ELIGIBLE_FOR_GAME_EVENT_DATE';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.iq_v3_validate_game_event_eligibility() from public;
+
+do $$
+begin
+  if to_regclass('public.game_events') is not null then
+    execute 'drop trigger if exists trg_iq_v3_game_event_eligibility on public.game_events';
+    execute 'create trigger trg_iq_v3_game_event_eligibility before insert or update of game_id, player_id on public.game_events for each row execute function public.iq_v3_validate_game_event_eligibility()';
+  end if;
+end $$;
 
 create or replace function public.iq_v3_validate_game_roster_eligibility()
 returns trigger
@@ -1013,9 +1192,11 @@ where routine_schema = 'public'
     'iq_v3_roster_admin_capabilities',
     'iq_v3_seed_team_season_roster',
     'iq_v3_set_roster_member',
+    'iq_v3_remove_roster_member',
     'iq_v3_create_player_for_roster',
     'iq_v3_transfer_player',
     'iq_v3_validate_player_game_stat_eligibility',
+    'iq_v3_validate_game_event_eligibility',
     'iq_v3_validate_game_roster_eligibility'
   )
 order by routine_name;
@@ -1029,6 +1210,7 @@ from information_schema.triggers
 where trigger_schema = 'public'
   and trigger_name in (
     'trg_iq_v3_player_game_stat_eligibility',
+    'trg_iq_v3_game_event_eligibility',
     'trg_iq_v3_game_roster_eligibility'
   )
 order by trigger_name, event_manipulation;
