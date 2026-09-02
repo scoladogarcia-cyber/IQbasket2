@@ -58,25 +58,44 @@ begin
     raise exception 'SMOKE_REQUIRES_GLOBAL_SUPERADMIN';
   end if;
 
+  -- Phase 3C itself allows open-ended season dates, so the smoke test must not
+  -- impose a stricter 15-day requirement. We only need three calendar dates:
+  -- first eligible day, one gap day, and rejoin day.
   select ts.id, ts.team_id, sc.start_date, sc.end_date
     into v_team_season_id, v_team_id, v_season_start, v_season_end
   from public.team_seasons ts
   join public.season_catalog sc on sc.id = ts.season_id
-  where sc.start_date is not null
-    and sc.end_date is not null
-    and sc.end_date >= sc.start_date + 14
-  order by sc.start_date desc, ts.created_at desc
+  where sc.start_date is null
+     or sc.end_date is null
+     or sc.end_date >= sc.start_date + 2
+  order by
+    coalesce(sc.start_date, sc.end_date, ts.created_at::date, current_date) desc,
+    ts.created_at desc
   limit 1;
 
   if v_team_season_id is null then
-    raise exception 'SMOKE_NEEDS_TEAM_SEASON_WITH_AT_LEAST_15_DAYS';
+    raise exception 'SMOKE_NEEDS_TEAM_SEASON_WITH_THREE_USABLE_DATES';
+  end if;
+
+  -- Resolve a safe three-day test window that respects any configured bounds.
+  -- If only an end date exists, count backwards; if only a start exists, count
+  -- forwards. With no bounds, use current_date as the middle reference.
+  if v_season_start is not null then
+    v_season_start := v_season_start;
+  elsif v_season_end is not null then
+    v_season_start := v_season_end - 2;
+  else
+    v_season_start := current_date - 2;
+  end if;
+
+  if v_season_end is not null and v_season_start + 2 > v_season_end then
+    raise exception 'SMOKE_SELECTED_TEAM_SEASON_HAS_NO_THREE_DAY_WINDOW';
   end if;
 
   -- Persist only transaction-local context through custom GUCs.
   perform set_config('iq.smoke.team_season_id', v_team_season_id::text, true);
   perform set_config('iq.smoke.team_id', v_team_id::text, true);
-  perform set_config('iq.smoke.season_start', v_season_start::text, true);
-  perform set_config('iq.smoke.season_end', v_season_end::text, true);
+  perform set_config('iq.smoke.test_start', v_season_start::text, true);
 
   perform set_config(
     'request.jwt.claims',
@@ -157,8 +176,7 @@ set local role authenticated;
 do $$
 declare
   v_team_season_id uuid := current_setting('iq.smoke.team_season_id')::uuid;
-  v_season_start date := current_setting('iq.smoke.season_start')::date;
-  v_season_end date := current_setting('iq.smoke.season_end')::date;
+  v_test_start date := current_setting('iq.smoke.test_start')::date;
   v_seed_player_id uuid := current_setting('iq.smoke.seed_player_id')::uuid;
 
   v_first_date date;
@@ -181,13 +199,13 @@ begin
     raise exception 'SMOKE_GLOBAL_SUPERADMIN_CONTEXT_FAILED';
   end if;
 
-  v_first_date := v_season_start + 2;
-  v_last_date := v_season_start + 6;
-  v_rejoin_date := v_season_start + 8;
-
-  if v_rejoin_date > v_season_end then
-    raise exception 'SMOKE_SELECTED_SEASON_TOO_SHORT';
-  end if;
+  -- Minimal temporal pattern:
+  -- day 0 = first/last eligible day of stint #1
+  -- day 1 = intentional ineligible gap
+  -- day 2 = first eligible day of stint #2
+  v_first_date := v_test_start;
+  v_last_date := v_test_start;
+  v_rejoin_date := v_test_start + 2;
 
   -- A. Create identity + first stint atomically.
   v_created := public.iq_v3_create_player_for_roster(
@@ -288,7 +306,7 @@ begin
   v_seed_remove := public.iq_v3_remove_roster_member(
     v_team_season_id,
     v_seed_player_id,
-    v_season_start
+    v_test_start
   );
 
   if coalesce(v_seed_remove ->> 'mode', '') <> 'EXCLUDED_FROM_SEASON' then
@@ -298,7 +316,7 @@ begin
   if public.iq_v3_player_eligible_on_date(
     v_seed_player_id,
     v_team_season_id,
-    v_season_start
+    v_test_start
   ) then
     raise exception 'ASSERT_EXCLUDED_SEED_PLAYER_MUST_NOT_BE_ELIGIBLE';
   end if;
