@@ -183,7 +183,15 @@ export class LayoutView {
     const currentUserEmail = localStorage.getItem("iq_user_email") || "";
 
     const currentActiveTeamId = DataStore.getActiveTeamId() || localStorage.getItem("iq_active_team_id") || "";
-    const currentActiveSeason = DataStore.getActiveSeason() || localStorage.getItem("iq_active_season") || "";
+    const currentActiveSeasonContext = DataStore.getActiveSeasonContext?.(currentActiveTeamId) || null;
+    const currentActiveSeason = DataStore.getActiveSeasonDisplayName?.(currentActiveTeamId)
+      || DataStore.getActiveSeason()
+      || localStorage.getItem("iq_active_season")
+      || "";
+    const currentActiveSeasonValue = currentActiveSeasonContext?.team_season_id
+      || currentActiveSeasonContext?.teamSeasonId
+      || currentActiveSeasonContext?.name
+      || currentActiveSeason;
 
     const allTeams = DataStore.getTeams() || [];
 
@@ -274,11 +282,20 @@ export class LayoutView {
       </option>
     `).join("") : `<option value="" disabled selected>⚠️ Sin equipos asignados</option>`;
 
-    const seasonOptionsMarkup = seasonsToRender.length > 0 ? seasonsToRender.map(s => `
-      <option value="${s.name}" ${String(s.name) === String(currentActiveSeason) ? 'selected' : ''}>
-        ${s.name}
-      </option>
-    `).join("") : `<option value="" disabled selected>⚠️ Sin temporadas</option>`;
+    const seasonOptionsMarkup = seasonsToRender.length > 0 ? seasonsToRender.map(s => {
+      const optionValue = s.team_season_id || s.teamSeasonId || s.name;
+      const rawLabel = String(s.name || "");
+      const labelMatch = rawLabel.match(/^(\\d{4})\\s*[-\\/]\\s*(\\d{4})$/);
+      const optionLabel = labelMatch ? `${labelMatch[1]}/${labelMatch[2]}` : rawLabel;
+      const isSelected = String(optionValue) === String(currentActiveSeasonValue)
+        || String(optionLabel) === String(currentActiveSeason);
+
+      return `
+        <option value="${optionValue}" ${isSelected ? 'selected' : ''}>
+          ${optionLabel}
+        </option>
+      `;
+    }).join("") : `<option value="" disabled selected>⚠️ Sin temporadas</option>`;
 
     const langOptionsMarkup = `
       <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
