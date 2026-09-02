@@ -41,7 +41,6 @@ export class SeasonManagementService {
       seasonsRes,
       teamSeasonsRes,
       teamsRes,
-      staffRes,
       legacyRes
     ] = await Promise.all([
       this.getCapabilities(),
@@ -56,28 +55,40 @@ export class SeasonManagementService {
         .from("teams")
         .select("id,club_id,name,category,competition,coach_name"),
       this.supabase
-        .from("team_season_staff_assignments")
-        .select("id,team_season_id,staff_role,user_id,external_name,status,created_at,updated_at")
-        .eq("status", "ACTIVE"),
-      this.supabase
         .from("seasons")
         .select("id,team_id,name,coach_name,start_date,end_date")
     ]);
-
-    const ignoreMissingStaffTable = staffRes.error
-      && /team_season_staff_assignments/i.test(String(staffRes.error.message || ""));
 
     const firstError = [
       seasonsRes.error,
       teamSeasonsRes.error,
       teamsRes.error,
-      ignoreMissingStaffTable ? null : staffRes.error,
       legacyRes.error
     ].find(Boolean);
 
     if (firstError) throw firstError;
 
-    const staffAssignments = staffRes.error ? [] : (staffRes.data || []);
+    // La tabla canónica de staff aparece en Fase 3A. Su ausencia no debe impedir
+    // visualizar season_catalog y team_seasons ya existentes desde Fase 1.
+    let staffAssignments = [];
+    try {
+      const staffRes = await this.supabase
+        .from("team_season_staff_assignments")
+        .select("id,team_season_id,staff_role,user_id,external_name,status,created_at,updated_at")
+        .eq("status", "ACTIVE");
+
+      if (staffRes.error) {
+        const missingTable = /team_season_staff_assignments|does not exist|schema cache/i
+          .test(String(staffRes.error.message || ""));
+        if (!missingTable) throw staffRes.error;
+      } else {
+        staffAssignments = staffRes.data || [];
+      }
+    } catch (error) {
+      const missingTable = /team_season_staff_assignments|does not exist|schema cache/i
+        .test(String(error?.message || error || ""));
+      if (!missingTable) throw error;
+    }
     const userIds = [...new Set(
       staffAssignments.map(row => row.user_id).filter(Boolean).map(String)
     )];
