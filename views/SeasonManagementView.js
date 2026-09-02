@@ -356,21 +356,44 @@ export class SeasonManagementView {
           .season-v3-modal {
             position: fixed;
             inset: 0;
+            width: 100%;
+            height: 100dvh;
+            box-sizing: border-box;
             z-index: 10020;
             background: rgba(15, 23, 42, .52);
-            padding: 16px;
             overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
             display: flex;
             align-items: flex-start;
             justify-content: center;
+            padding:
+              max(10px, env(safe-area-inset-top))
+              max(10px, env(safe-area-inset-right))
+              max(12px, env(safe-area-inset-bottom))
+              max(10px, env(safe-area-inset-left));
           }
           .season-v3-modal-card {
             width: min(680px, 100%);
+            max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            box-sizing: border-box;
             background: white;
             border-radius: 14px;
             padding: 18px;
-            margin: max(20px, env(safe-area-inset-top)) auto 40px;
+            margin: auto;
             box-shadow: 0 18px 60px rgba(15, 23, 42, .24);
+          }
+          @media (max-width: 640px) {
+            .season-v3-modal-card {
+              width: 100%;
+              margin: 0;
+              padding: 14px;
+              border-radius: 12px;
+              max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            }
           }
           .season-v3-staff-row {
             display: flex;
