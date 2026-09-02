@@ -39,7 +39,9 @@ export class GameBoxScoreView {
     if (!container) return;
 
     this.games = DataStore.getGames() || [];
-    this.players = DataStore.getPlayers() || [];
+    this.players = DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
+      || DataStore.getPlayers()
+      || [];
 
     if (this.games.length === 0) {
       container.innerHTML = `
