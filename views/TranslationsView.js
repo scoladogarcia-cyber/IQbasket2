@@ -934,7 +934,8 @@ export class TranslationsView {
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
               ${this._can("MANAGE_PLAYERS") ? `
                 <div class="config-card">
-                  <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO A LA PLANTILLA</div>
+                  <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO · ${rosterContextName}</div>
+                   ${!rosterBackendReady ? '<div class="read-only-banner" style="margin-bottom:12px;">La gestión histórica de plantilla está en modo lectura hasta aplicar el backend v3 de roster.</div>' : ''}
                   <form id="form-add-player" class="grid-4-cols">
                     <div class="form-group"><label>Nombre *</label><input type="text" id="add-p-name" placeholder="Ej. Pablo" required /></div>
                     <div class="form-group"><label>Apellidos *</label><input type="text" id="add-p-lastname" placeholder="Ej. García" required /></div>
@@ -952,28 +953,58 @@ export class TranslationsView {
                 </div>
               ` : ''}
 
-              <!-- JUGADORES PLANTILLA ACTIVA -->
+              <!-- JUGADORES PLANTILLA DE LA TEMPORADA ACTIVA -->
               <div class="config-card">
-                <div class="card-title"><span>📋</span> JUGADORES EN TU PLANTILLA ACTIVA (${players.length})</div>
+                <div class="card-title"><span>📋</span> PLANTILLA ${rosterContextName} (${players.length})</div>
+                ${this.rosterState && !this.rosterState.persisted ? `
+                  <div style="font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
+                    Esta temporada parte de la plantilla anterior como base. El primer cambio la guardará como plantilla independiente.
+                  </div>
+                ` : ''}
                 <div class="players-grid">
                   ${players.length > 0 ? players.map(p => `
                     <div class="player-card ${p.status === 'TRASPASADO' ? 'player-transferred' : ''}">
                       <div>
                         <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
                         <div style="font-size: 11px; color: #64748b;">
-                          ${p.primary_position || p.position || 'Jugador'} • ${p.status === 'TRASPASADO' ? '⚠️ Traspasado (Histórico)' : 'Activo'}
+                          ${p.primary_position || p.position || 'Jugador'} • ${p.rosterInherited ? 'Base heredada' : 'Activo en esta temporada'}
                         </div>
                       </div>
-                      ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>` : ''}
+                      ${this._can("MANAGE_PLAYERS") ? `
+                        <div class="player-card-actions">
+                          <button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>
+                          <button type="button" class="btn-remove-player-season btn-danger-sm" data-id="${p.id}" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled'}>
+                            Quitar
+                          </button>
+                        </div>
+                      ` : ''}
                     </div>
-                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla.</p>`}
+                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores en esta temporada.</p>`}
                 </div>
               </div>
 
+              ${availableRosterPlayers.length > 0 && this._can("MANAGE_PLAYERS") ? `
+                <div class="config-card">
+                  <div class="card-title"><span>↩️</span> JUGADORES DEL EQUIPO FUERA DE ${rosterContextName}</div>
+                  <div class="players-grid">
+                    ${availableRosterPlayers.map(p => `
+                      <div class="player-card">
+                        <div>
+                          <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+                          <div style="font-size:11px;color:#64748b;">${p.primary_position || p.position || 'Jugador'} · No inscrito en esta temporada</div>
+                        </div>
+                        <button type="button" class="btn-reactivate-player-season btn-secondary-sm" data-id="${p.id}">
+                          + Añadir
+                        </button>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ''}
               <!-- MODAL DE EDICIÓN DE JUGADOR -->
-              <div id="modal-edit-player" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 500px; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-edit-player" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-sm">
+                  <div class="iq-modal-header">
                     <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ Editar Datos del Jugador</h3>
                     <button type="button" id="btn-close-edit-player-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
                   </div>
@@ -1007,9 +1038,9 @@ export class TranslationsView {
               </div>
 
               <!-- SUBPANTALLA / MODAL DEL MERCADO GLOBAL -->
-              <div id="modal-market-global" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 850px; max-height: 90vh; overflow-y: auto; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-market-global" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-lg">
+                  <div class="iq-modal-header">
                     <div>
                       <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
                       <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Mostrando todos los jugadores registrados en la base de datos de Supabase.</p>
@@ -1172,9 +1203,9 @@ export class TranslationsView {
               </div>
 
               <!-- MODAL FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO -->
-              <div id="modal-user-card" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 600px; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-user-card" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-md">
+                  <div class="iq-modal-header">
                     <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">📇 FICHA TÉCNICA Y ASIGNACIÓN DE EQUIPOS</h3>
                     <button type="button" id="btn-close-user-card-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
                   </div>
@@ -1279,10 +1310,61 @@ export class TranslationsView {
         .badge-inactive { background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
 
         .players-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        .player-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .player-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .player-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+        .iq-modal-overlay {
+          position: fixed;
+          inset: 0;
+          width: 100%;
+          height: 100dvh;
+          box-sizing: border-box;
+          background: rgba(15, 23, 42, 0.75);
+          backdrop-filter: blur(4px);
+          z-index: 10020;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          align-items: flex-start;
+          justify-content: center;
+          padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(12px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+        }
+        .iq-modal-card {
+          width: 100%;
+          max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          box-sizing: border-box;
+          margin: auto 0;
+        }
+        .iq-modal-card-sm { max-width: 500px; }
+        .iq-modal-card-md { max-width: 600px; }
+        .iq-modal-card-lg { max-width: 850px; }
+        .iq-modal-header {
+          position: sticky;
+          top: -20px;
+          z-index: 2;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          margin: -4px -4px 16px;
+          padding: 4px 4px 10px;
+          background: white;
+          border-bottom: 1px solid #f1f5f9;
+        }
 
         @media (max-width: 868px) {
           .grid-2-cols, .grid-4-cols, .players-grid { grid-template-columns: 1fr !important; }
+          .player-card { align-items: flex-start; flex-wrap: wrap; }
+          .player-card-actions { width: 100%; justify-content: flex-start; }
+          .iq-modal-card { margin: 0; max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 14px; }
+          .iq-modal-header { top: -14px; margin: -2px -2px 12px; padding-top: 2px; }
         }
       </style>
     `;
