@@ -45,7 +45,9 @@ export class RosterManagementService {
   async loadForTeam(teamId) {
     const context = this.dataStore?.getActiveSeasonContext?.(teamId) || null;
     const teamSeasonId = context?.team_season_id || context?.teamSeasonId || null;
-    const allTeamPlayers = this.dataStore?.getPlayers?.(teamId) || [];
+    const allTeamPlayers = this.dataStore?.getTeamPlayers?.(teamId)
+      || this.dataStore?.getPlayers?.(teamId)
+      || [];
     const capabilities = await this.getCapabilities();
 
     if (!teamSeasonId || !this.supabase || !capabilities.ready) {
