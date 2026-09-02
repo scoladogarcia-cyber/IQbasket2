@@ -223,7 +223,7 @@ async function checkViewport(browser, name, viewport) {
       hasRoster: text.includes("PLANTILLA 2025/2026"),
       hasHistorical: text.includes("HISTÓRICO DE PLANTILLA"),
       hasMarketButton: Boolean(document.querySelector("#btn-open-market-modal")),
-      hasTemporalStatusHelp: text.includes("no cambia la elegibilidad por temporada"),
+      hasTemporalStatusHelp: document.body.textContent.includes("no cambia la elegibilidad por temporada"),
       minDate: dateInput?.getAttribute("min") || null,
       maxDate: dateInput?.getAttribute("max") || null,
       documentOverflow: document.documentElement.scrollWidth > window.innerWidth + 1
