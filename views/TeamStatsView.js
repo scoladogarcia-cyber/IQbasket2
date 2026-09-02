@@ -37,7 +37,9 @@ export class TeamStatsView {
       const games = DataStore.getGamesForActiveSeason?.(activeTeamId)
         || DataStore.getGames(activeTeamId)
         || [];
-      const players = DataStore.getPlayers(activeTeamId) || [];
+      const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+        || DataStore.getPlayers(activeTeamId)
+        || [];
       const gameIds = new Set(games.map(g => String(g.id)));
       const allPlayerStats = DataStore.getPlayerGameStats() || [];
       const playerStats = allPlayerStats.filter(s => gameIds.has(String(s.game_id || s.gameId || "")));
