@@ -678,14 +678,26 @@ export class SeasonDashboardView {
         : containerId;
       if (!container) return;
 
-      const activeSeason = DataStore.getActiveSeason ? (DataStore.getActiveSeason() || "2026") : "2026";
-      const activeSeasonId = DataStore.getActiveSeasonId?.(this.currentTeamId) || null;
-      const teamSeasons = DataStore.getSeasons?.(this.currentTeamId) || [];
+      const activeSeasonContext = DataStore.getActiveSeasonContext?.(this.currentTeamId) || null;
+      const activeSeason = DataStore.getActiveSeasonDisplayName?.(this.currentTeamId)
+        || activeSeasonContext?.name
+        || DataStore.getActiveSeason?.()
+        || "Sin temporada";
+      const activeTeamSeasonId = activeSeasonContext?.team_season_id
+        || activeSeasonContext?.teamSeasonId
+        || DataStore.getActiveTeamSeasonId?.(this.currentTeamId)
+        || null;
+      const activeSeasonId = activeSeasonContext?.legacy_season_id
+        || activeSeasonContext?.legacySeasonId
+        || DataStore.getActiveSeasonId?.(this.currentTeamId)
+        || null;
 
       const allGames = DataStore.getGames ? (DataStore.getGames(this.currentTeamId) || []) : [];
-      const games = activeSeasonId
-        ? allGames.filter(g => String(g.season_id || g.seasonId || "") === String(activeSeasonId))
-        : allGames;
+      const games = activeTeamSeasonId
+        ? allGames.filter(g => String(g.team_season_id || g.teamSeasonId || "") === String(activeTeamSeasonId))
+        : activeSeasonId
+          ? allGames.filter(g => String(g.season_id || g.seasonId || "") === String(activeSeasonId))
+          : allGames;
       const players = DataStore.getPlayers ? (DataStore.getPlayers(this.currentTeamId) || []) : [];
       const gameIds = new Set(games.map(g => String(g.id)));
       const allPlayerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
@@ -742,7 +754,6 @@ export class SeasonDashboardView {
             .dash-win-loss .l-text { color: #dc2626; }
             
             .dash-top-actions { display: flex; align-items: center; gap: 10px; }
-            .season-select-pill { padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 13px; background: white; cursor: pointer; height: 38px; }
             
             /* TOOLTIP SYSTEM */
             .dash-tooltip-wrapper { position: relative; display: inline-flex; align-items: center; }
@@ -877,11 +888,6 @@ export class SeasonDashboardView {
               <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
                 🔄 Sincronizar${canSyncPreview ? '' : ' 🔒'}
               </button>
-              <select class="season-select-pill" aria-label="Temporada activa">
-                ${teamSeasons.length > 0
-                  ? teamSeasons.map(s => `<option value="${s.name}" ${String(s.name) === String(activeSeason) ? 'selected' : ''}>${s.name}</option>`).join("")
-                  : `<option value="${activeSeason}">${activeSeason}</option>`}
-              </select>
             </div>
           </div>
 
@@ -1069,12 +1075,6 @@ export class SeasonDashboardView {
       this._attachSortEventListeners(container);
       this._attachSyncButtonListener(container, this.currentTeamId);
 
-      container.querySelector(".season-select-pill")?.addEventListener("change", async (e) => {
-        const nextSeason = e.target.value;
-        if (!nextSeason) return;
-        DataStore.setActiveTeamAndSeason?.(null, nextSeason);
-        await this.render(containerId, this.currentTeamId);
-      });
     } catch (err) {
       console.error("[SeasonDashboardView] Error renderizando dashboard:", err);
     }
