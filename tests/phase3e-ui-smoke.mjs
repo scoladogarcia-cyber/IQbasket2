@@ -12,11 +12,11 @@ const SEASON = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 function candidates() {
   return Array.from({ length: 11 }, (_, index) => ({
-    id: \`90000000-0000-4000-8000-\${String(index + 1).padStart(12, "0")}\`,
-    playerId: \`90000000-0000-4000-8000-\${String(index + 1).padStart(12, "0")}\`,
-    first_name: \`Jugador\${index + 1}\`,
+    id: `90000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    playerId: `90000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    first_name: `Jugador${index + 1}`,
     last_name: index % 2 ? "Equipo B" : "Equipo C",
-    playerName: \`Jugador\${index + 1} \${index % 2 ? "Equipo B" : "Equipo C"}\`,
+    playerName: `Jugador${index + 1} ${index % 2 ? "Equipo B" : "Equipo C"}`,
     jersey: index + 1,
     primary_position: index % 2 ? "Base" : "Alero",
     team_id: index % 2 ? TEAM_B : TEAM_C,
@@ -230,14 +230,14 @@ async function checkViewport(browser, name, viewport) {
     };
   });
 
-  if (!core.hasRoster) throw new Error(\`[\${name}] No se renderiza la plantilla 2025/2026\`);
-  if (!core.hasHistorical) throw new Error(\`[\${name}] No se renderiza el histórico\`);
-  if (!core.hasMarketButton) throw new Error(\`[\${name}] No aparece el botón de mercado\`);
-  if (!core.hasTemporalStatusHelp) throw new Error(\`[\${name}] Falta aclaración de elegibilidad temporal\`);
+  if (!core.hasRoster) throw new Error(`[${name}] No se renderiza la plantilla 2025/2026`);
+  if (!core.hasHistorical) throw new Error(`[${name}] No se renderiza el histórico`);
+  if (!core.hasMarketButton) throw new Error(`[${name}] No aparece el botón de mercado`);
+  if (!core.hasTemporalStatusHelp) throw new Error(`[${name}] Falta aclaración de elegibilidad temporal`);
   if (core.minDate !== "2025-09-01" || core.maxDate !== "2026-06-30") {
-    throw new Error(\`[\${name}] Límites de fecha incorrectos: \${JSON.stringify(core)}\`);
+    throw new Error(`[${name}] Límites de fecha incorrectos: ${JSON.stringify(core)}`);
   }
-  if (core.documentOverflow) throw new Error(\`[\${name}] Hay overflow horizontal global antes de abrir el modal\`);
+  if (core.documentOverflow) throw new Error(`[${name}] Hay overflow horizontal global antes de abrir el modal`);
 
   await page.click("#btn-open-market-modal");
   await page.waitForFunction(() => {
@@ -277,34 +277,34 @@ async function checkViewport(browser, name, viewport) {
     };
   });
 
-  if (!market.visible) throw new Error(\`[\${name}] Modal de mercado no visible\`);
+  if (!market.visible) throw new Error(`[${name}] Modal de mercado no visible`);
   if (market.candidateRows !== 10) {
-    throw new Error(\`[\${name}] Se esperaban 10 filas en la primera página, hay \${market.candidateRows}\`);
+    throw new Error(`[${name}] Se esperaban 10 filas en la primera página, hay ${market.candidateRows}`);
   }
   if (!market.containsOtherTeams || market.containsOwnTeam) {
-    throw new Error(\`[\${name}] El mercado no respeta el alcance de otros equipos: \${JSON.stringify(market)}\`);
+    throw new Error(`[${name}] El mercado no respeta el alcance de otros equipos: ${JSON.stringify(market)}`);
   }
-  if (!market.cardWithinViewport) throw new Error(\`[\${name}] La tarjeta del modal sale del viewport\`);
-  if (!market.closeWithinViewport) throw new Error(\`[\${name}] El botón cerrar queda fuera del viewport\`);
-  if (!market.overlayScrollable) throw new Error(\`[\${name}] El overlay no permite scroll vertical\`);
-  if (market.globalOverflow) throw new Error(\`[\${name}] El modal provoca overflow horizontal global\`);
+  if (!market.cardWithinViewport) throw new Error(`[${name}] La tarjeta del modal sale del viewport`);
+  if (!market.closeWithinViewport) throw new Error(`[${name}] El botón cerrar queda fuera del viewport`);
+  if (!market.overlayScrollable) throw new Error(`[${name}] El overlay no permite scroll vertical`);
+  if (market.globalOverflow) throw new Error(`[${name}] El modal provoca overflow horizontal global`);
 
   await page.fill("#input-market-search", "Jugador11");
   await page.waitForTimeout(100);
   const filtered = await page.locator("#market-modal-table-container tbody tr").allInnerTexts();
   if (filtered.length !== 1 || !filtered[0].includes("Jugador11")) {
-    throw new Error(\`[\${name}] Búsqueda del mercado no filtra correctamente: \${JSON.stringify(filtered)}\`);
+    throw new Error(`[${name}] Búsqueda del mercado no filtra correctamente: ${JSON.stringify(filtered)}`);
   }
 
   await page.click("#btn-close-market-modal");
   const closed = await page.evaluate(() => getComputedStyle(document.querySelector("#modal-market-global")).display === "none");
-  if (!closed) throw new Error(\`[\${name}] El modal no se cierra\`);
+  if (!closed) throw new Error(`[${name}] El modal no se cierra`);
 
   const relevantConsoleErrors = consoleErrors.filter(message =>
     !/favicon|Failed to load resource.*404/i.test(message)
   );
-  if (pageErrors.length) throw new Error(\`[\${name}] pageerror: \${pageErrors.join(" | ")}\`);
-  if (relevantConsoleErrors.length) throw new Error(\`[\${name}] console errors: \${relevantConsoleErrors.join(" | ")}\`);
+  if (pageErrors.length) throw new Error(`[${name}] pageerror: ${pageErrors.join(" | ")}`);
+  if (relevantConsoleErrors.length) throw new Error(`[${name}] console errors: ${relevantConsoleErrors.join(" | ")}`);
 
   console.log(JSON.stringify({
     viewport: name,
