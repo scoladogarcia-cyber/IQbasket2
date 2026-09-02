@@ -81,7 +81,7 @@ export class TransferRequestService {
       playerIds.length
         ? this.supabase
             .from("players")
-            .select("id,first_name,last_name,jersey,number,primary_position")
+            .select("id,first_name,last_name,jersey,primary_position")
             .in("id", playerIds)
         : Promise.resolve({ data: [], error: null }),
       teamSeasonIds.length
@@ -123,6 +123,40 @@ export class TransferRequestService {
         workflowVersion: row.workflow_version
       };
     });
+  }
+
+  async listMarket({ targetTeamSeasonId }) {
+    if (!this.supabase) {
+      throw new Error("No hay conexión disponible con la base de datos.");
+    }
+    if (!targetTeamSeasonId) {
+      throw new Error("No se pudo resolver el equipo-temporada de destino.");
+    }
+
+    const { data, error } = await this.supabase.rpc(
+      "iq_v3_list_transfer_market",
+      {
+        p_target_team_season_id: targetTeamSeasonId
+      }
+    );
+
+    if (error) throw error;
+
+    return (data || []).map(row => ({
+      id: row.player_id,
+      playerId: row.player_id,
+      first_name: row.first_name || "",
+      last_name: row.last_name || "",
+      playerName: [row.first_name, row.last_name].filter(Boolean).join(" ") || "Jugador",
+      jersey: row.jersey,
+      primary_position: row.primary_position || "Jugador",
+      team_id: row.source_team_id,
+      team_name: row.source_team_name || "Equipo",
+      from_team_season_id: row.from_team_season_id,
+      global_season_id: row.global_season_id,
+      source_stint_from: row.source_stint_from,
+      pending_to_target: Boolean(row.pending_to_target)
+    }));
   }
 
   async requestTransfer({
