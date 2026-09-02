@@ -570,9 +570,11 @@ export class TranslationsView {
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
+    const currentActiveSeasonContext = DataStore.getActiveSeasonContext?.(activeTeamId) || null;
     const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
       || DataStore.getActiveSeason()
       || "Sin temporada";
+    const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
     if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
       this.activeTab = "requests";
@@ -695,7 +697,21 @@ export class TranslationsView {
                   <div class="form-group">
                     <label>Temporada en Pantalla</label>
                     <select id="select-guest-active-season">
-                      ${this.seasonsList.map(s => `<option value="${s.name}" ${String(s.name) === String(currentActiveSeasonName) ? 'selected' : ''}>${s.name}</option>`).join("")}
+                      ${requestSeasonContexts.length > 0
+                        ? requestSeasonContexts.map(s => {
+                            const value = s.team_season_id || s.teamSeasonId || s.name;
+                            const rawLabel = String(s.name || "");
+                            const match = rawLabel.match(/^(\\d{4})\\s*[-\\/]\\s*(\\d{4})$/);
+                            const label = match ? `${match[1]}/${match[2]}` : rawLabel;
+                            const activeValue = currentActiveSeasonContext?.team_season_id
+                              || currentActiveSeasonContext?.teamSeasonId
+                              || currentActiveSeasonContext?.name
+                              || currentActiveSeasonName;
+                            const selected = String(value) === String(activeValue)
+                              || String(label) === String(currentActiveSeasonName);
+                            return `<option value="${value}" ${selected ? 'selected' : ''}>${label}</option>`;
+                          }).join("")
+                        : `<option value="" disabled selected>Sin temporadas vinculadas</option>`}
                     </select>
                   </div>
                 </div>
@@ -1781,8 +1797,17 @@ export class TranslationsView {
     // Selector de Temporada Activa en Pantalla (Invitado / Jugador)
     container.querySelector("#select-guest-active-season")?.addEventListener("change", async (e) => {
       const newSeason = e.target.value;
+      if (!newSeason) return;
+
+      if (typeof DataStore.setActiveTeamAndSeason === "function") {
+        DataStore.setActiveTeamAndSeason(null, newSeason);
+      }
       localStorage.setItem("iq_active_season", newSeason);
-      alert(`🟢 Temporada ${newSeason} seleccionada.`);
+      DataStore.isLoaded = false;
+      await DataStore.init(activeTeamId, true);
+
+      const label = e.target.options[e.target.selectedIndex]?.textContent || newSeason;
+      alert(`🟢 Temporada ${label} seleccionada.`);
       if (window.iqApp) await window.iqApp.render();
     });
 
