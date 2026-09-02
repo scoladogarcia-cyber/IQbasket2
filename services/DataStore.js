@@ -939,11 +939,44 @@ class DataStoreService {
     return raw.length >= 10 ? raw.slice(0, 10) : raw;
   }
 
+  _todayLocalDate() {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0")
+    ].join("-");
+  }
+
+  _getSeasonReferenceDate(teamId = null) {
+    const context = this.getActiveSeasonContext(teamId);
+    const today = this._todayLocalDate();
+    const start = this._dateOnly(context?.start_date || context?.startDate);
+    const end = this._dateOnly(context?.end_date || context?.endDate);
+
+    if (start && today < start) return start;
+    if (end && today > end) return end;
+    return today;
+  }
+
+  _membershipRepresentsParticipation(membership, statisticalPlayerIds = null) {
+    if (!membership) return false;
+
+    const playerId = String(membership.player_id || membership.playerId || "");
+    if (statisticalPlayerIds?.has(playerId)) return true;
+    if (this._getStintsForMembership(membership.id).length > 0) return true;
+    if (this._dateOnly(membership.joined_at) || this._dateOnly(membership.left_at)) return true;
+
+    return ["ACTIVE", "ACTIVO"].includes(
+      String(membership.status || "").toUpperCase()
+    );
+  }
+
   _membershipEligibleOnDate(membership, effectiveDate) {
     if (!membership) return false;
 
     const targetDate = this._dateOnly(effectiveDate)
-      || new Date().toISOString().slice(0, 10);
+      || this._todayLocalDate();
     const stints = this._getStintsForMembership(membership.id);
 
     if (stints.length > 0) {
@@ -993,9 +1026,6 @@ class DataStoreService {
     const memberships = this._getRosterMembershipsForTeamSeason(teamSeasonId);
     if (memberships.length === 0) return teamPlayers;
 
-    const membershipByPlayer = new Map(
-      memberships.map(row => [String(row.player_id || row.playerId), row])
-    );
     const directoryById = new Map(
       (this.players || []).map(player => [String(player.id), player])
     );
@@ -1011,7 +1041,11 @@ class DataStoreService {
   }
 
   getPlayersForActiveSeason(teamId = null) {
-    return this.getPlayersEligibleOnDate(teamId, new Date().toISOString().slice(0, 10));
+    const targetTeamId = teamId || this.getActiveTeamId();
+    return this.getPlayersEligibleOnDate(
+      targetTeamId,
+      this._getSeasonReferenceDate(targetTeamId)
+    );
   }
 
   getSeasonParticipantPlayers(teamId = null) {
@@ -1026,24 +1060,34 @@ class DataStoreService {
       (this.players || []).map(player => [String(player.id), player])
     );
 
-    const participants = new Map();
-    memberships.forEach(membership => {
-      const player = directoryById.get(String(membership.player_id || membership.playerId));
-      if (player) {
-        participants.set(String(player.id), this._applyRosterMembership(player, membership));
-      }
-    });
-
-    // Statistical truth wins: if a player has recorded stats in a game of this
-    // team-season, keep that player in historical season analysis even if an
-    // old migration lacks a roster row.
+    // Statistical truth and explicit temporal stints define participation.
+    // An INACTIVE membership with no stint and no stats is only an audit marker
+    // for a player excluded from an automatically inherited future/new roster.
     const gameIds = new Set(
       this.getGamesForActiveSeason(targetTeamId).map(game => String(game.id))
     );
-    (this.playerGameStats || []).forEach(stat => {
-      if (!gameIds.has(String(stat.game_id || stat.gameId || ""))) return;
-      const playerId = String(stat.player_id || stat.playerId || "");
-      if (!playerId || participants.has(playerId)) return;
+    const statisticalPlayerIds = new Set(
+      (this.playerGameStats || [])
+        .filter(stat => gameIds.has(String(stat.game_id || stat.gameId || "")))
+        .map(stat => String(stat.player_id || stat.playerId || ""))
+        .filter(Boolean)
+    );
+
+    const participants = new Map();
+    memberships
+      .filter(membership =>
+        this._membershipRepresentsParticipation(membership, statisticalPlayerIds)
+      )
+      .forEach(membership => {
+        const player = directoryById.get(String(membership.player_id || membership.playerId));
+        if (player) {
+          participants.set(String(player.id), this._applyRosterMembership(player, membership));
+        }
+      });
+
+    // Statistical truth wins even if an old migration lacks a roster row.
+    statisticalPlayerIds.forEach(playerId => {
+      if (participants.has(playerId)) return;
       const player = directoryById.get(playerId);
       if (player) participants.set(playerId, player);
     });
