@@ -18,6 +18,7 @@ class DataStoreService {
     this.seasons = [];
     this.legacySeasons = [];
     this.staffAssignments = [];
+    this.rosterMemberships = [];
     this.playerGameStats = [];
     this.gamePeriodScores = [];
     this.gameEvents = [];
@@ -395,6 +396,7 @@ class DataStoreService {
         const cPlayers = localStorage.getItem("iq_cache_players");
         const cGames = localStorage.getItem("iq_cache_games");
         const cStaffAssignments = localStorage.getItem("iq_cache_staff_assignments");
+        const cRosterMemberships = localStorage.getItem("iq_cache_roster_memberships");
         const cStats = localStorage.getItem("iq_cache_stats");
         const cPeriods = localStorage.getItem("iq_cache_periods");
         const cEvents = localStorage.getItem("iq_cache_events");
@@ -403,6 +405,7 @@ class DataStoreService {
         if (cPlayers) this.players = JSON.parse(cPlayers).map(p => this._normalizePlayer(p));
         if (cGames) this.games = JSON.parse(cGames).map(g => this._normalizeGame(g));
         if (cStaffAssignments) this.staffAssignments = JSON.parse(cStaffAssignments).map(a => this._normalizeStaffAssignment(a));
+        if (cRosterMemberships) this.rosterMemberships = JSON.parse(cRosterMemberships);
         if (cStats) this.playerGameStats = JSON.parse(cStats).map(s => this._normalizeStat(s));
         if (cPeriods) this.gamePeriodScores = JSON.parse(cPeriods);
         if (cEvents) {
@@ -468,6 +471,7 @@ class DataStoreService {
           this.games = [];
           this.seasons = [];
           this.legacySeasons = [];
+          this.rosterMemberships = [];
         } else {
           // v3-first: temporada global + team_season. Si falla, _loadSeasonContexts
           // conserva automáticamente el comportamiento legacy.
@@ -496,6 +500,24 @@ class DataStoreService {
             playersQuery,
             gamesQuery
           ]);
+
+          this.rosterMemberships = [];
+          if (activeTeamSeasonId) {
+            try {
+              const { data: rosterRows, error: rosterError } = await supabase
+                .from("roster_memberships")
+                .select("id,player_id,team_season_id,jersey,primary_position,secondary_positions,status,joined_at,left_at")
+                .eq("team_season_id", activeTeamSeasonId);
+
+              if (!rosterError) {
+                this.rosterMemberships = rosterRows || [];
+              } else {
+                console.warn("[DataStore] Plantilla v3 no disponible:", rosterError.message);
+              }
+            } catch (rosterError) {
+              console.warn("[DataStore] Plantilla v3 no disponible:", rosterError.message);
+            }
+          }
 
           if (playersRes.status === "fulfilled" && !playersRes.value.error) {
             this.players = (playersRes.value.data || []).map(p => this._normalizePlayer(p));
@@ -581,6 +603,7 @@ class DataStoreService {
       localStorage.setItem("iq_cache_players", JSON.stringify(this.players));
       localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
       localStorage.setItem("iq_cache_staff_assignments", JSON.stringify(this.staffAssignments));
+      localStorage.setItem("iq_cache_roster_memberships", JSON.stringify(this.rosterMemberships));
       localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
       localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
       localStorage.setItem("iq_cache_events", JSON.stringify(this.gameEvents));
@@ -819,11 +842,59 @@ class DataStoreService {
     this._notifyListeners();
   }
 
-  getPlayers(teamId = null) {
+  getTeamPlayers(teamId = null) {
     const all = this.players || [];
     const targetTeamId = String(teamId || this.getActiveTeamId()).toLowerCase();
-    const filtered = all.filter((p) => String(p.team_id || p.teamId || "").toLowerCase() === targetTeamId);
-    return [...filtered].sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+    const filtered = all.filter(
+      (p) => String(p.team_id || p.teamId || "").toLowerCase() === targetTeamId
+    );
+    return [...filtered].sort(
+      (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
+    );
+  }
+
+  getPlayersForActiveSeason(teamId = null) {
+    const targetTeamId = teamId || this.getActiveTeamId();
+    const teamPlayers = this.getTeamPlayers(targetTeamId);
+    const teamSeasonId = this.getActiveTeamSeasonId(targetTeamId);
+
+    if (!teamSeasonId) return teamPlayers;
+
+    const memberships = (this.rosterMemberships || []).filter(
+      row => String(row.team_season_id || row.teamSeasonId || "") === String(teamSeasonId)
+    );
+
+    // Un scope todavía no materializado hereda la plantilla del equipo.
+    if (memberships.length === 0) return teamPlayers;
+
+    const activeByPlayer = new Map(
+      memberships
+        .filter(row => String(row.status || "ACTIVE").toUpperCase() === "ACTIVE")
+        .map(row => [String(row.player_id || row.playerId), row])
+    );
+
+    return teamPlayers
+      .filter(player => activeByPlayer.has(String(player.id)))
+      .map(player => {
+        const membership = activeByPlayer.get(String(player.id));
+        return {
+          ...player,
+          roster_membership_id: membership.id,
+          rosterMembershipId: membership.id,
+          roster_status: membership.status,
+          rosterStatus: membership.status,
+          jersey: membership.jersey ?? player.jersey,
+          number: membership.jersey ?? player.number ?? player.jersey,
+          primary_position: membership.primary_position || player.primary_position,
+          primaryPosition: membership.primary_position || player.primaryPosition,
+          position: membership.primary_position || player.position
+        };
+      })
+      .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+  }
+
+  getPlayers(teamId = null) {
+    return this.getPlayersForActiveSeason(teamId);
   }
 
   getPlayerById(id) {
