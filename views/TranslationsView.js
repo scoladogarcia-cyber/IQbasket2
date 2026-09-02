@@ -27,7 +27,19 @@ import { RosterManagementService } from "../services/roster/RosterManagementServ
 
 function normalizeIsoDate(value = "") {
   const raw = String(value || "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    ? raw
+    : null;
 }
 
 function todayLocalIsoDate() {
@@ -1011,7 +1023,7 @@ export class TranslationsView {
                       ${this._can("MANAGE_PLAYERS") ? `
                         <div class="player-card-actions">
                           <button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>
-                          <button type="button" class="btn-remove-player-season btn-danger-sm" data-id="${p.id}" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled'}>
+                          <button type="button" class="btn-remove-player-season btn-danger-sm" data-id="${p.id}" ${rosterRemovalReady && rosterTeamSeasonId ? '' : 'disabled'}>
                             Quitar
                           </button>
                         </div>
