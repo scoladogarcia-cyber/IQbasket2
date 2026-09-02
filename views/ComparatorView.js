@@ -601,7 +601,9 @@ export class ComparatorView {
       return;
     }
 
-    const allPlayers = DataStore.getPlayers() || [];
+    const allPlayers = DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
+      || DataStore.getPlayers()
+      || [];
 
     // Inicializar los 2 primeros SOLO la primera vez que se carga la vista
     if (!this.hasInitialized) {
