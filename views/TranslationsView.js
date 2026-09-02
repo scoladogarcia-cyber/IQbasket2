@@ -2420,6 +2420,11 @@ export class TranslationsView {
             alert("⚠️ Las dos fechas del traspaso deben tener formato AAAA-MM-DD.");
             return;
           }
+          if (!isDateInsideSeason(lastDateFrom, rosterSeasonContext)
+              || !isDateInsideSeason(firstDateTo, rosterSeasonContext)) {
+            alert("⚠️ Las fechas de salida y alta deben estar dentro de la temporada.");
+            return;
+          }
           if (firstDateTo <= lastDateFrom) {
             alert("⚠️ La fecha de alta en destino debe ser posterior al último día en origen.");
             return;
