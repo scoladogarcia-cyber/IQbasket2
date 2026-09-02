@@ -72,7 +72,7 @@ export class TranslationsView {
     this.teamDirectory = [];
     this.accessRequestService = new TeamAccessRequestService(supabase);
     this.staffAssignmentService = new StaffAssignmentService(supabase);
-    this.seasonManagementService = new SeasonManagementService(supabase);
+    this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
     this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
