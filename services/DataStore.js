@@ -812,6 +812,50 @@ class DataStoreService {
     return [...filtered].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   }
 
+  getGamesForActiveSeason(teamId = null) {
+    const targetTeamId = String(teamId || this.getActiveTeamId() || "");
+    const games = this.getGames(targetTeamId);
+    if (games.length === 0) return [];
+
+    const context = this.getActiveSeasonContext(targetTeamId);
+    const teamSeasonId = context?.team_season_id || context?.teamSeasonId || null;
+    const legacySeasonId = context?.legacy_season_id || context?.legacySeasonId || context?.id || null;
+
+    // Prioridad v3 cuando las filas cargadas ya contienen el bridge.
+    const rowsWithTeamSeason = games.filter(
+      game => Boolean(game.team_season_id || game.teamSeasonId)
+    );
+    if (teamSeasonId && rowsWithTeamSeason.length > 0) {
+      const matched = games.filter(
+        game => String(game.team_season_id || game.teamSeasonId || "") === String(teamSeasonId)
+      );
+      if (matched.length > 0) return matched;
+    }
+
+    // Compatibilidad legacy: si la selección guardada quedó obsoleta durante la
+    // migración pero todos los partidos cargados pertenecen a una única temporada
+    // real, el dataset ya acotado por equipo es la fuente más fiable.
+    const legacyIds = [...new Set(
+      games
+        .map(game => game.season_id || game.seasonId)
+        .filter(Boolean)
+        .map(String)
+    )];
+
+    if (legacySeasonId) {
+      const matchedLegacy = games.filter(
+        game => String(game.season_id || game.seasonId || "") === String(legacySeasonId)
+      );
+      if (matchedLegacy.length > 0) return matchedLegacy;
+    }
+
+    if (legacyIds.length <= 1) return games;
+
+    // Con múltiples temporadas distintas no se mezclan datos si el contexto no
+    // puede resolverse de forma inequívoca.
+    return [];
+  }
+
   getGameById(id) {
     if (!id) return null;
     return (this.games || []).find((g) => String(g.id) === String(id)) || null;
