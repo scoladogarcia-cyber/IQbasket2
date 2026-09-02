@@ -11,7 +11,22 @@ function toIsoDate(value = null) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function seasonReferenceDate(context = null) {
+  const today = todayIso();
+  const start = toIsoDate(context?.start_date || context?.startDate);
+  const end = toIsoDate(context?.end_date || context?.endDate);
+
+  if (start && today < start) return start;
+  if (end && today > end) return end;
+  return today;
 }
 
 export class RosterManagementService {
@@ -40,10 +55,16 @@ export class RosterManagementService {
     return from <= date && (!until || until >= date);
   }
 
-  _applyMembership(player, membership = null, stints = [], inherited = false) {
-    const currentDate = todayIso();
+  _applyMembership(
+    player,
+    membership = null,
+    stints = [],
+    inherited = false,
+    referenceDate = null
+  ) {
+    const effectiveReferenceDate = toIsoDate(referenceDate) || todayIso();
     const activeNow = stints.length > 0
-      ? stints.some(stint => this._isDateInsideStint(stint, currentDate))
+      ? stints.some(stint => this._isDateInsideStint(stint, effectiveReferenceDate))
       : ["ACTIVE", "ACTIVO"].includes(String(membership?.status || "").toUpperCase());
 
     return {
@@ -52,6 +73,7 @@ export class RosterManagementService {
       rosterStatus: membership?.status || (inherited ? "INHERITED" : null),
       rosterInherited: inherited,
       rosterActiveNow: activeNow,
+      rosterReferenceDate: effectiveReferenceDate,
       rosterStints: stints,
       rosterFirstFrom: stints.length
         ? [...stints].map(stint => toIsoDate(stint.valid_from)).filter(Boolean).sort()[0] || null
@@ -77,6 +99,7 @@ export class RosterManagementService {
   async loadForTeam(teamId) {
     const context = this.dataStore?.getActiveSeasonContext?.(teamId) || null;
     const teamSeasonId = context?.team_season_id || context?.teamSeasonId || null;
+    const referenceDate = seasonReferenceDate(context);
     const capabilities = await this.getCapabilities();
 
     const fallbackPlayers = this.dataStore?.getTeamPlayers?.(teamId)
@@ -88,11 +111,12 @@ export class RosterManagementService {
         capabilities,
         context,
         teamSeasonId,
+        referenceDate,
         persisted: false,
         memberships: [],
         stints: [],
-        activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true)),
-        seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true)),
+        activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
+        seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
         availablePlayers: []
       };
     }
@@ -110,11 +134,12 @@ export class RosterManagementService {
         capabilities,
         context,
         teamSeasonId,
+        referenceDate,
         persisted: false,
         memberships,
         stints: [],
-        activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true)),
-        seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true)),
+        activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
+        seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
         availablePlayers: []
       };
     }
@@ -166,7 +191,9 @@ export class RosterManagementService {
       const player = directory.get(String(membership.player_id));
       if (!player) return;
       const playerStints = stintsByMembership.get(String(membership.id)) || [];
-      seasonParticipants.push(this._applyMembership(player, membership, playerStints, false));
+      seasonParticipants.push(
+        this._applyMembership(player, membership, playerStints, false, referenceDate)
+      );
     });
 
     const activePlayers = seasonParticipants.filter(player => player.rosterActiveNow);
@@ -178,13 +205,14 @@ export class RosterManagementService {
       ...seasonParticipants.filter(player => !activeIds.has(String(player.id))),
       ...fallbackPlayers
         .filter(player => !participantIds.has(String(player.id)))
-        .map(player => this._applyMembership(player, null, [], false))
+        .map(player => this._applyMembership(player, null, [], false, referenceDate))
     ];
 
     return {
       capabilities,
       context,
       teamSeasonId,
+      referenceDate,
       persisted: true,
       memberships,
       stints,
@@ -218,12 +246,22 @@ export class RosterManagementService {
     newJersey = null,
     newPrimaryPosition = null
   }) {
+    const sourceEnd = toIsoDate(lastDateFrom);
+    const targetStart = toIsoDate(firstDateTo);
+
+    if (!sourceEnd || !targetStart) {
+      throw new Error("Las fechas de salida y alta del traspaso son obligatorias.");
+    }
+    if (targetStart <= sourceEnd) {
+      throw new Error("La fecha de alta en destino debe ser posterior al último día en origen.");
+    }
+
     const { data, error } = await this.supabase.rpc("iq_v3_transfer_player", {
       p_player_id: playerId,
       p_from_team_season_id: fromTeamSeasonId,
       p_to_team_season_id: toTeamSeasonId,
-      p_last_date_from: lastDateFrom,
-      p_first_date_to: firstDateTo,
+      p_last_date_from: sourceEnd,
+      p_first_date_to: targetStart,
       p_new_jersey: newJersey,
       p_new_primary_position: newPrimaryPosition
     });
@@ -276,12 +314,18 @@ export class RosterManagementService {
     playerId,
     lastEligibleDate = null
   }) {
-    return this.setMember({
-      teamSeasonId,
-      playerId,
-      status: "INACTIVE",
-      effectiveDate: lastEligibleDate
+    if (!this.supabase) {
+      throw new Error("No hay conexión disponible con la base de datos.");
+    }
+
+    const { data, error } = await this.supabase.rpc("iq_v3_remove_roster_member", {
+      p_team_season_id: teamSeasonId,
+      p_player_id: playerId,
+      p_last_eligible_date: toIsoDate(lastEligibleDate)
     });
+
+    if (error) throw error;
+    return data;
   }
 
   async reactivatePlayer({
