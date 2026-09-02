@@ -24,6 +24,7 @@ import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentSe
 import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
 import { SeasonManagementView } from "./SeasonManagementView.js";
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
+import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
 
 function normalizeIsoDate(value = "") {
   const raw = String(value || "").trim();
@@ -134,14 +135,13 @@ export class TranslationsView {
     this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
     this.rosterManagementService = new RosterManagementService(supabase, DataStore);
     this.rosterState = null;
+    this.transferRequestService = new TransferRequestService(supabase);
+    this.transferRequestCapabilities = { ready: false };
+    this.transfers = [];
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
     this.userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
-
-    // Traspasos
-    const storedTransfers = localStorage.getItem("iq_transfers");
-    this.transfers = storedTransfers ? JSON.parse(storedTransfers) : [];
 
     // Perfiles
     this.profilesList = [];
@@ -434,8 +434,24 @@ export class TranslationsView {
     this._saveAssignmentsLocal();
   }
 
-  _saveTransfersLocal() {
-    localStorage.setItem("iq_transfers", JSON.stringify(this.transfers));
+  async _refreshTransferRequests(targetTeamSeasonId = null) {
+    try {
+      this.transferRequestCapabilities = await this.transferRequestService.getCapabilities();
+      if (!this.transferRequestCapabilities?.ready || !targetTeamSeasonId) {
+        this.transfers = [];
+        return this.transfers;
+      }
+
+      this.transfers = await this.transferRequestService.listPending({
+        targetTeamSeasonId
+      });
+      return this.transfers;
+    } catch (error) {
+      console.warn("No se pudieron cargar las solicitudes persistentes de traspaso:", error);
+      this.transferRequestCapabilities = { ready: false };
+      this.transfers = [];
+      return [];
+    }
   }
 
   async _fetchTranslationsForLang(langCode) {
@@ -611,6 +627,12 @@ export class TranslationsView {
         console.warn("No se pudo cargar la plantilla v3 por temporada:", error);
         this.rosterState = null;
       }
+
+      if (this._can("REQUEST_TRANSFERS") || this._can("APPROVE_TRANSFERS")) {
+        await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
+      } else {
+        this.transfers = [];
+      }
     }
 
     if (this._can("APPROVE_JOIN_REQUESTS") || this.activeTab === "requests") {
@@ -660,6 +682,7 @@ export class TranslationsView {
     const rosterRemovalReady = Boolean(
       rosterBackendReady && this.rosterState?.capabilities?.supports_seed_exclusion
     );
+    const transferRequestReady = Boolean(this.transferRequestCapabilities?.ready);
     const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
     const rosterReferenceDate = this.rosterState?.referenceDate
       || normalizeIsoDate(currentActiveSeasonContext?.start_date)
@@ -994,7 +1017,7 @@ export class TranslationsView {
               ` : ''}
 
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
-              ${this._can("REQUEST_TRANSFERS") ? `
+              ${this._can("REQUEST_TRANSFERS") && transferRequestReady ? `
               <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
                   <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
@@ -1004,6 +1027,12 @@ export class TranslationsView {
                   🔍 Abrir Mercado / Fichar Jugador
                 </button>
               </div>
+              ` : ''}
+
+              ${this._can("REQUEST_TRANSFERS") && !transferRequestReady ? `
+                <div class="read-only-banner">
+                  El mercado de fichajes está en modo lectura hasta aplicar la Fase 3D de solicitudes persistentes.
+                </div>
               ` : ''}
 
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
