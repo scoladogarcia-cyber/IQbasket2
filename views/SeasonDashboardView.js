@@ -824,7 +824,9 @@ export class SeasonDashboardView {
       const games = DataStore.getGamesForActiveSeason
         ? (DataStore.getGamesForActiveSeason(this.currentTeamId) || [])
         : (DataStore.getGames?.(this.currentTeamId) || []);
-      const players = DataStore.getPlayers ? (DataStore.getPlayers(this.currentTeamId) || []) : [];
+      const players = DataStore.getSeasonParticipantPlayers
+        ? (DataStore.getSeasonParticipantPlayers(this.currentTeamId) || [])
+        : (DataStore.getPlayers?.(this.currentTeamId) || []);
       const gameIds = new Set(games.map(g => String(g.id)));
       const allPlayerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
       const playerStats = allPlayerStats.filter(s => gameIds.has(String(s.game_id || s.gameId || "")));
