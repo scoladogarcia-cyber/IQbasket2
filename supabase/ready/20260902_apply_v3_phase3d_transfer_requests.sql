@@ -219,11 +219,19 @@ begin
     raise exception 'TRANSFER_REQUIRES_SAME_GLOBAL_SEASON';
   end if;
 
-  if not public.iq_v3_player_participated_in_team_season(
-    p_player_id,
-    p_from_team_season_id
+  -- A transfer request must originate from a genuinely active temporal roster
+  -- stint. An audit-only membership left behind after excluding an inherited
+  -- player has no stint and must never be treated as a transferable player.
+  if not exists (
+    select 1
+    from public.roster_memberships rm
+    join public.roster_membership_stints rs
+      on rs.roster_membership_id = rm.id
+    where rm.player_id = p_player_id
+      and rm.team_season_id = p_from_team_season_id
+      and rs.valid_until is null
   ) then
-    raise exception 'PLAYER_NOT_LINKED_TO_SOURCE_TEAM_SEASON';
+    raise exception 'PLAYER_NOT_ACTIVE_IN_SOURCE_TEAM_SEASON';
   end if;
 
   insert into public.roster_transfer_requests (
@@ -319,6 +327,20 @@ begin
          updated_at = now()
    where id = request_row.id
    returning * into request_row;
+
+  -- Once one request moves the player out of the source team-season, any other
+  -- pending request from that same source becomes stale. Preserve it for audit
+  -- but close it deterministically instead of leaving an impossible PENDING row.
+  update public.roster_transfer_requests
+     set status = 'CANCELLED',
+         reviewed_by = auth.uid(),
+         reviewed_at = now(),
+         rejection_reason = 'SUPERSEDED_BY_APPROVED_TRANSFER',
+         updated_at = now()
+   where id <> request_row.id
+     and player_id = request_row.player_id
+     and from_team_season_id = request_row.from_team_season_id
+     and status = 'PENDING';
 
   return jsonb_build_object(
     'request', to_jsonb(request_row),
