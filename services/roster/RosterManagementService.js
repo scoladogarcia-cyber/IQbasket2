@@ -195,6 +195,42 @@ export class RosterManagementService {
     };
   }
 
+  async resolveTeamSeason(teamId, globalSeasonId) {
+    if (!teamId || !globalSeasonId || !this.supabase) return null;
+
+    const { data, error } = await this.supabase
+      .from("team_seasons")
+      .select("id,team_id,season_id,status")
+      .eq("team_id", teamId)
+      .eq("season_id", globalSeasonId)
+      .limit(1);
+
+    if (error) throw error;
+    return (data || [])[0] || null;
+  }
+
+  async transferPlayer({
+    playerId,
+    fromTeamSeasonId,
+    toTeamSeasonId,
+    lastDateFrom,
+    firstDateTo,
+    newJersey = null,
+    newPrimaryPosition = null
+  }) {
+    const { data, error } = await this.supabase.rpc("iq_v3_transfer_player", {
+      p_player_id: playerId,
+      p_from_team_season_id: fromTeamSeasonId,
+      p_to_team_season_id: toTeamSeasonId,
+      p_last_date_from: lastDateFrom,
+      p_first_date_to: firstDateTo,
+      p_new_jersey: newJersey,
+      p_new_primary_position: newPrimaryPosition
+    });
+    if (error) throw error;
+    return data;
+  }
+
   async createPlayer({
     teamSeasonId,
     firstName,
