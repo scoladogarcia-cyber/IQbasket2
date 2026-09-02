@@ -65,6 +65,25 @@ function shiftIsoDate(value, days) {
   ].join("-");
 }
 
+function seasonDateBounds(context = null) {
+  return {
+    start: normalizeIsoDate(context?.start_date || context?.startDate || ""),
+    end: normalizeIsoDate(context?.end_date || context?.endDate || "")
+  };
+}
+
+function isDateInsideSeason(value, context = null) {
+  const iso = normalizeIsoDate(value);
+  if (!iso) return false;
+  const { start, end } = seasonDateBounds(context);
+  return (!start || iso >= start) && (!end || iso <= end);
+}
+
+function maxIsoDate(...values) {
+  const dates = values.map(normalizeIsoDate).filter(Boolean).sort();
+  return dates.length ? dates.at(-1) : null;
+}
+
 function formatRosterIntervals(player = {}) {
   const stints = Array.isArray(player.rosterStints) ? player.rosterStints : [];
   if (stints.length > 0) {
@@ -477,29 +496,22 @@ export class TranslationsView {
   }
 
   async _fetchAllMarketPlayers(force = false) {
-    if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) return;
-
-    try {
-      if (!supabase) return;
-      const [pRes, tRes] = await Promise.all([
-        supabase.from("players").select("*"),
-        supabase.from("teams").select("*")
-      ]);
-
-      if (!pRes.error && pRes.data) {
-        const teams = tRes.data || DataStore.getTeams() || [];
-        this.allMarketPlayers = pRes.data.map(p => {
-          const teamObj = teams.find(t => String(t.id).toLowerCase() === String(p.team_id).toLowerCase());
-          return {
-            ...p,
-            team_name: teamObj ? teamObj.name : 'Otro Equipo'
-          };
-        });
-        this.isMarketLoaded = true;
-      }
-    } catch (e) {
-      console.warn("Error cargando mercado global:", e);
+    if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) {
+      return this.allMarketPlayers;
     }
+
+    const targetTeamSeasonId = this.rosterState?.teamSeasonId || null;
+    if (!targetTeamSeasonId) {
+      throw new Error("No se pudo resolver la temporada activa del equipo de destino.");
+    }
+
+    const rows = await this.transferRequestService.listMarket({
+      targetTeamSeasonId
+    });
+
+    this.allMarketPlayers = rows || [];
+    this.isMarketLoaded = true;
+    return this.allMarketPlayers;
   }
 
   _renderMarketTable(container) {
@@ -536,7 +548,8 @@ export class TranslationsView {
           <tbody>
             ${paginatedPlayers.length > 0 ? paginatedPlayers.map(p => {
               const isMyTeam = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
-              const existingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === "PENDING");
+              const existingTransfer = Boolean(p.pending_to_target)
+                || this.transfers.some(t => String(t.playerId) === String(p.id) && t.status === "PENDING");
 
               return `
                 <tr>
@@ -549,7 +562,7 @@ export class TranslationsView {
                     ` : (existingTransfer ? `
                       <span class="badge-pending">⏳ Solicitado</span>
                     ` : `
-                      <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name || ''} ${p.last_name || ''}" data-team-origin="${p.team_id}">
+                      <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name || ''} ${p.last_name || ''}" data-team-season-origin="${p.from_team_season_id || ''}">
                         ⚡ Fichar
                       </button>
                     `)}
@@ -583,31 +596,19 @@ export class TranslationsView {
 
         const playerId = e.currentTarget.getAttribute("data-id");
         const playerName = e.currentTarget.getAttribute("data-name");
-        const originTeamId = e.currentTarget.getAttribute("data-team-origin");
+        const fromTeamSeasonId = e.currentTarget.getAttribute("data-team-season-origin");
         const targetTeamSeasonId = this.rosterState?.teamSeasonId || null;
-        const globalSeasonId = this.rosterState?.context?.global_season_id
-          || this.rosterState?.context?.globalSeasonId
-          || null;
 
-        if (!playerId || !originTeamId || !targetTeamSeasonId || !globalSeasonId) {
-          alert("⚠️ No se pudo resolver el jugador, el equipo origen o la temporada del traspaso.");
+        if (!playerId || !fromTeamSeasonId || !targetTeamSeasonId) {
+          alert("⚠️ No se pudo resolver el jugador o el ámbito temporal del traspaso.");
           return;
         }
 
         this.showSyncOverlay("📩 Registrando solicitud de traspaso...");
         try {
-          const sourceScope = await this.rosterManagementService.resolveTeamSeason(
-            originTeamId,
-            globalSeasonId
-          );
-
-          if (!sourceScope?.id) {
-            throw new Error("El equipo origen no está vinculado a la temporada activa.");
-          }
-
           await this.transferRequestService.requestTransfer({
             playerId,
-            fromTeamSeasonId: sourceScope.id,
+            fromTeamSeasonId,
             toTeamSeasonId: targetTeamSeasonId
           });
 
@@ -1203,7 +1204,7 @@ export class TranslationsView {
                   <div class="iq-modal-header">
                     <div>
                       <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
-                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Mostrando todos los jugadores registrados en la base de datos de Supabase.</p>
+                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Solo se muestran jugadores con un periodo activo en otro equipo de la misma temporada. No se exponen datos privados de otros equipos.</p>
                     </div>
                     <button type="button" id="btn-close-market-modal" class="btn-outline-sm" style="font-size: 16px; padding: 4px 10px;">✕</button>
                   </div>
