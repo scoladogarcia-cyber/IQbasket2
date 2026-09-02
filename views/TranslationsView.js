@@ -25,6 +25,33 @@ import { SeasonManagementService } from "../services/seasons/SeasonManagementSer
 import { SeasonManagementView } from "./SeasonManagementView.js";
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 
+function normalizeIsoDate(value = "") {
+  const raw = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+function todayLocalIsoDate() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function shiftIsoDate(value, days) {
+  const iso = normalizeIsoDate(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + Number(days || 0));
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
 export class TranslationsView {
   /**
    * Crea una instancia de TranslationsView.
@@ -592,6 +619,10 @@ export class TranslationsView {
       : currentActiveSeasonName;
     const rosterBackendReady = Boolean(this.rosterState?.capabilities?.ready);
     const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
+    const rosterReferenceDate = this.rosterState?.referenceDate
+      || normalizeIsoDate(currentActiveSeasonContext?.start_date)
+      || normalizeIsoDate(currentActiveSeasonContext?.end_date)
+      || todayLocalIsoDate();
 
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
@@ -945,6 +976,10 @@ export class TranslationsView {
                       <select id="add-p-position" required>
                         <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
                       </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Primer día elegible *</label>
+                      <input type="date" id="add-p-effective-date" value="${rosterReferenceDate || ''}" required />
                     </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
                       <button type="submit" class="btn-secondary" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'}>+ Crear y Añadir a la Plantilla</button>
@@ -1605,8 +1640,12 @@ export class TranslationsView {
         const lastName = container.querySelector("#add-p-lastname")?.value.trim();
         const jersey = Number(container.querySelector("#add-p-number")?.value || 0);
         const position = container.querySelector("#add-p-position")?.value || "Alero";
+        const effectiveDate = normalizeIsoDate(
+          container.querySelector("#add-p-effective-date")?.value
+        );
 
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
+        if (!effectiveDate) return alert("Indica el primer día en que el jugador será elegible.");
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
         this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla de la temporada...");
@@ -1620,7 +1659,8 @@ export class TranslationsView {
             firstName,
             lastName,
             jersey,
-            primaryPosition: position
+            primaryPosition: position,
+            effectiveDate
           });
 
           DataStore.isLoaded = false;
@@ -1725,13 +1765,29 @@ export class TranslationsView {
         }
 
         const playerName = [player.first_name, player.last_name].filter(Boolean).join(" ") || player.name || "este jugador";
-        if (!confirm(`Quitar a ${playerName} de ${rosterContextName}?\n\nNo se borrará el jugador ni su historial de temporadas anteriores.`)) return;
+        if (!confirm(
+          `Quitar a ${playerName} de ${rosterContextName}?\n\n`
+          + "Si solo fue heredado de la temporada anterior y todavía no participó, se excluirá sin crear un historial falso. "
+          + "Si ya participó, se conservarán todos sus datos y se cerrará su periodo de elegibilidad."
+        )) return;
+
+        const requestedLastDate = prompt(
+          "Último día en que el jugador puede participar en esta temporada (AAAA-MM-DD):",
+          rosterReferenceDate || ""
+        );
+        if (requestedLastDate === null) return;
+        const lastEligibleDate = normalizeIsoDate(requestedLastDate);
+        if (!lastEligibleDate) {
+          alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
 
         this.showSyncOverlay("💾 Actualizando plantilla de la temporada...");
         try {
           await this.rosterManagementService.removePlayer({
             teamSeasonId: rosterTeamSeasonId,
-            playerId
+            playerId,
+            lastEligibleDate
           });
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1751,11 +1807,31 @@ export class TranslationsView {
         const playerId = btn.getAttribute("data-id");
         if (!playerId || !rosterTeamSeasonId || !rosterBackendReady) return;
 
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, {
+          teamId: activeTeamId,
+          teamSeasonId: rosterTeamSeasonId
+        })) {
+          alert("⚠️ No tienes permiso para modificar esta plantilla.");
+          return;
+        }
+
+        const requestedFirstDate = prompt(
+          "Primer día en que el jugador puede participar en esta temporada (AAAA-MM-DD):",
+          rosterReferenceDate || ""
+        );
+        if (requestedFirstDate === null) return;
+        const firstEligibleDate = normalizeIsoDate(requestedFirstDate);
+        if (!firstEligibleDate) {
+          alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
+
         this.showSyncOverlay("💾 Añadiendo jugador a la temporada...");
         try {
           await this.rosterManagementService.reactivatePlayer({
             teamSeasonId: rosterTeamSeasonId,
-            playerId
+            playerId,
+            firstEligibleDate
           });
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -2132,8 +2208,6 @@ export class TranslationsView {
           return;
         }
 
-        this.showSyncOverlay("⚡ Procesando traspaso temporal seguro...");
-
         try {
           const capabilities = await this.rosterManagementService.getCapabilities();
           if (!capabilities?.ready || !capabilities?.supports_multiple_stints) {
@@ -2163,18 +2237,33 @@ export class TranslationsView {
             throw new Error("Origen y destino deben estar vinculados a la misma temporada global antes de aprobar el traspaso.");
           }
 
-          const now = new Date();
-          const firstDateTo = [
-            now.getFullYear(),
-            String(now.getMonth() + 1).padStart(2, "0"),
-            String(now.getDate()).padStart(2, "0")
-          ].join("-");
-          const previous = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-          const lastDateFrom = [
-            previous.getFullYear(),
-            String(previous.getMonth() + 1).padStart(2, "0"),
-            String(previous.getDate()).padStart(2, "0")
-          ].join("-");
+          const defaultFirstDateTo = rosterReferenceDate || todayLocalIsoDate();
+          const defaultLastDateFrom = shiftIsoDate(defaultFirstDateTo, -1);
+
+          const requestedLastDateFrom = prompt(
+            "Último día elegible en el equipo de origen (AAAA-MM-DD):",
+            defaultLastDateFrom || ""
+          );
+          if (requestedLastDateFrom === null) return;
+          const lastDateFrom = normalizeIsoDate(requestedLastDateFrom);
+
+          const requestedFirstDateTo = prompt(
+            "Primer día elegible en el equipo de destino (AAAA-MM-DD):",
+            defaultFirstDateTo
+          );
+          if (requestedFirstDateTo === null) return;
+          const firstDateTo = normalizeIsoDate(requestedFirstDateTo);
+
+          if (!lastDateFrom || !firstDateTo) {
+            alert("⚠️ Las dos fechas del traspaso deben tener formato AAAA-MM-DD.");
+            return;
+          }
+          if (firstDateTo <= lastDateFrom) {
+            alert("⚠️ La fecha de alta en destino debe ser posterior al último día en origen.");
+            return;
+          }
+
+          this.showSyncOverlay("⚡ Procesando traspaso temporal seguro...");
 
           await this.rosterManagementService.transferPlayer({
             playerId,
@@ -2186,6 +2275,8 @@ export class TranslationsView {
 
           if (transferObj) {
             transferObj.status = "APROBADO";
+            transferObj.lastDateFrom = lastDateFrom;
+            transferObj.firstDateTo = firstDateTo;
             transferObj.effectiveDate = firstDateTo;
           }
           this._saveTransfersLocal();
