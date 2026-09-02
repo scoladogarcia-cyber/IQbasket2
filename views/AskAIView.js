@@ -12,6 +12,7 @@
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { AiPromptBuilder } from "../services/ai/AiPromptBuilder.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class AskAIView {
   /**
