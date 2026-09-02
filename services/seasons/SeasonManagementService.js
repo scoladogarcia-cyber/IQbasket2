@@ -5,8 +5,9 @@
  */
 
 export class SeasonManagementService {
-  constructor(supabaseClient) {
+  constructor(supabaseClient, contextStore = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
+    this.contextStore = contextStore;
   }
 
   async getCapabilities() {
@@ -36,87 +37,118 @@ export class SeasonManagementService {
       };
     }
 
-    const [
-      capabilities,
-      seasonsRes,
-      teamSeasonsRes,
-      teamsRes,
-      legacyRes
-    ] = await Promise.all([
-      this.getCapabilities(),
+    const capabilities = await this.getCapabilities();
+
+    // Fuente canónica: exactamente el mismo SeasonContextService que usa DataStore.
+    // Evita que Configuración tenga una segunda lógica de lectura de temporadas.
+    if (this.contextStore?.getAllTeamSeasonContexts) {
+      const contexts = await this.contextStore.getAllTeamSeasonContexts({ status: "ACTIVE" });
+
+      if (contexts.length > 0) {
+        const seasonsMap = new Map();
+        const teamSeasons = [];
+
+        contexts.forEach(context => {
+          const globalSeasonId = context.global_season_id || context.globalSeasonId;
+          const teamSeasonId = context.team_season_id || context.teamSeasonId;
+          const teamId = context.team_id || context.teamId;
+
+          if (globalSeasonId && !seasonsMap.has(String(globalSeasonId))) {
+            seasonsMap.set(String(globalSeasonId), {
+              id: globalSeasonId,
+              code: context.code || context.name || "",
+              name: context.name || context.code || "",
+              start_date: context.start_date || null,
+              end_date: context.end_date || null,
+              status: context.status || "ACTIVE",
+              is_test: false
+            });
+          }
+
+          if (teamSeasonId && teamId && globalSeasonId) {
+            teamSeasons.push({
+              id: teamSeasonId,
+              team_id: teamId,
+              season_id: globalSeasonId,
+              legacy_season_id: context.legacy_season_id || context.legacySeasonId || null,
+              status: context.status || "ACTIVE",
+              data_status: context.data_status || "ACTIVE"
+            });
+          }
+        });
+
+        const teams = (this.contextStore.getTeams?.() || []).map(team => ({
+          id: team.id,
+          club_id: team.club_id || team.clubId || null,
+          name: team.name,
+          category: team.category || "",
+          competition: team.competition || ""
+        }));
+
+        const legacySeasons = this.contextStore.legacySeasons || [];
+
+        let staffAssignments = [];
+        try {
+          const staffRes = await this.supabase
+            .from("team_season_staff_assignments")
+            .select("id,team_season_id,staff_role,user_id,external_name,status,created_at,updated_at")
+            .eq("status", "ACTIVE");
+
+          if (!staffRes.error) staffAssignments = staffRes.data || [];
+        } catch {
+          staffAssignments = [];
+        }
+
+        const userIds = [...new Set(
+          staffAssignments.map(row => row.user_id).filter(Boolean).map(String)
+        )];
+        const usersById = new Map();
+
+        if (userIds.length > 0) {
+          const { data, error } = await this.supabase
+            .from("user_profiles")
+            .select("id,email,first_name,last_name")
+            .in("id", userIds);
+
+          if (!error) {
+            (data || []).forEach(user => usersById.set(String(user.id), user));
+          }
+        }
+
+        return {
+          capabilities,
+          seasons: [...seasonsMap.values()],
+          teamSeasons,
+          teams,
+          staffAssignments,
+          legacySeasons,
+          usersById
+        };
+      }
+    }
+
+    // Fallback directo únicamente si el contexto central no devuelve nada.
+    const [seasonsRes, teamSeasonsRes] = await Promise.all([
       this.supabase
         .from("season_catalog")
-        .select("id,code,name,start_date,end_date,status,is_test,created_at,updated_at")
+        .select("id,code,name,start_date,end_date,status,is_test")
         .order("start_date", { ascending: false }),
       this.supabase
         .from("team_seasons")
-        .select("id,team_id,season_id,legacy_season_id,status,data_status,created_at,updated_at"),
-      this.supabase
-        .from("teams")
-        .select("id,club_id,name,category,competition"),
-      this.supabase
-        .from("seasons")
-        .select("id,team_id,name,coach_name")
+        .select("id,team_id,season_id,legacy_season_id,status,data_status")
     ]);
 
-    // Las fuentes canónicas v3 sí son obligatorias para esta pantalla.
     const canonicalError = [seasonsRes.error, teamSeasonsRes.error].find(Boolean);
     if (canonicalError) throw canonicalError;
-
-    // Teams y seasons legacy son auxiliares. Si alguna consulta antigua falla,
-    // mantenemos visible el modelo v3 y degradamos solo esa información secundaria.
-    if (teamsRes.error) {
-      console.warn("[SeasonManagement] No se pudo cargar metadata de equipos:", teamsRes.error.message);
-    }
-    if (legacyRes.error) {
-      console.warn("[SeasonManagement] No se pudo cargar compatibilidad legacy:", legacyRes.error.message);
-    }
-
-    // La tabla canónica de staff aparece en Fase 3A. Su ausencia no debe impedir
-    // visualizar season_catalog y team_seasons ya existentes desde Fase 1.
-    let staffAssignments = [];
-    try {
-      const staffRes = await this.supabase
-        .from("team_season_staff_assignments")
-        .select("id,team_season_id,staff_role,user_id,external_name,status,created_at,updated_at")
-        .eq("status", "ACTIVE");
-
-      if (staffRes.error) {
-        const missingTable = /team_season_staff_assignments|does not exist|schema cache/i
-          .test(String(staffRes.error.message || ""));
-        if (!missingTable) throw staffRes.error;
-      } else {
-        staffAssignments = staffRes.data || [];
-      }
-    } catch (error) {
-      const missingTable = /team_season_staff_assignments|does not exist|schema cache/i
-        .test(String(error?.message || error || ""));
-      if (!missingTable) throw error;
-    }
-    const userIds = [...new Set(
-      staffAssignments.map(row => row.user_id).filter(Boolean).map(String)
-    )];
-
-    const usersById = new Map();
-    if (userIds.length > 0) {
-      const { data, error } = await this.supabase
-        .from("user_profiles")
-        .select("id,email,first_name,last_name")
-        .in("id", userIds);
-
-      if (!error) {
-        (data || []).forEach(user => usersById.set(String(user.id), user));
-      }
-    }
 
     return {
       capabilities,
       seasons: seasonsRes.data || [],
       teamSeasons: teamSeasonsRes.data || [],
-      teams: teamsRes.error ? [] : (teamsRes.data || []),
-      staffAssignments,
-      legacySeasons: legacyRes.error ? [] : (legacyRes.data || []),
-      usersById
+      teams: this.contextStore?.getTeams?.() || [],
+      staffAssignments: [],
+      legacySeasons: this.contextStore?.legacySeasons || [],
+      usersById: new Map()
     };
   }
 
