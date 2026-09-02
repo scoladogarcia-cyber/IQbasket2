@@ -2142,7 +2142,13 @@ export class TranslationsView {
     if (this.activeTab === "seasons") {
       this.seasonManagementView.bindEvents(container, {
         onBackendUnavailable: () => {
-          alert("ℹ️ La nueva gestión de temporadas está en modo lectura hasta aplicar el backend v3 seguro.");
+          alert("ℹ️ Esta acción no está disponible para tu rol o el backend seguro no está activo.");
+        },
+        onChanged: async () => {
+          await this.render(containerId);
+        },
+        onError: (error) => {
+          alert(`❌ No se pudo completar la operación: ${error?.message || error}`);
         }
       });
     }
