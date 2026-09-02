@@ -23,6 +23,7 @@ import { TeamAccessRequestService } from "../services/TeamAccessRequestService.j
 import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
 import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
 import { SeasonManagementView } from "./SeasonManagementView.js";
+import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 
 export class TranslationsView {
   /**
@@ -74,6 +75,8 @@ export class TranslationsView {
     this.staffAssignmentService = new StaffAssignmentService(supabase);
     this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
     this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
+    this.rosterManagementService = new RosterManagementService(supabase, DataStore);
+    this.rosterState = null;
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
@@ -534,7 +537,18 @@ export class TranslationsView {
     const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
+    const activeTeamId = DataStore.getActiveTeamId();
+
     if (this.seasonsList.length === 0) await this._fetchSeasons();
+
+    if (this.activeTab === "players") {
+      try {
+        this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+      } catch (error) {
+        console.warn("No se pudo cargar la plantilla v3 por temporada:", error);
+        this.rosterState = null;
+      }
+    }
 
     if (this._can("APPROVE_JOIN_REQUESTS") || this.activeTab === "requests") {
       await this._fetchJoinRequests();
@@ -559,10 +573,26 @@ export class TranslationsView {
 
     const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
-    const activeTeamId = DataStore.getActiveTeamId();
     const currentUserEmail = this.auth?.getCurrentUser?.()?.email || "";
     
-    const players = DataStore.getPlayers() || [];
+    const currentActiveSeasonContext = DataStore.getActiveSeasonContext?.(activeTeamId) || null;
+    const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
+      || DataStore.getActiveSeason()
+      || "Sin temporada";
+
+    const teamPlayers = DataStore.getPlayers() || [];
+    const players = this.activeTab === "players" && this.rosterState
+      ? this.rosterState.activePlayers
+      : teamPlayers;
+    const availableRosterPlayers = this.activeTab === "players"
+      ? (this.rosterState?.availablePlayers || [])
+      : [];
+    const rosterContextName = this.rosterState?.context?.name
+      ? String(this.rosterState.context.name).replace(/^(\d{4})\s*[-\/]\s*(\d{4})$/, "$1/$2")
+      : currentActiveSeasonName;
+    const rosterBackendReady = Boolean(this.rosterState?.capabilities?.ready);
+    const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
+
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
     const directoryTeams = this.teamDirectory.length > 0 ? this.teamDirectory : realTeams;
@@ -570,10 +600,6 @@ export class TranslationsView {
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
-    const currentActiveSeasonContext = DataStore.getActiveSeasonContext?.(activeTeamId) || null;
-    const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
-      || DataStore.getActiveSeason()
-      || "Sin temporada";
     const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
     if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
