@@ -19,6 +19,7 @@ class DataStoreService {
     this.legacySeasons = [];
     this.staffAssignments = [];
     this.rosterMemberships = [];
+    this.rosterStints = [];
     this.playerGameStats = [];
     this.gamePeriodScores = [];
     this.gameEvents = [];
@@ -397,6 +398,7 @@ class DataStoreService {
         const cGames = localStorage.getItem("iq_cache_games");
         const cStaffAssignments = localStorage.getItem("iq_cache_staff_assignments");
         const cRosterMemberships = localStorage.getItem("iq_cache_roster_memberships");
+        const cRosterStints = localStorage.getItem("iq_cache_roster_stints");
         const cStats = localStorage.getItem("iq_cache_stats");
         const cPeriods = localStorage.getItem("iq_cache_periods");
         const cEvents = localStorage.getItem("iq_cache_events");
@@ -406,6 +408,7 @@ class DataStoreService {
         if (cGames) this.games = JSON.parse(cGames).map(g => this._normalizeGame(g));
         if (cStaffAssignments) this.staffAssignments = JSON.parse(cStaffAssignments).map(a => this._normalizeStaffAssignment(a));
         if (cRosterMemberships) this.rosterMemberships = JSON.parse(cRosterMemberships);
+        if (cRosterStints) this.rosterStints = JSON.parse(cRosterStints);
         if (cStats) this.playerGameStats = JSON.parse(cStats).map(s => this._normalizeStat(s));
         if (cPeriods) this.gamePeriodScores = JSON.parse(cPeriods);
         if (cEvents) {
@@ -472,6 +475,7 @@ class DataStoreService {
           this.seasons = [];
           this.legacySeasons = [];
           this.rosterMemberships = [];
+          this.rosterStints = [];
         } else {
           // v3-first: temporada global + team_season. Si falla, _loadSeasonContexts
           // conserva automáticamente el comportamiento legacy.
@@ -502,6 +506,7 @@ class DataStoreService {
           ]);
 
           this.rosterMemberships = [];
+          this.rosterStints = [];
           if (activeTeamSeasonId) {
             try {
               const { data: rosterRows, error: rosterError } = await supabase
@@ -511,6 +516,23 @@ class DataStoreService {
 
               if (!rosterError) {
                 this.rosterMemberships = rosterRows || [];
+
+                const membershipIds = this.rosterMemberships
+                  .map(row => row.id)
+                  .filter(Boolean);
+
+                if (membershipIds.length > 0) {
+                  const { data: stintRows, error: stintError } = await supabase
+                    .from("roster_membership_stints")
+                    .select("id,roster_membership_id,valid_from,valid_until,source,notes")
+                    .in("roster_membership_id", membershipIds);
+
+                  if (!stintError) {
+                    this.rosterStints = stintRows || [];
+                  } else if (!/roster_membership_stints|does not exist|schema cache/i.test(String(stintError.message || ""))) {
+                    console.warn("[DataStore] No se pudieron cargar periodos de plantilla:", stintError.message);
+                  }
+                }
               } else {
                 console.warn("[DataStore] Plantilla v3 no disponible:", rosterError.message);
               }
@@ -521,6 +543,30 @@ class DataStoreService {
 
           if (playersRes.status === "fulfilled" && !playersRes.value.error) {
             this.players = (playersRes.value.data || []).map(p => this._normalizePlayer(p));
+
+            // Un jugador puede haber cambiado de equipo y aun así pertenecer
+            // históricamente al team-season activo. Cargamos su identidad por ID
+            // aunque players.team_id ya apunte a otro equipo.
+            const loadedIds = new Set(this.players.map(player => String(player.id)));
+            const missingHistoricalIds = this.rosterMemberships
+              .map(row => String(row.player_id || ""))
+              .filter(id => id && !loadedIds.has(id));
+
+            if (missingHistoricalIds.length > 0) {
+              const { data: historicalPlayers, error: historicalPlayersError } = await supabase
+                .from("players")
+                .select("*")
+                .in("id", missingHistoricalIds);
+
+              if (!historicalPlayersError) {
+                (historicalPlayers || []).forEach(player => {
+                  if (!loadedIds.has(String(player.id))) {
+                    this.players.push(this._normalizePlayer(player));
+                    loadedIds.add(String(player.id));
+                  }
+                });
+              }
+            }
           }
           if (gamesRes.status === "fulfilled" && !gamesRes.value.error) {
             this.games = (gamesRes.value.data || []).map(g => this._normalizeGame(g));
@@ -604,6 +650,7 @@ class DataStoreService {
       localStorage.setItem("iq_cache_games", JSON.stringify(this.games));
       localStorage.setItem("iq_cache_staff_assignments", JSON.stringify(this.staffAssignments));
       localStorage.setItem("iq_cache_roster_memberships", JSON.stringify(this.rosterMemberships));
+      localStorage.setItem("iq_cache_roster_stints", JSON.stringify(this.rosterStints));
       localStorage.setItem("iq_cache_stats", JSON.stringify(this.playerGameStats));
       localStorage.setItem("iq_cache_periods", JSON.stringify(this.gamePeriodScores));
       localStorage.setItem("iq_cache_events", JSON.stringify(this.gameEvents));
@@ -842,6 +889,10 @@ class DataStoreService {
     this._notifyListeners();
   }
 
+  getPlayerDirectory() {
+    return [...(this.players || [])];
+  }
+
   getTeamPlayers(teamId = null) {
     const all = this.players || [];
     const targetTeamId = String(teamId || this.getActiveTeamId()).toLowerCase();
@@ -853,44 +904,154 @@ class DataStoreService {
     );
   }
 
-  getPlayersForActiveSeason(teamId = null) {
+  _getRosterMembershipsForTeamSeason(teamSeasonId) {
+    if (!teamSeasonId) return [];
+    return (this.rosterMemberships || []).filter(
+      row => String(row.team_season_id || row.teamSeasonId || "") === String(teamSeasonId)
+    );
+  }
+
+  _getStintsForMembership(membershipId) {
+    if (!membershipId) return [];
+    return (this.rosterStints || []).filter(
+      row => String(row.roster_membership_id || row.rosterMembershipId || "") === String(membershipId)
+    );
+  }
+
+  _dateOnly(value = null) {
+    if (!value) return "";
+    const raw = String(value);
+    return raw.length >= 10 ? raw.slice(0, 10) : raw;
+  }
+
+  _membershipEligibleOnDate(membership, effectiveDate) {
+    if (!membership) return false;
+
+    const targetDate = this._dateOnly(effectiveDate)
+      || new Date().toISOString().slice(0, 10);
+    const stints = this._getStintsForMembership(membership.id);
+
+    if (stints.length > 0) {
+      return stints.some(stint => {
+        const from = this._dateOnly(stint.valid_from);
+        const until = this._dateOnly(stint.valid_until);
+        return Boolean(from)
+          && from <= targetDate
+          && (!until || until >= targetDate);
+      });
+    }
+
+    const status = String(membership.status || "ACTIVE").toUpperCase();
+    const joined = this._dateOnly(membership.joined_at);
+    const left = this._dateOnly(membership.left_at);
+
+    return ["ACTIVE", "ACTIVO"].includes(status)
+      && (!joined || joined <= targetDate)
+      && (!left || left >= targetDate);
+  }
+
+  _applyRosterMembership(player, membership) {
+    if (!player || !membership) return player;
+    return {
+      ...player,
+      roster_membership_id: membership.id,
+      rosterMembershipId: membership.id,
+      roster_status: membership.status,
+      rosterStatus: membership.status,
+      roster_stints: this._getStintsForMembership(membership.id),
+      rosterStints: this._getStintsForMembership(membership.id),
+      jersey: membership.jersey ?? player.jersey,
+      number: membership.jersey ?? player.number ?? player.jersey,
+      primary_position: membership.primary_position || player.primary_position,
+      primaryPosition: membership.primary_position || player.primaryPosition,
+      position: membership.primary_position || player.position
+    };
+  }
+
+  getPlayersEligibleOnDate(teamId = null, effectiveDate = null) {
     const targetTeamId = teamId || this.getActiveTeamId();
-    const teamPlayers = this.getTeamPlayers(targetTeamId);
     const teamSeasonId = this.getActiveTeamSeasonId(targetTeamId);
+    const teamPlayers = this.getTeamPlayers(targetTeamId);
 
     if (!teamSeasonId) return teamPlayers;
 
-    const memberships = (this.rosterMemberships || []).filter(
-      row => String(row.team_season_id || row.teamSeasonId || "") === String(teamSeasonId)
-    );
-
-    // Un scope todavía no materializado hereda la plantilla del equipo.
+    const memberships = this._getRosterMembershipsForTeamSeason(teamSeasonId);
     if (memberships.length === 0) return teamPlayers;
 
-    const activeByPlayer = new Map(
-      memberships
-        .filter(row => String(row.status || "ACTIVE").toUpperCase() === "ACTIVE")
-        .map(row => [String(row.player_id || row.playerId), row])
+    const membershipByPlayer = new Map(
+      memberships.map(row => [String(row.player_id || row.playerId), row])
+    );
+    const directoryById = new Map(
+      (this.players || []).map(player => [String(player.id), player])
     );
 
-    return teamPlayers
-      .filter(player => activeByPlayer.has(String(player.id)))
-      .map(player => {
-        const membership = activeByPlayer.get(String(player.id));
-        return {
-          ...player,
-          roster_membership_id: membership.id,
-          rosterMembershipId: membership.id,
-          roster_status: membership.status,
-          rosterStatus: membership.status,
-          jersey: membership.jersey ?? player.jersey,
-          number: membership.jersey ?? player.number ?? player.jersey,
-          primary_position: membership.primary_position || player.primary_position,
-          primaryPosition: membership.primary_position || player.primaryPosition,
-          position: membership.primary_position || player.position
-        };
+    return memberships
+      .filter(membership => this._membershipEligibleOnDate(membership, effectiveDate))
+      .map(membership => {
+        const player = directoryById.get(String(membership.player_id || membership.playerId));
+        return player ? this._applyRosterMembership(player, membership) : null;
       })
+      .filter(Boolean)
       .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+  }
+
+  getPlayersForActiveSeason(teamId = null) {
+    return this.getPlayersEligibleOnDate(teamId, new Date().toISOString().slice(0, 10));
+  }
+
+  getSeasonParticipantPlayers(teamId = null) {
+    const targetTeamId = teamId || this.getActiveTeamId();
+    const teamSeasonId = this.getActiveTeamSeasonId(targetTeamId);
+    const teamPlayers = this.getTeamPlayers(targetTeamId);
+
+    if (!teamSeasonId) return teamPlayers;
+
+    const memberships = this._getRosterMembershipsForTeamSeason(teamSeasonId);
+    const directoryById = new Map(
+      (this.players || []).map(player => [String(player.id), player])
+    );
+
+    const participants = new Map();
+    memberships.forEach(membership => {
+      const player = directoryById.get(String(membership.player_id || membership.playerId));
+      if (player) {
+        participants.set(String(player.id), this._applyRosterMembership(player, membership));
+      }
+    });
+
+    // Statistical truth wins: if a player has recorded stats in a game of this
+    // team-season, keep that player in historical season analysis even if an
+    // old migration lacks a roster row.
+    const gameIds = new Set(
+      this.getGamesForActiveSeason(targetTeamId).map(game => String(game.id))
+    );
+    (this.playerGameStats || []).forEach(stat => {
+      if (!gameIds.has(String(stat.game_id || stat.gameId || ""))) return;
+      const playerId = String(stat.player_id || stat.playerId || "");
+      if (!playerId || participants.has(playerId)) return;
+      const player = directoryById.get(playerId);
+      if (player) participants.set(playerId, player);
+    });
+
+    if (participants.size === 0) return teamPlayers;
+
+    return [...participants.values()].sort(
+      (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
+    );
+  }
+
+  getEligibleGamesForPlayer(playerId, teamId = null) {
+    if (!playerId) return [];
+    const targetTeamId = teamId || this.getActiveTeamId();
+    const teamSeasonId = this.getActiveTeamSeasonId(targetTeamId);
+    const membership = this._getRosterMembershipsForTeamSeason(teamSeasonId)
+      .find(row => String(row.player_id || row.playerId || "") === String(playerId));
+
+    if (!membership) return [];
+
+    return this.getGamesForActiveSeason(targetTeamId).filter(game =>
+      this._membershipEligibleOnDate(membership, game.date)
+    );
   }
 
   getPlayers(teamId = null) {
