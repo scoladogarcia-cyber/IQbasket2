@@ -780,9 +780,14 @@ export class PlayerStatsView {
 
     const targetTeamId = teamId || DataStore.getActiveTeamId();
     this.players = DataStore.getPlayers(targetTeamId) || [];
-    this.playerStats = DataStore.getPlayerGameStats() || [];
 
-    const gamesList = DataStore.getGames(targetTeamId) || [];
+    const gamesList = DataStore.getGamesForActiveSeason?.(targetTeamId)
+      || DataStore.getGames(targetTeamId)
+      || [];
+    const gameIds = new Set(gamesList.map(game => String(game.id)));
+    this.playerStats = (DataStore.getPlayerGameStats() || []).filter(
+      stat => gameIds.has(String(stat.game_id || stat.gameId || ""))
+    );
     this.gamesMap = new Map(gamesList.map(g => [g.id, g]));
 
     // CASO A: DETALLE DE JUGADOR (#/player/UUID)
