@@ -285,7 +285,7 @@ export class LayoutView {
     const seasonOptionsMarkup = seasonsToRender.length > 0 ? seasonsToRender.map(s => {
       const optionValue = s.team_season_id || s.teamSeasonId || s.name;
       const rawLabel = String(s.name || "");
-      const labelMatch = rawLabel.match(/^(\\d{4})\\s*[-\\/]\\s*(\\d{4})$/);
+      const labelMatch = rawLabel.match(/^(\d{4})\s*[-\/]\s*(\d{4})$/);
       const optionLabel = labelMatch ? `${labelMatch[1]}/${labelMatch[2]}` : rawLabel;
       const isSelected = String(optionValue) === String(currentActiveSeasonValue)
         || String(optionLabel) === String(currentActiveSeason);
