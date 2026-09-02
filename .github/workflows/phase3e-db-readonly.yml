@@ -1,0 +1,57 @@
+name: Phase 3E Real DB Readonly
+
+on:
+  push:
+    branches:
+      - feature/season-roster-history-v2
+    paths:
+      - "supabase/ready/20260902_verify_v3_phase3e_real_market_readonly.sql"
+      - ".github/workflows/phase3e-db-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readonly-db-smoke:
+    name: Real Supabase read-only smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Check database connection secret
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_DB_URL is not configured."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Run read-only real database verification
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260902_verify_v3_phase3e_real_market_readonly.sql
+
+      - name: Require configured database secret
+        if: steps.check.outputs.ready != 'true'
+        run: exit 1
