@@ -1950,14 +1950,31 @@ export class TranslationsView {
           return;
         }
 
+        const player = [...historicalRosterPlayers, ...availableRosterPlayers]
+          .find(item => String(item.id) === String(playerId));
+        const earliestRejoinDate = player?.rosterLastUntil
+          ? shiftIsoDate(player.rosterLastUntil, 1)
+          : null;
+        const suggestedRejoinDate = maxIsoDate(rosterReferenceDate, earliestRejoinDate)
+          || rosterReferenceDate
+          || "";
+
         const requestedFirstDate = prompt(
           "Primer día en que el jugador puede participar en esta temporada (AAAA-MM-DD):",
-          rosterReferenceDate || ""
+          suggestedRejoinDate
         );
         if (requestedFirstDate === null) return;
         const firstEligibleDate = normalizeIsoDate(requestedFirstDate);
         if (!firstEligibleDate) {
           alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
+        if (!isDateInsideSeason(firstEligibleDate, rosterSeasonContext)) {
+          alert("⚠️ El primer día elegible debe estar dentro de las fechas de la temporada.");
+          return;
+        }
+        if (player?.rosterLastUntil && firstEligibleDate <= player.rosterLastUntil) {
+          alert(`⚠️ La reincorporación debe ser posterior al último periodo cerrado (${player.rosterLastUntil}).`);
           return;
         }
 
@@ -1983,14 +2000,19 @@ export class TranslationsView {
 
     // 6. MERCADO DE FICHAJES (MODAL Y TABLA)
     container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
-      this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
-      await this._fetchAllMarketPlayers(true);
-      this.hideSyncOverlay();
-
-      const modal = container.querySelector("#modal-market-global");
-      if (modal) {
-        modal.style.display = "flex";
-        this._renderMarketTable(container);
+      this.showSyncOverlay("⚡ Cargando jugadores elegibles de la temporada...");
+      try {
+        await this._fetchAllMarketPlayers(true);
+        const modal = container.querySelector("#modal-market-global");
+        if (modal) {
+          modal.style.display = "flex";
+          this._renderMarketTable(container);
+        }
+      } catch (error) {
+        console.error("Error cargando directorio seguro de traspasos:", error);
+        alert(`❌ No se pudo cargar el mercado de esta temporada: ${error.message || error}`);
+      } finally {
+        this.hideSyncOverlay();
       }
     });
 
@@ -2364,7 +2386,10 @@ export class TranslationsView {
             throw new Error("La solicitud ya no está pendiente o no se pudo recuperar.");
           }
 
-          const defaultFirstDateTo = rosterReferenceDate || todayLocalIsoDate();
+          const defaultFirstDateTo = maxIsoDate(
+            rosterReferenceDate || todayLocalIsoDate(),
+            rosterSeasonBounds.start ? shiftIsoDate(rosterSeasonBounds.start, 1) : null
+          );
           const defaultLastDateFrom = shiftIsoDate(defaultFirstDateTo, -1);
 
           const requestedLastDateFrom = prompt(
