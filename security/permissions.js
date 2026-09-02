@@ -46,6 +46,7 @@ export const Permission = Object.freeze({
   MANAGE_TEAMS: "MANAGE_TEAMS",
   REQUEST_TEAM_ACCESS: "REQUEST_TEAM_ACCESS",
   APPROVE_TEAM_ACCESS: "APPROVE_TEAM_ACCESS",
+  REQUEST_TRANSFER: "REQUEST_TRANSFER",
   APPROVE_TRANSFER: "APPROVE_TRANSFER",
   MANAGE_ROSTER: "MANAGE_ROSTER",
   VIEW_SEASONS: "VIEW_SEASONS",
@@ -104,6 +105,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.MANAGE_CLUBS,
     Permission.MANAGE_TEAMS,
     Permission.APPROVE_TEAM_ACCESS,
+    Permission.REQUEST_TRANSFER,
     Permission.MANAGE_ROSTER,
     Permission.MANAGE_SEASONS,
     Permission.VIEW_USERS,
@@ -128,6 +130,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.USE_AI,
     Permission.VIEW_FAMILY_ADVISOR,
     Permission.REQUEST_TEAM_ACCESS,
+    Permission.REQUEST_TRANSFER,
     Permission.MANAGE_ROSTER,
     Permission.MANAGE_SEASONS
   ],
