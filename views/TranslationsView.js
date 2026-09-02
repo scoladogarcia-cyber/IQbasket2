@@ -21,6 +21,8 @@ import { I18n } from "../services/I18nService.js";
 import { Permission, UserRole, UNIQUE_SUPERADMIN_EMAIL } from "../security/PermissionService.js";
 import { TeamAccessRequestService } from "../services/TeamAccessRequestService.js";
 import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
+import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
+import { SeasonManagementView } from "./SeasonManagementView.js";
 
 export class TranslationsView {
   /**
@@ -70,6 +72,8 @@ export class TranslationsView {
     this.teamDirectory = [];
     this.accessRequestService = new TeamAccessRequestService(supabase);
     this.staffAssignmentService = new StaffAssignmentService(supabase);
+    this.seasonManagementService = new SeasonManagementService(supabase);
+    this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
@@ -545,6 +549,13 @@ export class TranslationsView {
       await this._fetchTeamDirectory();
     }
     if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
+    if (this.activeTab === "seasons") {
+      try {
+        await this.seasonManagementView.load();
+      } catch (error) {
+        console.warn("No se pudo cargar la gestión v3 de temporadas:", error);
+      }
+    }
 
     const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
@@ -559,7 +570,9 @@ export class TranslationsView {
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
-    const currentActiveSeasonName = DataStore.getActiveSeason() || "2026";
+    const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
+      || DataStore.getActiveSeason()
+      || "Sin temporada";
 
     if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
       this.activeTab = "requests";
@@ -630,7 +643,7 @@ export class TranslationsView {
 
           ${this._can("VIEW_TAB_SEASONS") ? `
             <button class="tab-btn ${this.activeTab === 'seasons' ? 'active' : ''}" data-tab="seasons">
-              📅 ${this.t("tab_seasons", "Temporadas")} (${this.seasonsList.length})
+              📅 ${this.t("tab_seasons", "Temporadas")} (${this.seasonManagementView.state?.seasons?.length ?? this.seasonsList.length})
             </button>
           ` : ''}
 
@@ -1131,57 +1144,13 @@ export class TranslationsView {
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 4: TEMPORADAS -->
-          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS") ? `
-            <div class="config-card">
-              <div class="card-title"><span>📅</span> TEMPORADAS REGISTRADAS EN SUPABASE (${this.seasonsList.length})</div>
-
-              ${this._can("CREATE_SEASON") ? `
-                <form id="form-create-season" class="grid-inline" style="margin-bottom: 20px;">
-                  <div class="form-group" style="flex: 2;">
-                    <label>Nombre de la Nueva Temporada *</label>
-                    <input type="text" id="input-new-season-name" placeholder="Ej. 2026 o 2026/2027" required />
-                  </div>
-                  <div style="align-self: flex-end;">
-                    <button type="submit" class="btn-primary">+ Añadir Temporada</button>
-                  </div>
-                </form>
-              ` : ''}
-
-              <div class="seasons-list" style="display: flex; flex-direction: column; gap: 10px;">
-                ${this.seasonsList.length > 0 ? this.seasonsList.map(s => {
-                  const sNameClean = String(s.name).trim();
-                  const activeClean = String(currentActiveSeasonName).trim();
-                  const isSeasonActive = sNameClean === activeClean || activeClean.includes(sNameClean) || sNameClean.includes(activeClean);
-
-                  return `
-                    <div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-                      <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 380px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span>
-                        <input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" />
-                      </div>
-
-                      <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="${isSeasonActive ? 'badge-active-team' : 'badge-inactive'}">
-                          ${isSeasonActive ? '🟢 Activa' : '⚪ Inactiva'}
-                        </span>
-
-                        ${!isReadOnly ? `
-                          <button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 Guardar Nombre</button>
-                        ` : ''}
-
-                        ${!isSeasonActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}" data-name="${s.name}">Activar</button>` : ''}
-
-                        ${this._can("DELETE_SEASON") ? `
-                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada">🗑️</button>
-                        ` : ''}
-                      </div>
-                    </div>
-                  `;
-                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas en Supabase.</p>`}
-              </div>
-            </div>
-          ` : ''}
+          <!-- PESTAÑA 4: TEMPORADAS V3 -->
+          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS")
+            ? this.seasonManagementView.renderMarkup({
+                activeTeamId,
+                canManage: this._can("CREATE_SEASON")
+              })
+            : ''}
 
           <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES (SUPERADMIN) -->
           ${this.activeTab === 'translations' && this._can("VIEW_TAB_TRANSLATIONS") ? `
@@ -2144,6 +2113,14 @@ export class TranslationsView {
         }
       });
     });
+
+    if (this.activeTab === "seasons") {
+      this.seasonManagementView.bindEvents(container, {
+        onBackendUnavailable: () => {
+          alert("ℹ️ La nueva gestión de temporadas está en modo lectura hasta aplicar el backend v3 seguro.");
+        }
+      });
+    }
 
     // PESTAÑA IDIOMAS: GUARDAR EN SUPABASE
     if (this.activeTab === "translations") {
