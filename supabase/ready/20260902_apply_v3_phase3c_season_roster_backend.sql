@@ -236,6 +236,30 @@ revoke all on function public.iq_v3_player_participated_in_team_season(uuid,uuid
 grant execute on function public.iq_v3_player_participated_in_team_season(uuid,uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
+-- 4B. Historical validation: current data must remain eligible.
+-- Any mismatch aborts the whole migration before triggers are installed.
+-- -----------------------------------------------------------------------------
+do $
+declare
+  invalid_count bigint;
+begin
+  select count(*)
+    into invalid_count
+  from public.player_game_stats pgs
+  join public.games g on g.id = pgs.game_id
+  where g.team_season_id is not null
+    and not public.iq_v3_player_eligible_on_date(
+      pgs.player_id,
+      g.team_season_id,
+      g.date::date
+    );
+
+  if invalid_count <> 0 then
+    raise exception 'EXISTING_STATS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_count;
+  end if;
+end $;
+
+-- -----------------------------------------------------------------------------
 -- 5. Capabilities
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v3_roster_admin_capabilities()
@@ -533,8 +557,10 @@ begin
         select 1
         from public.roster_membership_stints rs
         where rs.roster_membership_id = membership_row.id
-          and rs.valid_from <= effective_date
-          and (rs.valid_until is null or rs.valid_until >= effective_date)
+          and (
+            rs.valid_until is null
+            or rs.valid_until >= effective_date
+          )
       ) then
         raise exception 'ROSTER_STINT_OVERLAP';
       end if;
@@ -564,6 +590,17 @@ begin
         and effective_date < rs.valid_from
     ) then
       raise exception 'INVALID_STINT_END_BEFORE_START';
+    end if;
+
+    if exists (
+      select 1
+      from public.player_game_stats pgs
+      join public.games g on g.id = pgs.game_id
+      where pgs.player_id = p_player_id
+        and g.team_season_id = p_team_season_id
+        and g.date::date > effective_date
+    ) then
+      raise exception 'ROSTER_END_BEFORE_RECORDED_GAME';
     end if;
 
     update public.roster_membership_stints
@@ -762,8 +799,7 @@ revoke all on function public.iq_v3_link_team_season(uuid,uuid) from public;
 grant execute on function public.iq_v3_link_team_season(uuid,uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- 10. DB guard: statistics only for players eligible on the game date.
--- Existing rows are untouched; trigger applies to future INSERT/UPDATE.
+-- 10. DB guards
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v3_validate_player_game_stat_eligibility()
 returns trigger
@@ -796,6 +832,8 @@ begin
 end;
 $$;
 
+revoke all on function public.iq_v3_validate_player_game_stat_eligibility() from public;
+
 drop trigger if exists trg_iq_v3_player_game_stat_eligibility
   on public.player_game_stats;
 
@@ -804,6 +842,48 @@ before insert or update of game_id, player_id
 on public.player_game_stats
 for each row
 execute function public.iq_v3_validate_player_game_stat_eligibility();
+
+create or replace function public.iq_v3_validate_game_roster_eligibility()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  invalid_count bigint;
+begin
+  if new.team_season_id is null then
+    return new;
+  end if;
+
+  select count(*)
+    into invalid_count
+  from public.player_game_stats pgs
+  where pgs.game_id = new.id
+    and not public.iq_v3_player_eligible_on_date(
+      pgs.player_id,
+      new.team_season_id,
+      new.date::date
+    );
+
+  if invalid_count <> 0 then
+    raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_PLAYER_ELIGIBILITY';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.iq_v3_validate_game_roster_eligibility() from public;
+
+drop trigger if exists trg_iq_v3_game_roster_eligibility
+  on public.games;
+
+create trigger trg_iq_v3_game_roster_eligibility
+before update of date, team_season_id
+on public.games
+for each row
+execute function public.iq_v3_validate_game_roster_eligibility();
 
 commit;
 
@@ -822,9 +902,23 @@ where routine_schema = 'public'
     'iq_v3_seed_team_season_roster',
     'iq_v3_set_roster_member',
     'iq_v3_create_player_for_roster',
-    'iq_v3_validate_player_game_stat_eligibility'
+    'iq_v3_validate_player_game_stat_eligibility',
+    'iq_v3_validate_game_roster_eligibility'
   )
 order by routine_name;
+
+select
+  event_object_table as table_name,
+  trigger_name,
+  action_timing,
+  event_manipulation
+from information_schema.triggers
+where trigger_schema = 'public'
+  and trigger_name in (
+    'trg_iq_v3_player_game_stat_eligibility',
+    'trg_iq_v3_game_roster_eligibility'
+  )
+order by trigger_name, event_manipulation;
 
 select
   count(*) as roster_memberships,
