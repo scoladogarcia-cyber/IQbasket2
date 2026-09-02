@@ -24,6 +24,22 @@ export class SeasonManagementService {
     };
   }
 
+  async _loadGlobalSeasonCatalog() {
+    if (!this.supabase) return [];
+
+    const { data, error } = await this.supabase
+      .from("season_catalog")
+      .select("id,code,name,start_date,end_date,status,is_test")
+      .order("start_date", { ascending: false });
+
+    if (error) {
+      console.warn("[SeasonManagement] No se pudo leer season_catalog:", error.message);
+      return [];
+    }
+
+    return data || [];
+  }
+
   async loadOverview() {
     if (!this.supabase) {
       return {
@@ -38,6 +54,7 @@ export class SeasonManagementService {
     }
 
     const capabilities = await this.getCapabilities();
+    const globalCatalog = await this._loadGlobalSeasonCatalog();
 
     // Fuente canónica: exactamente el mismo SeasonContextService que usa DataStore.
     // Evita que Configuración tenga una segunda lógica de lectura de temporadas.
@@ -115,9 +132,22 @@ export class SeasonManagementService {
           }
         }
 
+        const mergedSeasons = new Map(
+          globalCatalog.map(season => [String(season.id), season])
+        );
+        [...seasonsMap.values()].forEach(season => {
+          if (!mergedSeasons.has(String(season.id))) {
+            mergedSeasons.set(String(season.id), season);
+          }
+        });
+
         return {
           capabilities,
-          seasons: [...seasonsMap.values()],
+          seasons: [...mergedSeasons.values()].sort((a, b) => {
+            const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+            const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+            return bDate - aDate;
+          }),
           teamSeasons,
           teams,
           staffAssignments,
