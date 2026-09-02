@@ -947,7 +947,7 @@ export class TranslationsView {
                       </select>
                     </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
-                      <button type="submit" class="btn-secondary">+ Crear y Añadir a la Plantilla</button>
+                      <button type="submit" class="btn-secondary" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'}>+ Crear y Añadir a la Plantilla</button>
                     </div>
                   </form>
                 </div>
@@ -1031,7 +1031,7 @@ export class TranslationsView {
                     </div>
                     <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                       <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
-                      ${!isReadOnly ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
+                      ${!isReadOnly && rosterBackendReady && rosterTeamSeasonId ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
                     </div>
                   </form>
                 </div>
@@ -1607,7 +1607,7 @@ export class TranslationsView {
         const position = container.querySelector("#add-p-position")?.value || "Alero";
 
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
-        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
         this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla de la temporada...");
         try {
@@ -1672,10 +1672,13 @@ export class TranslationsView {
         const jersey = Number(container.querySelector("#edit-p-number")?.value || 0);
         const position = container.querySelector("#edit-p-position")?.value;
         const status = container.querySelector("#edit-p-status")?.value;
-        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
 
         this.showSyncOverlay("💾 Guardando cambios del jugador...");
         try {
+          if (!rosterBackendReady || !rosterTeamSeasonId) {
+            throw new Error("La edición de plantilla por temporada todavía no está disponible.");
+          }
           await DataStore.updatePlayer(pId, {
             first_name: firstName,
             last_name: lastName,
