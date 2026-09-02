@@ -902,10 +902,12 @@ export class LayoutView {
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
             padding: 20px;
-            padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
-            max-height: 80vh;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+            padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            max-height: calc(100dvh - max(env(safe-area-inset-top, 0px), 12px));
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            overscroll-behavior: contain;
           }
 
           .drawer-header {
@@ -913,6 +915,11 @@ export class LayoutView {
             justify-content: space-between;
             align-items: center;
             margin-bottom: 16px;
+            flex: 0 0 auto;
+            position: sticky;
+            top: 0;
+            background: #ffffff;
+            z-index: 2;
           }
 
           .drawer-title {
@@ -932,8 +939,13 @@ export class LayoutView {
 
           .drawer-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            min-height: 0;
+            padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
           }
 
           .drawer-item {
