@@ -64,6 +64,24 @@ function shiftIsoDate(value, days) {
   ].join("-");
 }
 
+function formatRosterIntervals(player = {}) {
+  const stints = Array.isArray(player.rosterStints) ? player.rosterStints : [];
+  if (stints.length > 0) {
+    return [...stints]
+      .sort((a, b) => String(a.valid_from || "").localeCompare(String(b.valid_from || "")))
+      .map(stint => {
+        const from = normalizeIsoDate(stint.valid_from) || "?";
+        const until = normalizeIsoDate(stint.valid_until) || "abierto";
+        return `${from} → ${until}`;
+      })
+      .join(" · ");
+  }
+
+  const from = normalizeIsoDate(player.rosterFirstFrom);
+  const until = normalizeIsoDate(player.rosterLastUntil);
+  return from ? `${from} → ${until || "abierto"}` : "Sin intervalo histórico";
+}
+
 export class TranslationsView {
   /**
    * Crea una instancia de TranslationsView.
@@ -632,6 +650,9 @@ export class TranslationsView {
     const availableRosterPlayers = this.activeTab === "players"
       ? (this.rosterState?.availablePlayers || [])
       : [];
+    const historicalRosterPlayers = this.activeTab === "players"
+      ? (this.rosterState?.historicalPlayers || [])
+      : [];
     const rosterContextName = this.rosterState?.context?.name
       ? String(this.rosterState.context.name).replace(/^(\d{4})\s*[-\/]\s*(\d{4})$/, "$1/$2")
       : currentActiveSeasonName;
@@ -1013,7 +1034,7 @@ export class TranslationsView {
 
               <!-- JUGADORES PLANTILLA DE LA TEMPORADA ACTIVA -->
               <div class="config-card">
-                <div class="card-title"><span>📋</span> PLANTILLA ${rosterContextName} (${players.length})</div>
+                <div class="card-title"><span>📋</span> PLANTILLA ${rosterContextName} · ${rosterReferenceDate} (${players.length})</div>
                 ${this.rosterState && !this.rosterState.persisted ? `
                   <div style="font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
                     Esta temporada parte de la plantilla anterior como base. El primer cambio la guardará como plantilla independiente.
@@ -1025,7 +1046,7 @@ export class TranslationsView {
                       <div>
                         <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
                         <div style="font-size: 11px; color: #64748b;">
-                          ${p.primary_position || p.position || 'Jugador'} • ${p.rosterInherited ? 'Base heredada' : 'Activo en esta temporada'}
+                          ${p.primary_position || p.position || 'Jugador'} • ${p.rosterCurrentFrom ? `Elegible desde ${p.rosterCurrentFrom}` : (p.rosterInherited ? 'Base heredada' : 'Activo en esta temporada')}
                         </div>
                       </div>
                       ${this._can("MANAGE_PLAYERS") ? `
@@ -1040,6 +1061,32 @@ export class TranslationsView {
                   `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores en esta temporada.</p>`}
                 </div>
               </div>
+
+              ${historicalRosterPlayers.length > 0 ? `
+                <div class="config-card">
+                  <div class="card-title"><span>🕘</span> HISTÓRICO DE PLANTILLA · ${rosterContextName} (${historicalRosterPlayers.length})</div>
+                  <div style="font-size:11px;color:#64748b;margin:-6px 0 12px;">
+                    Jugadores que participaron en esta temporada pero no están elegibles en la fecha de referencia ${rosterReferenceDate}.
+                  </div>
+                  <div class="players-grid">
+                    ${historicalRosterPlayers.map(p => `
+                      <div class="player-card player-transferred">
+                        <div>
+                          <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+                          <div style="font-size:11px;color:#64748b;">
+                            ${p.primary_position || p.position || 'Jugador'} · ${formatRosterIntervals(p)}
+                          </div>
+                        </div>
+                        ${this._can("MANAGE_PLAYERS") && rosterBackendReady ? `
+                          <button type="button" class="btn-reactivate-player-season btn-secondary-sm" data-id="${p.id}">
+                            + Reincorporar
+                          </button>
+                        ` : ''}
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ''}
 
               ${availableRosterPlayers.length > 0 && this._can("MANAGE_PLAYERS") ? `
                 <div class="config-card">
