@@ -28,8 +28,16 @@ export class SeasonCatalogRepository {
 
   async getByIds(ids = []) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
+
     if (typeof this.db.getByIds === "function") {
-      return this.db.getByIds(this.collection, ids);
+      try {
+        return await this.db.getByIds(this.collection, ids);
+      } catch (error) {
+        console.warn(
+          "[SeasonCatalogRepository] Lectura por lote no disponible; se usa fallback por ID:",
+          error.message
+        );
+      }
     }
 
     const rows = await Promise.all(ids.map(id => this.getById(id)));
