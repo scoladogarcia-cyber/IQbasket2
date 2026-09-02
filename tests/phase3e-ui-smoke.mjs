@@ -196,8 +196,33 @@ async function installFixture(page) {
       historicalPlayers,
       availablePlayers
     });
+    window.__phase3eRequestCalls = [];
+    window.__phase3eApproveCalls = [];
+    window.__phase3eRejectCalls = [];
+
     view.transferRequestService.listMarket = async () => marketRows;
     view.transferRequestService.getCapabilities = async () => view.transferRequestCapabilities;
+    view.transferRequestService.requestTransfer = async (args) => {
+      window.__phase3eRequestCalls.push(args);
+      return { id: "request-mock" };
+    };
+    view.transferRequestService.approveTransfer = async (args) => {
+      window.__phase3eApproveCalls.push(args);
+      return { id: args.requestId, status: "APPROVED" };
+    };
+    view.transferRequestService.rejectTransfer = async (args) => {
+      window.__phase3eRejectCalls.push(args);
+      return { id: args.requestId, status: "REJECTED" };
+    };
+    view.rosterManagementService.getCapabilities = async () => ({
+      ready: true,
+      supports_seed_exclusion: true,
+      supports_multiple_stints: true
+    });
+
+    DataStore.init = async () => {
+      DataStore.isLoaded = true;
+    };
 
     document.getElementById("app").innerHTML = '<main id="dashboard-content-area"></main>';
     await view.render("dashboard-content-area");
@@ -296,9 +321,140 @@ async function checkViewport(browser, name, viewport) {
     throw new Error(`[${name}] Búsqueda del mercado no filtra correctamente: ${JSON.stringify(filtered)}`);
   }
 
+  await page.fill("#input-market-search", "");
+  await page.waitForTimeout(50);
+
+  const requestDialogs = [];
+  const requestDialogHandler = async dialog => {
+    requestDialogs.push(dialog.message());
+    await dialog.accept();
+  };
+  page.on("dialog", requestDialogHandler);
+  await page.click(".btn-request-transfer");
+  await page.waitForFunction(() => window.__phase3eRequestCalls.length === 1);
+  page.off("dialog", requestDialogHandler);
+
+  const requestCall = await page.evaluate(() => window.__phase3eRequestCalls[0]);
+  if (requestCall.fromTeamSeasonId !== TS_C && requestCall.fromTeamSeasonId !== TS_B) {
+    throw new Error(`[${name}] Fichar no envía un team-season origen válido: ${JSON.stringify(requestCall)}`);
+  }
+  if (requestCall.toTeamSeasonId !== TS_A) {
+    throw new Error(`[${name}] Fichar no envía el team-season destino activo: ${JSON.stringify(requestCall)}`);
+  }
+
   await page.click("#btn-close-market-modal");
   const closed = await page.evaluate(() => getComputedStyle(document.querySelector("#modal-market-global")).display === "none");
   if (!closed) throw new Error(`[${name}] El modal no se cierra`);
+
+  await page.evaluate(async ({ TEAM_A, TEAM_B, TS_A, TS_B, SEASON }) => {
+    const app = window.iqApp;
+    const view = app.views.settings;
+    view.transfers = [{
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      playerId: "90000000-0000-4000-8000-000000000001",
+      playerName: "Jugador1 Equipo C",
+      fromTeamSeasonId: TS_B,
+      toTeamSeasonId: TS_A,
+      originTeamId: TEAM_B,
+      targetTeamId: TEAM_A,
+      globalSeasonId: SEASON,
+      status: "PENDING",
+      requestedAt: "2026-02-01T10:00:00Z"
+    }];
+    view._refreshTransferRequests = async () => view.transfers;
+    await view.render("dashboard-content-area");
+  }, { TEAM_A, TEAM_B, TS_A, TS_B, SEASON });
+
+  const approveButton = page.locator(".btn-approve-transfer");
+  if (await approveButton.count() !== 1) {
+    throw new Error(`[${name}] No aparece la acción de aprobación pendiente`);
+  }
+
+  let invalidSeasonAlert = false;
+  const invalidApproveDialog = async dialog => {
+    if (dialog.type() === "prompt" && dialog.message().includes("Último día")) {
+      await dialog.accept("2026-06-30");
+      return;
+    }
+    if (dialog.type() === "prompt" && dialog.message().includes("Primer día")) {
+      await dialog.accept("2026-07-01");
+      return;
+    }
+    if (dialog.type() === "alert") {
+      if (dialog.message().includes("dentro de la temporada")) invalidSeasonAlert = true;
+      await dialog.accept();
+      return;
+    }
+    await dialog.accept();
+  };
+  page.on("dialog", invalidApproveDialog);
+  await approveButton.click();
+  await page.waitForTimeout(150);
+  page.off("dialog", invalidApproveDialog);
+
+  const invalidApproveCalls = await page.evaluate(() => window.__phase3eApproveCalls.length);
+  if (invalidApproveCalls !== 0 || !invalidSeasonAlert) {
+    throw new Error(`[${name}] La UI no bloquea una aprobación fuera de temporada`);
+  }
+
+  const approveDialog = async dialog => {
+    if (dialog.type() === "prompt" && dialog.message().includes("Último día")) {
+      await dialog.accept("2026-01-31");
+      return;
+    }
+    if (dialog.type() === "prompt" && dialog.message().includes("Primer día")) {
+      await dialog.accept("2026-02-01");
+      return;
+    }
+    await dialog.accept();
+  };
+  page.on("dialog", approveDialog);
+  await approveButton.click();
+  await page.waitForFunction(() => window.__phase3eApproveCalls.length === 1);
+  page.off("dialog", approveDialog);
+
+  const approveCall = await page.evaluate(() => window.__phase3eApproveCalls[0]);
+  if (approveCall.requestId !== "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+      || approveCall.lastDateFrom !== "2026-01-31"
+      || approveCall.firstDateTo !== "2026-02-01") {
+    throw new Error(`[${name}] Aprobación envía parámetros incorrectos: ${JSON.stringify(approveCall)}`);
+  }
+
+  await page.evaluate(async ({ TEAM_A, TEAM_B, TS_A, TS_B, SEASON }) => {
+    const view = window.iqApp.views.settings;
+    view.transfers = [{
+      id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      playerId: "90000000-0000-4000-8000-000000000002",
+      playerName: "Jugador2 Equipo B",
+      fromTeamSeasonId: TS_B,
+      toTeamSeasonId: TS_A,
+      originTeamId: TEAM_B,
+      targetTeamId: TEAM_A,
+      globalSeasonId: SEASON,
+      status: "PENDING",
+      requestedAt: "2026-02-02T10:00:00Z"
+    }];
+    view._refreshTransferRequests = async () => view.transfers;
+    await view.render("dashboard-content-area");
+  }, { TEAM_A, TEAM_B, TS_A, TS_B, SEASON });
+
+  const rejectDialog = async dialog => {
+    if (dialog.type() === "prompt") {
+      await dialog.accept("Motivo de prueba");
+      return;
+    }
+    await dialog.accept();
+  };
+  page.on("dialog", rejectDialog);
+  await page.click(".btn-reject-transfer");
+  await page.waitForFunction(() => window.__phase3eRejectCalls.length === 1);
+  page.off("dialog", rejectDialog);
+
+  const rejectCall = await page.evaluate(() => window.__phase3eRejectCalls[0]);
+  if (rejectCall.requestId !== "ffffffff-ffff-4fff-8fff-ffffffffffff"
+      || rejectCall.reason !== "Motivo de prueba") {
+    throw new Error(`[${name}] Rechazo envía parámetros incorrectos: ${JSON.stringify(rejectCall)}`);
+  }
 
   const relevantConsoleErrors = consoleErrors.filter(message =>
     !/favicon|Failed to load resource.*404/i.test(message)
@@ -311,6 +467,9 @@ async function checkViewport(browser, name, viewport) {
     core,
     market,
     filteredSearchRows: filtered.length,
+    requestCall,
+    approveCall,
+    rejectCall,
     result: "PASS"
   }));
 
