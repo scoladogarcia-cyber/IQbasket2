@@ -28,7 +28,8 @@ begin
      or to_regclass('public.season_catalog') is null
      or to_regclass('public.players') is null
      or to_regclass('public.games') is null
-     or to_regclass('public.player_game_stats') is null then
+     or to_regclass('public.player_game_stats') is null
+     or to_regclass('public.game_events') is null then
     raise exception 'PHASE1_REQUIRED';
   end if;
 
@@ -131,13 +132,22 @@ insert into public.roster_membership_stints (
 select
   rm.id,
   coalesce(
-    rm.joined_at::date,
-    (
-      select min(g.date)::date
-      from public.player_game_stats pgs
-      join public.games g on g.id = pgs.game_id
-      where pgs.player_id = rm.player_id
-        and g.team_season_id = rm.team_season_id
+    least(
+      rm.joined_at::date,
+      (
+        select min(g.date)::date
+        from public.player_game_stats pgs
+        join public.games g on g.id = pgs.game_id
+        where pgs.player_id = rm.player_id
+          and g.team_season_id = rm.team_season_id
+      ),
+      (
+        select min(ge_game.date)::date
+        from public.game_events ge
+        join public.games ge_game on ge_game.id = ge.game_id
+        where ge.player_id = rm.player_id
+          and ge_game.team_season_id = rm.team_season_id
+      )
     ),
     (
       select min(g2.date)::date
@@ -147,7 +157,26 @@ select
     sc.start_date,
     rm.created_at::date
   ) as valid_from,
-  rm.left_at::date as valid_until,
+  case
+    when rm.left_at is null then null
+    else greatest(
+      rm.left_at::date,
+      (
+        select max(g3.date)::date
+        from public.player_game_stats pgs3
+        join public.games g3 on g3.id = pgs3.game_id
+        where pgs3.player_id = rm.player_id
+          and g3.team_season_id = rm.team_season_id
+      ),
+      (
+        select max(ge_game2.date)::date
+        from public.game_events ge2
+        join public.games ge_game2 on ge_game2.id = ge2.game_id
+        where ge2.player_id = rm.player_id
+          and ge_game2.team_season_id = rm.team_season_id
+      )
+    )
+  end as valid_until,
   'LEGACY_BACKFILL',
   'Inferred from pre-v3 roster/statistics; original rows preserved.'
 from public.roster_memberships rm
@@ -259,22 +288,20 @@ begin
     raise exception 'EXISTING_STATS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_count;
   end if;
 
-  if to_regclass('public.game_events') is not null then
-    select count(*)
-      into invalid_event_count
-    from public.game_events ge
-    join public.games g on g.id = ge.game_id
-    where ge.player_id is not null
-      and g.team_season_id is not null
-      and not public.iq_v3_player_eligible_on_date(
-        ge.player_id,
-        g.team_season_id,
-        g.date::date
-      );
+  select count(*)
+    into invalid_event_count
+  from public.game_events ge
+  join public.games g on g.id = ge.game_id
+  where ge.player_id is not null
+    and g.team_season_id is not null
+    and not public.iq_v3_player_eligible_on_date(
+      ge.player_id,
+      g.team_season_id,
+      g.date::date
+    );
 
-    if invalid_event_count <> 0 then
-      raise exception 'EXISTING_EVENTS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_event_count;
-    end if;
+  if invalid_event_count <> 0 then
+    raise exception 'EXISTING_EVENTS_OUTSIDE_INFERRED_ROSTER_STINTS: %', invalid_event_count;
   end if;
 end $$;
 
@@ -648,6 +675,17 @@ begin
       raise exception 'ROSTER_END_BEFORE_RECORDED_GAME';
     end if;
 
+    if exists (
+      select 1
+      from public.game_events ge
+      join public.games g on g.id = ge.game_id
+      where ge.player_id = p_player_id
+        and g.team_season_id = p_team_season_id
+        and g.date::date > effective_date
+    ) then
+      raise exception 'ROSTER_END_BEFORE_RECORDED_EVENT';
+    end if;
+
     update public.roster_membership_stints
        set valid_until = effective_date,
            updated_at = now()
@@ -682,6 +720,7 @@ declare
   membership_row public.roster_memberships;
   effective_date date := coalesce(p_last_eligible_date, current_date);
   has_stats boolean := false;
+  has_events boolean := false;
   has_any_stint boolean := false;
   has_non_seed_stint boolean := false;
 begin
@@ -722,6 +761,14 @@ begin
 
   select exists (
     select 1
+    from public.game_events ge
+    join public.games g on g.id = ge.game_id
+    where ge.player_id = p_player_id
+      and g.team_season_id = p_team_season_id
+  ) into has_events;
+
+  select exists (
+    select 1
     from public.roster_membership_stints rs
     where rs.roster_membership_id = membership_row.id
   ) into has_any_stint;
@@ -733,7 +780,9 @@ begin
       and upper(coalesce(rs.source, '')) not in ('SEASON_SEED','LEGACY_TEAM_SEED')
   ) into has_non_seed_stint;
 
-  if not has_stats and (not has_any_stint or not has_non_seed_stint) then
+  if not has_stats
+     and not has_events
+     and (not has_any_stint or not has_non_seed_stint) then
     delete from public.roster_membership_stints
     where roster_membership_id = membership_row.id;
 
@@ -994,6 +1043,7 @@ declare
   source_season_id uuid;
   target_membership_id uuid;
   target_has_stats boolean := false;
+  target_has_events boolean := false;
   target_has_non_seed_stint boolean := false;
 begin
   if auth.uid() is null then
@@ -1076,12 +1126,20 @@ begin
 
     select exists (
       select 1
+      from public.game_events ge
+      join public.games g on g.id = ge.game_id
+      where ge.player_id = p_player_id
+        and g.team_season_id = p_to_team_season_id
+    ) into target_has_events;
+
+    select exists (
+      select 1
       from public.roster_membership_stints rs
       where rs.roster_membership_id = target_membership_id
         and upper(coalesce(rs.source, '')) not in ('SEASON_SEED','LEGACY_TEAM_SEED')
     ) into target_has_non_seed_stint;
 
-    if target_has_stats or target_has_non_seed_stint then
+    if target_has_stats or target_has_events or target_has_non_seed_stint then
       raise exception 'PLAYER_ALREADY_HAS_REAL_TARGET_SEASON_PARTICIPATION';
     end if;
 
@@ -1248,21 +1306,19 @@ begin
     raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_PLAYER_ELIGIBILITY';
   end if;
 
-  if to_regclass('public.game_events') is not null then
-    select count(*)
-      into invalid_event_count
-    from public.game_events ge
-    where ge.game_id = new.id
-      and ge.player_id is not null
-      and not public.iq_v3_player_eligible_on_date(
-        ge.player_id,
-        new.team_season_id,
-        new.date::date
-      );
+  select count(*)
+    into invalid_event_count
+  from public.game_events ge
+  where ge.game_id = new.id
+    and ge.player_id is not null
+    and not public.iq_v3_player_eligible_on_date(
+      ge.player_id,
+      new.team_season_id,
+      new.date::date
+    );
 
-    if invalid_event_count <> 0 then
-      raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_EVENT_ELIGIBILITY';
-    end if;
+  if invalid_event_count <> 0 then
+    raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_EVENT_ELIGIBILITY';
   end if;
 
   return new;
