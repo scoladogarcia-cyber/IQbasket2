@@ -82,7 +82,9 @@ export class HeatmapAnalysisView {
 
     this.teamId = teamId || DataStore.getActiveTeamId();
     this.games = DataStore.getGames(this.teamId) || [];
-    this.players = DataStore.getPlayers(this.teamId) || [];
+    this.players = DataStore.getSeasonParticipantPlayers?.(this.teamId)
+      || DataStore.getPlayers(this.teamId)
+      || [];
     this.stats = DataStore.getPlayerGameStats() || [];
 
     if (this.activeMainTab === "player_report" && (this.selectedPlayerId === "all" || !this.selectedPlayerId) && this.players.length > 0) {
