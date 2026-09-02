@@ -619,6 +619,43 @@ class DataStoreService {
     return context?.name ? String(context.name) : "";
   }
 
+  _formatSeasonDisplayName(value = "") {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^(\d{4})\s*[-\/]\s*(\d{4})$/);
+    return match ? `${match[1]}/${match[2]}` : raw;
+  }
+
+  getActiveSeasonDisplayName(teamId = null) {
+    const targetTeamId = String(teamId || this.getActiveTeamId() || "");
+    const context = this.getActiveSeasonContext(targetTeamId);
+
+    if (context?.source === "v3" && context?.name) {
+      return this._formatSeasonDisplayName(context.name);
+    }
+
+    // Compatibilidad robusta: si el runtime ha cargado un único season_id real
+    // en los partidos visibles, ese contexto prevalece sobre una selección legacy
+    // obsoleta guardada en localStorage.
+    const gameSeasonIds = [...new Set(
+      (this.games || [])
+        .filter(game => !targetTeamId || String(game.team_id || game.teamId || "") === targetTeamId)
+        .map(game => game.season_id || game.seasonId)
+        .filter(Boolean)
+        .map(String)
+    )];
+
+    if (gameSeasonIds.length === 1) {
+      const matchingLegacy = (this.legacySeasons || this.seasons || []).find(
+        season => String(season.id || "") === gameSeasonIds[0]
+      );
+      if (matchingLegacy?.name) {
+        return this._formatSeasonDisplayName(matchingLegacy.name);
+      }
+    }
+
+    return this._formatSeasonDisplayName(context?.name || this.getActiveSeason() || "");
+  }
+
   getActiveSeasonContext(teamId = null) {
     const targetTeamId = String(teamId || this.getActiveTeamId() || "");
     const stored = typeof localStorage !== "undefined"
