@@ -165,7 +165,9 @@ export class ReportsView {
     if (!games.length) return null;
 
     const activeTeamId = DataStore.getActiveTeamId?.();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
 
     // Modo: Todos los partidos combinados (Promedio por partido)
     if (this.selectedGameId === "all") {
@@ -267,7 +269,9 @@ export class ReportsView {
 
   _getSeasonStatsList() {
     const activeTeamId = DataStore.getActiveTeamId?.();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
     const games = this._getFilteredGames();
     const gameIds = new Set(games.map(g => String(g.id)));
 
@@ -801,7 +805,9 @@ export class ReportsView {
     const teamObj = DataStore.getTeamById?.(activeTeamId) || {};
     const teamName = teamObj.name || "JMJ Manyanet Sant Andreu";
     const allGames = this._getFilteredGames();
-    const allPlayers = DataStore.getPlayers?.(activeTeamId) || [];
+    const allPlayers = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
     const seasonList = this._getSeasonStatsList();
 
     const selectedGames = allGames.filter(g => this.dossierConfig.selectedGameIds.includes(String(g.id)));
@@ -907,7 +913,9 @@ export class ReportsView {
     const activeTeamId = DataStore.getActiveTeamId?.();
     const canExport = Boolean(this.auth?.canPreview?.(Permission.EXPORT_REPORT, { teamId: activeTeamId }));
     const games = this._getFilteredGames();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
 
     if (this.dossierConfig.selectedPlayerIds.length === 0 && players.length > 0) {
       this.dossierConfig.selectedPlayerIds = players.map(p => String(p.id));
