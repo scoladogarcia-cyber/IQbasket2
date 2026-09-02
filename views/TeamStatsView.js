@@ -31,12 +31,12 @@ export class TeamStatsView {
       const activeTeamId = teamId || DataStore.getActiveTeamId();
       const activeTeam = DataStore.getTeamById(activeTeamId) || {};
       
-      const activeSeason = DataStore.getActiveSeason ? DataStore.getActiveSeason() : "2026";
-      const activeSeasonId = DataStore.getActiveSeasonId?.(activeTeamId) || null;
-      const allGames = DataStore.getGames(activeTeamId) || [];
-      const games = activeSeasonId
-        ? allGames.filter(g => String(g.season_id || g.seasonId || "") === String(activeSeasonId))
-        : allGames;
+      const activeSeason = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
+        || DataStore.getActiveSeason?.()
+        || "Sin temporada";
+      const games = DataStore.getGamesForActiveSeason?.(activeTeamId)
+        || DataStore.getGames(activeTeamId)
+        || [];
       const players = DataStore.getPlayers(activeTeamId) || [];
       const gameIds = new Set(games.map(g => String(g.id)));
       const allPlayerStats = DataStore.getPlayerGameStats() || [];
@@ -264,7 +264,9 @@ export class TeamStatsView {
     const teamName = team.name || "Equipo";
     const teamCategory = team.category || "General";
     const teamCompetition = team.competition || "Liga";
-    const activeSeason = DataStore.getActiveSeason ? DataStore.getActiveSeason() : "2026";
+    const activeSeason = DataStore.getActiveSeasonDisplayName?.(team.id || teamId)
+      || DataStore.getActiveSeason?.()
+      || "Sin temporada";
     const teamCoach = DataStore.getTeamCoach?.(team.id || teamId, activeSeason) || team.coach_name || "Por definir";
     const teamPeriods = team.periods_count ? `${team.periods_count} × ${team.period_minutes || 10} min` : "4 × 10 min";
     const teamColor = team.color || "#1e3a8a";
