@@ -1,0 +1,61 @@
+name: Phase 3E UI Smoke
+
+on:
+  push:
+    branches:
+      - feature/season-roster-history-v2
+    paths:
+      - "views/TranslationsView.js"
+      - "services/transfers/TransferRequestService.js"
+      - "tests/phase3e-ui-smoke.mjs"
+      - ".github/workflows/phase3e-ui-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Browser smoke desktop + mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without changing package files
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite preview
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/iqbasket-vite.log 2>&1 &
+          echo $! > /tmp/iqbasket-vite.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/iqbasket-vite.log
+          exit 1
+
+      - name: Run Phase 3E browser smoke
+        env:
+          PHASE3E_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/phase3e-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/iqbasket-vite.log || true
