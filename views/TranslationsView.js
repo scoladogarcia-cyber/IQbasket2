@@ -715,6 +715,8 @@ export class TranslationsView {
       || normalizeIsoDate(currentActiveSeasonContext?.start_date)
       || normalizeIsoDate(currentActiveSeasonContext?.end_date)
       || todayLocalIsoDate();
+    const rosterSeasonContext = this.rosterState?.context || currentActiveSeasonContext;
+    const rosterSeasonBounds = seasonDateBounds(rosterSeasonContext);
 
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
@@ -1079,7 +1081,7 @@ export class TranslationsView {
                     </div>
                     <div class="form-group">
                       <label>Primer día elegible *</label>
-                      <input type="date" id="add-p-effective-date" value="${rosterReferenceDate || ''}" required />
+                      <input type="date" id="add-p-effective-date" value="${rosterReferenceDate || ''}" ${rosterSeasonBounds.start ? `min="${rosterSeasonBounds.start}"` : ''} ${rosterSeasonBounds.end ? `max="${rosterSeasonBounds.end}"` : ''} required />
                     </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
                       <button type="submit" class="btn-secondary" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'}>+ Crear y Añadir a la Plantilla</button>
@@ -1772,6 +1774,9 @@ export class TranslationsView {
 
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
         if (!effectiveDate) return alert("Indica el primer día en que el jugador será elegible.");
+        if (!isDateInsideSeason(effectiveDate, rosterSeasonContext)) {
+          return alert("⚠️ El primer día elegible debe estar dentro de las fechas de la temporada.");
+        }
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
         this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla de la temporada...");
@@ -1905,6 +1910,10 @@ export class TranslationsView {
         const lastEligibleDate = normalizeIsoDate(requestedLastDate);
         if (!lastEligibleDate) {
           alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
+        if (!isDateInsideSeason(lastEligibleDate, rosterSeasonContext)) {
+          alert("⚠️ El último día elegible debe estar dentro de las fechas de la temporada.");
           return;
         }
 
