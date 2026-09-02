@@ -1733,6 +1733,8 @@ export class TranslationsView {
             teamSeasonId: rosterTeamSeasonId,
             playerId
           });
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
           this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
           this.hideSyncOverlay();
           await this.render(containerId);
@@ -1755,6 +1757,8 @@ export class TranslationsView {
             teamSeasonId: rosterTeamSeasonId,
             playerId
           });
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
           this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
           this.hideSyncOverlay();
           await this.render(containerId);
