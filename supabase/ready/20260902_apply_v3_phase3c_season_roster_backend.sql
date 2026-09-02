@@ -330,7 +330,16 @@ begin
   effective_start := coalesce(p_effective_date, target_start, current_date);
 
   select ts2.id,
-         coalesce(sc2.end_date, target_start - 1, effective_start)
+         coalesce(
+           sc2.end_date,
+           (
+             select max(gsrc.date)::date
+             from public.games gsrc
+             where gsrc.team_season_id = ts2.id
+           ),
+           target_start - 1,
+           effective_start
+         )
     into source_team_season_id, source_cutoff
   from public.team_seasons ts2
   join public.season_catalog sc2 on sc2.id = ts2.season_id
@@ -501,7 +510,7 @@ begin
   ) then
     perform public.iq_v3_seed_team_season_roster(
       p_team_season_id,
-      effective_date
+      null
     );
   end if;
 
