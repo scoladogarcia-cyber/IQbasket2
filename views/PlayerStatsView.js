@@ -779,7 +779,9 @@ export class PlayerStatsView {
     if (!container) return;
 
     const targetTeamId = teamId || DataStore.getActiveTeamId();
-    this.players = DataStore.getPlayers(targetTeamId) || [];
+    this.players = DataStore.getSeasonParticipantPlayers?.(targetTeamId)
+      || DataStore.getPlayers(targetTeamId)
+      || [];
 
     const gamesList = DataStore.getGamesForActiveSeason?.(targetTeamId)
       || DataStore.getGames(targetTeamId)
