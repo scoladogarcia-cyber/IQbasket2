@@ -992,6 +992,9 @@ declare
   source_team_id uuid;
   target_season_id uuid;
   source_season_id uuid;
+  target_membership_id uuid;
+  target_has_stats boolean := false;
+  target_has_non_seed_stint boolean := false;
 begin
   if auth.uid() is null then
     raise exception 'AUTH_REQUIRED';
@@ -1037,6 +1040,56 @@ begin
     p_last_date_from
   ) then
     raise exception 'PLAYER_NOT_ACTIVE_IN_SOURCE_ON_TRANSFER_END_DATE';
+  end if;
+
+  -- Materialize the destination's inherited roster before validating it. A
+  -- player inherited there from the previous season must not become eligible
+  -- from season start merely because they transfer back later.
+  if not exists (
+    select 1
+    from public.roster_memberships rm0
+    where rm0.team_season_id = p_to_team_season_id
+  ) then
+    perform public.iq_v3_seed_team_season_roster(p_to_team_season_id, null);
+  end if;
+
+  select rm.id
+    into target_membership_id
+  from public.roster_memberships rm
+  where rm.team_season_id = p_to_team_season_id
+    and rm.player_id = p_player_id;
+
+  if target_membership_id is not null
+     and public.iq_v3_player_eligible_on_date(
+       p_player_id,
+       p_to_team_season_id,
+       p_last_date_from
+     ) then
+
+    select exists (
+      select 1
+      from public.player_game_stats pgs
+      join public.games g on g.id = pgs.game_id
+      where pgs.player_id = p_player_id
+        and g.team_season_id = p_to_team_season_id
+    ) into target_has_stats;
+
+    select exists (
+      select 1
+      from public.roster_membership_stints rs
+      where rs.roster_membership_id = target_membership_id
+        and upper(coalesce(rs.source, '')) not in ('SEASON_SEED','LEGACY_TEAM_SEED')
+    ) into target_has_non_seed_stint;
+
+    if target_has_stats or target_has_non_seed_stint then
+      raise exception 'PLAYER_ALREADY_HAS_REAL_TARGET_SEASON_PARTICIPATION';
+    end if;
+
+    perform public.iq_v3_remove_roster_member(
+      p_to_team_season_id,
+      p_player_id,
+      null
+    );
   end if;
 
   perform public.iq_v3_set_roster_member(
