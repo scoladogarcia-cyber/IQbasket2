@@ -392,6 +392,71 @@ $$;
 revoke all on function public.iq_v3_create_player_for_roster(uuid,text,text,integer,text) from public;
 grant execute on function public.iq_v3_create_player_for_roster(uuid,text,text,integer,text) to authenticated;
 
+-- -----------------------------------------------------------------------------
+-- 6. Future links: seed a newly linked team-season from the previous roster.
+-- Existing team-seasons remain untouched until their first explicit roster change.
+-- -----------------------------------------------------------------------------
+create or replace function public.iq_v3_link_team_season(
+  p_team_id uuid,
+  p_season_id uuid
+)
+returns public.team_seasons
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  result_row public.team_seasons;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if not public.iq_v3_is_global_superadmin() then
+    raise exception 'SUPERADMIN_REQUIRED';
+  end if;
+
+  if not exists (select 1 from public.teams t where t.id = p_team_id) then
+    raise exception 'TEAM_NOT_FOUND';
+  end if;
+
+  if not exists (select 1 from public.season_catalog s where s.id = p_season_id) then
+    raise exception 'SEASON_NOT_FOUND';
+  end if;
+
+  insert into public.team_seasons (
+    team_id,
+    season_id,
+    status,
+    data_status
+  )
+  values (
+    p_team_id,
+    p_season_id,
+    'ACTIVE',
+    'ACTIVE'
+  )
+  on conflict (team_id, season_id)
+  do update set
+    status = 'ACTIVE',
+    updated_at = now()
+  returning * into result_row;
+
+  if not exists (
+    select 1
+    from public.roster_memberships rm
+    where rm.team_season_id = result_row.id
+  ) then
+    perform public.iq_v3_seed_team_season_roster(result_row.id);
+  end if;
+
+  return result_row;
+end;
+$;
+
+revoke all on function public.iq_v3_link_team_season(uuid,uuid) from public;
+grant execute on function public.iq_v3_link_team_season(uuid,uuid) to authenticated;
+
 commit;
 
 select
