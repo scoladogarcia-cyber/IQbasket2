@@ -117,6 +117,7 @@ export class RosterManagementService {
         stints: [],
         activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
         seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
+        historicalPlayers: [],
         availablePlayers: []
       };
     }
@@ -140,6 +141,7 @@ export class RosterManagementService {
         stints: [],
         activePlayers: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
         seasonParticipants: fallbackPlayers.map(player => this._applyMembership(player, null, [], true, referenceDate)),
+        historicalPlayers: [],
         availablePlayers: []
       };
     }
@@ -197,12 +199,22 @@ export class RosterManagementService {
     });
 
     const activePlayers = seasonParticipants.filter(player => player.rosterActiveNow);
+    const historicalPlayers = seasonParticipants.filter(player => {
+      if (player.rosterActiveNow) return false;
+      return (player.rosterStints || []).length > 0
+        || Boolean(player.rosterFirstFrom)
+        || Boolean(player.rosterLastUntil);
+    });
 
-    const activeIds = new Set(activePlayers.map(player => String(player.id)));
+    const historicalIds = new Set(historicalPlayers.map(player => String(player.id)));
     const participantIds = new Set(seasonParticipants.map(player => String(player.id)));
 
+    // Only audit-only exclusions and players with no membership in this season
+    // belong in "available". Real former participants are shown separately.
     const availablePlayers = [
-      ...seasonParticipants.filter(player => !activeIds.has(String(player.id))),
+      ...seasonParticipants.filter(player =>
+        !player.rosterActiveNow && !historicalIds.has(String(player.id))
+      ),
       ...fallbackPlayers
         .filter(player => !participantIds.has(String(player.id)))
         .map(player => this._applyMembership(player, null, [], false, referenceDate))
@@ -219,6 +231,7 @@ export class RosterManagementService {
       membershipByPlayer,
       activePlayers,
       seasonParticipants,
+      historicalPlayers,
       availablePlayers
     };
   }
