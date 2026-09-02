@@ -799,6 +799,109 @@ revoke all on function public.iq_v3_link_team_season(uuid,uuid) from public;
 grant execute on function public.iq_v3_link_team_season(uuid,uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
+-- 9B. Atomic transfer between team-seasons.
+-- Initial policy: SUPERADMIN only. Future workflow can add dual approval without
+-- changing the temporal roster model.
+-- -----------------------------------------------------------------------------
+create or replace function public.iq_v3_transfer_player(
+  p_player_id uuid,
+  p_from_team_season_id uuid,
+  p_to_team_season_id uuid,
+  p_last_date_from date,
+  p_first_date_to date,
+  p_new_jersey integer default null,
+  p_new_primary_position text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  target_team_id uuid;
+  source_team_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+
+  if not public.iq_v3_is_global_superadmin() then
+    raise exception 'SUPERADMIN_REQUIRED_FOR_TRANSFER';
+  end if;
+
+  if p_from_team_season_id = p_to_team_season_id then
+    raise exception 'SOURCE_AND_TARGET_SCOPE_MUST_DIFFER';
+  end if;
+
+  if p_last_date_from is null or p_first_date_to is null then
+    raise exception 'TRANSFER_DATES_REQUIRED';
+  end if;
+
+  if p_first_date_to <= p_last_date_from then
+    raise exception 'TARGET_START_MUST_BE_AFTER_SOURCE_END';
+  end if;
+
+  select ts.team_id
+    into source_team_id
+  from public.team_seasons ts
+  where ts.id = p_from_team_season_id;
+
+  select ts.team_id
+    into target_team_id
+  from public.team_seasons ts
+  where ts.id = p_to_team_season_id;
+
+  if source_team_id is null or target_team_id is null then
+    raise exception 'TEAM_SEASON_NOT_FOUND';
+  end if;
+
+  if not public.iq_v3_player_eligible_on_date(
+    p_player_id,
+    p_from_team_season_id,
+    p_last_date_from
+  ) then
+    raise exception 'PLAYER_NOT_ACTIVE_IN_SOURCE_ON_TRANSFER_END_DATE';
+  end if;
+
+  perform public.iq_v3_set_roster_member(
+    p_from_team_season_id,
+    p_player_id,
+    'INACTIVE',
+    null,
+    null,
+    p_last_date_from
+  );
+
+  perform public.iq_v3_set_roster_member(
+    p_to_team_season_id,
+    p_player_id,
+    'ACTIVE',
+    p_new_jersey,
+    p_new_primary_position,
+    p_first_date_to
+  );
+
+  -- Legacy/current-team hint only. Historical truth remains in memberships/stints.
+  update public.players
+     set team_id = target_team_id,
+         status = 'Activo',
+         updated_at = now()
+   where id = p_player_id;
+
+  return jsonb_build_object(
+    'player_id', p_player_id,
+    'from_team_season_id', p_from_team_season_id,
+    'to_team_season_id', p_to_team_season_id,
+    'last_date_from', p_last_date_from,
+    'first_date_to', p_first_date_to
+  );
+end;
+$;
+
+revoke all on function public.iq_v3_transfer_player(uuid,uuid,uuid,date,date,integer,text) from public;
+grant execute on function public.iq_v3_transfer_player(uuid,uuid,uuid,date,date,integer,text) to authenticated;
+
+-- -----------------------------------------------------------------------------
 -- 10. DB guards
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v3_validate_player_game_stat_eligibility()
@@ -902,6 +1005,7 @@ where routine_schema = 'public'
     'iq_v3_seed_team_season_roster',
     'iq_v3_set_roster_member',
     'iq_v3_create_player_for_roster',
+    'iq_v3_transfer_player',
     'iq_v3_validate_player_game_stat_eligibility',
     'iq_v3_validate_game_roster_eligibility'
   )
