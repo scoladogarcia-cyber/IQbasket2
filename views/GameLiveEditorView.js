@@ -68,7 +68,10 @@ export class GameLiveEditorView {
     if (!container) return;
 
     this.teamId = teamId || DataStore.getActiveTeamId();
-    this.players = DataStore.getPlayers(this.teamId) || [];
+    this.players = DataStore.getPlayersEligibleOnDate?.(
+      this.teamId,
+      new Date().toISOString().slice(0, 10)
+    ) || DataStore.getPlayers(this.teamId) || [];
 
     if (gameId && gameId !== this.teamId) {
       await this._openEditForm(gameId, container);
@@ -315,6 +318,17 @@ export class GameLiveEditorView {
   }
 async _openEditForm(gameId, container) {
     this.currentGame = DataStore.getGameById(gameId) || {};
+
+    const gameTeamId = this.currentGame.team_id || this.currentGame.teamId || this.teamId;
+    const eligiblePlayers = DataStore.getPlayersEligibleOnDate?.(
+      gameTeamId,
+      this.currentGame.date
+    ) || DataStore.getPlayers(gameTeamId) || [];
+    const seasonParticipants = DataStore.getSeasonParticipantPlayers?.(gameTeamId)
+      || DataStore.getPlayers(gameTeamId)
+      || [];
+    this.players = eligiblePlayers;
+
     let existingPeriods = DataStore.getGamePeriodScores(gameId) || [];
 
     // Si no estaban cargados por separado, extraerlos del objeto de partido
@@ -341,6 +355,21 @@ async _openEditForm(gameId, container) {
     }
 
     const pStats = DataStore.getPlayerGameStats(null, gameId) || [];
+
+    // Historical truth is preserved: if a legacy game already contains stats
+    // for a player, keep that player visible even if a later roster correction
+    // makes the inferred stint incomplete.
+    const playerMap = new Map(this.players.map(player => [String(player.id), player]));
+    pStats.forEach(stat => {
+      const playerId = String(stat.player_id ?? stat.playerId ?? "");
+      if (!playerId || playerMap.has(playerId)) return;
+      const historicalPlayer = seasonParticipants.find(
+        player => String(player.id) === playerId
+      );
+      if (historicalPlayer) playerMap.set(playerId, historicalPlayer);
+    });
+    this.players = [...playerMap.values()];
+
     this.currentGameStats = this.players.map(p => {
       const existing = pStats.find(s => String(s.player_id ?? s.playerId) === String(p.id));
       return existing ? { ...existing } : {
