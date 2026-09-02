@@ -664,6 +664,32 @@ class DataStoreService {
     return this._resolveSeasonContext(stored, targetTeamId);
   }
 
+  async getAllTeamSeasonContexts({ status = "ACTIVE" } = {}) {
+    if (!this.seasonContextService) return [];
+
+    const teams = this.getTeams() || [];
+    if (teams.length === 0) return [];
+
+    const settled = await Promise.allSettled(
+      teams
+        .filter(team => team?.id)
+        .map(async (team) => {
+          const contexts = await this.seasonContextService.listByTeam(team.id, { status });
+          return (contexts || []).map(context => ({
+            ...context,
+            team_name: team.name || "Equipo",
+            team_category: team.category || "",
+            team_competition: team.competition || "",
+            team_club_id: team.club_id || team.clubId || null
+          }));
+        })
+    );
+
+    return settled
+      .filter(result => result.status === "fulfilled")
+      .flatMap(result => result.value || []);
+  }
+
   // Compatibilidad: games.season_id sigue apuntando a public.seasons durante
   // la transición, por lo que este getter devuelve el ID legacy.
   getActiveSeasonId(teamId = null) {
