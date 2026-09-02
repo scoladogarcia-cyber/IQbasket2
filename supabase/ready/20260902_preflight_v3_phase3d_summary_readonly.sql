@@ -45,8 +45,11 @@ season_pairs as (
   having count(*) >= 2
 ),
 transferable_candidates as (
-  select count(*) as candidate_count
+  select count(distinct rm.id) as candidate_count
   from public.roster_memberships rm
+  join public.roster_membership_stints rs
+    on rs.roster_membership_id = rm.id
+   and rs.valid_until is null
   join public.team_seasons src on src.id = rm.team_season_id
   where exists (
     select 1
