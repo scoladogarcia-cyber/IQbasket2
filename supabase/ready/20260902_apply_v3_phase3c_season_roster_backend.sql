@@ -500,6 +500,8 @@ declare
   membership_row public.roster_memberships;
   player_row public.players;
   open_stint_id uuid;
+  season_start date;
+  season_end date;
 begin
   if auth.uid() is null then
     raise exception 'AUTH_REQUIRED';
@@ -511,6 +513,20 @@ begin
 
   if normalized_status not in ('ACTIVE','INACTIVE') then
     raise exception 'INVALID_ROSTER_STATUS';
+  end if;
+
+  select sc.start_date, sc.end_date
+    into season_start, season_end
+  from public.team_seasons ts
+  join public.season_catalog sc on sc.id = ts.season_id
+  where ts.id = p_team_season_id;
+
+  if season_start is not null and effective_date < season_start then
+    raise exception 'ROSTER_DATE_BEFORE_SEASON_START';
+  end if;
+
+  if season_end is not null and effective_date > season_end then
+    raise exception 'ROSTER_DATE_AFTER_SEASON_END';
   end if;
 
   select p.*
@@ -779,6 +795,8 @@ as $$
 declare
   target_team_id uuid;
   effective_date date := coalesce(p_effective_date, current_date);
+  season_start date;
+  season_end date;
   created_player public.players;
   created_membership public.roster_memberships;
   created_stint public.roster_membership_stints;
@@ -791,13 +809,22 @@ begin
     raise exception 'TEAM_SEASON_MANAGE_DENIED';
   end if;
 
-  select ts.team_id
-    into target_team_id
+  select ts.team_id, sc.start_date, sc.end_date
+    into target_team_id, season_start, season_end
   from public.team_seasons ts
+  join public.season_catalog sc on sc.id = ts.season_id
   where ts.id = p_team_season_id;
 
   if target_team_id is null then
     raise exception 'TEAM_SEASON_NOT_FOUND';
+  end if;
+
+  if season_start is not null and effective_date < season_start then
+    raise exception 'ROSTER_DATE_BEFORE_SEASON_START';
+  end if;
+
+  if season_end is not null and effective_date > season_end then
+    raise exception 'ROSTER_DATE_AFTER_SEASON_END';
   end if;
 
   if nullif(trim(coalesce(p_first_name,'')), '') is null
@@ -963,6 +990,8 @@ as $$
 declare
   target_team_id uuid;
   source_team_id uuid;
+  target_season_id uuid;
+  source_season_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'AUTH_REQUIRED';
@@ -984,18 +1013,22 @@ begin
     raise exception 'TARGET_START_MUST_BE_AFTER_SOURCE_END';
   end if;
 
-  select ts.team_id
-    into source_team_id
+  select ts.team_id, ts.season_id
+    into source_team_id, source_season_id
   from public.team_seasons ts
   where ts.id = p_from_team_season_id;
 
-  select ts.team_id
-    into target_team_id
+  select ts.team_id, ts.season_id
+    into target_team_id, target_season_id
   from public.team_seasons ts
   where ts.id = p_to_team_season_id;
 
   if source_team_id is null or target_team_id is null then
     raise exception 'TEAM_SEASON_NOT_FOUND';
+  end if;
+
+  if source_season_id is distinct from target_season_id then
+    raise exception 'TRANSFER_REQUIRES_SAME_GLOBAL_SEASON';
   end if;
 
   if not public.iq_v3_player_eligible_on_date(
@@ -1142,6 +1175,7 @@ set search_path = ''
 as $$
 declare
   invalid_count bigint;
+  invalid_event_count bigint;
 begin
   if new.team_season_id is null then
     return new;
@@ -1159,6 +1193,23 @@ begin
 
   if invalid_count <> 0 then
     raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_PLAYER_ELIGIBILITY';
+  end if;
+
+  if to_regclass('public.game_events') is not null then
+    select count(*)
+      into invalid_event_count
+    from public.game_events ge
+    where ge.game_id = new.id
+      and ge.player_id is not null
+      and not public.iq_v3_player_eligible_on_date(
+        ge.player_id,
+        new.team_season_id,
+        new.date::date
+      );
+
+    if invalid_event_count <> 0 then
+      raise exception 'GAME_DATE_OR_SCOPE_INVALIDATES_EVENT_ELIGIBILITY';
+    end if;
   end if;
 
   return new;
