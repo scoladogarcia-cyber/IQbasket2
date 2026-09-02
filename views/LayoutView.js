@@ -920,25 +920,25 @@ export class LayoutView {
             background-color: #ffffff;
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
-            padding: 20px;
-            padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-            max-height: calc(100dvh - max(env(safe-area-inset-top, 0px), 12px));
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            overscroll-behavior: contain;
+            padding: 16px;
+            padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+            max-height: min(82dvh, 720px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+            touch-action: pan-y;
           }
 
           .drawer-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
-            flex: 0 0 auto;
+            margin-bottom: 12px;
             position: sticky;
-            top: 0;
+            top: -16px;
             background: #ffffff;
             z-index: 2;
+            padding: 12px 0 8px;
           }
 
           .drawer-title {
@@ -959,19 +959,14 @@ export class LayoutView {
           .drawer-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            overscroll-behavior: contain;
-            min-height: 0;
-            padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+            gap: 8px;
           }
 
           .drawer-item {
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 12px;
+            padding: 9px 10px;
             background-color: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
@@ -979,7 +974,7 @@ export class LayoutView {
             color: #0f172a;
             font-weight: 600;
             font-size: 13px;
-            min-height: 48px;
+            min-height: 44px;
             box-sizing: border-box;
             touch-action: manipulation;
           }
