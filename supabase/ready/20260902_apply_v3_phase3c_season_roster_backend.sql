@@ -1171,8 +1171,7 @@ begin
   -- Legacy/current-team hint only. Historical truth remains in memberships/stints.
   update public.players
      set team_id = target_team_id,
-         status = 'Activo',
-         updated_at = now()
+         status = 'Activo'
    where id = p_player_id;
 
   return jsonb_build_object(
