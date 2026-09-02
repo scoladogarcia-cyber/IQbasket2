@@ -94,7 +94,11 @@ export class LiveScoreHUDView {
     }
 
     const activeTeamId = DataStore.getActiveTeamId ? DataStore.getActiveTeamId() : null;
-    const allPlayers = (DataStore.getPlayers ? (DataStore.getPlayers(activeTeamId) || DataStore.getPlayers()) : []) || [];
+    const allPlayers = (
+      DataStore.getPlayersEligibleOnDate
+        ? (DataStore.getPlayersEligibleOnDate(activeTeamId, new Date().toISOString().slice(0, 10)) || [])
+        : (DataStore.getPlayers?.(activeTeamId) || DataStore.getPlayers?.() || [])
+    );
 
     if (this.roster.length === 0 && allPlayers.length > 0) {
       this.roster = allPlayers.map((p, idx) => ({
