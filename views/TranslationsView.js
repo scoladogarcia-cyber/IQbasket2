@@ -455,7 +455,7 @@ export class TranslationsView {
 
   async _refreshTransferRequests(targetTeamSeasonId = null) {
     try {
-      this.transferRequestCapabilities = await this.transferRequestService.getCapabilities();
+      this.transferRequestCapabilities = await this.transferRequestService.getCapabilities({ force: true });
       if (!this.transferRequestCapabilities?.ready || !targetTeamSeasonId) {
         this.transfers = [];
         return this.transfers;
@@ -710,6 +710,9 @@ export class TranslationsView {
       rosterBackendReady && this.rosterState?.capabilities?.supports_seed_exclusion
     );
     const transferRequestReady = Boolean(this.transferRequestCapabilities?.ready);
+    const transferMarketReady = Boolean(
+      transferRequestReady && this.transferRequestCapabilities?.market_directory
+    );
     const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
     const rosterReferenceDate = this.rosterState?.referenceDate
       || normalizeIsoDate(currentActiveSeasonContext?.start_date)
@@ -1046,7 +1049,7 @@ export class TranslationsView {
               ` : ''}
 
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
-              ${this._can("REQUEST_TRANSFERS") && transferRequestReady ? `
+              ${this._can("REQUEST_TRANSFERS") && transferMarketReady ? `
               <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
                   <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
