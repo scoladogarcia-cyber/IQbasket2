@@ -59,7 +59,10 @@ export class EasyStatsEntryView {
 
     const allGames = DataStore.getGames() || [];
     this.game = (this.gameId ? allGames.find(g => String(g.id) === String(this.gameId)) : null) || allGames[0] || {};
-    this.players = DataStore.getPlayers(this.game.team_id || DataStore.getActiveTeamId()) || [];
+    this.players = DataStore.getPlayersEligibleOnDate?.(
+      this.game.team_id || DataStore.getActiveTeamId(),
+      this.game.date
+    ) || DataStore.getPlayers(this.game.team_id || DataStore.getActiveTeamId()) || [];
     this.gameStats = DataStore.getPlayerGameStats(null, this.game.id) || [];
     this.periodScores = DataStore.getGamePeriodScores(this.game.id) || [];
 
