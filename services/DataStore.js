@@ -1227,12 +1227,53 @@ class DataStoreService {
       team_season_id: targetTeamSeasonId
     });
 
+    // Validación temporal ANTES de tocar memoria o Supabase.
+    const formattedStats = statsList.map((st) =>
+      this._normalizeStat({ ...st, game_id: gId })
+    );
+    const eligiblePlayerIds = new Set(
+      this.getPlayersEligibleOnDate(targetTeamId, normalizedGame.date)
+        .map(player => String(player.id))
+    );
+
+    const invalidStatPlayerIds = [...new Set(
+      formattedStats
+        .map(stat => String(stat.player_id || stat.playerId || ""))
+        .filter(playerId => playerId && !eligiblePlayerIds.has(playerId))
+    )];
+
+    const invalidEventPlayerIds = [...new Set(
+      (liveEvents || [])
+        .map(event => String(event.player_id || event.playerId || ""))
+        .filter(playerId => playerId && !eligiblePlayerIds.has(playerId))
+    )];
+
+    const starterIds = Array.isArray(gameData.starter_ids || gameData.starterIds)
+      ? (gameData.starter_ids || gameData.starterIds).map(String)
+      : [];
+    const invalidStarterIds = starterIds.filter(playerId => !eligiblePlayerIds.has(playerId));
+
+    const invalidPlayerIds = [...new Set([
+      ...invalidStatPlayerIds,
+      ...invalidEventPlayerIds,
+      ...invalidStarterIds
+    ])];
+
+    if (invalidPlayerIds.length > 0) {
+      const names = invalidPlayerIds.map(playerId => {
+        const player = this.getPlayerById(playerId);
+        return player?.name || [player?.first_name, player?.last_name].filter(Boolean).join(" ") || playerId;
+      });
+      throw new Error(
+        `Hay jugadores no elegibles para este equipo en la fecha ${normalizedGame.date}: ${names.join(", ")}.`
+      );
+    }
+
     // 1. Estado en memoria local
     const gIdx = this.games.findIndex((g) => String(g.id) === String(gId));
     if (gIdx >= 0) this.games[gIdx] = normalizedGame;
     else this.games.unshift(normalizedGame);
 
-    const formattedStats = statsList.map((st) => this._normalizeStat({ ...st, game_id: gId }));
     this.playerGameStats = this.playerGameStats.filter((s) => String(s.game_id || s.gameId) !== String(gId));
     this.playerGameStats.push(...formattedStats);
 
