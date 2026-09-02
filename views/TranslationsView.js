@@ -1027,14 +1027,16 @@ export class TranslationsView {
                   <div class="card-title" style="color: #b45309;"><span>📩</span> SOLICITUDES DE TRASPASO PENDIENTES (${pendingTransfersList.length})</div>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead><tr><th>Jugador</th><th>Equipo Solicitante</th><th style="text-align: right;">Acciones</th></tr></thead>
+                      <thead><tr><th>Jugador</th><th>Origen</th><th>Destino</th><th style="text-align: right;">Acciones</th></tr></thead>
                       <tbody>
                         ${pendingTransfersList.map(tr => {
+                          const originTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.originTeamId).toLowerCase());
                           const targetTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.targetTeamId).toLowerCase());
                           return `
                             <tr>
                               <td><strong>${tr.playerName}</strong></td>
-                              <td><span class="badge-category">${targetTeam ? targetTeam.name : 'Nuevo Equipo'}</span></td>
+                              <td><span class="badge-category">${originTeam ? originTeam.name : 'Equipo origen'}</span></td>
+                              <td><span class="badge-active-team">${targetTeam ? targetTeam.name : 'Equipo destino'}</span></td>
                               <td style="text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
                                 <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background: #16a34a; color: white;">🟢 Aprobar Traspaso</button>
                                 <button type="button" class="btn-reject-transfer btn-danger-sm" data-id="${tr.id}">🔴 Rechazar</button>
@@ -1061,9 +1063,11 @@ export class TranslationsView {
               </div>
               ` : ''}
 
-              ${this._can("REQUEST_TRANSFERS") && !transferRequestReady ? `
+              ${this._can("REQUEST_TRANSFERS") && !transferMarketReady ? `
                 <div class="read-only-banner">
-                  El mercado de fichajes está en modo lectura hasta aplicar la Fase 3D de solicitudes persistentes.
+                  ${transferRequestReady
+                    ? 'El directorio seguro del mercado todavía no está disponible. Las solicitudes existentes siguen operativas, pero las nuevas búsquedas quedan desactivadas.'
+                    : 'El backend persistente de traspasos todavía no está disponible. El mercado queda desactivado para evitar solicitudes locales no auditables.'}
                 </div>
               ` : ''}
 
@@ -1187,13 +1191,16 @@ export class TranslationsView {
                       </select>
                     </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
-                      <label>Estado del Jugador</label>
+                      <label>Estado general del jugador</label>
                       <select id="edit-p-status" ${isReadOnly ? 'disabled' : ''}>
                         <option value="Activo">Activo</option>
                         <option value="Lesionado">Lesionado</option>
                         <option value="Inactivo">Inactivo</option>
-                        <option value="TRASPASADO">Traspasado (Histórico)</option>
+                        <option value="TRASPASADO">Traspasado (estado legacy)</option>
                       </select>
+                      <small style="font-size:10px;color:#64748b;line-height:1.35;">
+                        Este estado descriptivo no cambia la elegibilidad por temporada. Para dar de baja o reincorporar al jugador utiliza «Quitar» / «Reincorporar», que conservan el historial por fechas.
+                      </small>
                     </div>
                     <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                       <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
