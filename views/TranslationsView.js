@@ -2132,30 +2132,69 @@ export class TranslationsView {
           return;
         }
 
-        this.showSyncOverlay("⚡ Procesando y aprobando traspaso en Supabase...");
+        this.showSyncOverlay("⚡ Procesando traspaso temporal seguro...");
 
         try {
-          if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { error } = await supabase
-            .from("players")
-            .update({ team_id: targetTeamId, status: "Activo" })
-            .eq("id", playerId);
+          const capabilities = await this.rosterManagementService.getCapabilities();
+          if (!capabilities?.ready || !capabilities?.supports_multiple_stints) {
+            throw new Error("El backend temporal de traspasos todavía no está aplicado.");
+          }
 
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al actualizar equipo del jugador en Supabase: ${error.message}`);
-            return;
+          if (this.auth?.getAuthenticatedRole?.() !== UserRole.SUPERADMIN) {
+            throw new Error("Los traspasos entre equipos están restringidos temporalmente al SUPERADMIN hasta implantar la aprobación doble origen/destino.");
           }
 
           const transferObj = this.transfers.find(t => String(t.id) === String(trId));
-          if (transferObj) transferObj.status = "APROBADO";
+          const originTeamId = transferObj?.originTeamId;
+          const globalSeasonId = currentActiveSeasonContext?.global_season_id
+            || currentActiveSeasonContext?.globalSeasonId
+            || null;
+
+          if (!originTeamId || !globalSeasonId) {
+            throw new Error("No se pudo resolver el equipo origen o la temporada global del traspaso.");
+          }
+
+          const [sourceScope, targetScope] = await Promise.all([
+            this.rosterManagementService.resolveTeamSeason(originTeamId, globalSeasonId),
+            this.rosterManagementService.resolveTeamSeason(targetTeamId, globalSeasonId)
+          ]);
+
+          if (!sourceScope?.id || !targetScope?.id) {
+            throw new Error("Origen y destino deben estar vinculados a la misma temporada global antes de aprobar el traspaso.");
+          }
+
+          const now = new Date();
+          const firstDateTo = [
+            now.getFullYear(),
+            String(now.getMonth() + 1).padStart(2, "0"),
+            String(now.getDate()).padStart(2, "0")
+          ].join("-");
+          const previous = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          const lastDateFrom = [
+            previous.getFullYear(),
+            String(previous.getMonth() + 1).padStart(2, "0"),
+            String(previous.getDate()).padStart(2, "0")
+          ].join("-");
+
+          await this.rosterManagementService.transferPlayer({
+            playerId,
+            fromTeamSeasonId: sourceScope.id,
+            toTeamSeasonId: targetScope.id,
+            lastDateFrom,
+            firstDateTo
+          });
+
+          if (transferObj) {
+            transferObj.status = "APROBADO";
+            transferObj.effectiveDate = firstDateTo;
+          }
           this._saveTransfersLocal();
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
           this.hideSyncOverlay();
 
-          alert("🟢 ¡Traspaso aprobado! El jugador ya forma parte del nuevo equipo.");
+          alert(`🟢 Traspaso aprobado. Último día en origen: ${lastDateFrom}. Alta en destino: ${firstDateTo}.`);
           await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
