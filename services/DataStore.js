@@ -59,12 +59,27 @@ class DataStoreService {
 
     this.teams = (this.teams || []).filter(t => auth.canAccessTeam(String(t.id)));
 
+    const activeTeamId = String(this.getActiveTeamId?.() || "");
+    const activeTeamAllowed = Boolean(activeTeamId && auth.canAccessTeam(activeTeamId));
+    const activeTeamSeasonId = this.getActiveTeamSeasonId?.(activeTeamId) || null;
+    const historicalRosterPlayerIds = new Set(
+      (this.rosterMemberships || [])
+        .filter(row =>
+          !activeTeamSeasonId
+          || String(row.team_season_id || row.teamSeasonId || "") === String(activeTeamSeasonId)
+        )
+        .map(row => String(row.player_id || row.playerId || ""))
+        .filter(Boolean)
+    );
+
     const visiblePlayerIds = new Set();
     this.players = (this.players || []).filter(p => {
       const teamAllowed = auth.canAccessTeam(String(p.team_id || p.teamId || ""));
+      const historicalInAuthorizedScope =
+        activeTeamAllowed && historicalRosterPlayerIds.has(String(p.id));
       const isOwn = user?.playerId && String(user.playerId) === String(p.id);
       const isLinked = linkedPlayerIds.has(String(p.id));
-      const visible = teamAllowed || isOwn || isLinked;
+      const visible = teamAllowed || historicalInAuthorizedScope || isOwn || isLinked;
       if (visible) visiblePlayerIds.add(String(p.id));
       return visible;
     });
