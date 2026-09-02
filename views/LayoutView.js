@@ -287,8 +287,10 @@ export class LayoutView {
       const rawLabel = String(s.name || "");
       const labelMatch = rawLabel.match(/^(\d{4})\s*[-\/]\s*(\d{4})$/);
       const optionLabel = labelMatch ? `${labelMatch[1]}/${labelMatch[2]}` : rawLabel;
-      const isSelected = String(optionValue) === String(currentActiveSeasonValue)
-        || String(optionLabel) === String(currentActiveSeason);
+      const isV3Context = currentActiveSeasonContext?.source === "v3";
+      const isSelected = isV3Context
+        ? String(optionValue) === String(currentActiveSeasonValue)
+        : String(optionLabel) === String(currentActiveSeason);
 
       return `
         <option value="${optionValue}" ${isSelected ? 'selected' : ''}>
