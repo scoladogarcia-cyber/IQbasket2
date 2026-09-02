@@ -53,20 +53,24 @@ export class SeasonManagementService {
         .select("id,team_id,season_id,legacy_season_id,status,data_status,created_at,updated_at"),
       this.supabase
         .from("teams")
-        .select("id,club_id,name,category,competition,coach_name"),
+        .select("id,club_id,name,category,competition"),
       this.supabase
         .from("seasons")
-        .select("id,team_id,name,coach_name,start_date,end_date")
+        .select("id,team_id,name,coach_name")
     ]);
 
-    const firstError = [
-      seasonsRes.error,
-      teamSeasonsRes.error,
-      teamsRes.error,
-      legacyRes.error
-    ].find(Boolean);
+    // Las fuentes canónicas v3 sí son obligatorias para esta pantalla.
+    const canonicalError = [seasonsRes.error, teamSeasonsRes.error].find(Boolean);
+    if (canonicalError) throw canonicalError;
 
-    if (firstError) throw firstError;
+    // Teams y seasons legacy son auxiliares. Si alguna consulta antigua falla,
+    // mantenemos visible el modelo v3 y degradamos solo esa información secundaria.
+    if (teamsRes.error) {
+      console.warn("[SeasonManagement] No se pudo cargar metadata de equipos:", teamsRes.error.message);
+    }
+    if (legacyRes.error) {
+      console.warn("[SeasonManagement] No se pudo cargar compatibilidad legacy:", legacyRes.error.message);
+    }
 
     // La tabla canónica de staff aparece en Fase 3A. Su ausencia no debe impedir
     // visualizar season_catalog y team_seasons ya existentes desde Fase 1.
@@ -109,9 +113,9 @@ export class SeasonManagementService {
       capabilities,
       seasons: seasonsRes.data || [],
       teamSeasons: teamSeasonsRes.data || [],
-      teams: teamsRes.data || [],
+      teams: teamsRes.error ? [] : (teamsRes.data || []),
       staffAssignments,
-      legacySeasons: legacyRes.data || [],
+      legacySeasons: legacyRes.error ? [] : (legacyRes.data || []),
       usersById
     };
   }
