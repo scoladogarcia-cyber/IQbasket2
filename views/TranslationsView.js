@@ -2326,7 +2326,6 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         const trId = e.currentTarget.getAttribute("data-id");
-        const playerId = e.currentTarget.getAttribute("data-player-id");
         const targetTeamId = e.currentTarget.getAttribute("data-target-team");
         if (!this.auth?.can?.(Permission.APPROVE_TRANSFER, { teamId: targetTeamId })) {
           alert("⚠️ No tienes permiso para aprobar este traspaso.");
@@ -2334,9 +2333,16 @@ export class TranslationsView {
         }
 
         try {
-          const capabilities = await this.rosterManagementService.getCapabilities();
-          if (!capabilities?.ready || !capabilities?.supports_multiple_stints) {
+          const [rosterCapabilities, requestCapabilities] = await Promise.all([
+            this.rosterManagementService.getCapabilities(),
+            this.transferRequestService.getCapabilities()
+          ]);
+
+          if (!rosterCapabilities?.ready || !rosterCapabilities?.supports_multiple_stints) {
             throw new Error("El backend temporal de traspasos todavía no está aplicado.");
+          }
+          if (!requestCapabilities?.ready || !requestCapabilities?.persistent_requests) {
+            throw new Error("El backend persistente de solicitudes de traspaso todavía no está aplicado.");
           }
 
           if (this.auth?.getAuthenticatedRole?.() !== UserRole.SUPERADMIN) {
@@ -2344,22 +2350,8 @@ export class TranslationsView {
           }
 
           const transferObj = this.transfers.find(t => String(t.id) === String(trId));
-          const originTeamId = transferObj?.originTeamId;
-          const globalSeasonId = currentActiveSeasonContext?.global_season_id
-            || currentActiveSeasonContext?.globalSeasonId
-            || null;
-
-          if (!originTeamId || !globalSeasonId) {
-            throw new Error("No se pudo resolver el equipo origen o la temporada global del traspaso.");
-          }
-
-          const [sourceScope, targetScope] = await Promise.all([
-            this.rosterManagementService.resolveTeamSeason(originTeamId, globalSeasonId),
-            this.rosterManagementService.resolveTeamSeason(targetTeamId, globalSeasonId)
-          ]);
-
-          if (!sourceScope?.id || !targetScope?.id) {
-            throw new Error("Origen y destino deben estar vinculados a la misma temporada global antes de aprobar el traspaso.");
+          if (!transferObj?.id) {
+            throw new Error("La solicitud ya no está pendiente o no se pudo recuperar.");
           }
 
           const defaultFirstDateTo = rosterReferenceDate || todayLocalIsoDate();
@@ -2390,24 +2382,16 @@ export class TranslationsView {
 
           this.showSyncOverlay("⚡ Procesando traspaso temporal seguro...");
 
-          await this.rosterManagementService.transferPlayer({
-            playerId,
-            fromTeamSeasonId: sourceScope.id,
-            toTeamSeasonId: targetScope.id,
+          await this.transferRequestService.approveTransfer({
+            requestId: transferObj.id,
             lastDateFrom,
             firstDateTo
           });
 
-          if (transferObj) {
-            transferObj.status = "APROBADO";
-            transferObj.lastDateFrom = lastDateFrom;
-            transferObj.firstDateTo = firstDateTo;
-            transferObj.effectiveDate = firstDateTo;
-          }
-          this._saveTransfersLocal();
-
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
           this.hideSyncOverlay();
 
           alert(`🟢 Traspaso aprobado. Último día en origen: ${lastDateFrom}. Alta en destino: ${firstDateTo}.`);
@@ -2416,6 +2400,48 @@ export class TranslationsView {
           this.hideSyncOverlay();
           console.error("Error aprobando traspaso:", err);
           alert(`❌ Error durante el traspaso: ${err.message}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reject-transfer").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const requestId = e.currentTarget.getAttribute("data-id");
+        const transferObj = this.transfers.find(
+          item => String(item.id) === String(requestId)
+        );
+        const targetTeamId = transferObj?.targetTeamId || activeTeamId;
+
+        if (!this.auth?.can?.(Permission.APPROVE_TRANSFER, { teamId: targetTeamId })) {
+          alert("⚠️ No tienes permiso para rechazar este traspaso.");
+          return;
+        }
+        if (!transferObj?.id) {
+          alert("⚠️ La solicitud ya no está pendiente.");
+          return;
+        }
+
+        const reason = prompt(
+          "Motivo del rechazo (opcional):",
+          ""
+        );
+        if (reason === null) return;
+
+        this.showSyncOverlay("🛑 Registrando rechazo del traspaso...");
+        try {
+          await this.transferRequestService.rejectTransfer({
+            requestId: transferObj.id,
+            reason
+          });
+          await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
+          this.hideSyncOverlay();
+          alert("🔴 Solicitud de traspaso rechazada.");
+          await this.render(containerId);
+        } catch (error) {
+          this.hideSyncOverlay();
+          console.error("Error rechazando traspaso:", error);
+          alert(`❌ No se pudo rechazar el traspaso: ${error.message || error}`);
         }
       });
     });
