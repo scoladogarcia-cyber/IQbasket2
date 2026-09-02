@@ -551,6 +551,42 @@ export class SeasonDashboardView {
       const hUs = q.us === null ? 0 : Math.round((q.us / maxQuarter) * 100);
       const hThem = q.them === null ? 0 : Math.round((q.them / maxQuarter) * 100);
       return `
+        <div class="bar-col" style="flex: 1; max-width: 60px;">
+          <div class="bar-pair" style="gap: 6px;">
+            <div class="bar-bar bar-blue" style="height: ${hUs}%; width: 22px;" title="A favor: ${q.us === null ? 'Sin datos' : q.us.toFixed(1)}"></div>
+            <div class="bar-bar bar-orange" style="height: ${hThem}%; width: 22px;" title="En contra: ${q.them === null ? 'Sin datos' : q.them.toFixed(1)}"></div>
+          </div>
+          <span class="bar-label" style="font-weight: 800; font-size: 11px;">${q.name}</span>
+        </div>
+      `;
+    }).join("") : "";
+
+    const chartQuarters = hasQuarterData ? `
+      <div class="chart-flex-wrap">
+        <div class="chart-y-axis">
+          <span>${Math.round(maxQuarter)}</span>
+          <span>${Math.round(maxQuarter * .75)}</span>
+          <span>${Math.round(maxQuarter * .5)}</span>
+          <span>${Math.round(maxQuarter * .25)}</span>
+          <span>0</span>
+        </div>
+        <div class="chart-bars-wrap">
+          <div class="chart-bars-row" style="justify-content: space-around;">
+            ${quarterBars}
+          </div>
+        </div>
+      </div>
+      <div class="chart-legend-box">
+        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> a favor</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> en contra</span>
+      </div>
+    ` : `
+      <div style="padding: 28px; text-align: center; color: #64748b; font-size: 12px;">
+        Sin datos de parciales para este contexto.
+      </div>
+    `;
+
+    return `
       <div class="clean-charts-grid">
         <div class="clean-chart-card">
           <div class="clean-chart-header">
