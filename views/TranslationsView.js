@@ -167,7 +167,7 @@ export class TranslationsView {
       APPROVE_JOIN_REQUESTS: Permission.APPROVE_TEAM_ACCESS,
       VIEW_TAB_PLAYERS: Permission.VIEW_ROSTER,
       MANAGE_PLAYERS: Permission.MANAGE_ROSTER,
-      APPROVE_TRANSFERS: Permission.APPROVE_TEAM_ACCESS,
+      APPROVE_TRANSFERS: Permission.APPROVE_TRANSFER,
       VIEW_TAB_SEASONS: Permission.VIEW_SEASONS,
       CREATE_SEASON: Permission.MANAGE_SEASONS,
       VIEW_TAB_REQUESTS: Permission.REQUEST_TEAM_ACCESS,
@@ -618,6 +618,9 @@ export class TranslationsView {
       ? String(this.rosterState.context.name).replace(/^(\d{4})\s*[-\/]\s*(\d{4})$/, "$1/$2")
       : currentActiveSeasonName;
     const rosterBackendReady = Boolean(this.rosterState?.capabilities?.ready);
+    const rosterRemovalReady = Boolean(
+      rosterBackendReady && this.rosterState?.capabilities?.supports_seed_exclusion
+    );
     const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
     const rosterReferenceDate = this.rosterState?.referenceDate
       || normalizeIsoDate(currentActiveSeasonContext?.start_date)
@@ -1754,7 +1757,7 @@ export class TranslationsView {
       btn.addEventListener("click", async () => {
         const playerId = btn.getAttribute("data-id");
         const player = players.find(p => String(p.id) === String(playerId));
-        if (!player || !rosterTeamSeasonId || !rosterBackendReady) return;
+        if (!player || !rosterTeamSeasonId || !rosterRemovalReady) return;
 
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, {
           teamId: activeTeamId,
@@ -2203,7 +2206,7 @@ export class TranslationsView {
         const trId = e.currentTarget.getAttribute("data-id");
         const playerId = e.currentTarget.getAttribute("data-player-id");
         const targetTeamId = e.currentTarget.getAttribute("data-target-team");
-        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS, { teamId: targetTeamId })) {
+        if (!this.auth?.can?.(Permission.APPROVE_TRANSFER, { teamId: targetTeamId })) {
           alert("⚠️ No tienes permiso para aprobar este traspaso.");
           return;
         }
