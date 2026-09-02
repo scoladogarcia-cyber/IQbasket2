@@ -571,29 +571,55 @@ export class TranslationsView {
     `;
 
     tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         if (!this.auth?.can?.(Permission.REQUEST_TRANSFER, { teamId: activeTeamId })) {
           alert("⚠️ No tienes permiso para solicitar traspasos.");
+          return;
+        }
+        if (!this.transferRequestCapabilities?.ready) {
+          alert("⚠️ Las solicitudes persistentes de traspaso todavía no están disponibles.");
           return;
         }
 
         const playerId = e.currentTarget.getAttribute("data-id");
         const playerName = e.currentTarget.getAttribute("data-name");
         const originTeamId = e.currentTarget.getAttribute("data-team-origin");
+        const targetTeamSeasonId = this.rosterState?.teamSeasonId || null;
+        const globalSeasonId = this.rosterState?.context?.global_season_id
+          || this.rosterState?.context?.globalSeasonId
+          || null;
 
-        this.transfers.push({
-          id: "tr-" + Date.now(),
-          playerId,
-          playerName,
-          originTeamId,
-          targetTeamId: activeTeamId,
-          status: "PENDIENTE",
-          date: new Date().toLocaleDateString()
-        });
-        this._saveTransfersLocal();
+        if (!playerId || !originTeamId || !targetTeamSeasonId || !globalSeasonId) {
+          alert("⚠️ No se pudo resolver el jugador, el equipo origen o la temporada del traspaso.");
+          return;
+        }
 
-        alert(`✅ Solicitud de fichaje enviada para ${playerName}.`);
-        this._renderMarketTable(container);
+        this.showSyncOverlay("📩 Registrando solicitud de traspaso...");
+        try {
+          const sourceScope = await this.rosterManagementService.resolveTeamSeason(
+            originTeamId,
+            globalSeasonId
+          );
+
+          if (!sourceScope?.id) {
+            throw new Error("El equipo origen no está vinculado a la temporada activa.");
+          }
+
+          await this.transferRequestService.requestTransfer({
+            playerId,
+            fromTeamSeasonId: sourceScope.id,
+            toTeamSeasonId: targetTeamSeasonId
+          });
+
+          await this._refreshTransferRequests(targetTeamSeasonId);
+          this.hideSyncOverlay();
+          alert(`✅ Solicitud de fichaje registrada para ${playerName}.`);
+          this._renderMarketTable(container);
+        } catch (error) {
+          this.hideSyncOverlay();
+          console.error("Error registrando solicitud de traspaso:", error);
+          alert(`❌ No se pudo registrar el traspaso: ${error.message || error}`);
+        }
       });
     });
 
