@@ -1376,6 +1376,6 @@ where trigger_schema = 'public'
 order by trigger_name, event_manipulation;
 
 select
-  count(*) as roster_memberships,
+  (select count(*) from public.roster_memberships) as roster_memberships,
   (select count(*) from public.roster_membership_stints) as roster_stints,
   (select count(*) from public.player_game_stats) as existing_player_game_stats;
