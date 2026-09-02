@@ -536,7 +536,7 @@ export class TranslationsView {
           <tbody>
             ${paginatedPlayers.length > 0 ? paginatedPlayers.map(p => {
               const isMyTeam = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
-              const existingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === "PENDIENTE");
+              const existingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === "PENDING");
 
               return `
                 <tr>
@@ -720,7 +720,7 @@ export class TranslationsView {
     const directoryTeams = this.teamDirectory.length > 0 ? this.teamDirectory : realTeams;
     const myAssignedTeamIds = this.auth?.getCurrentUser?.()?.allowedTeamIds || [];
 
-    const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
+    const pendingTransfersList = this.transfers.filter(t => t.status === "PENDING");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
