@@ -1609,19 +1609,19 @@ export class TranslationsView {
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
-        this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla en Supabase...");
+        this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla de la temporada...");
         try {
-          if (!supabase) throw new Error("Supabase no configurado");
-          const { error } = await supabase.from("players").insert([{
-            team_id: activeTeamId,
-            first_name: firstName,
-            last_name: lastName,
-            jersey: jersey,
-            primary_position: position,
-            status: "Activo"
-          }]);
+          if (!rosterBackendReady || !rosterTeamSeasonId) {
+            throw new Error("La gestión de plantilla por temporada todavía no está disponible.");
+          }
 
-          if (error) throw error;
+          await this.rosterManagementService.createPlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            firstName,
+            lastName,
+            jersey,
+            primaryPosition: position
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1674,18 +1674,23 @@ export class TranslationsView {
         const status = container.querySelector("#edit-p-status")?.value;
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
 
-        this.showSyncOverlay("💾 Guardando cambios del jugador en Supabase...");
+        this.showSyncOverlay("💾 Guardando cambios del jugador...");
         try {
-          if (!supabase) throw new Error("Supabase no configurado");
-          const { error } = await supabase.from("players").update({
+          await DataStore.updatePlayer(pId, {
             first_name: firstName,
             last_name: lastName,
-            jersey: jersey,
-            primary_position: position,
-            status: status
-          }).eq("id", pId);
+            status
+          }, Permission.EDIT_PLAYER_MASTER);
 
-          if (error) throw error;
+          if (rosterBackendReady && rosterTeamSeasonId) {
+            await this.rosterManagementService.setMember({
+              teamSeasonId: rosterTeamSeasonId,
+              playerId: pId,
+              status: "ACTIVE",
+              jersey,
+              primaryPosition: position
+            });
+          }
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1700,6 +1705,63 @@ export class TranslationsView {
         }
       });
     }
+
+    // 5B. ALTA/BAJA DE JUGADOR EN LA TEMPORADA ACTIVA
+    container.querySelectorAll(".btn-remove-player-season").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const playerId = btn.getAttribute("data-id");
+        const player = players.find(p => String(p.id) === String(playerId));
+        if (!player || !rosterTeamSeasonId || !rosterBackendReady) return;
+
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, {
+          teamId: activeTeamId,
+          teamSeasonId: rosterTeamSeasonId
+        })) {
+          alert("⚠️ No tienes permiso para modificar esta plantilla.");
+          return;
+        }
+
+        const playerName = [player.first_name, player.last_name].filter(Boolean).join(" ") || player.name || "este jugador";
+        if (!confirm(`Quitar a ${playerName} de ${rosterContextName}?\n\nNo se borrará el jugador ni su historial de temporadas anteriores.`)) return;
+
+        this.showSyncOverlay("💾 Actualizando plantilla de la temporada...");
+        try {
+          await this.rosterManagementService.removePlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            playerId
+          });
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          this.hideSyncOverlay();
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error quitando jugador de temporada:", err);
+          alert(`❌ No se pudo quitar al jugador de esta temporada: ${err.message || err}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reactivate-player-season").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const playerId = btn.getAttribute("data-id");
+        if (!playerId || !rosterTeamSeasonId || !rosterBackendReady) return;
+
+        this.showSyncOverlay("💾 Añadiendo jugador a la temporada...");
+        try {
+          await this.rosterManagementService.reactivatePlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            playerId
+          });
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          this.hideSyncOverlay();
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error reactivando jugador en temporada:", err);
+          alert(`❌ No se pudo añadir al jugador a esta temporada: ${err.message || err}`);
+        }
+      });
+    });
 
     // 6. MERCADO DE FICHAJES (MODAL Y TABLA)
     container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
