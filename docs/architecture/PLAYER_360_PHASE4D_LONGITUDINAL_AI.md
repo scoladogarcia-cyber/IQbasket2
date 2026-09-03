@@ -112,6 +112,28 @@ Los conjuntos iniciales pueden coincidir en algunas acciones, pero los límites
 permanecen desacoplados para evolucionar hacia ABAC por recurso, audiencia,
 jugador, equipo-temporada y sensibilidad sin rehacer el esquema.
 
+## Estado de despliegue · 2026-09-03
+
+Phase 4D está instalada en Supabase mediante Controlled Apply.
+
+Validaciones completadas:
+
+- preflight read-only: correcto;
+- rehearsal transaccional con rollback forzado: correcto;
+- apply controlado: correcto;
+- RLS y RPC: correctos;
+- grants por defecto de Supabase cerrados explícitamente para `anon` y para el
+  helper interno;
+- smoke instalado: snapshot determinista + insight sintético + revisión humana,
+  sin llamada externa a proveedor de IA y con rollback de los datos de prueba;
+- baseline histórico/4B/4C: sin cambios;
+- filas sintéticas remanentes: 0 snapshots / 0 insights.
+
+El primer intento de apply detectó que los grants por defecto de Supabase
+permitían ejecutar el helper genérico. El workflow revirtió automáticamente
+todos los objetos 4D, se endurecieron los `REVOKE` y el rehearsal posterior
+confirmó la corrección antes del segundo apply exitoso.
+
 ## Siguiente puerta de control
 
 Antes de instalar la persistencia 4D:
