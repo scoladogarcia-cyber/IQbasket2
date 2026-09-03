@@ -30,6 +30,7 @@ import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
 import { TrainingView } from "./views/TrainingView.js";
+import { NutritionView } from "./views/NutritionView.js";
 import { Player360View } from "./views/Player360View.js";
 
 class App {
@@ -142,6 +143,12 @@ class App {
       case "desarrollo":
         this.currentView = new TrainingView(this.supabase, this.authController);
         await this.currentView.render(contentAreaId, this.teamId);
+        break;
+
+      case "nutrition":
+      case "nutricion":
+        this.currentView = new NutritionView(this.supabase, this.authController);
+        await this.currentView.render(contentAreaId, id, this.teamId);
         break;
 
       case "player360":
