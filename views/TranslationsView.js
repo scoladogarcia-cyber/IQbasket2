@@ -252,6 +252,34 @@ export class TranslationsView {
     return permission ? Boolean(this.auth?.canPreview?.(permission)) : false;
   }
 
+  _visibleSettingsTabs() {
+    const definitions = [
+      { key: "club", action: "VIEW_TAB_CLUB" },
+      { key: "players", action: "VIEW_TAB_PLAYERS" },
+      { key: "users", action: "VIEW_TAB_USERS" },
+      { key: "seasons", action: "VIEW_TAB_SEASONS" },
+      { key: "requests", action: "VIEW_TAB_REQUESTS" },
+      { key: "translations", action: "VIEW_TAB_TRANSLATIONS" },
+      { key: "simulation", action: "VIEW_TAB_SIMULATION" }
+    ];
+
+    return definitions
+      .filter(({ action }) => this._can(action))
+      .map(({ key }) => key);
+  }
+
+  _ensureVisibleActiveTab() {
+    const visibleTabs = this._visibleSettingsTabs();
+    if (visibleTabs.includes(this.activeTab)) return this.activeTab;
+
+    // El fallback conserva una entrada útil sin codificar nombres de rol.
+    const preferredOrder = ["requests", "players", "seasons", "club", "users", "translations", "simulation"];
+    this.activeTab = preferredOrder.find(tab => visibleTabs.includes(tab))
+      || visibleTabs[0]
+      || "requests";
+    return this.activeTab;
+  }
+
   _canReal(action, context = {}) {
     if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
       return this.auth?.getAuthenticatedRole?.() === UserRole.SUPERADMIN;
@@ -695,6 +723,10 @@ export class TranslationsView {
 
     const activeTeamId = DataStore.getActiveTeamId();
 
+    // La visibilidad de Configuración se resuelve exclusivamente por permisos.
+    // No se bloquean pestañas por nombre de rol: RBAC decide lectura/escritura.
+    this._ensureVisibleActiveTab();
+
     if (this.seasonsList.length === 0) await this._fetchSeasons();
 
     if (this.activeTab === "players") {
@@ -782,15 +814,13 @@ export class TranslationsView {
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
-    if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
-      this.activeTab = "requests";
-    }
-
     const allowedSelectableTeams = realTeams;
 
     const visibleProfiles = this.profilesList;
 
     const canModifyActiveRole = this._can("MODIFY_ACTIVE_ROLE");
+    const canManageClubData = this._can("MANAGE_CLUB_DATA");
+    const canManageTeams = this._can("CREATE_TEAM");
 
     container.innerHTML = `
       <div class="config-container">
@@ -1016,7 +1046,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Nombre del Club</th><th>Coordinador</th><th>Teléfono</th><th>Dirección</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${DataStore.getClubCoordinator?.(c.id, currentActiveSeasonName) || c.coordinator_name || 'No asignado'}<div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
+                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${DataStore.getClubCoordinator?.(c.id, currentActiveSeasonName) || c.coordinator_name || 'No asignado'}<div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">${canManageClubData ? '✏️ Editar Club' : '👁️ Ver Club'}</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -1026,7 +1056,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${DataStore.getTeamCoach?.(t.id, currentActiveSeasonName) || t.coach_name || t.coach || 'Por definir'}</strong><div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
+                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${DataStore.getTeamCoach?.(t.id, currentActiveSeasonName) || t.coach_name || t.coach || 'Por definir'}</strong><div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">${canManageTeams ? '⚙️ Configurar' : '👁️ Ver Equipo'}</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -1041,12 +1071,12 @@ export class TranslationsView {
 
                 <form id="form-edit-team" class="grid-2-cols">
                   <div class="form-group"><label>Nombre del Club</label><input type="text" value="${this.selectedTeamForEdit?.clubName || 'Club'}" disabled /></div>
-                  <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-team-coach" value="${DataStore.getTeamCoach?.(this.selectedTeamForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
-                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
+                  <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${!canManageTeams ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${!canManageTeams ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${!canManageTeams ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-team-coach" value="${DataStore.getTeamCoach?.(this.selectedTeamForEdit?.id, currentActiveSeasonName) || ''}" ${!canManageTeams ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${!canManageTeams ? 'disabled' : ''} /></div>
+                  ${canManageTeams ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
                 </form>
               </div>
             ` : ''}
@@ -1059,11 +1089,11 @@ export class TranslationsView {
                 </div>
 
                 <form id="form-edit-club" class="grid-2-cols">
-                  <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-club-coordinator" value="${DataStore.getClubCoordinator?.(this.selectedClubForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Teléfono</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
+                  <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!canManageClubData ? 'disabled' : ''} required /></div>
+                  <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-club-coordinator" value="${DataStore.getClubCoordinator?.(this.selectedClubForEdit?.id, currentActiveSeasonName) || ''}" ${!canManageClubData ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Teléfono</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${!canManageClubData ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${!canManageClubData ? 'disabled' : ''} /></div>
+                  ${canManageClubData ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
                 </form>
               </div>
             ` : ''}

@@ -1,0 +1,73 @@
+name: Role Acceptance UI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TranslationsView.js"
+      - "security/permissions.js"
+      - "security/PermissionService.js"
+      - "views/LayoutView.js"
+      - "tests/role-acceptance-ui-smoke.mjs"
+      - ".github/workflows/role-acceptance-ui.yml"
+  push:
+    branches:
+      - feature/role-acceptance-gate-v1
+    paths:
+      - "views/TranslationsView.js"
+      - "security/permissions.js"
+      - "security/PermissionService.js"
+      - "views/LayoutView.js"
+      - "tests/role-acceptance-ui-smoke.mjs"
+      - ".github/workflows/role-acceptance-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  role-acceptance:
+    name: Roles desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/role-acceptance-vite.log 2>&1 &
+          echo $! > /tmp/role-acceptance-vite.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/role-acceptance-vite.log
+          exit 1
+
+      - name: Run role acceptance browser smoke
+        env:
+          ROLE_ACCEPTANCE_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/role-acceptance-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/role-acceptance-vite.log || true
