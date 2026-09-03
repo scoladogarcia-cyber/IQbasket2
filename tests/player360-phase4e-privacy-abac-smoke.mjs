@@ -135,6 +135,17 @@ const selfRead = PrivacyAccessEvaluator.evaluate({
 assert.equal(selfRead.allowed, true);
 assert.equal(selfRead.reason, "ALLOW_RESTRICTED_SELF");
 
+const selfWrongPurpose = PrivacyAccessEvaluator.evaluate({
+  ...BASE,
+  actorUserId: "player-user-1",
+  purpose: PLAYER360_PRIVACY_PURPOSE.SPORT_PERFORMANCE,
+  subjectRelation: PLAYER360_SUBJECT_RELATION.SELF,
+  processingAuthorization: authorization,
+  accessGrant: null
+});
+assert.equal(selfWrongPurpose.allowed, false);
+assert.equal(selfWrongPurpose.reason, "DENY_UNSUPPORTED_PURPOSE");
+
 const guardianRead = PrivacyAccessEvaluator.evaluate({
   ...BASE,
   actorUserId: "guardian-1",
@@ -148,6 +159,20 @@ const guardianRead = PrivacyAccessEvaluator.evaluate({
 });
 assert.equal(guardianRead.allowed, true);
 assert.equal(guardianRead.reason, "ALLOW_RESTRICTED_GUARDIAN");
+
+const guardianWrongPurpose = PrivacyAccessEvaluator.evaluate({
+  ...BASE,
+  actorUserId: "guardian-1",
+  purpose: PLAYER360_PRIVACY_PURPOSE.SPORT_PERFORMANCE,
+  subjectRelation: PLAYER360_SUBJECT_RELATION.GUARDIAN,
+  processingAuthorization: {
+    ...authorization,
+    representative_user_id: "guardian-1"
+  },
+  accessGrant: null
+});
+assert.equal(guardianWrongPurpose.allowed, false);
+assert.equal(guardianWrongPurpose.reason, "DENY_UNSUPPORTED_PURPOSE");
 
 const wrongGuardian = PrivacyAccessEvaluator.evaluate({
   ...BASE,
