@@ -1,0 +1,75 @@
+name: Core UX Functional
+
+on:
+  push:
+    branches:
+      - feature/core-ux-completion-v1
+    paths:
+      - ".github/workflows/core-ux-functional.yml"
+      - "supabase/tests/20260903_core_ux_functional_transaction.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    name: Real training/technification/boxscore with rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Capture baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --tuples-only --no-align -c "
+            select
+              (select count(*) from public.training_sessions)::text||','||
+              (select count(*) from public.training_blocks)::text||','||
+              (select count(*) from public.training_participants)::text||','||
+              (select count(*) from public.external_development_sessions)::text||','||
+              (select count(*) from public.games)::text||','||
+              (select count(*) from public.player_game_stats)::text||','||
+              (select count(*) from public.game_boxscore_corrections)::text;
+          ")
+          echo "BASELINE_BEFORE=$BASE" >> "$GITHUB_ENV"
+          echo "Before: $BASE"
+      - name: Exercise real RPCs transactionally
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/tests/20260903_core_ux_functional_transaction.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^CORE_UX_FUNCTIONAL,' | tail -n 1)
+          test -n "$CHECK"
+          FINAL=${CHECK##*,}
+          test "$FINAL" = "t" -o "$FINAL" = "true"
+      - name: Confirm rollback baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --tuples-only --no-align -c "
+            select
+              (select count(*) from public.training_sessions)::text||','||
+              (select count(*) from public.training_blocks)::text||','||
+              (select count(*) from public.training_participants)::text||','||
+              (select count(*) from public.external_development_sessions)::text||','||
+              (select count(*) from public.games)::text||','||
+              (select count(*) from public.player_game_stats)::text||','||
+              (select count(*) from public.game_boxscore_corrections)::text;
+          ")
+          echo "Before: $BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$BASELINE_BEFORE" = "$AFTER"
