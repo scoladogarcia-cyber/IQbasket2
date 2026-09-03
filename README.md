@@ -14,6 +14,7 @@ La evolución Player 360 se mantiene en la rama segura
 - Fase 4A: contratos de observaciones, cobertura y permisos;
 - Fase 4B: sesiones, asistencia, carga y desarrollo externo;
 - Fase 4C RC: evaluación humana, perfil objetivo y gaps deterministas;
+- Fase 4D.1: series longitudinales y evidencia trazable para IA;
 - rutas y vistas responsive de Entrenamiento y Player 360;
 - pruebas de dominio, servicio, SQL, RBAC y navegador sin escrituras reales.
 
@@ -69,9 +70,12 @@ La rama dispone de GitHub Actions para ejecutar el build automáticamente en pus
 
 ## Siguiente fase
 
-La Fase 4D añadirá analítica longitudinal e interpretación mediante IA. Las
-salidas de IA deberán conservar trazabilidad, cobertura de datos, versión del
-modelo y separación estricta respecto a mediciones y evaluaciones humanas.
+La Fase 4D.1 incorpora el motor longitudinal determinista y deja preparada su
+persistencia controlada mediante un diseño reversible, preflight solo lectura y
+servicios sin escritura directa. El siguiente bloque validará el ensayo contra
+la base de datos antes de cualquier instalación. Las salidas de IA conservarán
+trazabilidad, cobertura, versión del modelo y separación estricta respecto a
+mediciones y evaluaciones humanas.
 
 ## Principio de migración
 

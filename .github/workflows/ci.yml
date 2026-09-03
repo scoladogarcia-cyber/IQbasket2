@@ -49,6 +49,15 @@ jobs:
       - name: Player 360 Phase 4C route and RBAC integration
         run: node tests/player360-phase4c-route-integration.mjs
 
+      - name: Player 360 Phase 4D longitudinal foundation
+        run: node tests/player360-phase4d-foundation-smoke.mjs
+
+      - name: Player 360 Phase 4D SQL structure
+        run: node tests/player360-phase4d-sql-structure.mjs
+
+      - name: Player 360 Phase 4D service boundary
+        run: node tests/player360-phase4d-service-smoke.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
