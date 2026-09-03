@@ -148,32 +148,52 @@ assert.equal(overall.enabled_modules, 2);
 assert.equal(overall.modules_with_data, 1);
 
 // -----------------------------------------------------------------------------
-// RBAC: sporting development vs sensitive wellness
+// RBAC + ABAC: sensitive wellness base permissions
 // -----------------------------------------------------------------------------
-for (const sensitive of [
-  Permission.VIEW_RECOVERY,
-  Permission.EDIT_RECOVERY,
-  Permission.VIEW_NUTRITION,
-  Permission.EDIT_NUTRITION,
-  Permission.VIEW_NEURO_DATA
+// 4E.2 exposes Nutrition/Recovery only as a base capability. The authoritative
+// read/write decision still lives in backend ABAC and cannot be inferred from
+// ROLE_PERMISSIONS alone.
+for (const role of [
+  UserRole.SUPERADMIN,
+  UserRole.ADMIN,
+  UserRole.ENTRENADOR,
+  UserRole.PREPARADOR_FISICO,
+  UserRole.JUGADOR,
+  UserRole.FAMILIA_TUTOR
 ]) {
-  assert.equal(has(UserRole.SUPERADMIN, sensitive), true);
-  for (const role of [
-    UserRole.ADMIN,
-    UserRole.ENTRENADOR,
-    UserRole.ANALISTA,
-    UserRole.PREPARADOR_FISICO,
-    UserRole.JUGADOR,
-    UserRole.FAMILIA_TUTOR,
-    UserRole.VISOR,
-    UserRole.INVITADO
-  ]) {
-    assert.equal(
-      has(role, sensitive),
-      false,
-      `${role} no debe recibir ${sensitive} antes de ABAC/privacidad 4E`
-    );
-  }
+  assert.equal(has(role, Permission.VIEW_RECOVERY), true, `${role} debe poder solicitar/ver Recovery vía ABAC`);
+  assert.equal(has(role, Permission.EDIT_RECOVERY), true, `${role} debe poder editar Recovery vía ABAC`);
+  assert.equal(has(role, Permission.VIEW_NUTRITION), true, `${role} debe poder solicitar/ver Nutrition vía ABAC`);
+  assert.equal(has(role, Permission.EDIT_NUTRITION), true, `${role} debe poder editar Nutrition vía ABAC`);
+  assert.equal(has(role, Permission.VIEW_WELLNESS_RECOMMENDATIONS), true);
+}
+
+for (const role of [
+  UserRole.ANALISTA,
+  UserRole.VISOR,
+  UserRole.INVITADO
+]) {
+  assert.equal(has(role, Permission.VIEW_RECOVERY), false);
+  assert.equal(has(role, Permission.EDIT_RECOVERY), false);
+  assert.equal(has(role, Permission.VIEW_NUTRITION), false);
+  assert.equal(has(role, Permission.EDIT_NUTRITION), false);
+  assert.equal(has(role, Permission.VIEW_WELLNESS_RECOMMENDATIONS), false);
+}
+
+// Neuro remains closed in 4E.2; only SUPERADMIN has the dormant platform
+// capability and no Neuro data model/UI is enabled.
+assert.equal(has(UserRole.SUPERADMIN, Permission.VIEW_NEURO_DATA), true);
+for (const role of [
+  UserRole.ADMIN,
+  UserRole.ENTRENADOR,
+  UserRole.ANALISTA,
+  UserRole.PREPARADOR_FISICO,
+  UserRole.JUGADOR,
+  UserRole.FAMILIA_TUTOR,
+  UserRole.VISOR,
+  UserRole.INVITADO
+]) {
+  assert.equal(has(role, Permission.VIEW_NEURO_DATA), false);
 }
 
 assert.equal(has(UserRole.ADMIN, Permission.CREATE_TRAINING), true);
@@ -245,8 +265,8 @@ for (const role of [
   assert.equal(has(role, Permission.CREATE_PRIVACY_AUTHORIZATION), false);
 }
 
-// 4E is only an authorization substrate: restricted modules remain disabled for
-// ordinary roles until each module has its own approved data model and policies.
+// 4E.2 activates only the Nutrition/Recovery base permissions above.
+// Neuro remains outside the active product scope.
 for (const role of [
   UserRole.ADMIN,
   UserRole.ENTRENADOR,
@@ -257,8 +277,6 @@ for (const role of [
   UserRole.VISOR,
   UserRole.INVITADO
 ]) {
-  assert.equal(has(role, Permission.VIEW_NUTRITION), false);
-  assert.equal(has(role, Permission.VIEW_RECOVERY), false);
   assert.equal(has(role, Permission.VIEW_NEURO_DATA), false);
 }
 
