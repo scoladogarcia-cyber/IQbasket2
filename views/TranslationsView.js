@@ -23,6 +23,7 @@ import { TeamAccessRequestService } from "../services/TeamAccessRequestService.j
 import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
 import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
 import { SeasonManagementView } from "./SeasonManagementView.js";
+import { SeasonFreezeService } from "../services/seasons/SeasonFreezeService.js";
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
 
@@ -152,7 +153,12 @@ export class TranslationsView {
     this.accessRequestService = new TeamAccessRequestService(supabase);
     this.staffAssignmentService = new StaffAssignmentService(supabase, DataStore);
     this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
-    this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
+    this.seasonFreezeService = new SeasonFreezeService(supabase, this.auth);
+    this.seasonManagementView = new SeasonManagementView(
+      this.seasonManagementService,
+      this.auth,
+      this.seasonFreezeService
+    );
     this.rosterManagementService = new RosterManagementService(supabase, DataStore);
     this.rosterState = null;
     this.transferRequestService = new TransferRequestService(supabase);
@@ -802,6 +808,10 @@ export class TranslationsView {
       || todayLocalIsoDate();
     const rosterSeasonContext = this.rosterState?.context || currentActiveSeasonContext;
     const rosterSeasonBounds = seasonDateBounds(rosterSeasonContext);
+    const rosterSeasonFrozen = String(
+      rosterSeasonContext?.data_status || rosterSeasonContext?.dataStatus || "ACTIVE"
+    ).toUpperCase() === "FROZEN";
+    const canManageRosterNow = this._can("MANAGE_PLAYERS") && !rosterSeasonFrozen;
 
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
@@ -1102,6 +1112,12 @@ export class TranslationsView {
           <!-- PESTAÑA 2: PLANTILLA -->
           ${this.activeTab === 'players' && this._can("VIEW_TAB_PLAYERS") ? `
             <div class="config-container">
+              ${rosterSeasonFrozen ? `
+                <div class="read-only-banner" style="background:#fff1f2;border-color:#fecdd3;color:#9f1239;">
+                  🔒 <strong>Temporada cerrada.</strong> La plantilla y los partidos están en modo histórico de solo lectura.
+                  Admin/Superadmin debe reabrir la temporada antes de realizar correcciones.
+                </div>
+              ` : ''}
               
               <!-- RESUMEN DE TRASPASOS DUALES: la revisión operativa vive en la Bandeja -->
               ${dualPendingTransfersList.length > 0 ? `
@@ -1177,7 +1193,7 @@ export class TranslationsView {
               ` : ''}
 
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
-              ${this._can("MANAGE_PLAYERS") ? `
+              ${canManageRosterNow ? `
                 <div class="config-card">
                   <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO · ${rosterContextName}</div>
                    ${!rosterBackendReady ? '<div class="read-only-banner" style="margin-bottom:12px;">La gestión histórica de plantilla está en modo lectura hasta aplicar el backend v3 de roster.</div>' : ''}
@@ -1219,7 +1235,7 @@ export class TranslationsView {
                           ${p.primary_position || p.position || 'Jugador'} • ${p.rosterCurrentFrom ? `Elegible desde ${p.rosterCurrentFrom}` : (p.rosterInherited ? 'Base heredada' : 'Activo en esta temporada')}
                         </div>
                       </div>
-                      ${this._can("MANAGE_PLAYERS") ? `
+                      ${canManageRosterNow ? `
                         <div class="player-card-actions">
                           <button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>
                           <button type="button" class="btn-remove-player-season btn-danger-sm" data-id="${p.id}" ${rosterRemovalReady && rosterTeamSeasonId ? '' : 'disabled'}>
@@ -1247,7 +1263,7 @@ export class TranslationsView {
                             ${p.primary_position || p.position || 'Jugador'} · ${formatRosterIntervals(p)}
                           </div>
                         </div>
-                        ${this._can("MANAGE_PLAYERS") && rosterBackendReady ? `
+                        ${canManageRosterNow && rosterBackendReady ? `
                           <button type="button" class="btn-reactivate-player-season btn-secondary-sm" data-id="${p.id}">
                             + Reincorporar
                           </button>
@@ -1258,7 +1274,7 @@ export class TranslationsView {
                 </div>
               ` : ''}
 
-              ${availableRosterPlayers.length > 0 && this._can("MANAGE_PLAYERS") ? `
+              ${availableRosterPlayers.length > 0 && canManageRosterNow ? `
                 <div class="config-card">
                   <div class="card-title"><span>↩️</span> JUGADORES DEL EQUIPO FUERA DE ${rosterContextName}</div>
                   <div class="players-grid">

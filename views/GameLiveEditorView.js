@@ -54,6 +54,12 @@ export class GameLiveEditorView {
     return GameLockService.isLocked(game || {});
   }
 
+  _isTeamSeasonFrozen(teamId = null) {
+    const targetTeamId = teamId || this.teamId || DataStore.getActiveTeamId?.();
+    const context = DataStore.getActiveSeasonContext?.(targetTeamId) || null;
+    return String(context?.data_status || context?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN";
+  }
+
   _gameContext(game = null) {
     return {
       teamId: game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId(),
@@ -305,9 +311,13 @@ export class GameLiveEditorView {
     this.games = DataStore.getGames(teamId) || [];
     await this._loadLockRequests();
 
-    const canCreateGame = Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId }));
-    const canRecordLive = Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId }));
-    const canEditGame = Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId }));
+    const seasonFrozen = this._isTeamSeasonFrozen(teamId);
+    const canCreateGame = !seasonFrozen
+      && Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId }));
+    const canRecordLive = !seasonFrozen
+      && Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId }));
+    const canEditGame = !seasonFrozen
+      && Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId }));
 
     const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const pCodeMap = new Map();
@@ -356,9 +366,9 @@ export class GameLiveEditorView {
       const locked = this._isGameLocked(game);
       const pendingRequest = this._pendingLockRequest(game.id);
       const editable = canEditGame && !locked;
-      const canLock = !locked && this.gameLockService.canLock(game);
-      const canReopen = locked && this.gameLockService.canReopen(game);
-      const canRequestLock = !locked && this.gameLockService.canRequestLock(game);
+      const canLock = !seasonFrozen && !locked && this.gameLockService.canLock(game);
+      const canReopen = !seasonFrozen && locked && this.gameLockService.canReopen(game);
+      const canRequestLock = !seasonFrozen && !locked && this.gameLockService.canRequestLock(game);
       const canDelete = this._canDeleteGame(game);
 
       const lifecycleBadge = locked
@@ -429,6 +439,12 @@ export class GameLiveEditorView {
           </div>
         </div>
 
+        ${seasonFrozen ? `
+          <div style="margin-bottom:16px;padding:12px 14px;border-radius:11px;background:#fff1f2;border:1px solid #fecdd3;color:#9f1239;font-size:12px;line-height:1.5;">
+            🔒 <strong>Temporada cerrada.</strong> Los partidos permanecen disponibles para BoxScore, informes y análisis, pero no pueden editarse, reabrirse ni crearse nuevos hasta reabrir la temporada.
+          </div>
+        ` : ''}
+
         ${this._renderLockRequestsPanel()}
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
@@ -453,6 +469,10 @@ export class GameLiveEditorView {
     this._bindGameLockEvents(container, teamId);
 
     container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
+      if (this._isTeamSeasonFrozen(teamId)) {
+        alert("🔒 Temporada cerrada. Reábrela antes de registrar un nuevo partido.");
+        return;
+      }
       if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId })) {
         alert("⚠️ Tu perfil puede consultar partidos, pero no registrar una anotación en vivo.");
         return;
@@ -478,6 +498,10 @@ export class GameLiveEditorView {
     });
 
     container.querySelector("#btn-create-game")?.addEventListener("click", () => {
+      if (this._isTeamSeasonFrozen(teamId)) {
+        alert("🔒 Temporada cerrada. Reábrela antes de registrar un nuevo partido.");
+        return;
+      }
       if (!this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId })) {
         alert("⚠️ Tu perfil no tiene permiso para registrar nuevos partidos.");
         return;

@@ -33,15 +33,45 @@ const STAFF_LABELS = Object.freeze({
 });
 
 export class SeasonManagementView {
-  constructor(service, authController = null) {
+  constructor(service, authController = null, freezeService = null) {
     this.service = service;
     this.auth = authController;
+    this.freezeService = freezeService;
+    this.freezeCapabilities = { ready: false };
+    this.freezeRequests = [];
     this.state = null;
   }
 
   async load() {
-    this.state = await this.service.loadOverview();
+    const [state, freezeCapabilities] = await Promise.all([
+      this.service.loadOverview(),
+      this.freezeService?.getCapabilities?.() || Promise.resolve({ ready: false })
+    ]);
+
+    this.state = state;
+    this.freezeCapabilities = freezeCapabilities || { ready: false };
+    this.freezeRequests = [];
+
+    if (this.freezeCapabilities.ready && this.freezeService?.listRequests) {
+      try {
+        const scopeIds = (this.state?.teamSeasons || []).map(scope => scope.id).filter(Boolean);
+        this.freezeRequests = scopeIds.length
+          ? await this.freezeService.listRequests(scopeIds, { status: "PENDING" })
+          : [];
+      } catch (error) {
+        console.warn("[SeasonManagementView] No se pudieron cargar solicitudes de cierre:", error?.message || error);
+        this.freezeRequests = [];
+      }
+    }
+
     return this.state;
+  }
+
+  _hasPendingFreezeRequest(teamSeasonId) {
+    return this.freezeRequests.some(request =>
+      String(request.team_season_id || request.teamSeasonId || "") === String(teamSeasonId || "")
+      && String(request.status || "").toUpperCase() === "PENDING"
+    );
   }
 
   _getActiveStaff(teamSeasonId) {
@@ -98,6 +128,7 @@ export class SeasonManagementView {
     const backendReady = Boolean(state.capabilities?.ready);
     const canWriteContext = Boolean(canManage && backendReady);
     const canWriteGlobal = Boolean(canManage && backendReady && state.capabilities?.global_season_write);
+    const freezeReady = Boolean(this.freezeCapabilities?.ready);
     const teamsById = new Map((state.teams || []).map(team => [String(team.id), team]));
 
     return `
@@ -213,6 +244,15 @@ export class SeasonManagementView {
               const season = state.seasons.find(s => String(s.id) === String(scope.season_id)) || {};
               const isActiveTeam = String(scope.team_id) === String(activeTeamId || "");
               const active = String(scope.status || "ACTIVE").toUpperCase() === "ACTIVE";
+              const frozen = Boolean(this.freezeService?.isFrozen?.(scope));
+              const pendingFreeze = this._hasPendingFreezeRequest(scope.id);
+              const canFreeze = Boolean(freezeReady && this.freezeService?.canFreeze?.(scope));
+              const canReopen = Boolean(freezeReady && this.freezeService?.canReopen?.(scope));
+              const canRequestFreeze = Boolean(
+                freezeReady
+                && !pendingFreeze
+                && this.freezeService?.canRequestFreeze?.(scope)
+              );
 
               return `
                 <div style="border:1px solid ${isActiveTeam ? '#93c5fd' : '#e2e8f0'};border-radius:12px;padding:14px;background:${isActiveTeam ? '#eff6ff' : '#fff'};">
@@ -224,9 +264,57 @@ export class SeasonManagementView {
                         ${team.category ? ` · ${escapeHtml(team.category)}` : ''}
                       </div>
                     </div>
-                    <span class="${active ? 'badge-active-team' : 'badge-inactive'}">
-                      ${escapeHtml(scope.status || "ACTIVE")}
-                    </span>
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                      <span class="${active ? 'badge-active-team' : 'badge-inactive'}">
+                        ${escapeHtml(scope.status || "ACTIVE")}
+                      </span>
+                      <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:900;background:${frozen ? '#fee2e2' : '#dcfce7'};color:${frozen ? '#991b1b' : '#166534'};">
+                        ${frozen ? '🔒 Datos cerrados' : '🟢 Datos abiertos'}
+                      </span>
+                      ${pendingFreeze ? '<span class="badge-pending">⏳ Cierre solicitado</span>' : ''}
+                    </div>
+                  </div>
+
+                  <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:${frozen ? '#fff1f2' : '#f8fafc'};border:1px solid ${frozen ? '#fecdd3' : '#e2e8f0'};">
+                    <div style="font-size:11px;font-weight:900;color:${frozen ? '#9f1239' : '#334155'};">
+                      ${frozen ? 'Temporada cerrada para edición competitiva' : 'Integridad de temporada'}
+                    </div>
+                    <div style="margin-top:3px;font-size:10px;line-height:1.5;color:#64748b;">
+                      ${frozen
+                        ? 'Partidos y plantilla quedan en modo histórico de solo lectura. Para corregir datos es obligatorio reabrir la temporada.'
+                        : 'El cierre congela partidos y plantilla sin ocultar estadísticas, informes ni histórico.'}
+                    </div>
+                    ${freezeReady ? `
+                      <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap;">
+                        ${canFreeze ? `
+                          <button type="button"
+                            class="btn-danger-sm season-v3-action"
+                            data-action="freeze-scope-data"
+                            data-team-season-id="${scope.id}"
+                            style="min-height:44px;font-weight:900;">
+                            🔒 Cerrar temporada
+                          </button>
+                        ` : ''}
+                        ${canReopen ? `
+                          <button type="button"
+                            class="btn-secondary-sm season-v3-action"
+                            data-action="reopen-scope-data"
+                            data-team-season-id="${scope.id}"
+                            style="min-height:44px;font-weight:900;">
+                            🔓 Reabrir temporada
+                          </button>
+                        ` : ''}
+                        ${canRequestFreeze ? `
+                          <button type="button"
+                            class="btn-outline-sm season-v3-action"
+                            data-action="request-freeze-scope-data"
+                            data-team-season-id="${scope.id}"
+                            style="min-height:44px;font-weight:900;">
+                            📩 Solicitar cierre
+                          </button>
+                        ` : ''}
+                      </div>
+                    ` : '<div style="margin-top:6px;font-size:10px;color:#b45309;">Lifecycle V6 no disponible · modo lectura.</div>'}
                   </div>
 
                   <div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;">
@@ -543,6 +631,68 @@ export class SeasonManagementView {
 
         try {
           await this.service.linkTeamSeason({ teamId, seasonId });
+          await refresh();
+        } catch (error) {
+          fail(error);
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-action="request-freeze-scope-data"]').forEach(button => {
+      button.addEventListener("click", async () => {
+        const teamSeasonId = button.dataset.teamSeasonId;
+        const reason = prompt(
+          "Motivo de la solicitud de cierre (opcional):",
+          "Temporada finalizada · solicitar congelación de datos"
+        );
+        if (reason === null) return;
+
+        try {
+          await this.freezeService.requestFreeze(teamSeasonId, reason.trim() || null);
+          await refresh();
+        } catch (error) {
+          fail(error);
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-action="freeze-scope-data"]').forEach(button => {
+      button.addEventListener("click", async () => {
+        const teamSeasonId = button.dataset.teamSeasonId;
+        if (!confirm(
+          "¿Cerrar esta temporada? Se bloquearán sus partidos abiertos y la plantilla quedará en modo histórico de solo lectura."
+        )) return;
+
+        const reason = prompt(
+          "Motivo del cierre (opcional):",
+          "Cierre de temporada"
+        );
+        if (reason === null) return;
+
+        try {
+          await this.freezeService.setFrozen(teamSeasonId, true, reason.trim() || null);
+          await refresh();
+        } catch (error) {
+          fail(error);
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-action="reopen-scope-data"]').forEach(button => {
+      button.addEventListener("click", async () => {
+        const teamSeasonId = button.dataset.teamSeasonId;
+        if (!confirm(
+          "¿Reabrir esta temporada para corregir datos? Sólo se reabrirán los partidos que fueron bloqueados por su cierre de temporada."
+        )) return;
+
+        const reason = prompt(
+          "Motivo de la reapertura (recomendado para auditoría):",
+          "Corrección autorizada"
+        );
+        if (reason === null) return;
+
+        try {
+          await this.freezeService.setFrozen(teamSeasonId, false, reason.trim() || null);
           await refresh();
         } catch (error) {
           fail(error);

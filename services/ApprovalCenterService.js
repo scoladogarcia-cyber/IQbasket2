@@ -12,12 +12,14 @@ import { DataStore } from "./DataStore.js";
 import { TeamAccessRequestService } from "./TeamAccessRequestService.js";
 import { GameLockService } from "./games/GameLockService.js";
 import { TransferRequestService } from "./transfers/TransferRequestService.js";
+import { SeasonFreezeService } from "./seasons/SeasonFreezeService.js";
 import { Permission } from "../security/PermissionService.js";
 
 const RequestType = Object.freeze({
   TEAM_ACCESS: "TEAM_ACCESS",
   GAME_LOCK: "GAME_LOCK",
-  TRANSFER: "TRANSFER"
+  TRANSFER: "TRANSFER",
+  TEAM_SEASON_FREEZE: "TEAM_SEASON_FREEZE"
 });
 
 function normalizeStatus(value = "") {
@@ -42,6 +44,7 @@ export class ApprovalCenterService {
     this.teamAccessService = new TeamAccessRequestService(this.supabase);
     this.gameLockService = new GameLockService(this.supabase, this.auth);
     this.transferRequestService = new TransferRequestService(this.supabase);
+    this.seasonFreezeService = new SeasonFreezeService(this.supabase, this.auth);
   }
 
   _activeGames() {
@@ -171,22 +174,66 @@ export class ApprovalCenterService {
     };
   }
 
+  _normalizeSeasonFreezeRequest(request = {}, scope = {}) {
+    const status = normalizeStatus(request.status);
+    const teamSeasonId = request.team_season_id || request.teamSeasonId || scope?.team_season_id || scope?.teamSeasonId || null;
+    const teamId = scope?.team_id || scope?.teamId || this.dataStore.getActiveTeamId?.() || null;
+    const seasonId = scope?.global_season_id || scope?.globalSeasonId || scope?.season_id || scope?.seasonId || null;
+    const team = this.dataStore.getTeamById?.(teamId)
+      || (this.dataStore.getTeams?.() || []).find(item => String(item.id) === String(teamId || ""))
+      || {};
+    const canReview = status === "PENDING"
+      && this.seasonFreezeService.canReviewRequests({
+        ...scope,
+        id: teamSeasonId,
+        team_id: teamId,
+        season_id: seasonId
+      });
+
+    return {
+      id: request.id,
+      type: RequestType.TEAM_SEASON_FREEZE,
+      status,
+      createdAt: request.created_at || null,
+      resolvedAt: request.resolved_at || null,
+      title: team.name || "Equipo",
+      subtitle: scope?.name || scope?.code || "",
+      detail: request.request_reason || request.resolution_note || "",
+      teamId,
+      seasonId,
+      teamSeasonId,
+      teamName: team.name || "Equipo",
+      seasonName: scope?.name || scope?.code || "Temporada",
+      requestedRole: request.requested_by_role || "",
+      actor: request.requested_by_role || "",
+      canApprove: canReview,
+      canReject: canReview,
+      raw: request
+    };
+  }
+
   async load() {
     const games = this._activeGames();
     const gameMap = new Map(games.map(game => [String(game.id), game]));
     const gameIds = games.map(game => game.id).filter(Boolean);
 
-    const activeTeamSeasonId = this.dataStore.getActiveTeamSeasonId?.(
-      this.dataStore.getActiveTeamId?.() || null
-    ) || null;
+    const activeTeamId = this.dataStore.getActiveTeamId?.() || null;
+    const activeScope = this.dataStore.getActiveSeasonContext?.(activeTeamId) || null;
+    const activeTeamSeasonId = this.dataStore.getActiveTeamSeasonId?.(activeTeamId)
+      || activeScope?.team_season_id
+      || activeScope?.teamSeasonId
+      || null;
 
-    const [accessResult, lockResult, transferResult] = await Promise.allSettled([
+    const [accessResult, lockResult, transferResult, seasonFreezeResult] = await Promise.allSettled([
       this.teamAccessService.listRequests(),
       gameIds.length > 0
         ? this.gameLockService.listRequests(gameIds)
         : Promise.resolve([]),
       activeTeamSeasonId
         ? this.transferRequestService.listRequests({ scopeTeamSeasonId: activeTeamSeasonId })
+        : Promise.resolve([]),
+      activeTeamSeasonId
+        ? this.seasonFreezeService.listRequests([activeTeamSeasonId])
         : Promise.resolve([])
     ]);
 
@@ -220,6 +267,19 @@ export class ApprovalCenterService {
       });
     }
 
+    if (seasonFreezeResult.status === "fulfilled") {
+      items.push(...(seasonFreezeResult.value || []).map(request =>
+        this._normalizeSeasonFreezeRequest(request, activeScope || {})
+      ));
+    } else {
+      errors.push({
+        source: RequestType.TEAM_SEASON_FREEZE,
+        message: seasonFreezeResult.reason?.message || String(
+          seasonFreezeResult.reason || "Error cargando cierres de temporada"
+        )
+      });
+    }
+
     items.sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt));
 
     return {
@@ -241,6 +301,14 @@ export class ApprovalCenterService {
 
     if (item.type === RequestType.GAME_LOCK) {
       return this.gameLockService.resolveRequest(item.id, "APPROVED", note || "Aprobado desde Bandeja de Solicitudes");
+    }
+
+    if (item.type === RequestType.TEAM_SEASON_FREEZE) {
+      return this.seasonFreezeService.resolveRequest(
+        item.id,
+        "APPROVED",
+        note || "Cierre de temporada aprobado desde Bandeja de Solicitudes"
+      );
     }
 
     throw new Error("Tipo de solicitud no soportado.");
@@ -286,6 +354,10 @@ export class ApprovalCenterService {
 
     if (item.type === RequestType.GAME_LOCK) {
       return this.gameLockService.resolveRequest(item.id, "REJECTED", note || null);
+    }
+
+    if (item.type === RequestType.TEAM_SEASON_FREEZE) {
+      return this.seasonFreezeService.resolveRequest(item.id, "REJECTED", note || null);
     }
 
     throw new Error("Tipo de solicitud no soportado.");

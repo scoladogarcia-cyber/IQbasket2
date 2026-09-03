@@ -1,0 +1,79 @@
+name: Team Season Freeze UI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "security/permissions.js"
+      - "services/seasons/SeasonFreezeService.js"
+      - "views/SeasonManagementView.js"
+      - "views/TranslationsView.js"
+      - "views/GameLiveEditorView.js"
+      - "services/ApprovalCenterService.js"
+      - "views/ApprovalCenterView.js"
+      - "tests/team-season-freeze-ui-smoke.mjs"
+      - ".github/workflows/team-season-freeze-ui.yml"
+  push:
+    branches:
+      - feature/team-season-freeze-v1
+    paths:
+      - "security/permissions.js"
+      - "services/seasons/SeasonFreezeService.js"
+      - "views/SeasonManagementView.js"
+      - "views/TranslationsView.js"
+      - "views/GameLiveEditorView.js"
+      - "services/ApprovalCenterService.js"
+      - "views/ApprovalCenterView.js"
+      - "tests/team-season-freeze-ui-smoke.mjs"
+      - ".github/workflows/team-season-freeze-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-ui:
+    name: Season lifecycle desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/season-freeze-vite.log 2>&1 &
+          echo $! > /tmp/season-freeze-vite.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/season-freeze-vite.log
+          exit 1
+
+      - name: Run season lifecycle browser smoke
+        env:
+          SEASON_FREEZE_UI_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/team-season-freeze-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/season-freeze-vite.log || true

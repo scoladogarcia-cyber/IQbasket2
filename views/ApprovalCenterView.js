@@ -66,6 +66,9 @@ export class ApprovalCenterView {
     if (type === RequestType.TRANSFER) {
       return { label: this.t("approvals.type_transfer", "Traspaso"), icon: "🔄", bg: "#f5f3ff", fg: "#6d28d9" };
     }
+    if (type === RequestType.TEAM_SEASON_FREEZE) {
+      return { label: this.t("approvals.type_season_freeze", "Cierre de temporada"), icon: "🗄️", bg: "#fff1f2", fg: "#9f1239" };
+    }
     return { label: this.t("approvals.type_team_access", "Acceso a equipo"), icon: "👥", bg: "#eff6ff", fg: "#1d4ed8" };
   }
 
@@ -80,6 +83,11 @@ export class ApprovalCenterView {
         opponent: item.opponent || item.title || "Rival"
       });
     }
+    if (item.type === RequestType.TEAM_SEASON_FREEZE) {
+      return this.t("approvals.season_freeze_title", "Cerrar temporada · {team}", {
+        team: item.teamName || item.title || "Equipo"
+      });
+    }
     return item.title || item.actor || this.t("approvals.type_team_access", "Acceso a equipo");
   }
 
@@ -92,6 +100,9 @@ export class ApprovalCenterView {
     }
     if (item.type === RequestType.GAME_LOCK) {
       return [item.gameDate || "", item.requestedRole || ""].filter(Boolean).join(" · ");
+    }
+    if (item.type === RequestType.TEAM_SEASON_FREEZE) {
+      return [item.seasonName || "", item.requestedRole || ""].filter(Boolean).join(" · ");
     }
     return this.t("approvals.access_subtitle", "Acceso a {team} como {role}", {
       team: item.teamName || "equipo",
@@ -497,12 +508,17 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
         if (!item) return;
         const confirmation = item.type === RequestType.GAME_LOCK
           ? this.t("approvals.approve_lock_confirm", "¿Aprobar y cerrar este partido? Quedará bloqueado hasta que un Admin/Superadmin lo reabra.")
-          : this.t("approvals.approve_access_confirm", "¿Aprobar esta solicitud de acceso?");
+          : item.type === RequestType.TEAM_SEASON_FREEZE
+            ? this.t(
+                "approvals.approve_season_freeze_confirm",
+                "¿Aprobar el cierre de esta temporada? Sus partidos abiertos y la plantilla quedarán congelados en modo histórico."
+              )
+            : this.t("approvals.approve_access_confirm", "¿Aprobar esta solicitud de acceso?");
         if (!confirm(confirmation)) return;
 
         await this._runAction(event.currentTarget, async () => {
           await this.service.approve(item);
-          if (item.type === RequestType.GAME_LOCK) {
+          if ([RequestType.GAME_LOCK, RequestType.TEAM_SEASON_FREEZE].includes(item.type)) {
             await DataStore.init(DataStore.getActiveTeamId?.() || null, true);
           }
         });
@@ -513,10 +529,14 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
       button.addEventListener("click", async event => {
         const item = this._findItem(event.currentTarget.dataset.requestId);
         if (!item) return;
-        const note = item.type === RequestType.GAME_LOCK
+        const requiresReasonPrompt = [
+          RequestType.GAME_LOCK,
+          RequestType.TEAM_SEASON_FREEZE
+        ].includes(item.type);
+        const note = requiresReasonPrompt
           ? prompt(this.t("approvals.reject_reason", "Motivo del rechazo (opcional):"), "")
           : null;
-        if (item.type === RequestType.GAME_LOCK && note === null) return;
+        if (requiresReasonPrompt && note === null) return;
 
         await this._runAction(event.currentTarget, () => this.service.reject(item, note));
       });
