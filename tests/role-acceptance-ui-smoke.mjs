@@ -310,6 +310,20 @@ async function inspectRole(browser, spec, viewportName, viewport) {
   if (viewport.width <= 390) {
     await page.click("#btn-mobile-more-toggle");
     await page.waitForSelector("#mobile-more-drawer", { state: "visible" });
+
+    // El bottom sheet entra con una transición. Validamos su geometría estable,
+    // no un frame intermedio del translateY.
+    try {
+      await page.waitForFunction(() => {
+        const content = document.querySelector("#mobile-more-drawer .mobile-drawer-content");
+        if (!content) return false;
+        const rect = content.getBoundingClientRect();
+        return rect.top >= -1 && rect.bottom <= window.innerHeight + 1;
+      }, null, { timeout: 1500 });
+    } catch {
+      // La comprobación detallada inferior devolverá la geometría diagnóstica.
+    }
+
     const mobile = await page.evaluate(() => {
       const drawer = document.querySelector("#mobile-more-drawer");
       const content = drawer?.querySelector(".mobile-drawer-content");
