@@ -315,10 +315,24 @@ async function inspectRole(browser, spec, viewportName, viewport) {
       const content = drawer?.querySelector(".mobile-drawer-content");
       const logout = document.querySelector("#btn-mobile-logout");
       const logoutRect = logout?.getBoundingClientRect();
+      const contentRect = content?.getBoundingClientRect();
       return {
         logoutVisible: Boolean(logoutRect && logoutRect.width > 0 && logoutRect.height > 0),
         drawerScrollable: Boolean(content && ["auto", "scroll"].includes(getComputedStyle(content).overflowY)),
-        drawerWithinViewport: Boolean(content && content.getBoundingClientRect().bottom <= window.innerHeight + 1),
+        drawerWithinViewport: Boolean(
+          contentRect
+          && contentRect.top >= -1
+          && contentRect.bottom <= window.innerHeight + 1
+        ),
+        geometry: contentRect ? {
+          top: contentRect.top,
+          bottom: contentRect.bottom,
+          height: contentRect.height,
+          innerHeight: window.innerHeight,
+          cssMaxHeight: getComputedStyle(content).maxHeight,
+          cssBottom: getComputedStyle(content).bottom,
+          position: getComputedStyle(content).position
+        } : null,
         globalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1
       };
     });
