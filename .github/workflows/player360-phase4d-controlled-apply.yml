@@ -163,6 +163,40 @@ jobs:
             echo "Phase 4D objects are already absent."
           fi
 
+      - name: Verify Phase 4D emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4d_postrollback_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4D_POST_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)
+          set -euo pipefail
+          OLD=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.game_events)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.training_blocks)::text || '|' ||
+              (select count(*) from public.training_participants)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player360_evaluation_metrics)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_evaluation_scores)::text || '|' ||
+              (select count(*) from public.player_objective_profiles)::text || '|' ||
+              (select count(*) from public.player_objective_targets)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4D_AFTER_EMERGENCY_ROLLBACK=$OLD"
+          test "$OLD" = "${{ steps.baseline.outputs.value }}"
+
+
       - name: Verify baseline after emergency rollback
         if: failure() && steps.apply.outcome == 'success'
         shell: bash
