@@ -126,7 +126,7 @@ const playerViewSource=readFileSync(
   "utf8"
 );
 assert.match(playerViewSource,/WellnessSupportPanel/);
-assert.match(playerViewSource,/tabs\.push\(\{ id: "wellness", label: "🌱 Apoyo" \}\)/);
+assert.match(playerViewSource,/tabs\.push\(\{ id: "wellness", label: "🥤 Nutrición \+ recuperación" \}\)/);
 assert.match(playerViewSource,/this\.activeTab === "wellness"/);
 assert.match(playerViewSource,/this\.wellnessPanel\.bind/);
 
