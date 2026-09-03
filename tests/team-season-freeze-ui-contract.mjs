@@ -14,6 +14,8 @@ assert.match(seasonView, /data-action="freeze-scope-data"/);
 assert.match(seasonView, /data-action="reopen-scope-data"/);
 assert.match(seasonView, /data-action="request-freeze-scope-data"/);
 assert.match(seasonView, /Sólo se reabrirán los partidos que fueron bloqueados por su cierre de temporada/i);
+assert.match(seasonView, /class="season-freeze-reason"/);
+assert.doesNotMatch(seasonView, /prompt\(/, "Temporadas no debe usar prompt() para el lifecycle V6.");
 
 assert.match(settingsView, /rosterSeasonFrozen/);
 assert.match(settingsView, /canManageRosterNow/);
@@ -30,6 +32,14 @@ assert.match(approvalService, /SeasonFreezeService/);
 assert.match(approvalService, /seasonFreezeService\.resolveRequest/);
 assert.match(approvalView, /approvals\.type_season_freeze/);
 assert.match(approvalView, /approve_season_freeze_confirm/);
+assert.match(approvalView, /class="approval-resolution-note"/);
+assert.doesNotMatch(approvalView, /prompt\(/, "Bandeja no debe usar prompt() para cierres operativos.");
+
+assert.equal(
+  (translations.match(/"approvals\.resolution_note":/g) || []).length,
+  4,
+  "La nota de resolución debe estar localizada ES/CA/EN/FR."
+);
 
 for (const value of [
   "Cierre de temporada",
