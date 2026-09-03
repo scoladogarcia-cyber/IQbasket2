@@ -558,6 +558,15 @@ export class TrainingView {
                 >
                   Guardar
                 </button>
+                <button
+                  type="button"
+                  class="p360-danger-link p360-remove-participant"
+                  data-session-id="${escapeHtml(session.id)}"
+                  data-player-id="${escapeHtml(participant.player_id)}"
+                  aria-label="Quitar jugador de esta sesión"
+                >
+                  Quitar
+                </button>
                 <div class="p360-load-value">
                   Carga: <strong>${displayNumber(participant.internal_load, 1)}</strong>
                 </div>
@@ -1323,7 +1332,7 @@ export class TrainingView {
         }
         .p360-attendance-row {
           display: grid;
-          grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto;
+          grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto auto;
           gap: 7px;
           align-items: center;
           padding: 8px;
@@ -1400,7 +1409,7 @@ export class TrainingView {
           .p360-attendance-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-          .p360-attendance-player, .p360-att-notes, .p360-save-attendance, .p360-load-value {
+          .p360-attendance-player, .p360-att-notes, .p360-save-attendance, .p360-remove-participant, .p360-load-value {
             grid-column: 1 / -1;
           }
         }
@@ -1597,6 +1606,26 @@ export class TrainingView {
         this.editingExternalId = null;
         this.activeTab = "external";
         await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const removeParticipant = event.target.closest(".p360-remove-participant");
+      if (removeParticipant) {
+        if (!confirm("¿Quitar a este jugador de la sesión? Úsalo solo para corregir una inclusión errónea.")) return;
+
+        removeParticipant.disabled = true;
+        try {
+          await this.service.removeParticipant({
+            trainingSessionId: removeParticipant.dataset.sessionId,
+            teamSeasonId: this.teamSeasonId,
+            playerId: removeParticipant.dataset.playerId
+          });
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error quitando participante:", error);
+          alert(`❌ ${error.message || error}`);
+          removeParticipant.disabled = false;
+        }
         return;
       }
 
