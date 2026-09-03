@@ -123,6 +123,25 @@ async function installFixture(page, viewportName) {
       drawerHref: playerTrainingDrawer?.getAttribute("href") || ""
     };
 
+    const guestScratch = document.createElement("div");
+    guestScratch.innerHTML = LayoutView.wrap(
+      '<div id="dashboard-content-area"></div>',
+      "training",
+      "INVITADO"
+    );
+    const guestTrainingNav = guestScratch.querySelector(
+      '.nav-link[data-route-key="training"]'
+    );
+    const guestTrainingDrawer = guestScratch.querySelector(
+      '.drawer-item[data-route-key="training"]'
+    );
+    window.__p360GuestNavCheck = {
+      desktopLocked: guestTrainingNav?.classList.contains("disabled-link") || false,
+      desktopHref: guestTrainingNav?.getAttribute("href") || "",
+      drawerLocked: guestTrainingDrawer?.classList.contains("disabled-link") || false,
+      drawerHref: guestTrainingDrawer?.getAttribute("href") || ""
+    };
+
     // Isolated real TrainingView host. Existing SPA listeners may remain on
     // window, but they have no #app node to overwrite and therefore cannot
     // race with the component under test.
@@ -333,7 +352,8 @@ async function runViewport(browser, name, viewport) {
 
   const nav = await page.evaluate(() => ({
     coach: window.__p360NavCheck,
-    player: window.__p360PlayerNavCheck
+    player: window.__p360PlayerNavCheck,
+    guest: window.__p360GuestNavCheck
   }));
 
   assertCondition(nav.coach.desktopExists, name, "Falta navegación desktop de Training");
@@ -343,6 +363,10 @@ async function runViewport(browser, name, viewport) {
   assertCondition(nav.coach.drawerHref === "#/training", name, "Training móvil no apunta a #/training");
   assertCondition(nav.player.desktopLocked, name, "Training no queda bloqueado para JUGADOR en desktop");
   assertCondition(nav.player.drawerLocked, name, "Training no queda bloqueado para JUGADOR en móvil");
+  assertCondition(nav.guest.desktopHref === "#/training", name, "INVITADO desktop no apunta a Training");
+  assertCondition(nav.guest.drawerHref === "#/training", name, "INVITADO móvil no apunta a Training");
+  assertCondition(!nav.guest.desktopLocked, name, "Training aparece bloqueado para INVITADO en desktop");
+  assertCondition(!nav.guest.drawerLocked, name, "Training aparece bloqueado para INVITADO en móvil");
 
   const core = await page.evaluate(() => ({
     title: document.querySelector(".p360-hero h1")?.textContent || "",
