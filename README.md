@@ -4,26 +4,29 @@ Aplicación web de gestión, registro y analítica de baloncesto.
 
 ## Estado del desarrollo
 
-`main` contiene el modelo histórico v3 validado y Player 360 4A–4D.1:
+`main` contiene el modelo histórico v3 validado y Player 360 4A–4D.2:
 temporadas globales, equipo-temporada, plantillas por intervalos, transferencias,
 entrenador principal por temporada, entrenamiento, tecnificación externa,
-evaluación humana, perfil objetivo, gaps y persistencia longitudinal/IA.
+evaluación humana, perfil objetivo, gaps, analítica longitudinal real y
+experiencia `Evolución + IA`.
 
-La rama segura `feature/player360-analytics-ai-ui-v1` desarrolla 4D.2 sobre
-ese baseline y añade:
+La rama segura `feature/player360-privacy-abac-v1` desarrolla 4E.1 y ya ha
+instalado en Supabase, mediante Controlled Apply validado, el sustrato de
+privacidad/consentimiento/ABAC:
 
-- adaptador de evidencia real para competición, entrenamiento, tecnificación y evaluación;
-- cálculo longitudinal sensible a los stints reales de plantilla;
-- fingerprint SHA-256 reproducible de las fuentes del snapshot;
-- pestaña responsive `Evolución + IA` dentro de Player 360;
-- tendencias y cobertura deterministas, sin etiquetar automáticamente subir/bajar como bueno/malo;
-- asociaciones explícitamente descriptivas y no causales;
-- lectura y revisión humana de insights IA persistidos;
-- generación externa de IA desactivada en frontend hasta disponer de adaptador backend seguro;
-- pruebas de dominio, orquestación, RBAC y navegador desktop/iPhone.
+- relaciones verificables SELF/GUARDIAN;
+- autorizaciones de tratamiento por jugador, equipo-temporada, módulo y finalidad;
+- solicitudes de acceso sensible separadas de la concesión;
+- grants por usuario, acción, módulo, finalidad y vigencia;
+- auditoría append-only de cambios de gobierno;
+- prohibición de bypass sensible por SUPERADMIN;
+- auto-grant administrativo bloqueado;
+- IA y exportación sensibles sometidas a autorización/grant explícitos;
+- acceso directo a tablas de gobierno cerrado para `authenticated` y `anon`.
 
-Recovery/Nutrition/Neuro continúan restringidos hasta implantar su fase específica
-de privacidad, consentimiento y ABAC.
+Recovery/Nutrition/Neuro siguen **sin tablas de datos ni UI de captura**. 4E.1
+instala únicamente la capa de gobierno necesaria para poder diseñarlos con
+seguridad.
 
 ## Seguridad de la base de datos
 
@@ -72,6 +75,8 @@ node tests/player360-phase4d-sql-structure.mjs
 node tests/player360-phase4d-service-smoke.mjs
 node tests/player360-phase4d-orchestrator-smoke.mjs
 # UI real: tests/player360-phase4d-ui-smoke.mjs (Playwright / GitHub Actions)
+node tests/player360-phase4e-privacy-abac-smoke.mjs
+node tests/player360-phase4e-sql-structure.mjs
 node tests/season-head-coach-history-regression.mjs
 node tests/session-switch-regression.mjs
 ```
@@ -80,16 +85,15 @@ La rama dispone de GitHub Actions para ejecutar el build automáticamente en pus
 
 ## Siguiente fase
 
-La Fase 4D.2 completa la primera experiencia de analítica longitudinal:
-datos reales → snapshot determinista → evidencia → visualización → insight IA
-persistido → revisión humana. La llamada a un modelo externo sigue bloqueada
-hasta desplegar un endpoint backend seguro y auditable; nunca debe exponerse una
-clave de proveedor en el navegador.
+La Fase 4E.1 ya dispone de infraestructura de privacidad/ABAC instalada y
+validada. El siguiente bloque será diseñar **Nutrition + Recovery** sobre ese
+sustrato, sin mezclar datos wellness con estadísticas deportivas y sin conceder
+acceso por rol solamente.
 
-La siguiente puerta estructural será 4E: privacidad, consentimiento y ABAC para
-poder habilitar Recovery/Nutrition y, posteriormente, Neuro. Las salidas de IA
-permanecen separadas de mediciones y evaluaciones humanas y no autorizan
-inferencias causales.
+La generación externa de IA sigue bloqueada hasta desplegar un endpoint backend
+seguro y auditable; nunca debe exponerse una clave de proveedor en el navegador.
+Neuro-Cognitive permanecerá para una fase posterior por su mayor sensibilidad y
+complejidad.
 
 ## Principio de migración
 
