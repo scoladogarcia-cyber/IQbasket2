@@ -580,8 +580,11 @@ export class Player360View {
     if (this.analyticsPanel.isAvailable()) {
       tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
     }
-    if (this.wellnessPanel.isAvailable()) {
-      tabs.push({ id: "wellness", label: "🌱 Apoyo" });
+    if (this.wellnessPanel.isAvailable() && this._can(Permission.VIEW_NUTRITION)) {
+      tabs.push({ id: "nutrition", label: "🥤 Nutrición" });
+    }
+    if (this.wellnessPanel.isAvailable() && this._can(Permission.VIEW_RECOVERY)) {
+      tabs.push({ id: "recovery", label: "🌙 Recuperación" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1076,7 +1079,14 @@ export class Player360View {
   _renderBody() {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
     if (this.activeTab === "analytics") return this.analyticsPanel.render();
-    if (this.activeTab === "wellness") return this.wellnessPanel.render();
+    if (this.activeTab === "nutrition") {
+      this.wellnessPanel.activeModule = "nutrition";
+      return this.wellnessPanel.render({ showModuleTabs: false });
+    }
+    if (this.activeTab === "recovery") {
+      this.wellnessPanel.activeModule = "recovery";
+      return this.wellnessPanel.render({ showModuleTabs: false });
+    }
     return this._renderEvaluationPanel();
   }
 
@@ -1084,7 +1094,7 @@ export class Player360View {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
         const requested = button.dataset.p360cTab;
-        this.activeTab = ["evaluation", "objective", "analytics", "wellness"].includes(requested)
+        this.activeTab = ["evaluation", "objective", "analytics", "nutrition", "recovery"].includes(requested)
           ? requested
           : "evaluation";
         this._renderLoaded(container);
@@ -1271,8 +1281,8 @@ export class Player360View {
           <div>
             <h1>Player 360 · ${escapeHtml(playerName(this.player))}</h1>
             <p>
-              Evaluación humana, perfil objetivo, evolución longitudinal y apoyo de hábitos.
-              Los check-ins de Nutrition/Recovery se mantienen separados de estadísticas e IA.
+              Evaluación humana, perfil objetivo, evolución longitudinal, nutrición y recuperación.
+              Los check-ins de Nutrición/Recuperación se mantienen separados de estadísticas e IA.
             </p>
           </div>
           <span class="p360c-context">${escapeHtml(teamName)} · ${escapeHtml(seasonName)}</span>
@@ -1306,7 +1316,9 @@ export class Player360View {
     });
     void this.wellnessPanel.bind(container, {
       onChanged: async () => {
-        this.activeTab = "wellness";
+        this.activeTab = this.wellnessPanel.activeModule === "nutrition"
+          ? "nutrition"
+          : "recovery";
         this._renderLoaded(container);
       }
     });
