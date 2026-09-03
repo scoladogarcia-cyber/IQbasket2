@@ -1,0 +1,78 @@
+name: Player 360 Phase 4E.2 UI
+
+on:
+  push:
+    branches:
+      - feature/player360-nutrition-recovery-v1
+    paths:
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "services/player360/WellnessService.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "config/player360-wellness.config.js"
+      - "security/permissions.js"
+      - "tests/browser-test-support.mjs"
+      - "tests/player360-phase4e2-ui-smoke.mjs"
+      - ".github/workflows/player360-phase4e2-ui.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "services/player360/WellnessService.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "config/player360-wellness.config.js"
+      - "security/permissions.js"
+      - "tests/browser-test-support.mjs"
+      - "tests/player360-phase4e2-ui-smoke.mjs"
+      - ".github/workflows/player360-phase4e2-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Manual Nutrition/Recovery desktop + mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/player360-phase4e2-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/player360-phase4e2-vite.log
+          exit 1
+
+      - name: Run Player 360 Phase 4E.2 browser smoke
+        env:
+          PLAYER360_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/player360-phase4e2-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/player360-phase4e2-vite.log || true
