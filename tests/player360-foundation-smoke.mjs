@@ -190,6 +190,26 @@ assert.equal(has(UserRole.FAMILIA_TUTOR, Permission.VIEW_PLAYER_360), false);
 assert.equal(has(UserRole.VISOR, Permission.VIEW_OBJECTIVE_PROFILE), true);
 assert.equal(has(UserRole.VISOR, Permission.VIEW_PRIVATE_PLAYER_EVALUATION), false);
 
+// Phase 4D: analytical generation, AI generation and human approval are separate actions.
+for (const role of [UserRole.ADMIN, UserRole.ENTRENADOR]) {
+  assert.equal(has(role, Permission.VIEW_LONGITUDINAL_ANALYTICS), true);
+  assert.equal(has(role, Permission.GENERATE_LONGITUDINAL_ANALYTICS), true);
+  assert.equal(has(role, Permission.VIEW_AI_INSIGHTS), true);
+  assert.equal(has(role, Permission.GENERATE_AI_INSIGHTS), true);
+  assert.equal(has(role, Permission.REVIEW_AI_INSIGHTS), true);
+}
+
+for (const role of [UserRole.ANALISTA, UserRole.PREPARADOR_FISICO]) {
+  assert.equal(has(role, Permission.VIEW_LONGITUDINAL_ANALYTICS), true);
+  assert.equal(has(role, Permission.GENERATE_LONGITUDINAL_ANALYTICS), true);
+  assert.equal(has(role, Permission.VIEW_AI_INSIGHTS), true);
+  assert.equal(has(role, Permission.GENERATE_AI_INSIGHTS), true);
+  assert.equal(has(role, Permission.REVIEW_AI_INSIGHTS), false);
+}
+
+assert.equal(has(UserRole.VISOR, Permission.VIEW_LONGITUDINAL_ANALYTICS), false);
+assert.equal(has(UserRole.VISOR, Permission.VIEW_AI_INSIGHTS), false);
+
 // Guard against accidentally duplicated ROLE_PERMISSIONS blocks in source.
 const permissionSource = readFileSync(
   new URL("../security/permissions.js", import.meta.url),
