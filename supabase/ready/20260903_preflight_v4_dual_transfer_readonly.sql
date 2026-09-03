@@ -17,6 +17,7 @@ with checks as (
     to_regprocedure('public.iq_v3_reject_transfer_request(uuid,text)') is not null as reject_rpc_ok,
     to_regprocedure('public.iq_v3_can_request_transfer(uuid)') is not null as request_permission_ok,
     to_regprocedure('public.iq_v3_can_manage_roster(uuid)') is not null as roster_permission_ok,
+    to_regprocedure('public.iq_v3_can_manage_team_season(uuid)') is not null as team_season_permission_ok,
     to_regprocedure('public.iq_v3_is_global_superadmin()') is not null as superadmin_helper_ok,
     not exists (
       select 1
@@ -91,6 +92,7 @@ select
     and reject_rpc_ok
     and request_permission_ok
     and roster_permission_ok
+    and team_season_permission_ok
     and superadmin_helper_ok
     and team_season_columns_ok
     and team_membership_columns_ok
