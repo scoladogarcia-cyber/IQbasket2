@@ -1,0 +1,4 @@
+phase4b-controlled-apply
+requested_at=2026-09-03
+branch=feature/player360-core-v1
+reason=validated preflight and forced-rollback rehearsal
