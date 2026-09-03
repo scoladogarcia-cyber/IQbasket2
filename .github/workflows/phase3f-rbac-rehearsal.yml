@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v3_phase3f_roster_permissions_readonly.sql)
           echo "$OUT"
-          echo "$OUT" | grep -q ',true$'
+          echo "$OUT" | grep -q ',t
 
       - name: Assert rehearsal rollback-only structure
         if: steps.check.outputs.ready == 'true'
@@ -78,6 +78,42 @@ jobs:
           OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_verify_v3_phase3f_postrollback_readonly.sql)
           echo "$OUT"
           echo "$OUT" | grep -q ',true$'
+
+      - name: Require database secret
+        if: steps.check.outputs.ready != 'true'
+        run: exit 1
+
+
+      - name: Assert rehearsal rollback-only structure
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/drafts/20260903_rehearse_v3_phase3f_roster_permissions_rollback.sql
+          test "$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$FILE")" -eq 1
+          test "$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$FILE" || true)" -eq 0
+          test "$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$FILE")" -eq 1
+
+      - name: Run Phase 3F rollback rehearsal
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/drafts/20260903_rehearse_v3_phase3f_roster_permissions_rollback.sql
+
+      - name: Verify clean rollback
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_verify_v3_phase3f_postrollback_readonly.sql)
+          echo "$OUT"
+          echo "$OUT" | grep -q ',t
+
+      - name: Require database secret
+        if: steps.check.outputs.ready != 'true'
+        run: exit 1
+
 
       - name: Require database secret
         if: steps.check.outputs.ready != 'true'
