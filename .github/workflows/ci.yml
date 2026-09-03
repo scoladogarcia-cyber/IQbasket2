@@ -91,6 +91,9 @@ jobs:
       - name: Approval center foundation
         run: node tests/approval-center-foundation.mjs
 
+      - name: Dual transfer SQL
+        run: node tests/dual-transfer-sql.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
