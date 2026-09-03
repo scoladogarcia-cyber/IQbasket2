@@ -277,7 +277,7 @@ export class LongitudinalAnalyticsPanel {
             '<span>n=' + displayNumber(item.sample_size, 0) + '</span>' +
             (ready ? '<span>r=' + displayNumber(item.coefficient, 2) + '</span>' : '') +
           '</div>' +
-          '<div class="p360d-note">Relación descriptiva: no demuestra que una variable cause la otra.</div>' +
+          '<div class="p360d-note">Relación descriptiva: no demuestra causalidad ni permite atribuir causa y efecto.</div>' +
         '</article>';
       }).join("") +
       '</div></div>';
