@@ -178,6 +178,30 @@ assert.equal(
   true
 );
 
+const stintAwareSnapshot = LongitudinalAnalyticsCalculator.calculate({
+  playerId: PLAYER_ID,
+  teamSeasonId: TEAM_SEASON_ID,
+  period: { from: "2026-01-05", to: "2026-02-22" },
+  eligibilityPeriods: [{ from: "2026-01-19", to: "2026-02-08" }],
+  observations,
+  metricDefinitions: [{
+    module: "training",
+    metric_code: "SESSION_LOAD",
+    unit: "AU",
+    aggregation: "SUM"
+  }]
+});
+const stintTraining = stintAwareSnapshot.series[0];
+assert.equal(stintAwareSnapshot.expected_buckets, 3);
+assert.deepEqual(stintAwareSnapshot.eligibility_periods, [{
+  from: "2026-01-19",
+  to: "2026-02-08"
+}]);
+assert.equal(stintTraining.points.length, 3);
+assert.equal(stintTraining.points[0].value, 3);
+assert.equal(stintTraining.points.at(-1).value, 5);
+assert.equal(stintTraining.coverage.coverage_pct, 100);
+
 assert.throws(
   () => LongitudinalAnalyticsCalculator.calculate({
     playerId: PLAYER_ID,
