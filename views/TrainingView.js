@@ -15,6 +15,12 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { Permission } from "../security/PermissionService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
+import {
+  EXTERNAL_PROVIDER_LABELS,
+  EXTERNAL_PROVIDER_TYPE,
+  PLAYER360_SOURCE_TYPE,
+  TRAINING_ATTENDANCE_LABELS
+} from "../config/player360.config.js";
 
 function escapeHtml(value = "") {
   return String(value ?? "")
@@ -411,19 +417,13 @@ export class TrainingView {
   }
 
   _attendanceStatusOptions(selected = "PLANNED") {
-    const statuses = [
-      ["PLANNED", "Planificado"],
-      ["PRESENT", "Presente"],
-      ["PARTIAL", "Parcial"],
-      ["ABSENT", "Ausente"],
-      ["EXCUSED", "Justificado"]
-    ];
-
-    return statuses.map(([value, label]) => `
-      <option value="${value}" ${String(selected).toUpperCase() === value ? "selected" : ""}>
-        ${escapeHtml(label)}
-      </option>
-    `).join("");
+    return Object.entries(TRAINING_ATTENDANCE_LABELS)
+      .map(([value, label]) => `
+        <option value="${value}" ${String(selected).toUpperCase() === value ? "selected" : ""}>
+          ${escapeHtml(label)}
+        </option>
+      `)
+      .join("");
   }
 
   _renderAttendanceEditor(session, directory) {
@@ -705,11 +705,11 @@ export class TrainingView {
             <label>
               <span>Tipo de proveedor</span>
               <select id="p360-external-provider-type">
-                <option value="EXTERNAL_COACH">Tecnificador / entrenador externo</option>
-                <option value="ACADEMY">Academia</option>
-                <option value="PHYSICAL_COACH">Preparador físico externo</option>
-                <option value="SELF">Trabajo autónomo</option>
-                <option value="OTHER">Otro</option>
+                ${Object.entries(EXTERNAL_PROVIDER_LABELS).map(([value, label]) => `
+                  <option value="${escapeHtml(value)}" ${value === EXTERNAL_PROVIDER_TYPE.EXTERNAL_COACH ? "selected" : ""}>
+                    ${escapeHtml(label)}
+                  </option>
+                `).join("")}
               </select>
             </label>
 
@@ -1361,7 +1361,7 @@ export class TrainingView {
           durationMinutes: numberOrNull(form.querySelector("#p360-external-duration")?.value),
           intensity: numberOrNull(form.querySelector("#p360-external-intensity")?.value),
           rpe: numberOrNull(form.querySelector("#p360-external-rpe")?.value),
-          sourceType: "EXTERNAL_COACH",
+          sourceType: PLAYER360_SOURCE_TYPE.EXTERNAL_COACH,
           notes: form.querySelector("#p360-external-notes")?.value.trim() || null,
           provenance: { entered_from: "IQBASKET_PLAYER360_UI" }
         });
