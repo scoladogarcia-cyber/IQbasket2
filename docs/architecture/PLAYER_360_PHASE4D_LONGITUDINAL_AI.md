@@ -2,9 +2,15 @@
 
 ## Estado
 
-Primer bloque de 4D en `feature/player360-core-v1`. El motor es puro, la
-persistencia permanece en diseño reversible y todavía no se activa generación
-de IA ni se modifica Supabase.
+4D.1 está instalada y validada en Supabase. La rama
+`feature/player360-analytics-ai-ui-v1` añade 4D.2: adaptación de fuentes reales,
+orquestación determinista y experiencia responsive de `Evolución + IA`.
+
+La generación contra un proveedor externo continúa deliberadamente desactivada
+en el navegador. La UI solo puede leer/revisar insights persistidos y solicitar
+snapshots deterministas; cualquier llamada futura a un modelo deberá ejecutarse
+en backend con autenticación, autorización, trazabilidad y secretos fuera del
+bundle cliente.
 
 ## Objetivo
 
@@ -66,6 +72,29 @@ para el contrato de evidencia. No genera texto clínico, deportivo o táctico.
 Lee snapshots e insights y encapsula las RPC controladas. No calcula métricas
 ni llama a un proveedor de IA. Rechaza contratos o versiones inconsistentes
 antes de intentar persistirlos.
+
+### `Player360ObservationAssembler`
+
+Conoce las formas de las fuentes de IQBasket y las transforma al contrato
+`PLAYER360_OBSERVATION_V1`. La vista no conoce columnas de tablas ni reglas de
+mapeo. Las métricas de competición, entrenamiento y tecnificación se configuran
+en `config/player360-analytics.config.js`; las métricas de evaluación se
+incorporan desde el catálogo activo.
+
+### `LongitudinalAnalyticsOrchestrator`
+
+Coordina DataStore, TrainingService, EvaluationService, adaptador, calculador,
+evidence assembler y persistencia. Aplica los stints reales del jugador para que
+las semanas previas a su alta, posteriores a su baja o fuera de un intervalo
+válido no penalicen cobertura ni entren en la evidencia. Genera una huella
+SHA-256 reproducible de las fuentes normalizadas para mantener idempotencia y
+auditabilidad.
+
+### `LongitudinalAnalyticsPanel`
+
+Presenta snapshots, tendencias, cobertura, asociaciones descriptivas e insights
+IA persistidos. Puede solicitar nuevos snapshots y revisar insights si RBAC lo
+permite. No calcula métricas ni contiene credenciales de proveedor.
 
 ### Futuro orquestador de IA
 
@@ -134,13 +163,55 @@ permitían ejecutar el helper genérico. El workflow revirtió automáticamente
 todos los objetos 4D, se endurecieron los `REVOKE` y el rehearsal posterior
 confirmó la corrección antes del segundo apply exitoso.
 
+## 4D.2 · Fuentes reales, stints y experiencia de uso
+
+La capa 4D.2 incorpora:
+
+- datos de competición desde estadísticas de partidos elegibles del jugador;
+- carga, minutos y RPE de entrenamientos del club;
+- carga, minutos y RPE de tecnificación/desarrollo externo;
+- puntuaciones del catálogo de evaluación humana;
+- exclusión de observaciones de competición fuera de la elegibilidad temporal;
+- cobertura semanal limitada a los stints reales de plantilla;
+- fingerprint SHA-256 estable de observaciones/definiciones/periodo/stints;
+- pestaña `Evolución + IA` responsive;
+- revisión humana de insights DRAFT;
+- aviso explícito de que las asociaciones no demuestran causalidad.
+
+Validación de navegador:
+
+- desktop 1440×900: PASS;
+- iPhone 390×844: PASS;
+- generación/refresco de snapshot: PASS;
+- revisión humana: PASS;
+- overflow horizontal: 0;
+- llamadas a proveedor IA desde frontend: 0.
+
+## Seguridad de IA
+
+`PLAYER360_AI_UI_CONFIG.generationEnabled` permanece en `false`. El frontend
+no debe contener API keys ni invocar directamente OpenAI, Anthropic u otro
+proveedor. La futura generación se implementará mediante un adaptador backend
+o Edge Function que:
+
+1. valide sesión, RBAC y contexto de equipo-temporada;
+2. recupere el snapshot/evidence bundle autorizado desde servidor;
+3. use secretos del proveedor solo en infraestructura segura;
+4. registre proveedor, modelo, prompt, audiencia, idioma y costes/tokens;
+5. persista la respuesta como recurso IA separado;
+6. mantenga revisión humana y auditoría;
+7. no convierta inferencias de IA en observaciones objetivas.
+
 ## Siguiente puerta de control
 
-Antes de instalar la persistencia 4D:
+La persistencia 4D ya está instalada; **no debe reaplicarse**. Las siguientes
+puertas son:
 
-1. ejecutar el preflight read-only contra la base real;
-2. ejecutar el rehearsal con rollback forzado;
-3. confirmar que tablas, funciones y datos vuelven al baseline;
-4. verificar que 4B y 4C no se alteran;
-5. preparar un script de instalación distinto del ensayo;
-6. aplicar únicamente tras validación explícita.
+1. integrar 4D.2 en `main` solo después de CI + smoke desktop/móvil;
+2. diseñar el endpoint backend seguro para generación IA antes de habilitar
+   `generationEnabled`;
+3. mantener evaluación humana, datos objetivos e IA como recursos separados;
+4. implantar privacidad, consentimiento y ABAC antes de abrir
+   Recovery/Nutrition/Neuro;
+5. añadir métricas o asociaciones nuevas únicamente mediante configuración y
+   pruebas de validez, nunca hardcodeándolas en la UI.
