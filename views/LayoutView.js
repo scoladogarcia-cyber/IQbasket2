@@ -371,7 +371,7 @@ export class LayoutView {
                 </select>
               </div>
 
-              <button id="btn-logout" class="btn-logout">
+              <button type="button" id="btn-logout" class="btn-logout" data-session-action="logout">
                 <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                 <span>${LayoutView.t("logout", "Cerrar sesión")}</span>
               </button>
@@ -455,6 +455,13 @@ export class LayoutView {
                 <span class="drawer-icon">⚙️</span>
                 <span>${LayoutView.t("settings", "Configuración")}</span>
               </a>
+              <button type="button"
+                      id="btn-mobile-logout"
+                      class="drawer-item drawer-item-logout"
+                      data-session-action="logout">
+                <span class="drawer-icon">↪</span>
+                <span>${LayoutView.t("logout", "Cerrar sesión")}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -977,6 +984,21 @@ export class LayoutView {
             min-height: 44px;
             box-sizing: border-box;
             touch-action: manipulation;
+          }
+
+          .drawer-item-logout {
+            grid-column: 1 / -1;
+            justify-content: center;
+            width: 100%;
+            color: #b91c1c;
+            background-color: #fff7f7;
+            border-color: #fecaca;
+            cursor: pointer;
+            font-weight: 800;
+          }
+
+          .drawer-item-logout:active {
+            background-color: #fee2e2;
           }
         }
       </style>
