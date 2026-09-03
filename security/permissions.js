@@ -463,6 +463,8 @@ export const ROUTE_PERMISSIONS = Object.freeze({
   entrenamientos: Permission.VIEW_TRAINING,
   development: Permission.VIEW_TRAINING,
   desarrollo: Permission.VIEW_TRAINING,
+  nutrition: Permission.VIEW_NUTRITION,
+  nutricion: Permission.VIEW_NUTRITION,
   player360: Permission.VIEW_PLAYER_360,
   "player-360": Permission.VIEW_PLAYER_360,
   "desarrollo-jugador": Permission.VIEW_PLAYER_360,
