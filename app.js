@@ -13,6 +13,7 @@ import { GameController } from "./controllers/GameController.js";
 
 // Vistas del Sistema
 import { LayoutView } from "./views/LayoutView.js";
+import { ApprovalCenterView } from "./views/ApprovalCenterView.js";
 import { AuthView } from "./views/AuthView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
@@ -154,6 +155,14 @@ class App {
       case "player":
         this.currentView = new PlayerStatsView(this.supabase, this.authController);
         await this.currentView.render(contentAreaId, id, this.teamId);
+        break;
+
+      case "approvals":
+      case "requests":
+      case "solicitudes":
+      case "bandeja":
+        this.currentView = new ApprovalCenterView(this.supabase, this.authController);
+        await this.currentView.render(contentAreaId);
         break;
 
       case "games":
