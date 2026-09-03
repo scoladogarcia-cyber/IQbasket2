@@ -229,7 +229,7 @@ async function installFixture(page, viewportName) {
           training_session_id: id,
           player_id: participant.player_id,
           attendance_status: participant.attendance_status,
-          participated_minutes: null,
+          participated_minutes: participant.participated_minutes ?? null,
           rpe: null,
           internal_load: null,
           notes: null
@@ -350,7 +350,10 @@ async function runViewport(browser, name, viewport) {
     hasExternalTab: Boolean(document.querySelector('[data-p360-tab="external"]')),
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     trainingMin: document.querySelector("#p360-training-date")?.getAttribute("min") || null,
-    trainingMax: document.querySelector("#p360-training-date")?.getAttribute("max") || null
+    trainingMax: document.querySelector("#p360-training-date")?.getAttribute("max") || null,
+    heroTitleColor: getComputedStyle(document.querySelector(".p360-hero h1")).color,
+    heroPillColor: getComputedStyle(document.querySelector(".p360-context-pill")).color,
+    durationReadOnly: Boolean(document.querySelector("#p360-training-duration")?.readOnly)
   }));
 
   assertCondition(core.title.includes("Player 360"), name, "No se renderiza Player 360 Training");
@@ -359,6 +362,9 @@ async function runViewport(browser, name, viewport) {
   assertCondition(!core.horizontalOverflow, name, "Overflow horizontal en estado inicial");
   assertCondition(core.trainingMin === "2025-09-01", name, "Min de temporada incorrecto");
   assertCondition(core.trainingMax === "2026-06-30", name, "Max de temporada incorrecto");
+  assertCondition(core.heroTitleColor === "rgb(255, 255, 255)", name, "Título hero sin contraste suficiente");
+  assertCondition(core.heroPillColor === "rgb(255, 255, 255)", name, "Contexto hero sin contraste suficiente");
+  assertCondition(core.durationReadOnly, name, "Duración debe ser derivada y no editable");
 
   // Cancelling a training draft must discard local state and never persist.
   await page.locator("#p360-create-training-panel").evaluate(el => { el.open = true; });
@@ -395,8 +401,12 @@ async function runViewport(browser, name, viewport) {
 
   await page.click("#p360-select-all-players");
   await page.fill("#p360-training-title", "Sesión creada por UI smoke");
-  await page.fill("#p360-training-duration", "90");
+  await page.fill("#p360-training-start-time", "18:00");
+  await page.fill("#p360-training-end-time", "19:30");
   await page.fill("#p360-training-intensity", "7.5");
+
+  const derivedDuration = await page.locator("#p360-training-duration").inputValue();
+  assertCondition(derivedDuration === "90", name, "La duración no se calcula desde inicio/fin");
   await page.fill(".p360-block-title", "Tiro tras bote");
   await page.fill(".p360-block-code", "SHOOTING");
   await page.fill(".p360-block-duration", "25");
@@ -450,7 +460,20 @@ async function runViewport(browser, name, viewport) {
   assertCondition(createCall.teamSeasonId === TEAM_SEASON_ID, name, "Alta usa team-season incorrecto");
   assertCondition(createCall.sessionDate === "2026-02-10", name, "Alta usa fecha incorrecta");
   assertCondition(createCall.blocks.length === 2, name, "Alta no envía dos bloques");
+  assertCondition(createCall.durationMinutes === 90, name, "Alta no envía duración derivada");
+  assertCondition(createCall.startTime === "18:00", name, "Alta no envía hora de inicio");
+  assertCondition(createCall.endTime === "19:30", name, "Alta no envía hora de fin");
   assertCondition(createCall.participants.length === 2, name, "Alta no envía plantilla seleccionada");
+  assertCondition(
+    createCall.participants.every(row => row.attendance_status === "PRESENT"),
+    name,
+    "Una sesión histórica debe crear los seleccionados como presentes"
+  );
+  assertCondition(
+    createCall.participants.every(row => row.participated_minutes === 90),
+    name,
+    "Los presentes de una sesión histórica deben heredar la duración completa"
+  );
 
   // Attendance/RPE edit of the existing session.
   const existingCard = page.locator(".p360-session-card").filter({ hasText: "Sesión existente" });
