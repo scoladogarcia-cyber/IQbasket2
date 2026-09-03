@@ -12,14 +12,17 @@ begin;
 do $$
 begin
   if to_regclass('public.team_seasons') is null
+     or to_regclass('public.teams') is null
      or to_regclass('public.players') is null
+     or to_regclass('public.user_profiles') is null
+     or to_regclass('public.team_season_memberships') is null
+     or to_regclass('public.club_season_memberships') is null
      or to_regclass('public.roster_memberships') is null
      or to_regclass('public.roster_membership_stints') is null
      or to_regclass('public.analytics_runs') is null
      or to_regclass('public.training_sessions') is null
      or to_regclass('public.player_evaluations') is null
-     or to_regprocedure('public.iq_v4_can_view_player360_team_season(uuid)') is null
-     or to_regprocedure('public.iq_v4_can_manage_evaluation(uuid)') is null
+     or to_regprocedure('public.iq_v3_is_global_superadmin()') is null
      or to_regprocedure('public.iq_v4_touch_updated_at()') is null then
     raise exception 'PLAYER360_PHASE4D_PREREQUISITES_MISSING';
   end if;
@@ -29,6 +32,169 @@ begin
     raise exception 'PLAYER360_PHASE4D_ALREADY_INSTALLED';
   end if;
 end $$;
+
+-- -----------------------------------------------------------------------------
+-- Authorization: independent actions, least privilege, ready for ABAC evolution.
+-- -----------------------------------------------------------------------------
+
+create or replace function public.iq_v4_has_player360_action_role(
+  p_team_season_id uuid,
+  p_team_roles text[],
+  p_club_roles text[],
+  p_profile_roles text[]
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select
+    auth.uid() is not null
+    and p_team_season_id is not null
+    and exists (
+      select 1
+      from public.team_seasons ts
+      join public.teams t on t.id = ts.team_id
+      where ts.id = p_team_season_id
+        and (
+          public.iq_v3_is_global_superadmin()
+
+          or exists (
+            select 1
+            from public.team_season_memberships m
+            where m.user_id = auth.uid()
+              and m.team_season_id = ts.id
+              and upper(coalesce(m.status, 'ACTIVE')) = 'ACTIVE'
+              and (m.valid_from is null or m.valid_from <= now())
+              and (m.valid_until is null or m.valid_until > now())
+              and upper(m.function_role) = any(coalesce(p_team_roles, array[]::text[]))
+          )
+
+          or exists (
+            select 1
+            from public.club_season_memberships cm
+            where cm.user_id = auth.uid()
+              and cm.club_id = t.club_id
+              and cm.season_id = ts.season_id
+              and upper(coalesce(cm.status, 'ACTIVE')) = 'ACTIVE'
+              and (cm.valid_from is null or cm.valid_from <= now())
+              and (cm.valid_until is null or cm.valid_until > now())
+              and upper(cm.function_role) = any(coalesce(p_club_roles, array[]::text[]))
+          )
+
+          or exists (
+            select 1
+            from public.user_profiles up
+            cross join lateral jsonb_array_elements_text(
+              coalesce(to_jsonb(up.assigned_team_ids), '[]'::jsonb)
+            ) assigned(team_id)
+            where up.id = auth.uid()
+              and assigned.team_id = ts.team_id::text
+              and upper(coalesce(up.global_role, up.role, 'USER'))
+                  = any(coalesce(p_profile_roles, array[]::text[]))
+          )
+        )
+    );
+$;
+
+create or replace function public.iq_v4_can_view_longitudinal_analytics(
+  p_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select public.iq_v4_has_player360_action_role(
+    p_team_season_id,
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA','PREPARADOR_FISICO'],
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
+    array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
+  );
+$;
+
+create or replace function public.iq_v4_can_generate_longitudinal_analytics(
+  p_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select public.iq_v4_has_player360_action_role(
+    p_team_season_id,
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA','PREPARADOR_FISICO'],
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
+    array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
+  );
+$;
+
+create or replace function public.iq_v4_can_view_ai_insights(
+  p_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select public.iq_v4_has_player360_action_role(
+    p_team_season_id,
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA','PREPARADOR_FISICO'],
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
+    array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
+  );
+$;
+
+create or replace function public.iq_v4_can_generate_ai_insights(
+  p_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select public.iq_v4_has_player360_action_role(
+    p_team_season_id,
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA','PREPARADOR_FISICO'],
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
+    array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
+  );
+$;
+
+create or replace function public.iq_v4_can_review_ai_insights(
+  p_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select public.iq_v4_has_player360_action_role(
+    p_team_season_id,
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR'],
+    array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO'],
+    array['ADMIN','ENTRENADOR']
+  );
+$;
+
+revoke all on function public.iq_v4_has_player360_action_role(uuid,text[],text[],text[]) from public;
+revoke all on function public.iq_v4_can_view_longitudinal_analytics(uuid) from public;
+revoke all on function public.iq_v4_can_generate_longitudinal_analytics(uuid) from public;
+revoke all on function public.iq_v4_can_view_ai_insights(uuid) from public;
+revoke all on function public.iq_v4_can_generate_ai_insights(uuid) from public;
+revoke all on function public.iq_v4_can_review_ai_insights(uuid) from public;
+
+grant execute on function public.iq_v4_can_view_longitudinal_analytics(uuid) to authenticated;
+grant execute on function public.iq_v4_can_generate_longitudinal_analytics(uuid) to authenticated;
+grant execute on function public.iq_v4_can_view_ai_insights(uuid) to authenticated;
+grant execute on function public.iq_v4_can_generate_ai_insights(uuid) to authenticated;
+grant execute on function public.iq_v4_can_review_ai_insights(uuid) to authenticated;
 
 -- Deterministic output. This is not an AI resource.
 create table public.player_longitudinal_snapshots (
@@ -151,12 +317,12 @@ grant select on table public.player_ai_insights to authenticated;
 create policy iq_v4_longitudinal_snapshots_select
 on public.player_longitudinal_snapshots
 for select to authenticated
-using (public.iq_v4_can_view_player360_team_season(team_season_id));
+using (public.iq_v4_can_view_longitudinal_analytics(team_season_id));
 
 create policy iq_v4_ai_insights_select
 on public.player_ai_insights
 for select to authenticated
-using (public.iq_v4_can_view_player360_team_season(team_season_id));
+using (public.iq_v4_can_view_ai_insights(team_season_id));
 
 create or replace function public.iq_v4_save_longitudinal_snapshot(
   p_team_season_id uuid,
@@ -181,7 +347,7 @@ declare
   v_id uuid;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-  if not public.iq_v4_can_view_player360_team_season(p_team_season_id) then
+  if not public.iq_v4_can_generate_longitudinal_analytics(p_team_season_id) then
     raise exception 'PLAYER360_ANALYTICS_GENERATE_DENIED';
   end if;
   if p_period_start is null or p_period_end is null or p_period_end < p_period_start then
@@ -270,7 +436,7 @@ begin
   where id = p_snapshot_id;
 
   if v_snapshot.id is null then raise exception 'PLAYER360_SNAPSHOT_NOT_FOUND'; end if;
-  if not public.iq_v4_can_view_player360_team_season(v_snapshot.team_season_id) then
+  if not public.iq_v4_can_generate_ai_insights(v_snapshot.team_season_id) then
     raise exception 'PLAYER360_AI_GENERATE_DENIED';
   end if;
   if upper(trim(coalesce(p_audience, ''))) not in ('STAFF','PLAYER','FAMILY','EXECUTIVE') then
@@ -326,7 +492,7 @@ begin
   for update;
 
   if v_insight.id is null then raise exception 'PLAYER360_AI_INSIGHT_NOT_FOUND'; end if;
-  if not public.iq_v4_can_manage_evaluation(v_insight.team_season_id) then
+  if not public.iq_v4_can_review_ai_insights(v_insight.team_season_id) then
     raise exception 'PLAYER360_AI_REVIEW_DENIED';
   end if;
 
