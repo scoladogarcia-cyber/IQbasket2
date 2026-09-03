@@ -40,6 +40,65 @@ begin
 end $$;
 
 -- -----------------------------------------------------------------------------
+-- Roster-specific authorization boundary.
+-- Keeps general team-season administration restricted while allowing the
+-- coaching roles intentionally granted MANAGE_ROSTER / REQUEST_TRANSFER in UI.
+-- -----------------------------------------------------------------------------
+create or replace function public.iq_v3_can_manage_roster(
+  target_team_season_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select
+    auth.uid() is not null
+    and (
+      exists (
+        select 1
+        from public.user_profiles up
+        where up.id = auth.uid()
+          and upper(coalesce(up.global_role, up.role, 'USER')) = 'SUPERADMIN'
+      )
+      or exists (
+        select 1
+        from public.team_season_memberships m
+        where m.user_id = auth.uid()
+          and m.team_season_id = target_team_season_id
+          and upper(m.status) = 'ACTIVE'
+          and upper(m.function_role) in (
+            'ADMIN',
+            'COORDINADOR',
+            'DIRECTOR_DEPORTIVO',
+            'ENTRENADOR',
+            'AYUDANTE'
+          )
+      )
+      or exists (
+        select 1
+        from public.team_seasons ts
+        join public.teams t on t.id = ts.team_id
+        join public.club_season_memberships cm
+          on cm.club_id = t.club_id
+         and cm.season_id = ts.season_id
+        where ts.id = target_team_season_id
+          and cm.user_id = auth.uid()
+          and upper(cm.status) = 'ACTIVE'
+          and upper(cm.function_role) in (
+            'ADMIN',
+            'COORDINADOR',
+            'DIRECTOR_DEPORTIVO'
+          )
+      )
+    );
+$;
+
+revoke all on function public.iq_v3_can_manage_roster(uuid) from public;
+grant execute on function public.iq_v3_can_manage_roster(uuid) to authenticated;
+
+-- -----------------------------------------------------------------------------
 -- 1. Child table: multiple stints inside one team-season membership
 -- valid_from / valid_until are INCLUSIVE dates.
 -- -----------------------------------------------------------------------------
@@ -352,7 +411,7 @@ begin
     raise exception 'AUTH_REQUIRED';
   end if;
 
-  if not public.iq_v3_can_manage_team_season(p_team_season_id) then
+  if not public.iq_v3_can_manage_roster(p_team_season_id) then
     raise exception 'TEAM_SEASON_MANAGE_DENIED';
   end if;
 
@@ -534,7 +593,7 @@ begin
     raise exception 'AUTH_REQUIRED';
   end if;
 
-  if not public.iq_v3_can_manage_team_season(p_team_season_id) then
+  if not public.iq_v3_can_manage_roster(p_team_season_id) then
     raise exception 'TEAM_SEASON_MANAGE_DENIED';
   end if;
 
@@ -728,7 +787,7 @@ begin
     raise exception 'AUTH_REQUIRED';
   end if;
 
-  if not public.iq_v3_can_manage_team_season(p_team_season_id) then
+  if not public.iq_v3_can_manage_roster(p_team_season_id) then
     raise exception 'TEAM_SEASON_MANAGE_DENIED';
   end if;
 
@@ -854,7 +913,7 @@ begin
     raise exception 'AUTH_REQUIRED';
   end if;
 
-  if not public.iq_v3_can_manage_team_season(p_team_season_id) then
+  if not public.iq_v3_can_manage_roster(p_team_season_id) then
     raise exception 'TEAM_SEASON_MANAGE_DENIED';
   end if;
 
