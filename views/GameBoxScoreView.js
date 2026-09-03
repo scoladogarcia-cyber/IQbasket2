@@ -9,6 +9,8 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
+import { BoxScoreCorrectionService } from "../services/games/BoxScoreCorrectionService.js";
 
 export class GameBoxScoreView {
   /**
@@ -23,15 +25,79 @@ export class GameBoxScoreView {
     this.players = [];
     this.selectedGameId = null;
     this.gameStats = [];
+    this.correctionService = new BoxScoreCorrectionService(this.supabase);
   }
 
   t(key, fallback = "") {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
-  _canEdit() {
-    // El BoxScore es una vista de consulta para todos los roles.
+  _contextForGame(game = {}) {
+    return {
+      teamId: game.team_id || game.teamId || DataStore.getActiveTeamId?.() || null,
+      seasonId: game.season_id || game.seasonId || null,
+      teamSeasonId: game.team_season_id || game.teamSeasonId
+        || DataStore.getActiveTeamSeasonId?.(game.team_id || game.teamId || null)
+        || null
+    };
+  }
+
+  _hasEditPermission(game = {}) {
+    if (typeof this.auth?.canPreview === "function") {
+      return Boolean(this.auth.canPreview(Permission.EDIT_BOXSCORE,this._contextForGame(game)));
+    }
+    if (typeof this.auth?.can === "function") {
+      return Boolean(this.auth.can(Permission.EDIT_BOXSCORE,this._contextForGame(game)));
+    }
     return false;
+  }
+
+  _hasPlayByPlay(game = {}) {
+    return (DataStore.getGameEvents?.(game.id) || []).length > 0;
+  }
+
+  _isLocked(game = {}) {
+    return String(game.edit_state || game.editState || "OPEN").toUpperCase() === "LOCKED";
+  }
+
+  _editability(game = {}) {
+    const hasPermission=this._hasEditPermission(game);
+    if (!hasPermission) {
+      return {
+        canEdit:false,
+        code:"READ_ONLY_ROLE",
+        message:this.t("boxscore_readonly_role","Tu perfil puede consultar el boxscore, pero no modificarlo.")
+      };
+    }
+    if (this._isLocked(game)) {
+      return {
+        canEdit:false,
+        code:"GAME_LOCKED",
+        message:this.t("boxscore_locked_hint","Partido cerrado: reábrelo antes de realizar correcciones.")
+      };
+    }
+    if (this._hasPlayByPlay(game)) {
+      return {
+        canEdit:false,
+        code:"PLAY_BY_PLAY_SOURCE",
+        message:this.t(
+          "boxscore_pbp_source_hint",
+          "Este boxscore se deriva del Play-by-Play. Corrige los eventos para mantener una única fuente de verdad."
+        )
+      };
+    }
+    return {
+      canEdit:true,
+      code:"MANUAL_BOXSCORE",
+      message:this.t(
+        "boxscore_manual_mode_hint",
+        "Modo corrección manual: este partido no tiene Play-by-Play y el boxscore puede editarse mientras permanezca abierto."
+      )
+    };
+  }
+
+  _canEdit(game = {}) {
+    return this._editability(game).canEdit;
   }
 
   async render(containerId = "dashboard-content-area", targetGameId = null) {
@@ -196,7 +262,8 @@ export class GameBoxScoreView {
     if (typeof starters === "string") {
       try { starters = JSON.parse(starters); } catch (e) { starters = []; }
     }
-    const canEdit = this._canEdit();
+    const editability = this._editability(currentGame);
+    const canEdit = editability.canEdit;
 
     let totMin = 0, totPts = 0, totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
     let totRo = 0, totRd = 0, totAst = 0, totRob = 0, totTap = 0, totPer = 0, totFc = 0, totFr = 0, totVal = 0;
@@ -327,6 +394,19 @@ export class GameBoxScoreView {
           ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${this.t("read_only", "Modo Solo Lectura")}</span>`}
         </div>
 
+        <div class="boxscore-edit-state"
+             data-editability="${editability.code}"
+             style="margin-bottom:16px;padding:12px 14px;border-radius:10px;border:1px solid ${canEdit ? "#bbf7d0" : editability.code === "PLAY_BY_PLAY_SOURCE" ? "#bfdbfe" : "#fed7aa"};background:${canEdit ? "#f0fdf4" : editability.code === "PLAY_BY_PLAY_SOURCE" ? "#eff6ff" : "#fff7ed"};color:#334155;font-size:12px;line-height:1.5;">
+          <strong>${canEdit ? "✏️ Corrección habilitada" : editability.code === "PLAY_BY_PLAY_SOURCE" ? "🔄 Fuente Play-by-Play" : "🔒 Solo lectura"}</strong>
+          <span style="display:block;margin-top:3px;">${editability.message}</span>
+          ${editability.code === "PLAY_BY_PLAY_SOURCE" ? `
+            <button type="button" id="btn-correct-pbp"
+              style="margin-top:9px;min-height:44px;padding:8px 12px;border-radius:8px;border:1px solid #93c5fd;background:white;color:#1d4ed8;font-weight:800;cursor:pointer;">
+              Corregir Play-by-Play
+            </button>
+          ` : ""}
+        </div>
+
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
             <span style="font-size: 18px;">🏆</span>
@@ -407,8 +487,10 @@ export class GameBoxScoreView {
 
       <style>
         .bs-input {
-          width: 38px !important;
-          height: 32px !important;
+          width: 48px !important;
+          min-width: 48px !important;
+          height: 44px !important;
+          min-height: 44px !important;
           text-align: center !important;
           border: 1px solid #cbd5e1 !important;
           border-radius: 4px !important;
@@ -433,6 +515,10 @@ export class GameBoxScoreView {
 
     container.querySelector("#select-game-bs")?.addEventListener("change", (e) => {
       window.location.hash = `#/boxscore/${e.target.value}`;
+    });
+
+    container.querySelector("#btn-correct-pbp")?.addEventListener("click", () => {
+      window.location.hash = `#/game/${currentGame.id}`;
     });
 
     // Recálculo reactivo instantáneo en cliente al teclear en cualquier input
@@ -527,15 +613,24 @@ export class GameBoxScoreView {
           });
         }
 
-        const gameData = {
-          ...currentGame,
-          starter_ids: starterIds
-        };
+        await this.correctionService.saveManualBoxScore({
+          gameId:currentGame.id,
+          starterIds,
+          stats:statsList
+        });
 
-        await DataStore.saveGameAndStats(gameData, statsList);
+        DataStore.isLoaded=false;
+        await DataStore.init(DataStore.getActiveTeamId?.() || null,true);
+        this.games=DataStore.getGames() || [];
+        this.players=DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
+          || DataStore.getPlayers()
+          || [];
 
-        alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
-        this.render(containerId, currentGame.id);
+        alert("✅ " + this.t(
+          "boxscore_saved_msg",
+          "Boxscore corregido y guardado. El partido permanece abierto hasta que decidas cerrarlo."
+        ));
+        this.render(containerId,currentGame.id);
       });
     }
   }
