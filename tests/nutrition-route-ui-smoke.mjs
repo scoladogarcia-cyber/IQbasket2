@@ -15,6 +15,7 @@ async function installFixture(page) {
   await page.evaluate(async ({ TEAM_ID, TEAM_SEASON_ID }) => {
     const { DataStore } = await import("/services/DataStore.js");
     const { NutritionView } = await import("/views/NutritionView.js");
+    const { Player360View } = await import("/views/Player360View.js");
     const { LayoutView } = await import("/views/LayoutView.js");
     const { PermissionService } = await import("/security/PermissionService.js");
 
@@ -100,6 +101,37 @@ async function installFixture(page) {
       mobileHref: mobileNav?.getAttribute("href") || "",
       mobileLocked: mobileNav?.classList.contains("disabled-link") || false
     };
+
+    document.body.appendChild(navScratch);
+    const mobileBrand = navScratch.querySelector(".mobile-brand");
+    const mobileBrandTitle = navScratch.querySelector(".mobile-brand .brand-title");
+    const mobileDashboard = navScratch.querySelector(
+      '.mobile-nav-item[data-route-key="dashboard"]'
+    );
+    const mobileDashboardLabel = mobileDashboard?.querySelector(".mobile-label");
+    window.__layoutContrast = {
+      brandParent: mobileBrand ? getComputedStyle(mobileBrand).color : "",
+      brandTitle: mobileBrandTitle ? getComputedStyle(mobileBrandTitle).color : "",
+      navParent: mobileDashboard ? getComputedStyle(mobileDashboard).color : "",
+      navLabel: mobileDashboardLabel ? getComputedStyle(mobileDashboardLabel).color : ""
+    };
+    navScratch.remove();
+
+    const player360Scratch = document.createElement("div");
+    const player360View = new Player360View(null, auth);
+    player360Scratch.innerHTML = `
+      ${player360View._renderStyles()}
+      <header class="p360c-hero">
+        <div><h1>Player 360 · Contraste</h1></div>
+        <span class="p360c-context">Equipo · Temporada</span>
+      </header>
+    `;
+    document.body.appendChild(player360Scratch);
+    window.__player360Contrast = {
+      title: getComputedStyle(player360Scratch.querySelector(".p360c-hero h1")).color,
+      context: getComputedStyle(player360Scratch.querySelector(".p360c-context")).color
+    };
+    player360Scratch.remove();
 
     const guestNavScratch = document.createElement("div");
     guestNavScratch.innerHTML = LayoutView.wrap(
@@ -242,6 +274,10 @@ async function runViewport(browser, viewportName, viewport) {
   const initial = await page.evaluate(() => ({
     nav: window.__nutritionNav,
     title: document.querySelector(".nutrition-hero h1")?.textContent || "",
+    titleColor: getComputedStyle(document.querySelector(".nutrition-hero h1")).color,
+    contextColor: getComputedStyle(document.querySelector(".nutrition-context")).color,
+    layoutContrast: window.__layoutContrast,
+    player360Contrast: window.__player360Contrast,
     playerOptions: document.querySelectorAll("#nutrition-player-select option").length,
     nutritionButtons: [...document.querySelectorAll("[data-p360w-module]")]
       .map(button => button.textContent?.trim() || ""),
@@ -258,6 +294,24 @@ async function runViewport(browser, viewportName, viewport) {
   assertCondition(initial.nav.mobileHref === "#/nutrition", viewportName, "Ruta móvil de Nutrición incorrecta");
   assertCondition(!initial.nav.desktopLocked && !initial.nav.mobileLocked, viewportName, "Nutrición aparece bloqueada para ENTRENADOR");
   assertCondition(initial.title.includes("Nutrición"), viewportName, "No se abre la vista Nutrición");
+  assertCondition(initial.titleColor === "rgb(255, 255, 255)", viewportName, "Título de Nutrición pierde contraste");
+  assertCondition(initial.contextColor === "rgb(255, 255, 255)", viewportName, "Contexto de Nutrición pierde contraste");
+  assertCondition(
+    initial.layoutContrast.brandTitle === initial.layoutContrast.brandParent,
+    viewportName,
+    "La marca móvil no hereda el color visible"
+  );
+  assertCondition(
+    initial.layoutContrast.navLabel === initial.layoutContrast.navParent,
+    viewportName,
+    "Las etiquetas de navegación móvil no heredan el color del icono"
+  );
+  assertCondition(
+    initial.player360Contrast.title === "rgb(255, 255, 255)"
+      && initial.player360Contrast.context === "rgb(255, 255, 255)",
+    viewportName,
+    "Player 360 pierde contraste en título o contexto"
+  );
   assertCondition(initial.playerOptions === 2, viewportName, "Selector de jugador incompleto");
   assertCondition(initial.nutritionButtons.length === 1, viewportName, "Ruta Nutrición mezcla módulos");
   assertCondition(initial.nutritionButtons[0].includes("Nutrición"), viewportName, "Panel no queda enfocado en Nutrición");
