@@ -131,6 +131,7 @@ export class TranslationsView {
     this.marketItemsPerPage = 10;
     this.allMarketPlayers = [];
     this.isMarketLoaded = false;
+    this.marketTransferStartDate = "";
 
     // Idiomas y Diccionario en Supabase
     this.selectedLangForEdit = localStorage.getItem("iq_lang") || "es";
@@ -462,7 +463,7 @@ export class TranslationsView {
       }
 
       this.transfers = await this.transferRequestService.listPending({
-        targetTeamSeasonId
+        scopeTeamSeasonId: targetTeamSeasonId
       });
       return this.transfers;
     } catch (error) {
@@ -534,7 +535,30 @@ export class TranslationsView {
     const startIndex = (this.marketCurrentPage - 1) * this.marketItemsPerPage;
     const paginatedPlayers = filteredPlayers.slice(startIndex, startIndex + this.marketItemsPerPage);
 
+    const dualReviewEnabled = Boolean(this.transferRequestCapabilities?.dual_review);
+    const marketSeasonContext = this.rosterState?.context
+      || DataStore.getActiveSeasonContext?.(activeTeamId)
+      || null;
+    const suggestedTransferStart = this.marketTransferStartDate
+      || this.rosterState?.referenceDate
+      || normalizeIsoDate(marketSeasonContext?.start_date)
+      || todayLocalIsoDate();
+
     tableContainer.innerHTML = `
+      ${dualReviewEnabled ? `
+        <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:12px;border:1px solid #c4b5fd;border-radius:10px;background:#f5f3ff;">
+          <label style="display:grid;gap:4px;min-width:min(100%,230px);flex:1 1 230px;font-size:11px;color:#5b21b6;font-weight:800;">
+            Fecha prevista de alta en destino
+            <input type="date"
+                   id="market-transfer-start-date"
+                   value="${suggestedTransferStart || ""}"
+                   style="width:100%;min-height:44px;box-sizing:border-box;padding:8px 10px;border:1px solid #a78bfa;border-radius:8px;background:#ffffff;color:#0f172a;font:inherit;">
+          </label>
+          <div style="flex:2 1 280px;font-size:11px;line-height:1.45;color:#6b21a8;">
+            El destino propone esta fecha al solicitar el fichaje. El equipo de origen validará por separado el último día de elegibilidad.
+          </div>
+        </div>
+      ` : ""}
       <div class="table-responsive">
         <table class="data-table">
           <thead>
@@ -583,7 +607,11 @@ export class TranslationsView {
       </div>
     `;
 
-    tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
+    tableContainer.querySelector("#market-transfer-start-date")?.addEventListener("change", event => {
+      this.marketTransferStartDate = String(event.currentTarget.value || "");
+    });
+
+        tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         if (!this.auth?.can?.(Permission.REQUEST_TRANSFER, { teamId: activeTeamId })) {
           alert("⚠️ No tienes permiso para solicitar traspasos.");
@@ -604,12 +632,34 @@ export class TranslationsView {
           return;
         }
 
+        let firstDateTo = null;
+        if (this.transferRequestCapabilities?.dual_review) {
+          const rawStartDate = tableContainer.querySelector("#market-transfer-start-date")?.value || "";
+          firstDateTo = normalizeIsoDate(rawStartDate);
+          const targetSeasonContext = this.rosterState?.context
+            || DataStore.getActiveSeasonContext?.(activeTeamId)
+            || null;
+
+          if (!firstDateTo) {
+            alert("⚠️ Selecciona una fecha prevista de alta válida.");
+            tableContainer.querySelector("#market-transfer-start-date")?.focus();
+            return;
+          }
+          if (!isDateInsideSeason(firstDateTo, targetSeasonContext)) {
+            alert("⚠️ La fecha prevista de alta debe estar dentro de la temporada activa.");
+            tableContainer.querySelector("#market-transfer-start-date")?.focus();
+            return;
+          }
+          this.marketTransferStartDate = firstDateTo;
+        }
+
         this.showSyncOverlay("📩 Registrando solicitud de traspaso...");
         try {
           await this.transferRequestService.requestTransfer({
             playerId,
             fromTeamSeasonId,
-            toTeamSeasonId: targetTeamSeasonId
+            toTeamSeasonId: targetTeamSeasonId,
+            firstDateTo
           });
 
           await this._refreshTransferRequests(targetTeamSeasonId);
@@ -727,6 +777,8 @@ export class TranslationsView {
     const myAssignedTeamIds = this.auth?.getCurrentUser?.()?.allowedTeamIds || [];
 
     const pendingTransfersList = this.transfers.filter(t => t.status === "PENDING");
+    const dualPendingTransfersList = pendingTransfersList.filter(t => t.dualWorkflow);
+    const legacyPendingTransfersList = pendingTransfersList.filter(t => !t.dualWorkflow);
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
@@ -1021,24 +1073,47 @@ export class TranslationsView {
           ${this.activeTab === 'players' && this._can("VIEW_TAB_PLAYERS") ? `
             <div class="config-container">
               
-              <!-- PANEL DE APROBACIÓN DE TRASPASOS PENDIENTES -->
-              ${this._can("APPROVE_TRANSFERS") && pendingTransfersList.length > 0 ? `
-                <div class="config-card" style="border: 2px solid #f59e0b; background: #fffbeb;">
-                  <div class="card-title" style="color: #b45309;"><span>📩</span> SOLICITUDES DE TRASPASO PENDIENTES (${pendingTransfersList.length})</div>
+              <!-- RESUMEN DE TRASPASOS DUALES: la revisión operativa vive en la Bandeja -->
+              ${dualPendingTransfersList.length > 0 ? `
+                <div class="config-card" style="border:2px solid #c4b5fd;background:#f5f3ff;">
+                  <div class="card-title" style="color:#6d28d9;"><span>🔄</span> TRASPASOS EN REVISIÓN (${dualPendingTransfersList.length})</div>
+                  <div style="font-size:12px;color:#5b21b6;line-height:1.5;margin-bottom:10px;">
+                    Las nuevas solicitudes se validan por separado entre origen y destino. Gestiona las fechas y decisiones desde la Bandeja de Solicitudes.
+                  </div>
+                  <div style="display:grid;gap:8px;">
+                    ${dualPendingTransfersList.map(tr => `
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 10px;border:1px solid #ddd6fe;border-radius:9px;background:#ffffff;">
+                        <div>
+                          <strong style="font-size:12px;color:#0f172a;">${tr.playerName}</strong>
+                          <div style="font-size:11px;color:#64748b;margin-top:3px;">
+                            Origen: ${tr.sourceDecision || "PENDING"} · Destino: ${tr.destinationDecision || "PENDING"}
+                          </div>
+                        </div>
+                        <a href="#/approvals" class="btn-secondary-sm" style="text-decoration:none;min-height:40px;display:inline-flex;align-items:center;">📥 Abrir solicitud</a>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ""}
+
+              <!-- Compatibilidad: solicitudes V1 previas sólo para SUPERADMIN -->
+              ${this._can("APPROVE_TRANSFERS") && legacyPendingTransfersList.length > 0 ? `
+                <div class="config-card" style="border:2px solid #f59e0b;background:#fffbeb;">
+                  <div class="card-title" style="color:#b45309;"><span>📩</span> SOLICITUDES LEGACY PENDIENTES (${legacyPendingTransfersList.length})</div>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead><tr><th>Jugador</th><th>Origen</th><th>Destino</th><th style="text-align: right;">Acciones</th></tr></thead>
+                      <thead><tr><th>Jugador</th><th>Origen</th><th>Destino</th><th style="text-align:right;">Acciones</th></tr></thead>
                       <tbody>
-                        ${pendingTransfersList.map(tr => {
+                        ${legacyPendingTransfersList.map(tr => {
                           const originTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.originTeamId).toLowerCase());
                           const targetTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.targetTeamId).toLowerCase());
                           return `
                             <tr>
                               <td><strong>${tr.playerName}</strong></td>
-                              <td><span class="badge-category">${originTeam ? originTeam.name : 'Equipo origen'}</span></td>
-                              <td><span class="badge-active-team">${targetTeam ? targetTeam.name : 'Equipo destino'}</span></td>
-                              <td style="text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
-                                <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background: #16a34a; color: white;">🟢 Aprobar Traspaso</button>
+                              <td><span class="badge-category">${originTeam ? originTeam.name : "Equipo origen"}</span></td>
+                              <td><span class="badge-active-team">${targetTeam ? targetTeam.name : "Equipo destino"}</span></td>
+                              <td style="text-align:right;display:flex;justify-content:flex-end;gap:8px;">
+                                <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background:#16a34a;color:white;">🟢 Aprobar Legacy</button>
                                 <button type="button" class="btn-reject-transfer btn-danger-sm" data-id="${tr.id}">🔴 Rechazar</button>
                               </td>
                             </tr>
@@ -1048,7 +1123,7 @@ export class TranslationsView {
                     </table>
                   </div>
                 </div>
-              ` : ''}
+              ` : ""}
 
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
               ${this._can("REQUEST_TRANSFERS") && transferMarketReady ? `
@@ -2405,6 +2480,9 @@ export class TranslationsView {
           if (!transferObj?.id) {
             throw new Error("La solicitud ya no está pendiente o no se pudo recuperar.");
           }
+          if (transferObj.dualWorkflow) {
+            throw new Error("Este traspaso usa revisión dual y debe gestionarse desde la Bandeja de Solicitudes.");
+          }
 
           const defaultFirstDateTo = maxIsoDate(
             rosterReferenceDate || todayLocalIsoDate(),
@@ -2479,6 +2557,10 @@ export class TranslationsView {
         }
         if (!transferObj?.id) {
           alert("⚠️ La solicitud ya no está pendiente.");
+          return;
+        }
+        if (transferObj.dualWorkflow) {
+          alert("⚠️ Este traspaso usa revisión dual y debe gestionarse desde la Bandeja de Solicitudes.");
           return;
         }
 

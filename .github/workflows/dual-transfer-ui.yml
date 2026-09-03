@@ -1,0 +1,75 @@
+name: Dual Transfer UI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TranslationsView.js"
+      - "views/ApprovalCenterView.js"
+      - "services/ApprovalCenterService.js"
+      - "services/transfers/TransferRequestService.js"
+      - "security/permissions.js"
+      - "tests/dual-transfer-ui-smoke.mjs"
+      - ".github/workflows/dual-transfer-ui.yml"
+  push:
+    branches:
+      - feature/transfer-dual-approval-v1
+    paths:
+      - "views/TranslationsView.js"
+      - "views/ApprovalCenterView.js"
+      - "services/ApprovalCenterService.js"
+      - "services/transfers/TransferRequestService.js"
+      - "security/permissions.js"
+      - "tests/dual-transfer-ui-smoke.mjs"
+      - ".github/workflows/dual-transfer-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Dual transfer desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/dual-transfer-vite.log 2>&1 &
+          echo $! > /tmp/dual-transfer-vite.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/dual-transfer-vite.log
+          exit 1
+
+      - name: Run dual transfer browser smoke
+        env:
+          DUAL_TRANSFER_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/dual-transfer-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/dual-transfer-vite.log || true
