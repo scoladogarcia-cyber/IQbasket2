@@ -1,0 +1,76 @@
+name: Core UX BoxScore Rehearsal
+
+on:
+  push:
+    branches:
+      - feature/core-ux-completion-v1
+    paths:
+      - ".github/workflows/core-ux-boxscore-rehearsal.yml"
+      - "supabase/ready/20260903_preflight_core_ux_boxscore_readonly.sql"
+      - "supabase/ready/20260903_apply_core_ux_boxscore_correction.sql"
+      - "supabase/ready/20260903_verify_core_ux_boxscore_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    name: BoxScore apply + verify + rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Capture baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_core_ux_boxscore_readonly.sql)
+          echo "$OUT"
+          BASELINE=$(printf '%s\n' "$OUT" | grep '^CORE_UX_BOXSCORE_BASELINE,' | tail -n 1)
+          test -n "$BASELINE"
+          echo "BASELINE_BEFORE=$BASELINE" >> "$GITHUB_ENV"
+      - name: Build rehearsal transaction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          apply_sql=Path("supabase/ready/20260903_apply_core_ux_boxscore_correction.sql").read_text()
+          verify_sql=Path("supabase/ready/20260903_verify_core_ux_boxscore_readonly.sql").read_text()
+          idx=apply_sql.lower().rfind("commit;")
+          if idx < 0: raise SystemExit("Final COMMIT not found")
+          Path("/tmp/core_ux_boxscore_rehearsal.sql").write_text(
+            apply_sql[:idx] + "\n" + verify_sql + "\nrollback;\n"
+          )
+          PY
+      - name: Rehearse migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=/tmp/core_ux_boxscore_rehearsal.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^CORE_UX_BOXSCORE_VERIFY,' | tail -n 1)
+          test -n "$CHECK"
+          FINAL=${CHECK##*,}
+          test "$FINAL" = "t" -o "$FINAL" = "true"
+      - name: Confirm rollback baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_core_ux_boxscore_readonly.sql \
+            | grep '^CORE_UX_BOXSCORE_BASELINE,' | tail -n 1)
+          echo "Before: $BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$BASELINE_BEFORE" = "$AFTER"
