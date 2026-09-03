@@ -316,11 +316,15 @@ async function boxscoreScenario(page,label) {
   const lockedState=await page.evaluate(()=>({
     save:Boolean(document.querySelector("#btn-save-boxscore")),
     disabled:[...document.querySelectorAll(".bs-input")].every(el=>el.disabled),
-    readOnly:(document.body.textContent || "").includes("Solo Lectura") || (document.body.textContent || "").includes("Solo lectura")
+    badge:document.querySelector(".boxscore-readonly-badge")?.textContent || ""
   }));
   assertCondition(!lockedState.save,label,"Partido LOCKED muestra Guardar Boxscore");
   assertCondition(lockedState.disabled,label,"Partido LOCKED tiene inputs editables");
-  assertCondition(lockedState.readOnly,label,"Partido LOCKED no comunica sólo lectura");
+  assertCondition(
+    lockedState.badge.includes("Partido cerrado") && lockedState.badge.toLowerCase().includes("lectura"),
+    label,
+    "Partido LOCKED no comunica claramente que está cerrado: "+lockedState.badge
+  );
 }
 
 async function runViewport(browser,label,viewport) {
