@@ -1,0 +1,68 @@
+name: Core UX Completion UI
+
+on:
+  push:
+    branches:
+      - feature/core-ux-completion-v1
+    paths:
+      - "views/TrainingView.js"
+      - "services/player360/TrainingService.js"
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/GameBoxScoreView.js"
+      - "services/games/BoxScoreCorrectionService.js"
+      - "tests/core-ux-completion-ui-smoke.mjs"
+      - ".github/workflows/core-ux-completion-ui.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TrainingView.js"
+      - "services/player360/TrainingService.js"
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/GameBoxScoreView.js"
+      - "services/games/BoxScoreCorrectionService.js"
+      - "tests/core-ux-completion-ui-smoke.mjs"
+      - ".github/workflows/core-ux-completion-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    name: Training + Nutrition + BoxScore desktop/iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install app
+        run: npm ci
+      - name: Install Playwright
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/core-ux-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/core-ux-vite.log
+          exit 1
+      - name: Run Core UX smoke
+        env:
+          CORE_UX_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/core-ux-completion-ui-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/core-ux-vite.log || true
