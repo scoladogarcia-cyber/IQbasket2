@@ -1,0 +1,85 @@
+name: Core Corrections Functional DB
+
+on:
+  push:
+    branches:
+      - feature/core-corrections-v1
+    paths:
+      - ".github/workflows/core-corrections-functional.yml"
+      - "supabase/tests/20260903_core_training_edit_functional.sql"
+      - "supabase/tests/20260903_core_manual_boxscore_functional.sql"
+      - "supabase/ready/20260903_apply_v4_phase4b_edit_training_external.sql"
+      - "supabase/ready/20260903_apply_v7_manual_boxscore.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Capture baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          T=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v4_phase4b_edit_training_external_readonly.sql | grep '^TRAINING_EDIT_BASELINE,' | tail -n1)
+          B=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v7_manual_boxscore_readonly.sql | grep '^BOXSCORE_V7_BASELINE,' | tail -n1)
+          echo "T_BEFORE=$T" >> "$GITHUB_ENV"
+          echo "B_BEFORE=$B" >> "$GITHUB_ENV"
+      - name: Build functional transactions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          specs=[
+            ("supabase/ready/20260903_apply_v4_phase4b_edit_training_external.sql",
+             "supabase/tests/20260903_core_training_edit_functional.sql",
+             "/tmp/core_training_functional.sql"),
+            ("supabase/ready/20260903_apply_v7_manual_boxscore.sql",
+             "supabase/tests/20260903_core_manual_boxscore_functional.sql",
+             "/tmp/core_boxscore_functional.sql"),
+          ]
+          for apply_path,test_path,out_path in specs:
+            apply=Path(apply_path).read_text()
+            idx=apply.lower().rfind("commit;")
+            if idx<0: raise SystemExit("COMMIT missing")
+            Path(out_path).write_text(apply[:idx]+"\n"+Path(test_path).read_text()+"\nrollback;\n")
+          PY
+      - name: Exercise training and technification edit
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=/tmp/core_training_functional.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^CORE_TRAINING_FUNCTIONAL,' | tail -n1)
+          test -n "$CHECK"
+          test "${CHECK##*,}" = "t"
+      - name: Exercise manual boxscore and PBP guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=/tmp/core_boxscore_functional.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^CORE_BOXSCORE_FUNCTIONAL,' | tail -n1)
+          test -n "$CHECK"
+          test "${CHECK##*,}" = "t"
+      - name: Confirm rollbacks preserved baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          T=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v4_phase4b_edit_training_external_readonly.sql | grep '^TRAINING_EDIT_BASELINE,' | tail -n1)
+          B=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v7_manual_boxscore_readonly.sql | grep '^BOXSCORE_V7_BASELINE,' | tail -n1)
+          echo "Training before: $T_BEFORE"; echo "Training after: $T"
+          echo "Boxscore before: $B_BEFORE"; echo "Boxscore after: $B"
+          test "$T_BEFORE" = "$T"
+          test "$B_BEFORE" = "$B"
