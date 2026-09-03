@@ -151,11 +151,17 @@ export class WellnessSupportPanel {
     }
   }
 
-  isAvailable() {
+  isModuleAvailable(module) {
+    const normalized=String(module || "").toLowerCase();
     return Boolean(
       this.backendAvailable
-      && Object.keys(MODULES).some(module => this._baseCanView(module))
+      && MODULES[normalized]
+      && this._baseCanView(normalized)
     );
+  }
+
+  isAvailable() {
+    return Object.keys(MODULES).some(module => this.isModuleAvailable(module));
   }
 
   _entryById(id) {
@@ -431,11 +437,15 @@ export class WellnessSupportPanel {
     `;
   }
 
-  render() {
+  render({ module: requestedModule = null, showModuleTabs = true } = {}) {
     if (!this.isAvailable()) return "";
 
-    const modules=Object.keys(MODULES).filter(module => this._baseCanView(module));
-    const module=this.activeModule;
+    const modules=Object.keys(MODULES).filter(module => this.isModuleAvailable(module));
+    const normalizedRequested=String(requestedModule || "").toLowerCase();
+    const module=modules.includes(normalizedRequested)
+      ? normalizedRequested
+      : (modules.includes(this.activeModule) ? this.activeModule : modules[0]);
+    this.activeModule=module;
     const moduleData=this.data[module] || { access:null,metrics:[],entries:[] };
     const access=moduleData.access || {};
     const canCreate=this._baseCanEdit(module) && access.can_create && access.purpose;
@@ -449,16 +459,18 @@ export class WellnessSupportPanel {
           permanece desactivada en esta fase.
         </div>
 
-        <div class="p360w-modules" role="tablist" aria-label="Apoyo Nutrition y Recovery">
-          ${modules.map(key => `
-            <button
-              type="button"
-              class="p360w-module"
-              data-p360w-module="${key}"
-              aria-selected="${module===key}"
-            >${MODULES[key].icon} ${MODULES[key].label}</button>
-          `).join("")}
-        </div>
+        ${showModuleTabs && modules.length > 1 ? `
+          <div class="p360w-modules" role="tablist" aria-label="Nutrición y Recuperación">
+            ${modules.map(key => `
+              <button
+                type="button"
+                class="p360w-module"
+                data-p360w-module="${key}"
+                aria-selected="${module===key}"
+              >${MODULES[key].icon} ${MODULES[key].label}</button>
+            `).join("")}
+          </div>
+        ` : ""}
 
         ${!access.purpose ? `
           <div class="p360w-locked">
