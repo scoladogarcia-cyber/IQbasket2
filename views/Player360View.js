@@ -284,7 +284,7 @@ export class Player360View {
           background: linear-gradient(135deg, #0f172a, #1e3a8a);
           color: white;
         }
-        .p360c-hero h1 { margin: 0 0 5px; font-size: clamp(22px, 4vw, 30px); }
+        .p360c-hero h1 { margin: 0 0 5px; font-size: clamp(22px, 4vw, 30px); color: #ffffff !important; }
         .p360c-hero p { margin: 0; color: #dbeafe; line-height: 1.5; }
         .p360c-context {
           flex: 0 0 auto;
@@ -294,6 +294,7 @@ export class Player360View {
           font-size: 12px;
           font-weight: 800;
           white-space: nowrap;
+          color: #ffffff !important;
         }
         .p360c-tabs {
           display: flex;
