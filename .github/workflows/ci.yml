@@ -94,6 +94,9 @@ jobs:
       - name: Dual transfer SQL
         run: node tests/dual-transfer-sql.mjs
 
+      - name: Dual transfer service + RBAC
+        run: node tests/dual-transfer-service-rbac.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
