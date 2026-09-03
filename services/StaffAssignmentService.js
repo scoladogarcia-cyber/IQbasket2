@@ -1,11 +1,9 @@
 /**
- * @fileoverview Compatibilidad de responsables deportivos contra el esquema Supabase real.
+ * @fileoverview Adaptador de responsables deportivos contra el modelo v3 canónico.
  *
- * El esquema auditado NO contiene `staff_assignments`.
- * Hasta que el modelo v3 esté migrado:
- * - HEAD_COACH se persiste en `seasons.coach_name` (por equipo + temporada).
- * - COORDINATOR se persiste en `clubs.coordinator_name` (ámbito de club actual).
- * - El resto de funciones se reservarán para memberships v3.
+ * - HEAD_COACH usa team_season_staff_assignments y RPCs v3.
+ * - COORDINATOR mantiene temporalmente clubs.coordinator_name.
+ * - No se vuelve a escribir seasons.coach_name.
  */
 
 export const StaffRole = Object.freeze({
@@ -18,8 +16,86 @@ export const StaffRole = Object.freeze({
 });
 
 export class StaffAssignmentService {
-  constructor(supabaseClient) {
+  constructor(supabaseClient, contextStore = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
+    this.contextStore = contextStore || null;
+  }
+
+  _normalizeSeasonName(value = "") {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^(\d{4})\s*[-\/]\s*(\d{4})$/);
+    return match ? match[1] + "/" + match[2] : raw;
+  }
+
+  async _resolveTeamSeason({ teamId, seasonName }) {
+    if (!teamId || !seasonName) {
+      throw new Error("Equipo y temporada son obligatorios para resolver el staff.");
+    }
+
+    const normalizedSeasonName = this._normalizeSeasonName(seasonName);
+    const contexts = this.contextStore?.getSeasons?.(teamId) || [];
+    const localMatch = contexts.find((context) => {
+      const label = this._normalizeSeasonName(context?.name || context?.code || "");
+      return label === normalizedSeasonName;
+    });
+
+    if (localMatch) {
+      const teamSeasonId = localMatch.team_season_id
+        || localMatch.teamSeasonId
+        || (localMatch.source === "v3" ? localMatch.id : null);
+
+      if (teamSeasonId) {
+        return {
+          teamSeasonId: String(teamSeasonId),
+          seasonName: normalizedSeasonName
+        };
+      }
+    }
+
+    const { data: catalogRows, error: catalogError } = await this.supabase
+      .from("season_catalog")
+      .select("id,name,code");
+
+    if (catalogError) throw catalogError;
+
+    const globalSeason = (catalogRows || []).find((row) => {
+      const name = this._normalizeSeasonName(row.name || "");
+      const code = this._normalizeSeasonName(String(row.code || "").replaceAll("_", "/"));
+      return name === normalizedSeasonName || code === normalizedSeasonName;
+    });
+
+    if (!globalSeason) {
+      throw new Error("No se ha encontrado la temporada global " + normalizedSeasonName + ".");
+    }
+
+    const { data: teamSeason, error: teamSeasonError } = await this.supabase
+      .from("team_seasons")
+      .select("id,team_id,season_id,status")
+      .eq("team_id", teamId)
+      .eq("season_id", globalSeason.id)
+      .maybeSingle();
+
+    if (teamSeasonError) throw teamSeasonError;
+    if (!teamSeason) {
+      throw new Error("El equipo no está vinculado a la temporada seleccionada.");
+    }
+
+    return {
+      teamSeasonId: String(teamSeason.id),
+      seasonName: this._normalizeSeasonName(globalSeason.name || normalizedSeasonName)
+    };
+  }
+
+  async _findActiveAssignment(teamSeasonId, staffRole) {
+    const { data, error } = await this.supabase
+      .from("team_season_staff_assignments")
+      .select("id,team_season_id,staff_role,user_id,external_name,status")
+      .eq("team_season_id", teamSeasonId)
+      .eq("staff_role", String(staffRole || "").toUpperCase())
+      .eq("status", "ACTIVE");
+
+    if (error) throw error;
+    return (data || [])[0] || null;
   }
 
   async upsertAssignment({
@@ -35,36 +111,58 @@ export class StaffAssignmentService {
     const normalizedName = String(staffName || "").trim() || null;
 
     if (normalizedRole === StaffRole.HEAD_COACH) {
-      if (!teamId || !seasonName) {
-        throw new Error("Equipo y temporada son obligatorios para asignar entrenador.");
+      const scope = await this._resolveTeamSeason({ teamId, seasonName });
+      const current = await this._findActiveAssignment(
+        scope.teamSeasonId,
+        StaffRole.HEAD_COACH
+      );
+
+      if (!normalizedName) {
+        if (current?.id) {
+          const { error } = await this.supabase.rpc(
+            "iq_v3_remove_team_season_staff",
+            { p_assignment_id: current.id }
+          );
+          if (error) throw error;
+        }
+
+        return {
+          id: current?.id || ("head-coach:" + scope.teamSeasonId),
+          team_season_id: scope.teamSeasonId,
+          team_id: String(teamId),
+          club_id: clubId,
+          season_name: scope.seasonName,
+          staff_role: StaffRole.HEAD_COACH,
+          staff_name: "",
+          external_name: null,
+          status: "INACTIVE",
+          removed: true
+        };
       }
 
-      const { data: season, error: seasonError } = await this.supabase
-        .from("seasons")
-        .select("id,team_id,name,coach_name")
-        .eq("team_id", teamId)
-        .eq("name", String(seasonName).trim())
-        .maybeSingle();
-
-      if (seasonError) throw seasonError;
-      if (!season) throw new Error("No se ha encontrado la temporada del equipo.");
-
-      const { data, error } = await this.supabase
-        .from("seasons")
-        .update({ coach_name: normalizedName })
-        .eq("id", season.id)
-        .select("id,team_id,name,coach_name")
-        .single();
+      const { data, error } = await this.supabase.rpc(
+        "iq_v3_assign_team_season_staff",
+        {
+          p_team_season_id: scope.teamSeasonId,
+          p_staff_role: StaffRole.HEAD_COACH,
+          p_user_id: null,
+          p_external_name: normalizedName
+        }
+      );
 
       if (error) throw error;
 
       return {
-        id: data.id,
-        team_id: data.team_id,
-        club_id: null,
-        season_name: data.name,
+        ...(data || {}),
+        id: data?.id || current?.id || ("head-coach:" + scope.teamSeasonId),
+        team_season_id: scope.teamSeasonId,
+        team_id: String(teamId),
+        club_id: clubId,
+        season_name: scope.seasonName,
         staff_role: StaffRole.HEAD_COACH,
-        staff_name: data.coach_name
+        staff_name: normalizedName,
+        external_name: normalizedName,
+        status: data?.status || "ACTIVE"
       };
     }
 
@@ -105,11 +203,18 @@ export class StaffAssignmentService {
     if (normalizedRole === StaffRole.HEAD_COACH) {
       if (!teamId || !seasonName) return false;
 
-      const { error } = await this.supabase
-        .from("seasons")
-        .update({ coach_name: null })
-        .eq("team_id", teamId)
-        .eq("name", String(seasonName).trim());
+      const scope = await this._resolveTeamSeason({ teamId, seasonName });
+      const current = await this._findActiveAssignment(
+        scope.teamSeasonId,
+        StaffRole.HEAD_COACH
+      );
+
+      if (!current?.id) return true;
+
+      const { error } = await this.supabase.rpc(
+        "iq_v3_remove_team_season_staff",
+        { p_assignment_id: current.id }
+      );
 
       if (error) throw error;
       return true;
