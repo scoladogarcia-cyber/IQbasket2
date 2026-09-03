@@ -16,5 +16,9 @@ assert.match(apply,/from public,anon/i);
 assert.match(verify,/confirmed_attendance_guard_ok/i);
 assert.match(verify,/temporal_roster_guard_ok/i);
 assert.doesNotMatch(rollback,/drop table/i);
+assert.match(rollback,/create or replace function public\.iq_v4_update_training_session/i);
+assert.match(rollback,/create or replace function public\.iq_v4_update_external_development/i);
+assert.match(apply,/p_participant_ids jsonb/i);
+assert.match(apply,/p_external_development_id uuid/i);
 
 console.log("TRAINING_EDIT_SQL_OK");
