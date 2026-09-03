@@ -52,7 +52,7 @@ privileges as (
 ),
 catalog as (
   select
-    count(*) filter (where is_system)=9 as system_metric_count,
+    count(*) filter (where is_system) as system_metric_count,
     count(*) filter (
       where code in (
         'WEIGHT_KG','BMI','BODY_FAT_PCT','CALORIE_INTAKE','ENERGY_DEFICIT',
