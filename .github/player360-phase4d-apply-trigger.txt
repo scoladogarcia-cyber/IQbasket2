@@ -11,3 +11,10 @@ Preconditions verified before trigger:
 - granular longitudinal/AI permissions enforced and regression-tested.
 
 This file exists only to trigger .github/workflows/player360-phase4d-controlled-apply.yml.
+
+Retry 2:
+- first controlled apply rolled back automatically because Supabase default function grants exposed the generic helper;
+- explicit anon/authenticated revokes added;
+- hardened Phase 4D rehearsal passed;
+- workflow rollback verifier repaired;
+- full CI/build passed before retry.
