@@ -398,6 +398,8 @@ as $$
 declare
   season_start date;
   season_end date;
+  activity_scope uuid;
+  activity_module text;
 begin
   select sc.start_date, sc.end_date
     into season_start, season_end
@@ -417,6 +419,46 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.iq_v4_validate_training_block()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  session_scope uuid;
+  activity_scope uuid;
+  activity_module text;
+begin
+  select s.team_season_id
+    into session_scope
+  from public.training_sessions s
+  where s.id = new.training_session_id;
+
+  if session_scope is null then
+    raise exception 'TRAINING_SESSION_NOT_FOUND';
+  end if;
+
+  if new.activity_type_id is not null then
+    select a.team_season_id, a.module
+      into activity_scope, activity_module
+    from public.player360_activity_types a
+    where a.id = new.activity_type_id;
+
+    if activity_scope is null then
+      raise exception 'ACTIVITY_TYPE_NOT_FOUND';
+    end if;
+
+    if activity_scope is distinct from session_scope
+       or activity_module <> 'TRAINING' then
+      raise exception 'TRAINING_ACTIVITY_TYPE_SCOPE_MISMATCH';
+    end if;
+  end if;
+
+  return new;
+end;
+$;
 
 create or replace function public.iq_v4_validate_training_participant()
 returns trigger
@@ -486,9 +528,25 @@ begin
     raise exception 'PLAYER_NOT_ELIGIBLE_ON_EXTERNAL_DEVELOPMENT_DATE';
   end if;
 
+  if new.activity_type_id is not null then
+    select a.team_season_id, a.module
+      into activity_scope, activity_module
+    from public.player360_activity_types a
+    where a.id = new.activity_type_id;
+
+    if activity_scope is null then
+      raise exception 'ACTIVITY_TYPE_NOT_FOUND';
+    end if;
+
+    if activity_scope is distinct from new.team_season_id
+       or activity_module <> 'EXTERNAL_DEVELOPMENT' then
+      raise exception 'EXTERNAL_ACTIVITY_TYPE_SCOPE_MISMATCH';
+    end if;
+  end if;
+
   return new;
 end;
-$$;
+$;
 
 create trigger trg_player360_activity_types_touch
 before update on public.player360_activity_types
@@ -502,6 +560,11 @@ for each row execute function public.iq_v4_validate_session_date();
 create trigger trg_training_sessions_touch
 before update on public.training_sessions
 for each row execute function public.iq_v4_touch_updated_at();
+
+create trigger trg_training_blocks_validate
+before insert or update of training_session_id, activity_type_id
+on public.training_blocks
+for each row execute function public.iq_v4_validate_training_block();
 
 create trigger trg_training_blocks_touch
 before update on public.training_blocks
