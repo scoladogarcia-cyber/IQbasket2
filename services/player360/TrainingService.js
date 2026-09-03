@@ -284,6 +284,32 @@ export class TrainingService {
     return data;
   }
 
+  /**
+   * Removes an accidentally assigned participant from a training session.
+   * Absence/excused cases should use setParticipant instead; this method is for
+   * correcting roster-entry mistakes so attendance denominators remain truthful.
+   */
+  async removeParticipant({
+    trainingSessionId,
+    teamSeasonId,
+    playerId
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(teamSeasonId, "teamSeasonId");
+    assertRequired(playerId, "playerId");
+
+    const { error } = await this.supabase
+      .from("training_participants")
+      .delete()
+      .eq("training_session_id", trainingSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .eq("player_id", playerId);
+
+    if (error) throw error;
+    return true;
+  }
+
   async archiveSession(trainingSessionId) {
     this._assertReady();
     assertRequired(trainingSessionId, "trainingSessionId");
