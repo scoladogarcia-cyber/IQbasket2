@@ -13,6 +13,18 @@ on:
       - "config/player360.config.js"
       - "tests/player360-phase4b-ui-smoke.mjs"
       - ".github/workflows/player360-phase4b-ui.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TrainingView.js"
+      - "views/LayoutView.js"
+      - "index.js"
+      - "security/permissions.js"
+      - "services/player360/TrainingService.js"
+      - "config/player360.config.js"
+      - "tests/player360-phase4b-ui-smoke.mjs"
+      - ".github/workflows/player360-phase4b-ui.yml"
   workflow_dispatch:
 
 permissions:
