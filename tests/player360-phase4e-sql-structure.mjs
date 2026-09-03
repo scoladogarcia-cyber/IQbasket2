@@ -17,6 +17,22 @@ const verify = readFileSync(
   new URL("../supabase/ready/20260903_verify_v4_phase4e_summary_readonly.sql", import.meta.url),
   "utf8"
 );
+const rehearsal = readFileSync(
+  new URL("../supabase/drafts/20260903_rehearse_v4_phase4e_privacy_abac_rollback.sql", import.meta.url),
+  "utf8"
+);
+
+const applyCommit = apply.lastIndexOf("\ncommit;\n");
+const rehearsalSmoke = rehearsal.indexOf(
+  "-- Rehearsal functional smoke. All rows and objects are rolled back below."
+);
+assert.ok(applyCommit > 0, "Apply 4E debe contener commit final.");
+assert.ok(rehearsalSmoke > 0, "Rehearsal 4E debe contener el smoke funcional.");
+assert.equal(
+  rehearsal.slice(0, rehearsalSmoke).trimEnd(),
+  apply.slice(0, applyCommit).trimEnd(),
+  "El cuerpo ensayado debe ser idéntico al cuerpo que se aplicará."
+);
 
 for (const table of [
   "player360_subject_relationships",
