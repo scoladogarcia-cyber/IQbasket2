@@ -38,18 +38,7 @@ jobs:
           sudo apt-get install -y postgresql-client
 
       - name: Structural SQL guards
-        shell: bash
-        run: |
-          set -euo pipefail
-          APPLY=supabase/ready/20260903_apply_v4_phase4b_training_external.sql
-          REHEARSAL=supabase/drafts/20260903_rehearse_v4_phase4b_training_external_rollback.sql
-
-          ! grep -Eq '^[[:space:]]*as \$[[:space:]]*$' "$APPLY"
-          ! grep -Eq '^[[:space:]]*\$;[[:space:]]*$' "$APPLY"
-
-          test "$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$REHEARSAL")" -eq 1
-          test "$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$REHEARSAL" || true)" -eq 0
-          test "$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$REHEARSAL")" -eq 1
+        run: node tests/player360-phase4b-sql-structure.mjs
 
       - name: Run read-only preflight
         shell: bash
