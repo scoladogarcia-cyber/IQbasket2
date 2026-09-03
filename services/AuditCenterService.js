@@ -137,6 +137,7 @@ export class AuditCenterService {
         reason: row.reason || "",
         teamId: game.team_id || game.teamId || context.team?.id || null,
         teamSeasonId: game.team_season_id || game.teamSeasonId || context.scope?.team_season_id || null,
+        gameId: row.game_id || null,
         requestId: row.request_id || null,
         ...this._actorLabel(row.actor_id, row.actor_role, actors),
         raw: row
@@ -184,6 +185,7 @@ export class AuditCenterService {
           reason: "",
           teamId: context.team?.id || null,
           teamSeasonId: context.scope?.team_season_id || null,
+          playerId: row.playerId || null,
           ...this._actorLabel(row.requestedBy, "SOLICITANTE", actors),
           raw: row
         });
@@ -222,6 +224,7 @@ export class AuditCenterService {
           effectiveDate: side.date || null,
           teamId: context.team?.id || null,
           teamSeasonId: context.scope?.team_season_id || null,
+          playerId: row.playerId || null,
           ...this._actorLabel(side.actor, "REVISOR", actors),
           raw: row
         });
@@ -242,6 +245,7 @@ export class AuditCenterService {
           reason: row.rejectionReason || "",
           teamId: context.team?.id || null,
           teamSeasonId: context.scope?.team_season_id || null,
+          playerId: row.playerId || null,
           ...this._actorLabel(row.reviewedBy, "REVISOR", actors),
           raw: row
         });
@@ -265,6 +269,7 @@ export class AuditCenterService {
         reason: row.notes || "",
         teamId: row.teamId || row.team_id || context.team?.id || null,
         teamSeasonId: row.team_season_id || null,
+        userId: row.user_id || null,
         actorId: row.user_id || null,
         actorRole: row.requestedRole || null,
         actorName: row.userName || row.userEmail || "Usuario",
