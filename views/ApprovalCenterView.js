@@ -217,7 +217,7 @@ export class ApprovalCenterView {
               ${pending > 0 ? `<span style="padding:4px 9px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;">${pending} ${this.t("approvals.pending", "Pendientes").toLowerCase()}</span>` : ""}
             </div>
             <p style="margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.45;max-width:720px;">
-              Unifica solicitudes de acceso y cierres de partido. Las acciones disponibles dependen siempre de tus permisos reales y del equipo/temporada seleccionados.
+${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostrando sólo las acciones permitidas por tu rol y contexto.")}
             </p>
           </div>
           <button type="button" id="btn-refresh-approval-center"
