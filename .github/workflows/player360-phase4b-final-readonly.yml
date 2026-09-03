@@ -1,0 +1,142 @@
+name: Player 360 Phase 4B Final Readonly
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - ".github/workflows/player360-phase4b-final-readonly.yml"
+      - "supabase/ready/20260903_verify_v4_phase4b_summary_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-readonly:
+    name: Final read-only integrity check
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Assert verifier is read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/ready/20260903_verify_v4_phase4b_summary_readonly.sql
+          if grep -Eiq '^[[:space:]]*(insert|update|delete|truncate|alter|drop|create|grant|revoke|call)[[:space:]]' "$FILE"; then
+            echo "Unsafe SQL statement detected in read-only verifier."
+            exit 1
+          fi
+
+      - name: Run final Phase 4B verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4b_summary_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4B_POST_APPLY,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Read-only sporting integrity summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --command="
+            with integrity as (
+              select
+                (select count(*) from public.players) as players,
+                (select count(*) from public.games) as games,
+                (select count(*) from public.player_game_stats) as player_game_stats,
+                (select count(*) from public.game_events) as game_events,
+                (select count(*) from public.roster_memberships) as roster_memberships,
+                (select count(*) from public.roster_membership_stints) as roster_stints,
+                (select count(*) from public.roster_transfer_requests) as transfer_requests,
+                (select count(*) from public.training_sessions) as training_sessions,
+                (select count(*) from public.training_blocks) as training_blocks,
+                (select count(*) from public.training_participants) as training_participants,
+                (select count(*) from public.external_development_sessions) as external_development_sessions,
+                (select count(*) from public.player360_activity_types) as activity_types,
+                (
+                  select count(*)
+                  from public.player_game_stats pgs
+                  join public.games g on g.id = pgs.game_id
+                  where g.team_season_id is not null
+                    and not public.iq_v3_player_eligible_on_date(
+                      pgs.player_id,g.team_season_id,g.date::date
+                    )
+                ) as invalid_stats,
+                (
+                  select count(*)
+                  from public.game_events ge
+                  join public.games g on g.id = ge.game_id
+                  where ge.player_id is not null
+                    and g.team_season_id is not null
+                    and not public.iq_v3_player_eligible_on_date(
+                      ge.player_id,g.team_season_id,g.date::date
+                    )
+                ) as invalid_events
+            )
+            select 'PLAYER360_PHASE4B_FINAL_INTEGRITY' as section, *
+            from integrity;
+          "
+
+      - name: Assert no Phase 4B synthetic rows remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW_TABLES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.training_blocks)::text || '|' ||
+              (select count(*) from public.training_participants)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player360_activity_types)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4B_FINAL_ROWS=$NEW_TABLES"
+          test "$NEW_TABLES" = "0|0|0|0|0"
+
+      - name: Assert no sporting eligibility violations
+        shell: bash
+        run: |
+          set -euo pipefail
+          INVALID=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (
+                select count(*)
+                from public.player_game_stats pgs
+                join public.games g on g.id = pgs.game_id
+                where g.team_season_id is not null
+                  and not public.iq_v3_player_eligible_on_date(
+                    pgs.player_id,g.team_season_id,g.date::date
+                  )
+              )::text || '|' ||
+              (
+                select count(*)
+                from public.game_events ge
+                join public.games g on g.id = ge.game_id
+                where ge.player_id is not null
+                  and g.team_season_id is not null
+                  and not public.iq_v3_player_eligible_on_date(
+                    ge.player_id,g.team_season_id,g.date::date
+                  )
+              )::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4B_FINAL_INVALID=$INVALID"
+          test "$INVALID" = "0|0"
