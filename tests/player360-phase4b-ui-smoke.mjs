@@ -360,6 +360,27 @@ async function runViewport(browser, name, viewport) {
   assertCondition(core.trainingMin === "2025-09-01", name, "Min de temporada incorrecto");
   assertCondition(core.trainingMax === "2026-06-30", name, "Max de temporada incorrecto");
 
+  // Cancelling a training draft must discard local state and never persist.
+  await page.locator("#p360-create-training-panel").evaluate(el => { el.open = true; });
+  await page.fill("#p360-training-title", "Borrador cancelado");
+  await page.click("#p360-select-all-players");
+  await page.click("#p360-add-block");
+  await page.locator(".p360-block-row").nth(1).locator(".p360-block-title").fill("Bloque temporal");
+  await page.click("#p360-cancel-training");
+
+  const cancelledTraining = await page.evaluate(() => ({
+    panelOpen: document.querySelector("#p360-create-training-panel")?.open ?? true,
+    title: document.querySelector("#p360-training-title")?.value || "",
+    blocks: document.querySelectorAll(".p360-block-row").length,
+    checkedPlayers: document.querySelectorAll('input[name="p360-training-player"]:checked').length,
+    createCalls: window.__p360.createCalls.length
+  }));
+  assertCondition(!cancelledTraining.panelOpen, name, "Cancelar entrenamiento no cierra el panel");
+  assertCondition(cancelledTraining.title === "", name, "Cancelar entrenamiento no limpia el título");
+  assertCondition(cancelledTraining.blocks === 1, name, "Cancelar entrenamiento no restaura un único bloque vacío");
+  assertCondition(cancelledTraining.checkedPlayers === 0, name, "Cancelar entrenamiento no limpia jugadores seleccionados");
+  assertCondition(cancelledTraining.createCalls === 0, name, "Cancelar entrenamiento provoca una escritura");
+
   // Create session: exact-date eligibility should change the player checklist.
   await page.locator("#p360-create-training-panel").evaluate(el => { el.open = true; });
   await page.fill("#p360-training-date", "2026-01-15");
@@ -561,6 +582,27 @@ async function runViewport(browser, name, viewport) {
     "La pestaña Desarrollo externo no queda dentro del viewport"
   );
   await externalTab.click();
+
+  // Cancelling external development/technification must also discard the draft.
+  await page.locator("#p360-create-external-panel").evaluate(el => { el.open = true; });
+  await page.fill("#p360-external-date", "2026-02-10");
+  await page.dispatchEvent("#p360-external-date", "change");
+  await page.selectOption("#p360-external-player", "10000000-0000-4000-8000-000000000002");
+  await page.fill("#p360-external-title", "Tecnificación cancelada");
+  await page.fill("#p360-external-provider", "Academia temporal");
+  await page.click("#p360-cancel-external");
+
+  const cancelledExternal = await page.evaluate(() => ({
+    panelOpen: document.querySelector("#p360-create-external-panel")?.open ?? true,
+    title: document.querySelector("#p360-external-title")?.value || "",
+    playerId: document.querySelector("#p360-external-player")?.value || "",
+    externalCalls: window.__p360.externalCalls.length
+  }));
+  assertCondition(!cancelledExternal.panelOpen, name, "Cancelar tecnificación no cierra el panel");
+  assertCondition(cancelledExternal.title === "", name, "Cancelar tecnificación no limpia la actividad");
+  assertCondition(cancelledExternal.playerId === "", name, "Cancelar tecnificación no limpia el jugador");
+  assertCondition(cancelledExternal.externalCalls === 0, name, "Cancelar tecnificación provoca una escritura");
+
   await page.locator("#p360-create-external-panel").evaluate(el => { el.open = true; });
   await page.fill("#p360-external-date", "2026-02-10");
   await page.dispatchEvent("#p360-external-date", "change");
