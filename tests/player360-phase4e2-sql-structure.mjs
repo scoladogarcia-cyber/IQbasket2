@@ -21,6 +21,10 @@ const rehearsal = readFileSync(
   new URL("../supabase/drafts/20260903_rehearse_v4_phase4e2_wellness_rollback.sql", import.meta.url),
   "utf8"
 );
+const installedSmoke = readFileSync(
+  new URL("../supabase/drafts/20260903_smoke_v4_phase4e2_installed_rollback.sql", import.meta.url),
+  "utf8"
+);
 
 const applyCommit = apply.lastIndexOf("\ncommit;\n");
 const rehearsalSmoke = rehearsal.indexOf(
@@ -175,5 +179,18 @@ assert.doesNotMatch(
   /update public\.player360_wellness_entries[\s\S]*source_type=v_source_type/i,
   "Editar no debe alterar el origen del registro."
 );
+
+assert.equal((installedSmoke.match(/^\s*begin;\s*$/gmi) || []).length,1);
+assert.equal((installedSmoke.match(/^\s*commit;\s*$/gmi) || []).length,0);
+assert.equal((installedSmoke.match(/^\s*rollback;\s*$/gmi) || []).length,1);
+for (const invariant of [
+  "PLAYER360_PHASE4E2_INSTALLED_SUPERADMIN_BYPASS",
+  "PLAYER360_PHASE4E2_INSTALLED_EXTERNAL_IMPORT_ENABLED",
+  "PLAYER360_PHASE4E2_INSTALLED_AI_ENABLED",
+  "PLAYER360_PHASE4E2_INSTALLED_OUTSIDE_STINT_NOT_BLOCKED",
+  "PLAYER360_PHASE4E2_INSTALLED_ARCHIVED_VISIBLE"
+]) {
+  assert.match(installedSmoke,new RegExp(invariant));
+}
 
 console.log("PLAYER360_PHASE4E2_SQL_STRUCTURE_OK");
