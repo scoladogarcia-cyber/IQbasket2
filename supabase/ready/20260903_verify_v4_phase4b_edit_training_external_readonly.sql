@@ -13,10 +13,16 @@ select
     'public.iq_v4_update_external_development(uuid,uuid,date,text,text,uuid,text,text,text,integer,numeric,numeric,text,text,jsonb,jsonb)',
     'EXECUTE'
   ) as external_execute_ok,
-  position(
-    '''training_edit'', true'
-    in pg_get_functiondef('public.iq_v4_training_capabilities()'::regprocedure)
-  )>0 as capabilities_training_edit_ok,
+  (
+    position(
+      'training_edit'
+      in pg_get_functiondef('public.iq_v4_training_capabilities()'::regprocedure)
+    )>0
+    and position(
+      'external_development_edit'
+      in pg_get_functiondef('public.iq_v4_training_capabilities()'::regprocedure)
+    )>0
+  ) as capabilities_training_edit_ok,
   position(
     'TRAINING_CONFIRMED_PARTICIPANT_CANNOT_BE_REMOVED'
     in pg_get_functiondef(
