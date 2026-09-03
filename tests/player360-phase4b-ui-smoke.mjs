@@ -64,7 +64,16 @@ async function installFixture(page, viewportName) {
       email: "coach@example.com",
       role: "ENTRENADOR",
       global_role: "ENTRENADOR",
-      assigned_team_ids: [TEAM_ID]
+      assigned_team_ids: [TEAM_ID],
+      allowed_team_season_ids: [TEAM_SEASON_ID],
+      contextualMemberships: [
+        {
+          team_season_id: TEAM_SEASON_ID,
+          team_id: TEAM_ID,
+          function_role: "ENTRENADOR",
+          status: "ACTIVE"
+        }
+      ]
     });
 
     // Validate navigation in the real LayoutView before rendering the module.
