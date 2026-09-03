@@ -67,6 +67,9 @@ jobs:
       - name: Player 360 Phase 4E SQL structure
         run: node tests/player360-phase4e-sql-structure.mjs
 
+      - name: Player 360 Phase 4E.2 wellness foundation
+        run: node tests/player360-phase4e2-wellness-foundation.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
