@@ -13,6 +13,7 @@ import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
 import { Permission } from "../security/PermissionService.js";
+import { GameLockService } from "../services/games/GameLockService.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -37,6 +38,8 @@ export class GameLiveEditorView {
     this.liveEventsHistory = [];
     this.opponentStats = { oreb: 0, dreb: 0, tov: 0, ast: 0, blk_made: 0, blk_received: 0, fouls: 0 };
     this.continuationDialog = null;
+    this.pendingLockRequests = [];
+    this.gameLockService = new GameLockService(this.supabase, this.auth);
   }
 
   t(key, fallback = "") {
@@ -47,10 +50,223 @@ export class GameLiveEditorView {
     return Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME));
   }
 
+  _isGameLocked(game = null) {
+    return GameLockService.isLocked(game || {});
+  }
+
+  _gameContext(game = null) {
+    return {
+      teamId: game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId(),
+      seasonId: game?.season_id || game?.seasonId || null,
+      teamSeasonId: game?.team_season_id || game?.teamSeasonId || DataStore.getActiveTeamSeasonId?.()
+    };
+  }
+
   _canDeleteGame(game = null) {
-    const teamId = game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId();
-    const seasonId = game?.season_id || game?.seasonId || null;
-    return Boolean(this.auth?.canPreview?.(Permission.DELETE_GAME, { teamId, seasonId }));
+    if (this._isGameLocked(game)) return false;
+    return Boolean(
+      this.auth?.canPreview?.(Permission.DELETE_GAME, this._gameContext(game))
+    );
+  }
+
+  _escapeText(value = "") {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  _pendingLockRequest(gameId) {
+    return (this.pendingLockRequests || []).find(
+      request => String(request.game_id || request.gameId) === String(gameId)
+    ) || null;
+  }
+
+  async _loadLockRequests() {
+    const gameIds = (this.games || []).map(game => game.id).filter(Boolean);
+    if (gameIds.length === 0) {
+      this.pendingLockRequests = [];
+      return;
+    }
+
+    const shouldQuery = (this.games || []).some(game =>
+      this.gameLockService.canReviewRequests(game)
+      || this.gameLockService.canRequestLock(game)
+    );
+    if (!shouldQuery) {
+      this.pendingLockRequests = [];
+      return;
+    }
+
+    try {
+      this.pendingLockRequests = await this.gameLockService.listPendingRequests(gameIds);
+    } catch (error) {
+      // During staged rollout the UI can be deployed before the additive DB
+      // objects. Read-only game browsing must keep working in that case.
+      console.warn("[GameLiveEditorView] Solicitudes de cierre no disponibles:", error?.message || error);
+      this.pendingLockRequests = [];
+    }
+  }
+
+  _renderLockRequestsPanel() {
+    const reviewable = (this.pendingLockRequests || []).filter(request => {
+      const game = this.games.find(
+        item => String(item.id) === String(request.game_id || request.gameId)
+      );
+      return game && this.gameLockService.canReviewRequests(game);
+    });
+
+    if (reviewable.length === 0) return "";
+
+    return `
+      <section style="margin-bottom: 18px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px;">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <div>
+            <h2 style="margin:0; font-size:15px; font-weight:900; color:#78350f;">📨 Peticiones de cierre</h2>
+            <p style="margin:3px 0 0; font-size:12px; color:#92400e;">Entrenadores y analistas solicitan aquí el bloqueo definitivo del partido.</p>
+          </div>
+          <span style="background:#fef3c7; color:#92400e; border-radius:999px; padding:4px 9px; font-size:11px; font-weight:900;">${reviewable.length} pendiente${reviewable.length === 1 ? "" : "s"}</span>
+        </div>
+        <div style="display:grid; gap:8px;">
+          ${reviewable.map(request => {
+            const game = this.games.find(
+              item => String(item.id) === String(request.game_id || request.gameId)
+            ) || {};
+            const opponent = this._escapeText(game.opponent || game.opponentName || "Rival");
+            const reason = this._escapeText(request.request_reason || "Sin comentario");
+            const role = this._escapeText(request.requested_by_role || "Usuario");
+            return `
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; background:#ffffff; border:1px solid #fde68a; border-radius:10px; padding:10px 12px;">
+                <div style="min-width:220px;">
+                  <strong style="display:block; color:#0f172a; font-size:13px;">vs ${opponent} · ${this._escapeText(game.date || "")}</strong>
+                  <span style="display:block; color:#64748b; font-size:11px; margin-top:2px;">${role}: ${reason}</span>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button type="button" class="btn-approve-lock-request" data-request-id="${request.id}" style="min-height:40px; border:0; border-radius:8px; padding:8px 12px; background:#166534; color:#ffffff; font-weight:800; cursor:pointer;">✓ Aprobar y cerrar</button>
+                  <button type="button" class="btn-reject-lock-request" data-request-id="${request.id}" style="min-height:40px; border:1px solid #fca5a5; border-radius:8px; padding:8px 12px; background:#fff1f2; color:#be123c; font-weight:800; cursor:pointer;">Rechazar</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  async _refreshAfterLockAction(container, teamId) {
+    await DataStore.init(teamId, true);
+    this.games = DataStore.getGames(teamId) || [];
+    this.isEditing = false;
+    this.currentGame = null;
+    await this._renderGamesList(container, teamId);
+  }
+
+  _bindGameLockEvents(container, teamId) {
+    container.querySelectorAll(".btn-lock-game").forEach(button => {
+      button.addEventListener("click", async event => {
+        const gameId = event.currentTarget.dataset.id;
+        const game = this.games.find(item => String(item.id) === String(gameId));
+        if (!game || !this.gameLockService.canLock(game)) {
+          alert("⚠️ No tienes permiso para cerrar este partido.");
+          return;
+        }
+        if (!confirm("¿Cerrar este partido? Una vez cerrado nadie podrá modificar sus datos hasta que un Admin o Superadmin lo reabra.")) return;
+
+        const reason = prompt("Motivo del cierre (opcional):", "Partido revisado y validado");
+        try {
+          event.currentTarget.disabled = true;
+          await this.gameLockService.setLocked(gameId, true, reason);
+          await this._refreshAfterLockAction(container, teamId);
+        } catch (error) {
+          console.error("[GameLiveEditorView] Error cerrando partido:", error);
+          alert(`❌ No se pudo cerrar el partido: ${error.message || error}`);
+          event.currentTarget.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reopen-game").forEach(button => {
+      button.addEventListener("click", async event => {
+        const gameId = event.currentTarget.dataset.id;
+        const game = this.games.find(item => String(item.id) === String(gameId));
+        if (!game || !this.gameLockService.canReopen(game)) {
+          alert("⚠️ No tienes permiso para reabrir este partido.");
+          return;
+        }
+        if (!confirm("¿Reabrir este partido? Volverá a ser editable para los roles autorizados.")) return;
+
+        const reason = prompt("Motivo de reapertura (opcional):", "Corrección autorizada");
+        try {
+          event.currentTarget.disabled = true;
+          await this.gameLockService.setLocked(gameId, false, reason);
+          await this._refreshAfterLockAction(container, teamId);
+        } catch (error) {
+          console.error("[GameLiveEditorView] Error reabriendo partido:", error);
+          alert(`❌ No se pudo reabrir el partido: ${error.message || error}`);
+          event.currentTarget.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-request-game-lock").forEach(button => {
+      button.addEventListener("click", async event => {
+        const gameId = event.currentTarget.dataset.id;
+        const game = this.games.find(item => String(item.id) === String(gameId));
+        if (!game || !this.gameLockService.canRequestLock(game)) {
+          alert("⚠️ No tienes permiso para solicitar el cierre de este partido.");
+          return;
+        }
+
+        const reason = prompt("Comentario para Admin/Superadmin (opcional):", "Partido revisado; solicito cierre");
+        if (reason === null) return;
+
+        try {
+          event.currentTarget.disabled = true;
+          await this.gameLockService.requestLock(gameId, reason);
+          await this._refreshAfterLockAction(container, teamId);
+          alert("✅ Solicitud de cierre enviada.");
+        } catch (error) {
+          console.error("[GameLiveEditorView] Error solicitando cierre:", error);
+          alert(`❌ No se pudo solicitar el cierre: ${error.message || error}`);
+          event.currentTarget.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-approve-lock-request").forEach(button => {
+      button.addEventListener("click", async event => {
+        const requestId = event.currentTarget.dataset.requestId;
+        if (!confirm("¿Aprobar la petición y cerrar el partido?")) return;
+        try {
+          event.currentTarget.disabled = true;
+          await this.gameLockService.resolveRequest(requestId, "APPROVED", "Cierre aprobado");
+          await this._refreshAfterLockAction(container, teamId);
+        } catch (error) {
+          console.error("[GameLiveEditorView] Error aprobando cierre:", error);
+          alert(`❌ No se pudo aprobar la petición: ${error.message || error}`);
+          event.currentTarget.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reject-lock-request").forEach(button => {
+      button.addEventListener("click", async event => {
+        const requestId = event.currentTarget.dataset.requestId;
+        const note = prompt("Motivo del rechazo (opcional):", "");
+        if (note === null) return;
+        try {
+          event.currentTarget.disabled = true;
+          await this.gameLockService.resolveRequest(requestId, "REJECTED", note);
+          await this._refreshAfterLockAction(container, teamId);
+        } catch (error) {
+          console.error("[GameLiveEditorView] Error rechazando cierre:", error);
+          alert(`❌ No se pudo rechazar la petición: ${error.message || error}`);
+          event.currentTarget.disabled = false;
+        }
+      });
+    });
   }
 
   _generateUUID() {
@@ -87,20 +303,22 @@ export class GameLiveEditorView {
 
   async _renderGamesList(container, teamId) {
     this.games = DataStore.getGames(teamId) || [];
+    await this._loadLockRequests();
+
     const canCreateGame = Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId }));
     const canRecordLive = Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId }));
     const canEditGame = Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId }));
 
     const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const pCodeMap = new Map();
-    chronologicalGames.forEach((g, idx) => {
-      pCodeMap.set(String(g.id), `P${idx + 1}`);
+    chronologicalGames.forEach((game, index) => {
+      pCodeMap.set(String(game.id), `P${index + 1}`);
     });
 
-    const filteredGames = this.games.filter((g) => {
-      const v = String(g.venue || "").toLowerCase();
-      if (this.filterCondition === "Local") return v === "local" || v === "home";
-      if (this.filterCondition === "Visitante") return v === "visitante" || v === "away";
+    const filteredGames = this.games.filter(game => {
+      const venue = String(game.venue || "").toLowerCase();
+      if (this.filterCondition === "Local") return venue === "local" || venue === "home";
+      if (this.filterCondition === "Visitante") return venue === "visitante" || venue === "away";
       return true;
     });
 
@@ -110,105 +328,129 @@ export class GameLiveEditorView {
       return this.sortOrder === "asc" ? dateA - dateB : dateB - dateA;
     });
 
-    const gamesCardsMarkup = sortedGames.map((g) => {
-      const isWin = Number(g.team_score ?? g.teamScore ?? 0) > Number(g.opponent_score ?? g.opponentScore ?? 0);
+    const gamesCardsMarkup = sortedGames.map(game => {
+      const isWin = Number(game.team_score ?? game.teamScore ?? 0) > Number(game.opponent_score ?? game.opponentScore ?? 0);
       const resultClass = isWin ? "background: #166534; color: #ffffff;" : "background: #dc2626; color: #ffffff;";
       const resultText = isWin ? this.t("win", "VICTORIA") : this.t("loss", "DERROTA");
 
-      const periods = DataStore.getGamePeriodScores(g.id) || [];
-      const quarters = periods.filter(p => !p.is_overtime && !p.isOvertime);
-      const overtimes = periods.filter(p => p.is_overtime || p.isOvertime);
+      const periods = DataStore.getGamePeriodScores(game.id) || [];
+      const quarters = periods.filter(period => !period.is_overtime && !period.isOvertime);
+      const overtimes = periods.filter(period => period.is_overtime || period.isOvertime);
+      const quarterScore = index => quarters[index]
+        ? `${quarters[index].team_score ?? quarters[index].teamScore ?? 0}-${quarters[index].opponent_score ?? quarters[index].opponentScore ?? 0}`
+        : "0-0";
 
-      const q1 = quarters[0] ? `${quarters[0].team_score ?? quarters[0].teamScore ?? 0}-${quarters[0].opponent_score ?? quarters[0].opponentScore ?? 0}` : "0-0";
-      const q2 = quarters[1] ? `${quarters[1].team_score ?? quarters[1].teamScore ?? 0}-${quarters[1].opponent_score ?? quarters[1].opponentScore ?? 0}` : "0-0";
-      const q3 = quarters[2] ? `${quarters[2].team_score ?? quarters[2].teamScore ?? 0}-${quarters[2].opponent_score ?? quarters[2].opponentScore ?? 0}` : "0-0";
-      const q4 = quarters[3] ? `${quarters[3].team_score ?? quarters[3].teamScore ?? 0}-${quarters[3].opponent_score ?? quarters[3].opponentScore ?? 0}` : "0-0";
+      const otMarkup = overtimes.length > 0
+        ? overtimes.map((period, index) =>
+          `<b>OT${index + 1}:</b> ${period.team_score ?? period.teamScore ?? 0}-${period.opponent_score ?? period.opponentScore ?? 0}`
+        ).join(" ")
+        : "";
 
-      let otMarkup = "";
-      if (overtimes.length > 0) {
-        otMarkup = overtimes.map((ot, i) => `<b>OT${i + 1}:</b> ${ot.team_score ?? ot.teamScore ?? 0}-${ot.opponent_score ?? ot.opponentScore ?? 0} `).join(" ");
+      const venueLower = String(game.venue || "").toLowerCase();
+      const isHome = venueLower === "home" || venueLower === "local" || game.is_home === true || game.isHome === true;
+      const venueText = isHome ? this.t("local", "Local") : this.t("visitor", "Visitante");
+      const pCode = pCodeMap.get(String(game.id)) || "P-";
+      const opponentText = this._escapeText(game.opponent || game.opponent_name || game.opponentName || this.t("opponent", "Rival"));
+      const formattedDate = game.date ? (I18n.formatDate ? I18n.formatDate(game.date) : game.date) : "-";
+
+      const locked = this._isGameLocked(game);
+      const pendingRequest = this._pendingLockRequest(game.id);
+      const editable = canEditGame && !locked;
+      const canLock = !locked && this.gameLockService.canLock(game);
+      const canReopen = locked && this.gameLockService.canReopen(game);
+      const canRequestLock = !locked && this.gameLockService.canRequestLock(game);
+      const canDelete = this._canDeleteGame(game);
+
+      const lifecycleBadge = locked
+        ? '<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔒 Cerrado</span>'
+        : pendingRequest
+          ? '<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">⏳ Cierre solicitado</span>'
+          : '<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔓 Abierto</span>';
+
+      let lifecycleAction = "";
+      if (canReopen) {
+        lifecycleAction = `<button type="button" class="btn-reopen-game" data-id="${game.id}" style="background:#ecfdf5;color:#166534;border:1px solid #86efac;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔓 Reabrir</button>`;
+      } else if (canLock) {
+        lifecycleAction = `<button type="button" class="btn-lock-game" data-id="${game.id}" style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔒 Cerrar</button>`;
+      } else if (canRequestLock) {
+        lifecycleAction = `<button type="button" class="btn-request-game-lock" data-id="${game.id}" ${pendingRequest ? "disabled" : ""} style="background:${pendingRequest ? "#f1f5f9" : "#eff6ff"};color:${pendingRequest ? "#94a3b8" : "#1d4ed8"};border:1px solid ${pendingRequest ? "#cbd5e1" : "#93c5fd"};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:${pendingRequest ? "not-allowed" : "pointer"};min-height:44px;">${pendingRequest ? "⏳ Cierre solicitado" : "📨 Solicitar cierre"}</button>`;
       }
 
-      const venueLower = String(g.venue || "").toLowerCase();
-      const isHome = venueLower === "home" || venueLower === "local" || g.is_home === true || g.isHome === true;
-      const venueText = isHome ? this.t("local", "Local") : this.t("visitor", "Visitante");
-      const pCode = pCodeMap.get(String(g.id)) || "P-";
-      const opponentText = g.opponent || g.opponent_name || g.opponentName || this.t("opponent", "Rival");
-      const formattedDate = g.date ? (I18n.formatDate ? I18n.formatDate(g.date) : g.date) : "-";
-
       return `
-        <div class="game-item-card card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-wrap: wrap; gap: 12px;">
-          <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-            <div style="padding: 10px 14px; border-radius: 10px; font-weight: 900; font-size: 13px; text-align: center; width: 85px; ${resultClass}">
-              <div style="font-size: 9px; text-transform: uppercase; opacity: 0.9;">${resultText}</div>
-              <div style="font-size: 16px; font-weight: 900; margin-top: 2px;">${g.team_score ?? g.teamScore ?? 0}-${g.opponent_score ?? g.opponentScore ?? 0}</div>
+        <div class="game-item-card card" style="background:#ffffff;border:1px solid ${locked ? "#fecaca" : "#e2e8f0"};border-radius:14px;padding:18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div style="padding:10px 14px;border-radius:10px;font-weight:900;font-size:13px;text-align:center;width:85px;${resultClass}">
+              <div style="font-size:9px;text-transform:uppercase;opacity:.9;">${resultText}</div>
+              <div style="font-size:16px;font-weight:900;margin-top:2px;">${game.team_score ?? game.teamScore ?? 0}-${game.opponent_score ?? game.opponentScore ?? 0}</div>
             </div>
-
             <div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">vs ${opponentText}</h3>
-                <span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">
-                  ${venueText} (${pCode})
-                </span>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 style="margin:0;font-size:16px;font-weight:800;color:#0f172a;">vs ${opponentText}</h3>
+                <span style="background:#dbeafe;color:#1e40af;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;">${venueText} (${pCode})</span>
+                ${lifecycleBadge}
               </div>
-              <div style="font-size: 12px; color: #475569; margin: 4px 0;">
-                📅 ${formattedDate} &nbsp;·&nbsp; 🏆 ${g.competition || 'Liga'} &nbsp;·&nbsp; 📍 ${g.venue_name || g.venueName || '-'}
+              <div style="font-size:12px;color:#475569;margin:4px 0;">
+                📅 ${formattedDate} &nbsp;·&nbsp; 🏆 ${this._escapeText(game.competition || "Liga")} &nbsp;·&nbsp; 📍 ${this._escapeText(game.venue_name || game.venueName || "-")}
               </div>
-              <div style="font-size: 11px; color: #334155; background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-block;">
-                <b>${this.t("quarters", "CUARTOS")}:</b> Q1: ${q1} &nbsp; Q2: ${q2} &nbsp; Q3: ${q3} &nbsp; Q4: ${q4} ${otMarkup ? `&nbsp; ${otMarkup}` : ''}
+              <div style="font-size:11px;color:#334155;background:#f8fafc;padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;display:inline-block;">
+                <b>${this.t("quarters", "CUARTOS")}:</b> Q1: ${quarterScore(0)} &nbsp; Q2: ${quarterScore(1)} &nbsp; Q3: ${quarterScore(2)} &nbsp; Q4: ${quarterScore(3)} ${otMarkup ? `&nbsp; ${otMarkup}` : ""}
               </div>
+              ${locked && game.lock_reason ? `<div style="font-size:11px;color:#991b1b;margin-top:5px;">Motivo de cierre: ${this._escapeText(game.lock_reason || game.lockReason)}</div>` : ""}
             </div>
           </div>
 
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button class="btn-open-court-direct" data-id="${g.id}" aria-disabled="${!canEditGame}" style="background: ${canEditGame ? '#0284c7' : '#e2e8f0'}; color: ${canEditGame ? '#ffffff' : '#64748b'}; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canEditGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
-              🏀 Pista / Edición${canEditGame ? '' : ' 🔒'}
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button class="btn-open-court-direct" data-id="${game.id}" aria-disabled="${!editable}" style="background:${editable ? "#0284c7" : "#e2e8f0"};color:${editable ? "#ffffff" : "#64748b"};border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:${editable ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:4px;">
+              🏀 Pista / Edición${editable ? "" : " 🔒"}
             </button>
-            <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📋 Boxscore</button>
-            <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 Informe</button>
-            <button class="btn-delete-game-direct" data-id="${g.id}" ${!this._canDeleteGame(g) ? 'disabled' : ''} style="background: ${this._canDeleteGame(g) ? '#fee2e2' : '#f1f5f9'}; border: 1px solid ${this._canDeleteGame(g) ? '#fca5a5' : '#cbd5e1'}; font-size: 18px; cursor: ${this._canDeleteGame(g) ? 'pointer' : 'not-allowed'}; color: ${this._canDeleteGame(g) ? '#dc2626' : '#94a3b8'}; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="${this._canDeleteGame(g) ? 'Eliminar partido' : 'Tu rol no puede eliminar partidos'}">🗑️</button>
+            <button onclick="window.location.hash='#/boxscore/${game.id}'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📋 Boxscore</button>
+            <button onclick="window.location.hash='#/reports'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📊 Informe</button>
+            ${lifecycleAction}
+            <button class="btn-delete-game-direct" data-id="${game.id}" ${!canDelete ? "disabled" : ""} style="background:${canDelete ? "#fee2e2" : "#f1f5f9"};border:1px solid ${canDelete ? "#fca5a5" : "#cbd5e1"};font-size:18px;cursor:${canDelete ? "pointer" : "not-allowed"};color:${canDelete ? "#dc2626" : "#94a3b8"};min-height:44px;min-width:44px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;" title="${canDelete ? "Eliminar partido" : locked ? "Reabre el partido antes de eliminarlo" : "Tu rol no puede eliminar partidos"}">🗑️</button>
           </div>
         </div>
       `;
     }).join("");
 
     container.innerHTML = `
-      <div style="max-width: 1400px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+      <div style="max-width:1400px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
           <div>
-            <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 0;">${this.t("team_games", "Partidos del Equipo")}</h1>
-            <span style="font-size: 13px; color: #475569;">${this.games.length} ${this.t("registered_games", "partidos registrados")}</span>
+            <h1 style="font-size:24px;font-weight:800;color:#0f172a;margin:0;">${this.t("team_games", "Partidos del Equipo")}</h1>
+            <span style="font-size:13px;color:#475569;">${this.games.length} ${this.t("registered_games", "partidos registrados")}</span>
           </div>
-
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button id="btn-create-game-hud" aria-disabled="${!canRecordLive}" style="background: ${canRecordLive ? '#f97316' : '#e2e8f0'}; color: ${canRecordLive ? '#ffffff' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: ${canRecordLive ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: ${canRecordLive ? '0 4px 10px rgba(249,115,22,0.3)' : 'none'};">
-              ⚡ Nueva Anotación en Vivo (HUD Pro)${canRecordLive ? '' : ' 🔒'}
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button id="btn-create-game-hud" aria-disabled="${!canRecordLive}" style="background:${canRecordLive ? "#f97316" : "#e2e8f0"};color:${canRecordLive ? "#ffffff" : "#64748b"};border:none;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:900;cursor:${canRecordLive ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:6px;">
+              ⚡ Nueva Anotación en Vivo (HUD Pro)${canRecordLive ? "" : " 🔒"}
             </button>
-            <button id="btn-create-game" aria-disabled="${!canCreateGame}" style="background: ${canCreateGame ? '#0f172a' : '#e2e8f0'}; color: ${canCreateGame ? '#ffffff' : '#64748b'}; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: ${canCreateGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="btn-create-game" aria-disabled="${!canCreateGame}" style="background:${canCreateGame ? "#0f172a" : "#e2e8f0"};color:${canCreateGame ? "#ffffff" : "#64748b"};border:none;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:800;cursor:${canCreateGame ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:6px;">
               + 🏀 Registro Rápido
             </button>
           </div>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-          <div style="display: flex; gap: 8px;">
-            <button class="filter-btn ${this.filterCondition === 'Todos' ? 'active' : ''}" data-cond="Todos" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Todos' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Todos' ? '#ffffff' : '#334155'};">${this.t("all", "Todos")} (${this.games.length})</button>
-            <button class="filter-btn ${this.filterCondition === 'Local' ? 'active' : ''}" data-cond="Local" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Local' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Local' ? '#ffffff' : '#334155'};">${this.t("local", "Local")}</button>
-            <button class="filter-btn ${this.filterCondition === 'Visitante' ? 'active' : ''}" data-cond="Visitante" style="padding: 8px 16px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; background: ${this.filterCondition === 'Visitante' ? '#1e3a8a' : '#e2e8f0'}; color: ${this.filterCondition === 'Visitante' ? '#ffffff' : '#334155'};">${this.t("visitor", "Visitante")}</button>
-          </div>
+        ${this._renderLockRequestsPanel()}
 
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 12px; font-weight: 700; color: #475569;">${this.t("sort", "ORDENAR")}:</label>
-            <select id="select-sort-games" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; font-weight: 700; background: #ffffff; color: #0f172a; cursor: pointer; min-height: 44px;">
-              <option value="desc" ${this.sortOrder === 'desc' ? 'selected' : ''}>Pn → P1 (Más recientes primero)</option>
-              <option value="asc" ${this.sortOrder === 'asc' ? 'selected' : ''}>P1 → Pn (Antiguos a recientes)</option>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="filter-btn ${this.filterCondition === "Todos" ? "active" : ""}" data-cond="Todos" style="padding:8px 16px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;background:${this.filterCondition === "Todos" ? "#1e3a8a" : "#e2e8f0"};color:${this.filterCondition === "Todos" ? "#ffffff" : "#334155"};">${this.t("all", "Todos")} (${this.games.length})</button>
+            <button class="filter-btn ${this.filterCondition === "Local" ? "active" : ""}" data-cond="Local" style="padding:8px 16px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;background:${this.filterCondition === "Local" ? "#1e3a8a" : "#e2e8f0"};color:${this.filterCondition === "Local" ? "#ffffff" : "#334155"};">${this.t("local", "Local")}</button>
+            <button class="filter-btn ${this.filterCondition === "Visitante" ? "active" : ""}" data-cond="Visitante" style="padding:8px 16px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;background:${this.filterCondition === "Visitante" ? "#1e3a8a" : "#e2e8f0"};color:${this.filterCondition === "Visitante" ? "#ffffff" : "#334155"};">${this.t("visitor", "Visitante")}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;font-weight:700;color:#475569;">${this.t("sort", "ORDENAR")}:</label>
+            <select id="select-sort-games" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;background:#ffffff;color:#0f172a;cursor:pointer;min-height:44px;">
+              <option value="desc" ${this.sortOrder === "desc" ? "selected" : ""}>Pn → P1 (Más recientes primero)</option>
+              <option value="asc" ${this.sortOrder === "asc" ? "selected" : ""}>P1 → Pn (Antiguos a recientes)</option>
             </select>
           </div>
         </div>
 
-        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding: 40px; text-align: center; color: #64748b; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">${this.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
+        <div>${gamesCardsMarkup.length > 0 ? gamesCardsMarkup : `<div style="padding:40px;text-align:center;color:#64748b;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;">${this.t("no_games_recorded", "No hay partidos registrados.")}</div>`}</div>
       </div>
     `;
+
+    this._bindGameLockEvents(container, teamId);
 
     container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
       if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId })) {
@@ -218,10 +460,15 @@ export class GameLiveEditorView {
       new LiveScoreHUDView(this.auth).render("dashboard-content-area");
     });
 
-    container.querySelectorAll(".btn-open-court-direct").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        const id = e.currentTarget.getAttribute("data-id");
-        if (!this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId })) {
+    container.querySelectorAll(".btn-open-court-direct").forEach(button => {
+      button.addEventListener("click", event => {
+        const id = event.currentTarget.getAttribute("data-id");
+        const game = this.games.find(item => String(item.id) === String(id));
+        if (this._isGameLocked(game)) {
+          alert("🔒 Partido cerrado. Puedes consultar el BoxScore y los informes, pero no modificar datos.");
+          return;
+        }
+        if (!this.auth?.canPreview?.(Permission.EDIT_GAME, this._gameContext(game))) {
           alert("⚠️ Tu perfil puede consultar el partido y su BoxScore, pero no editarlo.");
           return;
         }
@@ -241,6 +488,7 @@ export class GameLiveEditorView {
         id: newGameId,
         team_id: teamId,
         season_id: DataStore.getActiveSeasonId(teamId),
+        team_season_id: DataStore.getActiveTeamSeasonId?.(teamId) || null,
         date: new Date().toISOString().split("T")[0],
         time: "18:00",
         opponent: "",
@@ -249,22 +497,39 @@ export class GameLiveEditorView {
         venue: "Local",
         venue_name: "",
         status: "Finalizado",
+        edit_state: "OPEN",
         starter_ids: [],
         notes: "",
         video_url: "",
         team_score: 0,
         opponent_score: 0
       };
-      this.currentPeriods = [
-        { period_type: 'quarter', period_number: 1, team_score: 0, opponent_score: 0, is_overtime: false },
-        { period_type: 'quarter', period_number: 2, team_score: 0, opponent_score: 0, is_overtime: false },
-        { period_type: 'quarter', period_number: 3, team_score: 0, opponent_score: 0, is_overtime: false },
-        { period_type: 'quarter', period_number: 4, team_score: 0, opponent_score: 0, is_overtime: false }
-      ];
-      this.currentGameStats = this.players.map(p => ({
-        player_id: p.id, minutes: 0, fg2_made: 0, fg2_attempted: 0, fg3_made: 0, fg3_attempted: 0,
-        ft_made: 0, ft_attempted: 0, off_reb: 0, def_reb: 0, assists: 0, steals: 0, blocks_made: 0,
-        blocks_received: 0, turnovers: 0, fouls_committed: 0, fouls_drawn: 0, plus_minus: 0
+      this.currentPeriods = [1, 2, 3, 4].map(periodNumber => ({
+        period_type: "quarter",
+        period_number: periodNumber,
+        team_score: 0,
+        opponent_score: 0,
+        is_overtime: false
+      }));
+      this.currentGameStats = this.players.map(player => ({
+        player_id: player.id,
+        minutes: 0,
+        fg2_made: 0,
+        fg2_attempted: 0,
+        fg3_made: 0,
+        fg3_attempted: 0,
+        ft_made: 0,
+        ft_attempted: 0,
+        off_reb: 0,
+        def_reb: 0,
+        assists: 0,
+        steals: 0,
+        blocks_made: 0,
+        blocks_received: 0,
+        turnovers: 0,
+        fouls_committed: 0,
+        fouls_drawn: 0,
+        plus_minus: 0
       }));
       this.liveEventsHistory = [];
       this.entrySubMode = "classic";
@@ -272,54 +537,60 @@ export class GameLiveEditorView {
       this._renderEditForm(container);
     });
 
-    container.querySelectorAll(".btn-delete-game-direct").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const id = e.currentTarget.getAttribute("data-id");
+    container.querySelectorAll(".btn-delete-game-direct").forEach(button => {
+      button.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const id = event.currentTarget.getAttribute("data-id");
         if (!id) return;
-        const game = this.games.find(g => String(g.id) === String(id));
-        if (!this.auth?.can?.(Permission.DELETE_GAME, {
-          teamId: game?.team_id || game?.teamId || teamId,
-          seasonId: game?.season_id || game?.seasonId || null
-        })) {
+        const game = this.games.find(item => String(item.id) === String(id));
+
+        if (this._isGameLocked(game)) {
+          alert("🔒 Partido cerrado. Debes reabrirlo antes de poder eliminarlo.");
+          return;
+        }
+        if (!this.auth?.can?.(Permission.DELETE_GAME, this._gameContext(game))) {
           alert("⚠️ Tu rol no puede eliminar partidos.");
           return;
         }
-
-        if (!confirm(this.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas, cuartos y jugadas asociadas."))) {
-          return;
-        }
+        if (!confirm(this.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas, cuartos y jugadas asociadas."))) return;
 
         try {
           await DataStore.deleteGame(id);
           this.games = DataStore.getGames(teamId) || [];
           await this._renderGamesList(container, teamId);
           alert("✅ Partido eliminado correctamente.");
-        } catch (err) {
-          console.error("❌ Excepción al eliminar partido:", err);
-          alert(`❌ No se pudo eliminar el partido: ${err.message || JSON.stringify(err)}`);
+        } catch (error) {
+          console.error("❌ Excepción al eliminar partido:", error);
+          alert(`❌ No se pudo eliminar el partido: ${error.message || error}`);
         }
       });
     });
 
-    container.querySelectorAll(".filter-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        this.filterCondition = btn.getAttribute("data-cond");
+    container.querySelectorAll(".filter-btn").forEach(button => {
+      button.addEventListener("click", () => {
+        this.filterCondition = button.getAttribute("data-cond");
         this._renderGamesList(container, teamId);
       });
     });
 
-    container.querySelector("#select-sort-games")?.addEventListener("change", (e) => {
-      this.sortOrder = e.target.value;
+    container.querySelector("#select-sort-games")?.addEventListener("change", event => {
+      this.sortOrder = event.target.value;
       this._renderGamesList(container, teamId);
     });
   }
+
 async _openEditForm(gameId, container) {
     this.currentGame = DataStore.getGameById(gameId) || {};
 
     const gameTeamId = this.currentGame.team_id || this.currentGame.teamId || this.teamId;
+    if (this._isGameLocked(this.currentGame)) {
+      this.isEditing = false;
+      alert("🔒 Partido cerrado. Reabre el partido antes de modificar datos.");
+      await this._renderGamesList(container, gameTeamId);
+      return;
+    }
     const eligiblePlayers = DataStore.getPlayersEligibleOnDate?.(
       gameTeamId,
       this.currentGame.date
