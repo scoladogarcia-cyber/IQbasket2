@@ -44,14 +44,16 @@ export class GameLockService {
     );
   }
 
-  async listPendingRequests(gameIds = []) {
+  async listRequests(gameIds = [], { status = null } = {}) {
     if (!this.supabase) return [];
 
     let query = this.supabase
       .from("game_lock_requests")
-      .select("id,game_id,requested_by,requested_by_role,request_reason,status,created_at")
-      .eq("status", "PENDING")
-      .order("created_at", { ascending: true });
+      .select("id,game_id,requested_by,requested_by_role,request_reason,status,created_at,resolved_at,resolved_by,resolution_note")
+      .order("created_at", { ascending: false });
+
+    const normalizedStatus = status ? String(status).trim().toUpperCase() : null;
+    if (normalizedStatus) query = query.eq("status", normalizedStatus);
 
     const ids = [...new Set((gameIds || []).map(String).filter(Boolean))];
     if (ids.length > 0) query = query.in("game_id", ids);
@@ -59,6 +61,10 @@ export class GameLockService {
     const { data, error } = await query;
     if (error) throw error;
     return data || [];
+  }
+
+  async listPendingRequests(gameIds = []) {
+    return this.listRequests(gameIds, { status: "PENDING" });
   }
 
   async requestLock(gameId, reason = null) {
