@@ -1,0 +1,88 @@
+name: Phase 3E Roster DB Rollback
+
+on:
+  push:
+    branches:
+      - feature/season-roster-history-v2
+    paths:
+      - "supabase/drafts/20260902_smoke_v3_phase3c_temporal_roster_rollback_v2.sql"
+      - ".github/workflows/phase3e-roster-db-rollback.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-roster-smoke:
+    name: Real Supabase roster lifecycle rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Check database connection secret
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_DB_URL is not configured."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Assert rollback-only structure
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/drafts/20260902_smoke_v3_phase3c_temporal_roster_rollback_v2.sql
+          BEGIN_COUNT=$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$FILE")
+          COMMIT_COUNT=$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$FILE" || true)
+          ROLLBACK_COUNT=$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$FILE")
+          test "$BEGIN_COUNT" -eq 1
+          test "$COMMIT_COUNT" -eq 0
+          test "$ROLLBACK_COUNT" -eq 1
+
+      - name: Run real roster lifecycle with forced rollback
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --file=supabase/drafts/20260902_smoke_v3_phase3c_temporal_roster_rollback_v2.sql
+
+      - name: Verify no synthetic smoke rows persisted
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players
+               where first_name in ('ZZ_SMOKE_TEMPORAL','ZZ_SMOKE_SEED')
+                 and last_name = 'TEMP_PLAYER')::text
+              || '|' ||
+              (select count(*) from public.roster_memberships)::text
+              || '|' ||
+              (select count(*) from public.roster_membership_stints)::text;
+          ")
+          echo "POST_ROLLBACK=$RESULT"
+          test "$RESULT" = "0|17|17"
+
+      - name: Require configured database secret
+        if: steps.check.outputs.ready != 'true'
+        run: exit 1
