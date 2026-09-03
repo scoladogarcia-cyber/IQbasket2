@@ -9,6 +9,26 @@ const preflight = fs.readFileSync(
   new URL("../supabase/ready/20260903_preflight_v4_phase4d_longitudinal_ai_readonly.sql", import.meta.url),
   "utf8"
 );
+const apply = fs.readFileSync(
+  new URL("../supabase/ready/20260903_apply_v4_phase4d_longitudinal_ai.sql", import.meta.url),
+  "utf8"
+);
+const rollback = fs.readFileSync(
+  new URL("../supabase/ready/20260903_rollback_v4_phase4d_longitudinal_ai.sql", import.meta.url),
+  "utf8"
+);
+const verify = fs.readFileSync(
+  new URL("../supabase/ready/20260903_verify_v4_phase4d_summary_readonly.sql", import.meta.url),
+  "utf8"
+);
+const postRollback = fs.readFileSync(
+  new URL("../supabase/ready/20260903_verify_v4_phase4d_postrollback_readonly.sql", import.meta.url),
+  "utf8"
+);
+const installedSmoke = fs.readFileSync(
+  new URL("../supabase/drafts/20260903_smoke_v4_phase4d_installed_rollback.sql", import.meta.url),
+  "utf8"
+);
 
 for (const table of ["player_longitudinal_snapshots", "player_ai_insights"]) {
   assert.match(rehearsal, new RegExp(`create table public\\.${table}\\s*\\(`, "i"));
@@ -89,5 +109,44 @@ assert.doesNotMatch(
   preflight,
   /\b(create|alter|drop|insert|update|delete|truncate)\s+(table|function|policy|trigger|into|public\.)/i
 );
+
+assert.match(apply, /CONTROLLED APPLY/i);
+assert.match(apply, /\bcommit\s*;/i);
+assert.doesNotMatch(apply, /\brollback\s*;/i);
+for (const helper of [
+  "iq_v4_can_view_longitudinal_analytics",
+  "iq_v4_can_generate_longitudinal_analytics",
+  "iq_v4_can_view_ai_insights",
+  "iq_v4_can_generate_ai_insights",
+  "iq_v4_can_review_ai_insights"
+]) {
+  assert.match(apply, new RegExp(`public\\.${helper}\\s*\\(`, "i"));
+}
+
+assert.match(rollback, /PLAYER360_PHASE4D_ROLLBACK/i);
+assert.match(rollback, /drop table if exists public\.player_ai_insights/i);
+assert.match(rollback, /drop table if exists public\.player_longitudinal_snapshots/i);
+assert.match(rollback, /drop function if exists public\.iq_v4_can_review_ai_insights/i);
+assert.match(rollback, /\bcommit\s*;/i);
+
+for (const readOnly of [verify, postRollback]) {
+  assert.match(readOnly, /READ ONLY/i);
+  assert.doesNotMatch(
+    readOnly,
+    /\b(create|alter|drop|insert|update|delete|truncate)\s+(table|function|policy|trigger|into|public\.)/i
+  );
+}
+
+assert.match(verify, /generic_action_helper_private/i);
+assert.match(verify, /phase4d_ok/i);
+assert.match(postRollback, /phase4d_rollback_clean/i);
+
+assert.match(installedSmoke, /FORCED ROLLBACK/i);
+assert.match(installedSmoke, /NO_EXTERNAL_MODEL/i);
+assert.match(installedSmoke, /iq_v4_save_longitudinal_snapshot/i);
+assert.match(installedSmoke, /iq_v4_save_ai_insight/i);
+assert.match(installedSmoke, /iq_v4_review_ai_insight/i);
+assert.match(installedSmoke, /\brollback\s*;/i);
+assert.doesNotMatch(installedSmoke, /\bcommit\s*;/i);
 
 console.log("PLAYER360_PHASE4D_SQL_STRUCTURE_OK");
