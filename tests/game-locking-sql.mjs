@@ -15,9 +15,11 @@ assert.match(apply, /create table if not exists public\.game_lock_requests/i);
 assert.match(apply, /create table if not exists public\.game_lock_history/i);
 assert.match(apply, /create unique index if not exists ux_game_lock_requests_one_pending/i);
 
+assert.match(apply, /create or replace function public\.iq_v5_current_role\(\)/i);
+assert.match(apply, /create or replace function public\.iq_v5_can_access_team\(target_team_id uuid\)/i);
 assert.match(
   apply,
-  /iq_v5_can_manage_game_lock[\s\S]*iq_current_role\(\)[\s\S]*'SUPERADMIN','ADMIN'[\s\S]*iq_can_access_team/i,
+  /iq_v5_can_manage_game_lock[\s\S]*iq_v5_current_role\(\)[\s\S]*'SUPERADMIN','ADMIN'[\s\S]*iq_v5_can_access_team/i,
   "Cerrar/reabrir debe limitarse a Superadmin/Admin con acceso al equipo."
 );
 assert.match(
