@@ -212,7 +212,11 @@ export class TrainingService {
         p_start_time: startTime,
         p_end_time: endTime,
         p_blocks: blocks === null ? null : normalizeArray(blocks),
-        p_participants: participants === null ? null : normalizeArray(participants)
+        p_participant_ids: participants === null
+          ? null
+          : normalizeArray(participants)
+              .map(item => typeof item === "string" ? item : item?.player_id)
+              .filter(Boolean)
       }
     );
 
@@ -368,7 +372,7 @@ export class TrainingService {
     const { data, error } = await this.supabase.rpc(
       "iq_v4_update_external_development",
       {
-        p_external_session_id: externalSessionId,
+        p_external_development_id: externalSessionId,
         p_player_id: playerId,
         p_activity_date: activityDate,
         p_title: title,
