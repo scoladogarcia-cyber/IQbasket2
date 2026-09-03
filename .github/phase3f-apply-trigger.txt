@@ -1,0 +1,2 @@
+Phase 3F apply authorized after green preflight, rollback rehearsal, UI RBAC smoke, and CI.
+Date: 2026-09-03
