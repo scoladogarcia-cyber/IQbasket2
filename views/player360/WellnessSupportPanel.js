@@ -431,7 +431,7 @@ export class WellnessSupportPanel {
     `;
   }
 
-  render() {
+  render({ showModuleTabs = true } = {}) {
     if (!this.isAvailable()) return "";
 
     const modules=Object.keys(MODULES).filter(module => this._baseCanView(module));
@@ -449,16 +449,18 @@ export class WellnessSupportPanel {
           permanece desactivada en esta fase.
         </div>
 
-        <div class="p360w-modules" role="tablist" aria-label="Apoyo Nutrition y Recovery">
-          ${modules.map(key => `
-            <button
-              type="button"
-              class="p360w-module"
-              data-p360w-module="${key}"
-              aria-selected="${module===key}"
-            >${MODULES[key].icon} ${MODULES[key].label}</button>
-          `).join("")}
-        </div>
+        ${showModuleTabs ? `
+          <div class="p360w-modules" role="tablist" aria-label="Nutrición y Recuperación">
+            ${modules.map(key => `
+              <button
+                type="button"
+                class="p360w-module"
+                data-p360w-module="${key}"
+                aria-selected="${module===key}"
+              >${MODULES[key].icon} ${MODULES[key].label}</button>
+            `).join("")}
+          </div>
+        ` : ""}
 
         ${!access.purpose ? `
           <div class="p360w-locked">
