@@ -15,6 +15,16 @@ select
   coalesce(sum(array_length(string_to_array(privileges,','),1)),0) as mutation_grant_entries
 from risky;
 
+with risky as (
+  select
+    table_name,
+    string_agg(distinct privilege_type, ',' order by privilege_type) as privileges
+  from information_schema.role_table_grants
+  where table_schema='public'
+    and grantee='anon'
+    and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
+  group by table_name
+)
 select
   'ANON_MUTATION_TABLE' as section,
   table_name,
