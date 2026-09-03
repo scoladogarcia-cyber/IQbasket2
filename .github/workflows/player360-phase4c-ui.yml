@@ -1,0 +1,69 @@
+name: Player 360 Phase 4C UI
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - "index.js"
+      - "app.js"
+      - "views/PlayerStatsView.js"
+      - "views/Player360View.js"
+      - "security/PermissionService.js"
+      - "security/permissions.js"
+      - "tests/browser-test-support.mjs"
+      - "tests/player360-phase4c-route-integration.mjs"
+      - "tests/player360-phase4c-ui-smoke.mjs"
+      - ".github/workflows/player360-phase4c-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Evaluation desktop + mobile without DB writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Validate route and RBAC integration
+        run: node tests/player360-phase4c-route-integration.mjs
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/player360-phase4c-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/player360-phase4c-vite.log
+          exit 1
+
+      - name: Run Player 360 Phase 4C browser smoke
+        env:
+          PLAYER360_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/player360-phase4c-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/player360-phase4c-vite.log || true

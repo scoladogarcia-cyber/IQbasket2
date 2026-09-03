@@ -1,4 +1,5 @@
 import { chromium } from "@playwright/test";
+import { installBrowserNetworkStubs } from "./browser-test-support.mjs";
 
 const BASE_URL = process.env.PLAYER360_BASE_URL || "http://127.0.0.1:4173";
 const TEAM_ID = "11111111-1111-4111-8111-111111111111";
@@ -310,6 +311,7 @@ async function installFixture(page, viewportName) {
 
 async function runViewport(browser, name, viewport) {
   const page = await browser.newPage({ viewport });
+  await installBrowserNetworkStubs(page);
   const pageErrors = [];
   const consoleErrors = [];
   page.on("pageerror", error => {

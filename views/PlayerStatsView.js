@@ -39,6 +39,7 @@ export class PlayerStatsView {
 
     // Estado Detalle Jugador
     this.selectedPlayer = null;
+    this.teamId = null;
     this.gamesMap = new Map();
     this.activeTab = "resumen";
   }
@@ -60,6 +61,19 @@ export class PlayerStatsView {
 
   _canEditNotes() {
     return Boolean(this.auth?.canPreview?.(Permission.EDIT_TACTICAL_NOTES));
+  }
+
+  _canViewPlayer360(player = this.selectedPlayer) {
+    if (!player?.id) return false;
+    const teamId = this.teamId || player.team_id || player.teamId || null;
+    const context = {
+      teamId,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.(teamId) || null,
+      playerId: player.id,
+      playerTeamId: teamId
+    };
+
+    return Boolean(this.auth?.canPreview?.(Permission.VIEW_PLAYER_360, context));
   }
 
   // =========================================================================
@@ -289,6 +303,7 @@ export class PlayerStatsView {
     const p = this.selectedPlayer || {};
     const photo = p.photo_url || p.photoUrl || "";
     const canEditFull = this._canEditFullProfile();
+    const canViewPlayer360 = this._canViewPlayer360(p);
     const secPosArray = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
     const secPos = secPosArray.map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
 
@@ -317,6 +332,11 @@ export class PlayerStatsView {
         </div>
 
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+          ${canViewPlayer360 ? `
+            <a href="#/player360/${encodeURIComponent(String(p.id))}" style="background: #1e3a8a; color: white; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
+              🎯 Player 360
+            </a>
+          ` : ""}
           ${canEditFull ? `
             <button id="btn-edit-tab" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
               ✏️ ${this.t("edit_player", "Editar Jugador")}
@@ -779,6 +799,7 @@ export class PlayerStatsView {
     if (!container) return;
 
     const targetTeamId = teamId || DataStore.getActiveTeamId();
+    this.teamId = targetTeamId;
     this.players = DataStore.getSeasonParticipantPlayers?.(targetTeamId)
       || DataStore.getPlayers(targetTeamId)
       || [];

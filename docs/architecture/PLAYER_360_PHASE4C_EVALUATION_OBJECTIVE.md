@@ -235,7 +235,7 @@ revocadas. Las escrituras se realizarán por RPC controlada.
 - `iq_v4_get_player_objective_gap`
 - `iq_v4_evaluation_capabilities`
 
-## Frontend previsto
+## Frontend implementado
 
 ### `services/player360/EvaluationService.js`
 
@@ -260,7 +260,10 @@ No se integrará 4C como lógica dispersa dentro de PlayerStatsView.
 
 `#/player360/:playerId`
 
-PlayerStatsView podrá enlazar a Player 360 sin mezclar responsabilidades.
+PlayerStatsView enlaza a Player 360 sin mezclar responsabilidades. El router
+aplica `VIEW_PLAYER_360` con contexto de equipo, equipo-temporada y jugador.
+La vista dispone de smoke funcional en escritorio y móvil sin escrituras en la
+base de datos.
 
 ## Secuencia segura
 
@@ -275,3 +278,6 @@ PlayerStatsView podrá enlazar a Player 360 sin mezclar responsabilidades.
 9. Verificación postsmoke.
 10. Service/UI desktop y móvil.
 11. Release candidate antes de main.
+
+Los pasos 1–10 están implementados. La rama permanece como release candidate
+hasta confirmar los checks remotos y realizar la validación funcional final.

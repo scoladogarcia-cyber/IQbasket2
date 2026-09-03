@@ -1,4 +1,5 @@
 import { chromium } from "@playwright/test";
+import { installBrowserNetworkStubs } from "./browser-test-support.mjs";
 
 const BASE_URL = process.env.PHASE3E_BASE_URL || "http://127.0.0.1:4173";
 const TEAM_A = "11111111-1111-4111-8111-111111111111";
@@ -334,6 +335,7 @@ async function promptThenCaptureAlert(page, value, action) {
 
 async function runLifecycle(browser, name, viewport) {
   const page = await browser.newPage({ viewport });
+  await installBrowserNetworkStubs(page);
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.message));
 

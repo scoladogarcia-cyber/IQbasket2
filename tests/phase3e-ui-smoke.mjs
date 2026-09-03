@@ -1,4 +1,5 @@
 import { chromium } from "@playwright/test";
+import { installBrowserNetworkStubs } from "./browser-test-support.mjs";
 
 const BASE_URL = process.env.PHASE3E_BASE_URL || "http://127.0.0.1:4173";
 
@@ -231,6 +232,7 @@ async function installFixture(page) {
 
 async function checkViewport(browser, name, viewport) {
   const page = await browser.newPage({ viewport });
+  await installBrowserNetworkStubs(page);
   const pageErrors = [];
   const consoleErrors = [];
 
