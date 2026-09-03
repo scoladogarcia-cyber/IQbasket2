@@ -11,11 +11,13 @@
 import { DataStore } from "./DataStore.js";
 import { TeamAccessRequestService } from "./TeamAccessRequestService.js";
 import { GameLockService } from "./games/GameLockService.js";
+import { TransferRequestService } from "./transfers/TransferRequestService.js";
 import { Permission } from "../security/PermissionService.js";
 
 const RequestType = Object.freeze({
   TEAM_ACCESS: "TEAM_ACCESS",
-  GAME_LOCK: "GAME_LOCK"
+  GAME_LOCK: "GAME_LOCK",
+  TRANSFER: "TRANSFER"
 });
 
 function normalizeStatus(value = "") {
@@ -39,6 +41,7 @@ export class ApprovalCenterService {
     this.dataStore = dataStore;
     this.teamAccessService = new TeamAccessRequestService(this.supabase);
     this.gameLockService = new GameLockService(this.supabase, this.auth);
+    this.transferRequestService = new TransferRequestService(this.supabase);
   }
 
   _activeGames() {
@@ -106,15 +109,84 @@ export class ApprovalCenterService {
     };
   }
 
+  _normalizeTransferRequest(request = {}) {
+    const status = normalizeStatus(request.status);
+    const sourceContext = {
+      teamId: request.originTeamId || null,
+      teamSeasonId: request.fromTeamSeasonId || null
+    };
+    const destinationContext = {
+      teamId: request.targetTeamId || null,
+      teamSeasonId: request.toTeamSeasonId || null
+    };
+    const sourceTeam = (this.dataStore.getTeams?.() || [])
+      .find(team => String(team.id) === String(request.originTeamId || ""));
+    const destinationTeam = (this.dataStore.getTeams?.() || [])
+      .find(team => String(team.id) === String(request.targetTeamId || ""));
+
+    const pendingDual = status === "PENDING" && Boolean(request.dualWorkflow);
+    const canSourceReview = pendingDual
+      && request.sourceDecision === "PENDING"
+      && Boolean(this.auth?.canPreview?.(Permission.REVIEW_TRANSFER_SOURCE, sourceContext));
+    const canDestinationReview = pendingDual
+      && request.destinationDecision === "PENDING"
+      && Boolean(this.auth?.canPreview?.(Permission.REVIEW_TRANSFER_DESTINATION, destinationContext));
+    const canFinalize = pendingDual
+      && Boolean(request.readyForFinalization)
+      && Boolean(this.auth?.canPreview?.(Permission.FINALIZE_TRANSFER));
+
+    return {
+      id: request.id,
+      type: RequestType.TRANSFER,
+      status,
+      createdAt: request.requestedAt || null,
+      resolvedAt: request.reviewedAt || null,
+      title: request.playerName || "Jugador",
+      subtitle: "",
+      detail: request.rejectionReason || "",
+      playerId: request.playerId || null,
+      playerName: request.playerName || "Jugador",
+      originTeamId: request.originTeamId || null,
+      targetTeamId: request.targetTeamId || null,
+      fromTeamSeasonId: request.fromTeamSeasonId || null,
+      toTeamSeasonId: request.toTeamSeasonId || null,
+      originTeamName: sourceTeam?.name || "Equipo origen",
+      targetTeamName: destinationTeam?.name || "Equipo destino",
+      workflowVersion: request.workflowVersion || null,
+      dualWorkflow: Boolean(request.dualWorkflow),
+      requestedFirstDateTo: request.requestedFirstDateTo || null,
+      sourceDecision: request.sourceDecision || null,
+      sourceDate: request.sourceDate || null,
+      sourceReason: request.sourceReason || null,
+      destinationDecision: request.destinationDecision || null,
+      destinationDate: request.destinationDate || request.requestedFirstDateTo || null,
+      destinationReason: request.destinationReason || null,
+      readyForFinalization: Boolean(request.readyForFinalization),
+      canSourceReview,
+      canDestinationReview,
+      canFinalize,
+      canApprove: false,
+      canReject: false,
+      raw: request
+    };
+  }
+
   async load() {
     const games = this._activeGames();
     const gameMap = new Map(games.map(game => [String(game.id), game]));
     const gameIds = games.map(game => game.id).filter(Boolean);
 
-    const [accessResult, lockResult] = await Promise.allSettled([
+    const activeTeamSeasonId = this.dataStore.getActiveTeamSeasonId?.(
+      this.dataStore.getActiveTeamId?.() || null
+    ) || null;
+
+    const [accessResult, lockResult, transferResult] = await Promise.allSettled([
       this.teamAccessService.listRequests(),
       gameIds.length > 0
         ? this.gameLockService.listRequests(gameIds)
+        : Promise.resolve([]),
+      activeTeamSeasonId
+        ? this.transferRequestService.listRequests({ scopeTeamSeasonId: activeTeamSeasonId })
         : Promise.resolve([])
     ]);
 
@@ -136,6 +208,15 @@ export class ApprovalCenterService {
       errors.push({
         source: RequestType.GAME_LOCK,
         message: lockResult.reason?.message || String(lockResult.reason || "Error cargando cierres")
+      });
+    }
+
+    if (transferResult.status === "fulfilled") {
+      items.push(...(transferResult.value || []).map(request => this._normalizeTransferRequest(request)));
+    } else {
+      errors.push({
+        source: RequestType.TRANSFER,
+        message: transferResult.reason?.message || String(transferResult.reason || "Error cargando traspasos")
       });
     }
 
@@ -163,6 +244,35 @@ export class ApprovalCenterService {
     }
 
     throw new Error("Tipo de solicitud no soportado.");
+  }
+
+  async reviewTransfer(item, side, decision, effectiveDate = null, reason = null) {
+    if (!item?.id || item.type !== RequestType.TRANSFER) {
+      throw new Error("Solicitud de traspaso no válida.");
+    }
+
+    const normalizedSide = String(side || "").toUpperCase();
+    const allowed = normalizedSide === "SOURCE"
+      ? item.canSourceReview
+      : item.canDestinationReview;
+    if (!allowed) {
+      throw new Error("No tienes permiso para revisar este lado del traspaso.");
+    }
+
+    return this.transferRequestService.reviewTransferSide({
+      requestId: item.id,
+      side: normalizedSide,
+      decision,
+      effectiveDate,
+      reason
+    });
+  }
+
+  async finalizeTransfer(item) {
+    if (!item?.id || item.type !== RequestType.TRANSFER || !item.canFinalize) {
+      throw new Error("El traspaso no está listo o no tienes permiso para finalizarlo.");
+    }
+    return this.transferRequestService.finalizeTransfer({ requestId: item.id });
   }
 
   async reject(item, note = null) {
