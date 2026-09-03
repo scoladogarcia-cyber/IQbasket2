@@ -399,6 +399,11 @@ async function runViewport(browser, name, viewport) {
 
   await page.locator("#p360-training-form").evaluate(form => form.requestSubmit());
   await page.waitForFunction(() => window.__p360.createCalls.length === 1);
+  await page.waitForFunction(() => {
+    const cards = [...document.querySelectorAll(".p360-session-card")];
+    return cards.length === 2
+      && cards.some(card => card.textContent?.includes("Sesión creada por UI smoke"));
+  });
 
   const createCall = await page.evaluate(() => window.__p360.createCalls[0]);
   assertCondition(createCall.teamSeasonId === TEAM_SEASON_ID, name, "Alta usa team-season incorrecto");
@@ -416,6 +421,12 @@ async function runViewport(browser, name, viewport) {
   await attendanceRow.locator(".p360-att-notes").fill("Smoke carga");
   await attendanceRow.locator(".p360-save-attendance").click();
   await page.waitForFunction(() => window.__p360.attendanceCalls.length === 1);
+  await page.waitForFunction(() => {
+    const card = [...document.querySelectorAll(".p360-session-card")]
+      .find(node => node.textContent?.includes("Sesión existente"));
+    const load = card?.querySelector(".p360-load-value strong")?.textContent || "";
+    return load.includes("350");
+  });
 
   const attendanceCall = await page.evaluate(() => window.__p360.attendanceCalls[0]);
   assertCondition(attendanceCall.attendanceStatus === "PARTIAL", name, "Asistencia no envía estado");
@@ -436,6 +447,11 @@ async function runViewport(browser, name, viewport) {
   await page.fill("#p360-external-objective", "Mejorar tiro");
   await page.locator("#p360-external-form").evaluate(form => form.requestSubmit());
   await page.waitForFunction(() => window.__p360.externalCalls.length === 1);
+  await page.waitForFunction(() => {
+    const cards = [...document.querySelectorAll(".p360-external-card")];
+    return cards.length === 2
+      && cards.some(card => card.textContent?.includes("Tecnificación individual"));
+  });
 
   const externalCall = await page.evaluate(() => window.__p360.externalCalls[0]);
   assertCondition(externalCall.teamSeasonId === TEAM_SEASON_ID, name, "Externo usa team-season incorrecto");
