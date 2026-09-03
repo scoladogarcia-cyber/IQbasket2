@@ -19,7 +19,7 @@ for (const file of files) {
     `${file} contiene delimitadores PL/pgSQL inválidos`
   );
 
-  const opens = (source.match(/\bas \$\$/g) || []).length;
+  const opens = (source.match(/\b(?:as|do)\s+\$\$/gi) || []).length;
   const closes = (source.match(/\$\$;/g) || []).length;
   assert.equal(opens, closes, `${file} tiene cuerpos SQL desbalanceados`);
 }
