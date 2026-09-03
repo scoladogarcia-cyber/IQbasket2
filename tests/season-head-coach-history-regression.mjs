@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { DataStore } from "../services/DataStore.js";
+import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
 import {
   StaffAssignmentService,
   StaffRole
@@ -15,13 +15,13 @@ const TS_2026 = "ts-2026";
 // Exact case reported from mobile:
 // 2025/2026 = Teo, 2026/2027 = Miriam.
 // -----------------------------------------------------------------------------
-DataStore.teams = [{
+const team = {
   id: TEAM_ID,
   name: "JMJ Manyanet Sant Andreu",
   coach_name: "Teo Raichman"
-}];
+};
 
-DataStore.seasons = [
+const seasons = [
   {
     id: TS_2026,
     team_id: TEAM_ID,
@@ -40,8 +40,8 @@ DataStore.seasons = [
   }
 ];
 
-DataStore.staffAssignments = [
-  DataStore._normalizeStaffAssignment({
+const canonicalAssignments = [
+  {
     id: "staff-2025",
     team_season_id: TS_2025,
     team_id: TEAM_ID,
@@ -49,8 +49,8 @@ DataStore.staffAssignments = [
     staff_role: "HEAD_COACH",
     external_name: "Teo Raichman",
     status: "ACTIVE"
-  }),
-  DataStore._normalizeStaffAssignment({
+  },
+  {
     id: "staff-2026",
     team_season_id: TS_2026,
     team_id: TEAM_ID,
@@ -58,41 +58,61 @@ DataStore.staffAssignments = [
     staff_role: "HEAD_COACH",
     external_name: "Miriam",
     status: "ACTIVE"
-  })
+  }
 ];
 
 assert.equal(
-  DataStore.getTeamCoach(TEAM_ID, "2025/2026"),
+  resolveHeadCoachName({
+    teamId: TEAM_ID,
+    seasonName: "2025/2026",
+    staffAssignments: canonicalAssignments,
+    seasons,
+    team
+  }),
   "Teo Raichman"
 );
+
 assert.equal(
-  DataStore.getTeamCoach(TEAM_ID, "2026/2027"),
+  resolveHeadCoachName({
+    teamId: TEAM_ID,
+    seasonName: "2026/2027",
+    staffAssignments: canonicalAssignments,
+    seasons,
+    team
+  }),
   "Miriam",
   "El editor debe mostrar Miriam y no resucitar seasons.coach_name"
 );
 
-// If canonical history exists but has no active coach, legacy must not come back.
-DataStore.staffAssignments = [
-  DataStore._normalizeStaffAssignment({
-    id: "staff-2026-old",
-    team_season_id: TS_2026,
-    team_id: TEAM_ID,
-    season_name: "2026/2027",
-    staff_role: "HEAD_COACH",
-    external_name: "Miriam",
-    status: "INACTIVE"
-  })
-];
 assert.equal(
-  DataStore.getTeamCoach(TEAM_ID, "2026/2027"),
-  "Por definir"
+  resolveHeadCoachName({
+    teamId: TEAM_ID,
+    seasonName: "2026/2027",
+    staffAssignments: [{
+      id: "staff-2026-old",
+      team_id: TEAM_ID,
+      season_name: "2026/2027",
+      staff_role: "HEAD_COACH",
+      external_name: "Miriam",
+      status: "INACTIVE"
+    }],
+    seasons,
+    team
+  }),
+  "Por definir",
+  "Una baja canónica no puede resucitar el entrenador legacy"
 );
 
-// Legacy remains a valid fallback only for a scope never migrated to canonical.
-DataStore.staffAssignments = [];
 assert.equal(
-  DataStore.getTeamCoach(TEAM_ID, "2025/2026"),
-  "Teo Raichman"
+  resolveHeadCoachName({
+    teamId: TEAM_ID,
+    seasonName: "2025/2026",
+    staffAssignments: [],
+    seasons,
+    team
+  }),
+  "Teo Raichman",
+  "Legacy solo queda como fallback para scopes no migrados"
 );
 
 // -----------------------------------------------------------------------------
