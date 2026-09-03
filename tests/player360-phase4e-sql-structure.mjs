@@ -28,6 +28,7 @@ const installedSmoke = readFileSync(
 
 const applyCommit = apply.lastIndexOf("\ncommit;\n");
 const rehearsalSmoke = rehearsal.indexOf(
+  "\n-- -----------------------------------------------------------------------------\n" +
   "-- Rehearsal functional smoke. All rows and objects are rolled back below."
 );
 assert.ok(applyCommit > 0, "Apply 4E debe contener commit final.");
