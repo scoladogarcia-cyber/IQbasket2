@@ -9,6 +9,8 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/permissions.js";
+import { BoxScoreCorrectionService } from "../services/games/BoxScoreCorrectionService.js";
 
 export class GameBoxScoreView {
   /**
@@ -23,15 +25,162 @@ export class GameBoxScoreView {
     this.players = [];
     this.selectedGameId = null;
     this.gameStats = [];
+    this.boxScoreCorrectionService = new BoxScoreCorrectionService(this.supabase);
+    this.canEditCurrentGame = false;
+    this.currentGameEvents = [];
   }
 
   t(key, fallback = "") {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
-  _canEdit() {
-    // El BoxScore es una vista de consulta para todos los roles.
+  _context(game = {}) {
+    return {
+      teamId: game.team_id || game.teamId || DataStore.getActiveTeamId?.() || null,
+      seasonId: game.season_id || game.seasonId || null,
+      teamSeasonId: game.team_season_id || game.teamSeasonId || DataStore.getActiveTeamSeasonId?.() || null
+    };
+  }
+
+  _frontendCanEdit(game = {}) {
+    if (String(game.edit_state || game.editState || "OPEN").toUpperCase() !== "OPEN") {
+      return false;
+    }
+
+    const seasonContext = DataStore.getActiveSeasonContext?.(
+      game.team_id || game.teamId || DataStore.getActiveTeamId?.()
+    );
+    if (String(seasonContext?.data_status || seasonContext?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN") {
+      return false;
+    }
+
+    if (typeof this.auth?.canPreview === "function") {
+      return Boolean(this.auth.canPreview(Permission.EDIT_GAME, this._context(game)));
+    }
+    if (typeof this.auth?.can === "function") {
+      return Boolean(this.auth.can(Permission.EDIT_GAME, this._context(game)));
+    }
     return false;
+  }
+
+  async _resolveCanEdit(game = {}) {
+    if (!this._frontendCanEdit(game)) return false;
+    try {
+      return await this.boxScoreCorrectionService.canEdit(game.id);
+    } catch (error) {
+      console.warn("[GameBoxScoreView] Backend de corrección BoxScore no disponible:", error?.message || error);
+      return false;
+    }
+  }
+
+  _canEdit() {
+    return Boolean(this.canEditCurrentGame);
+  }
+
+  _playerLabel(playerId) {
+    const player = this.players.find(item => String(item.id) === String(playerId));
+    if (!player) return String(playerId || "Jugador");
+    return [
+      player.jersey ?? player.number ?? null,
+      player.first_name || player.firstName || "",
+      player.last_name || player.lastName || ""
+    ].filter(value => value !== null && value !== "").join(" · ").replace(" · ", " #");
+  }
+
+  _collectBoxScoreState(container, currentGame) {
+    const starterIds = [];
+    const stats = [];
+    const processed = new Set();
+
+    container.querySelectorAll("tr[data-player-id]").forEach(row => {
+      const playerId = row.getAttribute("data-player-id");
+      if (!playerId || processed.has(playerId)) return;
+      processed.add(playerId);
+
+      const starter = Boolean(row.querySelector(".chk-starter")?.checked);
+      if (starter) starterIds.push(playerId);
+
+      const value = field => Number(
+        row.querySelector(`.bs-input[data-field="${field}"]`)?.value || 0
+      );
+      const fg2Made = value("fg2_made");
+      const fg3Made = value("fg3_made");
+      const ftMade = value("ft_made");
+
+      stats.push({
+        game_id: currentGame.id,
+        player_id: playerId,
+        starter,
+        minutes: value("minutes"),
+        points: fg2Made * 2 + fg3Made * 3 + ftMade,
+        fg2_made: fg2Made,
+        fg2_attempted: value("fg2_attempted"),
+        fg3_made: fg3Made,
+        fg3_attempted: value("fg3_attempted"),
+        ft_made: ftMade,
+        ft_attempted: value("ft_attempted"),
+        off_reb: value("off_reb"),
+        def_reb: value("def_reb"),
+        assists: value("assists"),
+        steals: value("steals"),
+        blocks_made: value("blocks"),
+        blocks_received: 0,
+        turnovers: value("turnovers"),
+        fouls_committed: value("fouls_committed"),
+        fouls_drawn: value("fouls_drawn"),
+        plus_minus: 0,
+        evaluation: 0
+      });
+    });
+
+    return { starterIds, stats };
+  }
+
+  _consistencyMarkup(comparison = {}) {
+    if (!comparison.hasEvents) {
+      return `
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.45;">
+          <strong>Boxscore como fuente primaria.</strong>
+          Este partido no tiene jugadas registradas. Puedes corregir el acta directamente.
+        </div>
+      `;
+    }
+
+    if (!comparison.discrepancies.length) {
+      return `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.45;">
+          ✓ Las estadísticas editables coinciden con el Play-by-Play cargado.
+        </div>
+      `;
+    }
+
+    const examples = comparison.discrepancies.slice(0, 6).map(item => `
+      <li>
+        <strong>${this._playerLabel(item.player_id)}</strong> · ${item.label}:
+        Boxscore ${item.boxscore_value} / Play-by-Play ${item.play_by_play_value}
+      </li>
+    `).join("");
+
+    return `
+      <div style="background:#fffbeb;border:1px solid #fde68a;color:#78350f;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.45;">
+        <strong>⚠️ ${comparison.discrepancies.length} discrepancia${comparison.discrepancies.length === 1 ? "" : "s"} con Play-by-Play.</strong>
+        <ul style="margin:7px 0 0;padding-left:18px;">${examples}</ul>
+        ${comparison.discrepancies.length > 6 ? `<div style="margin-top:5px;">… y ${comparison.discrepancies.length - 6} más.</div>` : ""}
+      </div>
+    `;
+  }
+
+  _updateConsistencyPanel(container, currentGame) {
+    const target = container.querySelector("#boxscore-consistency-status");
+    if (!target) return null;
+    const state = this._collectBoxScoreState(container, currentGame);
+    const comparison = this.boxScoreCorrectionService.compareWithEvents({
+      game: currentGame,
+      stats: state.stats,
+      events: this.currentGameEvents
+    });
+    target.innerHTML = this._consistencyMarkup(comparison);
+    return { ...state, comparison };
   }
 
   async render(containerId = "dashboard-content-area", targetGameId = null) {
@@ -54,6 +203,17 @@ export class GameBoxScoreView {
 
     if (targetGameId) {
       this.selectedGameId = targetGameId;
+      const currentGame = this.games.find(game => String(game.id) === String(targetGameId)) || this.games[0];
+      this.currentGameEvents = [];
+      try {
+        this.currentGameEvents = typeof DataStore.loadGameEvents === "function"
+          ? await DataStore.loadGameEvents([currentGame.id])
+          : (DataStore.getGameEvents?.(currentGame.id) || []);
+      } catch (error) {
+        console.warn("[GameBoxScoreView] No se pudieron cargar eventos para comparar:", error?.message || error);
+        this.currentGameEvents = DataStore.getGameEvents?.(currentGame.id) || [];
+      }
+      this.canEditCurrentGame = await this._resolveCanEdit(currentGame);
       this._renderGameBoxScoreDetail(container, containerId);
       return;
     }
@@ -343,6 +503,33 @@ export class GameBoxScoreView {
           </span>
         </div>
 
+        ${canEdit ? `
+          <section style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:16px;display:grid;gap:10px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+              <div>
+                <strong style="display:block;color:#0f172a;font-size:14px;">✏️ Modo corrección de acta</strong>
+                <span style="display:block;color:#64748b;font-size:12px;margin-top:3px;">
+                  ${this.currentGameEvents.length
+                    ? "Hay Play-by-Play: IQBasket compara los cambios antes de guardar y conserva una auditoría."
+                    : "Sin Play-by-Play: el Boxscore puede actuar como fuente primaria del acta."}
+                </span>
+              </div>
+              ${this.currentGameEvents.length ? `
+                <a href="#/live-entry/${currentGame.id}" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border:1px solid #cbd5e1;border-radius:9px;text-decoration:none;color:#334155;font-size:12px;font-weight:800;background:#f8fafc;">
+                  📝 Corregir Play-by-Play
+                </a>
+              ` : ""}
+            </div>
+            <div id="boxscore-consistency-status"></div>
+            <label style="display:grid;gap:5px;font-size:12px;font-weight:800;color:#334155;">
+              Nota de corrección ${this.currentGameEvents.length ? "(obligatoria)" : "(opcional)"}
+              <input id="boxscore-correction-reason" type="text" maxlength="240"
+                placeholder="${this.currentGameEvents.length ? "Explica por qué prevalece esta corrección manual" : "Ej. Corrección del acta oficial"}"
+                style="width:100%;min-height:44px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;font:inherit;color:#0f172a;background:#fff;" />
+            </label>
+          </section>
+        ` : ""}
+
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
@@ -407,8 +594,8 @@ export class GameBoxScoreView {
 
       <style>
         .bs-input {
-          width: 38px !important;
-          height: 32px !important;
+          width: 44px !important;
+          height: 44px !important;
           text-align: center !important;
           border: 1px solid #cbd5e1 !important;
           border-radius: 4px !important;
@@ -474,68 +661,66 @@ export class GameBoxScoreView {
           if (cellEfg) cellEfg.textContent = `${comp.eFG.toFixed(1)}%`;
           if (cellVal) cellVal.textContent = comp.pir ?? 0;
           if (cellAstTo) cellAstTo.textContent = tov > 0 ? (ast / tov).toFixed(1) : ast.toFixed(1);
+          this._updateConsistencyPanel(container, currentGame);
         });
       });
     });
 
     if (canEdit) {
-      container.querySelector("#btn-save-boxscore")?.addEventListener("click", async () => {
-        const rows = container.querySelectorAll("tr[data-player-id]");
-        const starterIds = [];
-        const statsList = [];
-        const processedPlayerIds = new Set();
+      this._updateConsistencyPanel(container, currentGame);
 
-        for (const item of rows) {
-          const playerId = item.getAttribute("data-player-id");
-          if (!playerId || processedPlayerIds.has(playerId)) continue;
-          processedPlayerIds.add(playerId);
+      container.querySelector("#btn-save-boxscore")?.addEventListener("click", async event => {
+        const button = event.currentTarget;
+        const state = this._collectBoxScoreState(container, currentGame);
 
-          const isStarter = item.querySelector(".chk-starter")?.checked;
-          if (isStarter) starterIds.push(playerId);
-
-          const getInpVal = (field) => Number(item.querySelector(`.bs-input[data-field="${field}"]`)?.value || 0);
-
-          const mFg2m = getInpVal("fg2_made");
-          const mFg3m = getInpVal("fg3_made");
-          const mFtm = getInpVal("ft_made");
-          const mPts = mFg2m * 2 + mFg3m * 3 + mFtm;
-
-          statsList.push({
-            game_id: currentGame.id,
-            player_id: playerId,
-            starter: Boolean(isStarter),
-            minutes: getInpVal("minutes"),
-            points: mPts,
-            fg2_made: mFg2m,
-            fg2_attempted: getInpVal("fg2_attempted"),
-            fg3_made: mFg3m,
-            fg3_attempted: getInpVal("fg3_attempted"),
-            ft_made: mFtm,
-            ft_attempted: getInpVal("ft_attempted"),
-            off_reb: getInpVal("off_reb"),
-            def_reb: getInpVal("def_reb"),
-            rebounds_offensive: getInpVal("off_reb"),
-            rebounds_defensive: getInpVal("def_reb"),
-            assists: getInpVal("assists"),
-            steals: getInpVal("steals"),
-            blocks: getInpVal("blocks"),
-            blocks_made: getInpVal("blocks"),
-            turnovers: getInpVal("turnovers"),
-            fouls_committed: getInpVal("fouls_committed"),
-            fouls_drawn: getInpVal("fouls_drawn"),
-            fouls_received: getInpVal("fouls_drawn")
-          });
+        if (state.starterIds.length > 5) {
+          alert("⚠️ No puede haber más de cinco titulares.");
+          return;
         }
 
-        const gameData = {
-          ...currentGame,
-          starter_ids: starterIds
-        };
+        const comparison = this.boxScoreCorrectionService.compareWithEvents({
+          game: currentGame,
+          stats: state.stats,
+          events: this.currentGameEvents
+        });
 
-        await DataStore.saveGameAndStats(gameData, statsList);
+        const reason = String(
+          container.querySelector("#boxscore-correction-reason")?.value || ""
+        ).trim();
 
-        alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
-        this.render(containerId, currentGame.id);
+        if (comparison.hasEvents && !reason) {
+          alert("⚠️ Indica el motivo de la corrección manual. Hay Play-by-Play asociado a este partido.");
+          container.querySelector("#boxscore-correction-reason")?.focus();
+          return;
+        }
+
+        if (comparison.discrepancies.length > 0) {
+          const proceed = confirm(
+            `Hay ${comparison.discrepancies.length} discrepancia(s) con el Play-by-Play. ¿Guardar el Boxscore como corrección manual auditada?`
+          );
+          if (!proceed) return;
+        }
+
+        button.disabled = true;
+        try {
+          await this.boxScoreCorrectionService.saveCorrection({
+            gameId: currentGame.id,
+            starterIds: state.starterIds,
+            stats: state.stats,
+            reason: reason || null,
+            sourceMode: comparison.hasEvents ? "MANUAL_OVERRIDE" : "PRIMARY_BOXSCORE",
+            discrepancies: comparison.discrepancies
+          });
+
+          DataStore.isLoaded = false;
+          await DataStore.init(DataStore.getActiveTeamId?.() || null, true);
+          alert("✅ " + this.t("boxscore_saved_msg", "BoxScore corregido y auditado correctamente."));
+          await this.render(containerId, currentGame.id);
+        } catch (error) {
+          console.error("[GameBoxScoreView] Error guardando corrección:", error);
+          alert(`❌ No se pudo guardar la corrección: ${error.message || error}`);
+          button.disabled = false;
+        }
       });
     }
   }
