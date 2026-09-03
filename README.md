@@ -4,24 +4,26 @@ Aplicación web de gestión, registro y analítica de baloncesto.
 
 ## Estado del desarrollo
 
-`main` contiene el modelo histórico v3 validado: temporadas globales,
-equipo-temporada, plantillas por intervalos, transferencias y entrenador
-principal aislado por temporada.
+`main` contiene el modelo histórico v3 validado y Player 360 4A–4D.1:
+temporadas globales, equipo-temporada, plantillas por intervalos, transferencias,
+entrenador principal por temporada, entrenamiento, tecnificación externa,
+evaluación humana, perfil objetivo, gaps y persistencia longitudinal/IA.
 
-La evolución Player 360 se mantiene en la rama segura
-`feature/player360-core-v1`. Esta rama incorpora `main` y contiene:
+La rama segura `feature/player360-analytics-ai-ui-v1` desarrolla 4D.2 sobre
+ese baseline y añade:
 
-- Fase 4A: contratos de observaciones, cobertura y permisos;
-- Fase 4B: sesiones, asistencia, carga y desarrollo externo;
-- Fase 4C: evaluación humana, perfil objetivo y gaps deterministas, instalada y validada;
-- Fase 4D.1: series longitudinales, snapshots deterministas y evidencia trazable para IA, instalada y validada;
-- autorización 4D granular para ver/generar analítica, ver/generar IA y revisar IA;
-- rutas y vistas responsive de Entrenamiento y Player 360;
-- pruebas de dominio, servicio, SQL, RBAC, navegador, preflight, rehearsal y controlled apply.
+- adaptador de evidencia real para competición, entrenamiento, tecnificación y evaluación;
+- cálculo longitudinal sensible a los stints reales de plantilla;
+- fingerprint SHA-256 reproducible de las fuentes del snapshot;
+- pestaña responsive `Evolución + IA` dentro de Player 360;
+- tendencias y cobertura deterministas, sin etiquetar automáticamente subir/bajar como bueno/malo;
+- asociaciones explícitamente descriptivas y no causales;
+- lectura y revisión humana de insights IA persistidos;
+- generación externa de IA desactivada en frontend hasta disponer de adaptador backend seguro;
+- pruebas de dominio, orquestación, RBAC y navegador desktop/iPhone.
 
-La rama ha completado la validación funcional 4B/4C/4D y está preparada para
-integrarse en `main` mediante PR, manteniendo Recovery/Nutrition/Neuro
-restringidos hasta su fase específica de privacidad/ABAC.
+Recovery/Nutrition/Neuro continúan restringidos hasta implantar su fase específica
+de privacidad, consentimiento y ABAC.
 
 ## Seguridad de la base de datos
 
@@ -68,6 +70,8 @@ node tests/player360-phase4c-route-integration.mjs
 node tests/player360-phase4d-foundation-smoke.mjs
 node tests/player360-phase4d-sql-structure.mjs
 node tests/player360-phase4d-service-smoke.mjs
+node tests/player360-phase4d-orchestrator-smoke.mjs
+# UI real: tests/player360-phase4d-ui-smoke.mjs (Playwright / GitHub Actions)
 node tests/season-head-coach-history-regression.mjs
 node tests/session-switch-regression.mjs
 ```
@@ -76,13 +80,16 @@ La rama dispone de GitHub Actions para ejecutar el build automáticamente en pus
 
 ## Siguiente fase
 
-La Fase 4D.1 ya dispone de persistencia controlada instalada para snapshots
-longitudinales e insights de IA, con RLS, RPC de escritura, trazabilidad de
-proveedor/modelo/prompt, revisión humana y rollback explícito. El siguiente
-bloque funcional es completar la experiencia de uso de analítica/IA y abordar
-Recovery/Nutrition/Neuro mediante privacidad y ABAC antes de habilitar datos
-sensibles. Las salidas de IA permanecen separadas de mediciones y evaluaciones
-humanas y no autorizan inferencias causales.
+La Fase 4D.2 completa la primera experiencia de analítica longitudinal:
+datos reales → snapshot determinista → evidencia → visualización → insight IA
+persistido → revisión humana. La llamada a un modelo externo sigue bloqueada
+hasta desplegar un endpoint backend seguro y auditable; nunca debe exponerse una
+clave de proveedor en el navegador.
+
+La siguiente puerta estructural será 4E: privacidad, consentimiento y ABAC para
+poder habilitar Recovery/Nutrition y, posteriormente, Neuro. Las salidas de IA
+permanecen separadas de mediciones y evaluaciones humanas y no autorizan
+inferencias causales.
 
 ## Principio de migración
 
