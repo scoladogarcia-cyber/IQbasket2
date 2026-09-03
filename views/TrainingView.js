@@ -1205,7 +1205,11 @@ export class TrainingView {
         }
 
         @media (max-width: 640px) {
-          .p360-training-view { padding: 12px; gap: 14px; }
+          .p360-training-view {
+            padding: 12px;
+            padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+            gap: 14px;
+          }
           .p360-hero { display: grid; border-radius: 12px; }
           .p360-context-pill { justify-self: start; white-space: normal; }
           .p360-kpi-grid { grid-template-columns: 1fr 1fr; }
