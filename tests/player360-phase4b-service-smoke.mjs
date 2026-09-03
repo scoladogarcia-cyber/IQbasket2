@@ -111,8 +111,22 @@ const fakeSupabase = {
         error: null
       };
     }
+    if (name === "iq_core_ux_training_edit_capabilities") {
+      return {
+        data: {
+          ready: true,
+          update_training: true,
+          update_external_development: true,
+          frozen_season_guard: true
+        },
+        error: null
+      };
+    }
     if (name === "iq_v4_create_training_session") {
       return { data: "created-session-id", error: null };
+    }
+    if (name === "iq_v4_update_training_session") {
+      return { data: "session-1", error: null };
     }
     if (name === "iq_v4_set_training_participant") {
       return { data: "participant-id", error: null };
@@ -123,6 +137,9 @@ const fakeSupabase = {
     if (name === "iq_v4_create_external_development") {
       return { data: "external-id", error: null };
     }
+    if (name === "iq_v4_update_external_development") {
+      return { data: "external-1", error: null };
+    }
     throw new Error(`RPC inesperada: ${name}`);
   }
 };
@@ -131,6 +148,9 @@ const service = new TrainingService(fakeSupabase);
 
 const capabilities = await service.getCapabilities();
 assert.equal(capabilities.training_core, true);
+assert.equal(capabilities.update_training, true);
+assert.equal(capabilities.update_external_development, true);
+assert.equal(capabilities.frozen_season_guard, true);
 
 const sessions = await service.listSessions({ teamSeasonId: "ts-1" });
 assert.equal(sessions.length, 1);
@@ -176,6 +196,33 @@ assert.deepEqual(createCall.args, {
   p_participants: [{ player_id: "player-1", attendance_status: "PLANNED" }]
 });
 
+const updatedSessionId = await service.updateSession({
+  trainingSessionId: "session-1",
+  sessionDate: "2026-09-04",
+  title: "Sesión corregida",
+  objective: "Objetivo corregido",
+  durationMinutes: 60,
+  intensity: 6,
+  startTime: "18:00",
+  endTime: "19:00",
+  blocks: [{ title: "Finalizaciones", duration_minutes: 20 }],
+  participantIds: ["player-1"]
+});
+assert.equal(updatedSessionId, "session-1");
+const updateCall = calls.find(call => call.name === "iq_v4_update_training_session");
+assert.deepEqual(updateCall.args, {
+  p_training_session_id: "session-1",
+  p_session_date: "2026-09-04",
+  p_title: "Sesión corregida",
+  p_objective: "Objetivo corregido",
+  p_duration_minutes: 60,
+  p_intensity: 6,
+  p_start_time: "18:00",
+  p_end_time: "19:00",
+  p_blocks: [{ title: "Finalizaciones", duration_minutes: 20 }],
+  p_participant_ids: ["player-1"]
+});
+
 await service.setParticipant({
   trainingSessionId: "session-1",
   playerId: "player-1",
@@ -207,6 +254,23 @@ assert.equal(externalCall.args.p_team_season_id, "ts-1");
 assert.equal(externalCall.args.p_player_id, "player-1");
 assert.equal(externalCall.args.p_source_type, "EXTERNAL_COACH");
 assert.deepEqual(externalCall.args.p_provenance, { source: "test" });
+
+const updatedExternalId = await service.updateExternalDevelopment({
+  externalDevelopmentId: "external-1",
+  playerId: "player-1",
+  activityDate: "2026-09-04",
+  title: "Tecnificación corregida",
+  providerName: "Academia corregida",
+  durationMinutes: 55,
+  rpe: 6,
+  provenance: { source: "edit-test" }
+});
+assert.equal(updatedExternalId, "external-1");
+const updateExternalCall = calls.find(call => call.name === "iq_v4_update_external_development");
+assert.equal(updateExternalCall.args.p_external_development_id, "external-1");
+assert.equal(updateExternalCall.args.p_title, "Tecnificación corregida");
+assert.equal(updateExternalCall.args.p_provider_name, "Academia corregida");
+assert.deepEqual(updateExternalCall.args.p_provenance, { source: "edit-test" });
 
 await assert.rejects(
   () => service.createSession({
