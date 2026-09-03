@@ -22,3 +22,19 @@ select
   (select count(*) from public.training_blocks) as training_blocks,
   (select count(*) from public.training_participants) as training_participants,
   (select count(*) from public.external_development_sessions) as external_development;
+
+
+select
+  'TRAINING_EDIT_EXISTING_RPC' as section,
+  p.oid::regprocedure::text as signature,
+  pg_get_function_arguments(p.oid) as arguments,
+  pg_get_function_result(p.oid) as result_type,
+  replace(replace(pg_get_functiondef(p.oid), E'\n', ' '), E'\r', ' ') as definition
+from pg_proc p
+join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname in (
+    'iq_v4_update_training_session',
+    'iq_v4_update_external_development'
+  )
+order by p.proname;
