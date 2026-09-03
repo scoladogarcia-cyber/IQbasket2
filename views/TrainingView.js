@@ -55,6 +55,26 @@ function displayNumber(value, digits = 0) {
   });
 }
 
+/**
+ * Calculates same-day duration from two HH:MM values.
+ * Returns null for incomplete/invalid ranges so UI and backend cannot diverge.
+ */
+function minutesBetweenTimes(startTime = "", endTime = "") {
+  const parse = value => {
+    const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return null;
+    return (hours * 60) + minutes;
+  };
+
+  const start = parse(startTime);
+  const end = parse(endTime);
+  if (start === null || end === null || end <= start) return null;
+  return end - start;
+}
+
 function playerName(player = null) {
   if (!player) return "Jugador";
   return (
@@ -349,17 +369,26 @@ export class TrainingView {
 
             <label>
               <span>${escapeHtml(this.t("player360.training.start_time", "Inicio"))}</span>
-              <input type="time" id="p360-training-start-time" />
+              <input type="time" id="p360-training-start-time" required />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.end_time", "Fin"))}</span>
-              <input type="time" id="p360-training-end-time" />
+              <input type="time" id="p360-training-end-time" required />
             </label>
 
             <label>
-              <span>${escapeHtml(this.t("player360.training.duration", "Duración total (min)"))}</span>
-              <input type="number" id="p360-training-duration" min="1" max="600" inputmode="numeric" />
+              <span>${escapeHtml(this.t("player360.training.duration", "Duración calculada (min)"))}</span>
+              <input
+                type="number"
+                id="p360-training-duration"
+                min="1"
+                max="600"
+                inputmode="numeric"
+                readonly
+                aria-readonly="true"
+                placeholder="Inicio + fin"
+              />
             </label>
 
             <label>
@@ -832,10 +861,15 @@ export class TrainingView {
           color: white;
           border-radius: 16px;
         }
-        .p360-hero h1 { margin: 0 0 6px; font-size: clamp(22px, 4vw, 30px); }
+        .p360-hero h1 {
+          margin: 0 0 6px;
+          font-size: clamp(22px, 4vw, 30px);
+          color: #ffffff !important;
+        }
         .p360-hero p { margin: 0; color: #dbeafe; max-width: 760px; line-height: 1.5; }
         .p360-context-pill {
           flex: 0 0 auto;
+          color: #ffffff !important;
           padding: 8px 12px;
           border-radius: 999px;
           background: rgba(255,255,255,.12);
@@ -1228,6 +1262,18 @@ export class TrainingView {
       this._refreshTrainingPlayerOptions(container, trainingDate.value);
     });
 
+    const trainingStart = container.querySelector("#p360-training-start-time");
+    const trainingEnd = container.querySelector("#p360-training-end-time");
+    const trainingDuration = container.querySelector("#p360-training-duration");
+    const syncTrainingDuration = () => {
+      if (!trainingDuration) return null;
+      const duration = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
+      trainingDuration.value = duration === null ? "" : String(duration);
+      return duration;
+    };
+    trainingStart?.addEventListener("input", syncTrainingDuration);
+    trainingEnd?.addEventListener("input", syncTrainingDuration);
+
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
 
     container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
@@ -1304,10 +1350,17 @@ export class TrainingView {
 
         addParticipant.disabled = true;
         try {
+          const session = this.sessions.find(
+            item => String(item.id) === String(addParticipant.dataset.sessionId)
+          );
+          const alreadyOccurred = String(session?.session_date || "") <= localIsoDate();
           await this.service.setParticipant({
             trainingSessionId: addParticipant.dataset.sessionId,
             playerId,
-            attendanceStatus: "PLANNED"
+            attendanceStatus: alreadyOccurred ? "PRESENT" : "PLANNED",
+            participatedMinutes: alreadyOccurred
+              ? numberOrNull(session?.duration_minutes)
+              : null
           });
           await this.render(this.containerId, this.teamId);
         } catch (error) {
@@ -1352,9 +1405,20 @@ export class TrainingView {
         .map(input => input.value)
         .filter(Boolean);
 
+      const startTime = form.querySelector("#p360-training-start-time")?.value || "";
+      const endTime = form.querySelector("#p360-training-end-time")?.value || "";
+      const durationMinutes = minutesBetweenTimes(startTime, endTime);
+
+      if (durationMinutes === null) {
+        alert("⚠️ Indica una hora de inicio y fin válidas. La hora de fin debe ser posterior al inicio.");
+        return;
+      }
+
+      const alreadyOccurred = String(date) <= localIsoDate();
       const participants = selectedPlayers.map(playerId => ({
         player_id: playerId,
-        attendance_status: "PLANNED"
+        attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
+        participated_minutes: alreadyOccurred ? durationMinutes : null
       }));
 
       submit.disabled = true;
@@ -1364,10 +1428,10 @@ export class TrainingView {
           sessionDate: date,
           title,
           objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
-          durationMinutes: numberOrNull(form.querySelector("#p360-training-duration")?.value),
+          durationMinutes,
           intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
-          startTime: form.querySelector("#p360-training-start-time")?.value || null,
-          endTime: form.querySelector("#p360-training-end-time")?.value || null,
+          startTime,
+          endTime,
           blocks: this._collectBlocks(form),
           participants
         });
