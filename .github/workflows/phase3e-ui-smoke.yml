@@ -9,6 +9,7 @@ on:
       - "services/transfers/TransferRequestService.js"
       - "tests/phase3e-ui-smoke.mjs"
       - "tests/phase3e-roster-lifecycle-smoke.mjs"
+      - "tests/phase3f-rbac-ui-smoke.mjs"
       - ".github/workflows/phase3e-ui-smoke.yml"
   workflow_dispatch:
 
@@ -61,6 +62,11 @@ jobs:
         env:
           PHASE3E_BASE_URL: http://127.0.0.1:4173/
         run: node tests/phase3e-roster-lifecycle-smoke.mjs
+
+      - name: Run Phase 3F RBAC UI smoke
+        env:
+          PHASE3E_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/phase3f-rbac-ui-smoke.mjs
 
       - name: Print Vite log on failure
         if: failure()
