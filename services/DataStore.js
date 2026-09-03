@@ -213,6 +213,8 @@ class DataStoreService {
     const teamScore = Number(g.team_score ?? g.teamScore ?? g.our_score ?? g.points ?? 0);
     const oppScore = Number(g.opponent_score ?? g.opponentScore ?? g.opp_score ?? g.opp_points ?? 0);
     const oppName = g.opponent || g.opponent_name || g.opponentName || "Rival";
+    const editState = String(g.edit_state || g.editState || "OPEN").toUpperCase();
+    const isLocked = editState === "LOCKED";
 
     return {
       ...g,
@@ -234,7 +236,21 @@ class DataStoreService {
       opp_score: oppScore,
       date: g.date || "",
       venue: g.venue || "Local",
-      status: g.status || "Finalizado"
+      status: g.status || "Finalizado",
+      edit_state: editState,
+      editState,
+      is_locked: isLocked,
+      isLocked,
+      locked_at: g.locked_at || g.lockedAt || null,
+      lockedAt: g.locked_at || g.lockedAt || null,
+      locked_by: g.locked_by || g.lockedBy || null,
+      lockedBy: g.locked_by || g.lockedBy || null,
+      lock_reason: g.lock_reason || g.lockReason || null,
+      lockReason: g.lock_reason || g.lockReason || null,
+      reopened_at: g.reopened_at || g.reopenedAt || null,
+      reopenedAt: g.reopened_at || g.reopenedAt || null,
+      reopened_by: g.reopened_by || g.reopenedBy || null,
+      reopenedBy: g.reopened_by || g.reopenedBy || null
     };
   }
 
@@ -606,7 +622,7 @@ class DataStoreService {
           // bridge `team_season_id`, manteniendo los FKs legacy.
           let gamesQuery = supabase
             .from("games")
-            .select("id,team_id,season_id,team_season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count")
+            .select("id,team_id,season_id,team_season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,periods,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes,has_overtime,overtime_count,edit_state,locked_at,locked_by,lock_reason,reopened_at,reopened_by")
             .order("date", { ascending: false });
 
           if (scopeTeamId) {
@@ -1341,6 +1357,14 @@ class DataStoreService {
     const existingGame = gameData.id
       ? this.games.find(g => String(g.id) === String(gameData.id))
       : null;
+
+    if (
+      existingGame
+      && String(existingGame.edit_state || existingGame.editState || "OPEN").toUpperCase() === "LOCKED"
+    ) {
+      throw new Error("Partido cerrado: reabre el partido antes de modificar datos.");
+    }
+
     const permissionKey = existingGame ? Permission.EDIT_GAME : Permission.CREATE_GAME;
     this._assertPermission(
       permissionKey,
@@ -1548,6 +1572,14 @@ class DataStoreService {
   async deleteGame(gameId) {
     if (!gameId) return false;
     const existingGame = this.games.find(g => String(g.id) === String(gameId));
+
+    if (
+      existingGame
+      && String(existingGame.edit_state || existingGame.editState || "OPEN").toUpperCase() === "LOCKED"
+    ) {
+      throw new Error("Partido cerrado: reabre el partido antes de modificar datos.");
+    }
+
     this._assertPermission(
       Permission.DELETE_GAME,
       {
