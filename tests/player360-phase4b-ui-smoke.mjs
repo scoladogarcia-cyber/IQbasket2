@@ -304,9 +304,19 @@ async function runViewport(browser, name, viewport) {
   const page = await browser.newPage({ viewport });
   const pageErrors = [];
   const consoleErrors = [];
-  page.on("pageerror", error => pageErrors.push(error.message));
+  page.on("pageerror", error => {
+    pageErrors.push(error.message);
+    console.log(`[${name}] BROWSER_PAGE_ERROR ${error.message}`);
+  });
   page.on("console", message => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+      console.log(`[${name}] BROWSER_CONSOLE_ERROR ${message.text()}`);
+    }
+  });
+  page.on("dialog", async dialog => {
+    console.log(`[${name}] BROWSER_DIALOG ${dialog.type()}: ${dialog.message()}`);
+    await dialog.dismiss();
   });
 
   await installFixture(page, name);
@@ -445,12 +455,39 @@ async function runViewport(browser, name, viewport) {
   );
   await saveAttendanceButton.click();
   await page.waitForFunction(() => window.__p360.attendanceCalls.length === 1);
-  await page.waitForFunction(() => {
+  await page.waitForTimeout(300);
+
+  const attendanceRenderState = await page.evaluate(() => {
     const card = [...document.querySelectorAll(".p360-session-card")]
       .find(node => node.textContent?.includes("Sesión existente"));
-    const load = card?.querySelector(".p360-load-value strong")?.textContent || "";
-    return load.includes("350");
+    const session = window.__p360.sessions.find(
+      item => item.id === "session-existing"
+    );
+    return {
+      callCount: window.__p360.attendanceCalls.length,
+      memoryLoad: session?.participants?.[0]?.internal_load ?? null,
+      memoryStatus: session?.participants?.[0]?.attendance_status ?? null,
+      visibleLoad: card?.querySelector(".p360-load-value strong")?.textContent || "",
+      visibleStatus: card?.querySelector(".p360-att-status")?.value || "",
+      title: document.querySelector(".p360-hero h1")?.textContent || "",
+      trainingViewExists: Boolean(document.querySelector(".p360-training-view")),
+      externalTabExists: Boolean(document.querySelector('[data-p360-tab="external"]')),
+      lastError: window.__p360View?.lastError?.message || "",
+      activeTab: window.__p360View?.activeTab || "",
+      capabilityReady: Boolean(window.__p360View?.capabilities?.ready),
+      contentPreview: String(
+        document.querySelector("#dashboard-content-area")?.textContent || ""
+      ).replace(/\s+/g, " ").trim().slice(0, 600)
+    };
   });
+  console.log(JSON.stringify({ viewport: name, attendanceRenderState }));
+
+  assertCondition(
+    String(attendanceRenderState.visibleLoad).includes("350"),
+    name,
+    "La asistencia persiste en memoria pero no se refleja en UI: "
+      + JSON.stringify(attendanceRenderState)
+  );
 
   const attendanceCall = await page.evaluate(() => window.__p360.attendanceCalls[0]);
   assertCondition(attendanceCall.attendanceStatus === "PARTIAL", name, "Asistencia no envía estado");
