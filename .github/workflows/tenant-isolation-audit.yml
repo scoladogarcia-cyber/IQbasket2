@@ -1,0 +1,35 @@
+name: Tenant Isolation Audit
+
+on:
+  push:
+    branches:
+      - security/tenant-isolation-audit-v1
+    paths:
+      - ".github/workflows/tenant-isolation-audit.yml"
+      - "supabase/ready/20260903_tenant_isolation_audit_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Read-only production tenant isolation audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Run read-only audit
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_tenant_isolation_audit_readonly.sql
