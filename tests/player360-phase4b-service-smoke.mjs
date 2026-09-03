@@ -7,7 +7,8 @@ function buildQuery(table, rows, callLog) {
     table,
     rows: [...rows],
     filters: [],
-    updatePayload: null
+    updatePayload: null,
+    insertPayload: null
   };
 
   const query = {
@@ -30,6 +31,15 @@ function buildQuery(table, rows, callLog) {
       callLog.push({ op: "update", table, payload: structuredClone(payload) });
       return this;
     },
+    insert(payload) {
+      state.insertPayload = structuredClone(payload);
+      callLog.push({ op: "insert", table, payload: structuredClone(payload) });
+      return this;
+    },
+    delete() {
+      callLog.push({ op: "delete", table });
+      return this;
+    },
     eq(key, value) { state.filters.push({ type: "eq", key, value }); return this; },
     neq(key, value) { state.filters.push({ type: "neq", key, value }); return this; },
     gte() { return this; },
@@ -39,9 +49,12 @@ function buildQuery(table, rows, callLog) {
     limit() { return this; },
     async single() {
       const row = this.data[0] || null;
+      const data = state.insertPayload
+        ? { id: "inserted-id", ...state.insertPayload }
+        : (row && state.updatePayload ? { ...row, ...state.updatePayload } : row);
       return {
-        data: row && state.updatePayload ? { ...row, ...state.updatePayload } : row,
-        error: row ? null : { message: "not found" }
+        data,
+        error: data ? null : { message: "not found" }
       };
     }
   };
@@ -216,6 +229,37 @@ assert.ok(
   "Cambiar la duración debe mantener coherentes los PRESENT que tenían la duración completa anterior."
 );
 
+const correctedBlock = await service.saveBlock({
+  trainingSessionId: "session-1",
+  blockId: "block-1",
+  blockOrder: 1,
+  title: "Tiro corregido",
+  durationMinutes: 25,
+  intensity: 6
+});
+assert.equal(correctedBlock.title, "Tiro corregido");
+assert.ok(
+  calls.some(call =>
+    call.op === "update"
+    && call.table === "training_blocks"
+    && call.payload.title === "Tiro corregido"
+  )
+);
+
+const newBlock = await service.saveBlock({
+  trainingSessionId: "session-1",
+  blockOrder: 2,
+  title: "Finalizaciones",
+  durationMinutes: 20
+});
+assert.equal(newBlock.id, "inserted-id");
+assert.ok(calls.some(call => call.op === "insert" && call.table === "training_blocks"));
+
+assert.equal(
+  await service.deleteBlock({ trainingSessionId: "session-1", blockId: "block-1" }),
+  true
+);
+
 await service.setParticipant({
   trainingSessionId: "session-1",
   playerId: "player-1",
@@ -228,6 +272,16 @@ const participantCall = calls.find(call => call.name === "iq_v4_set_training_par
 assert.equal(participantCall.args.p_attendance_status, "PARTIAL");
 assert.equal(participantCall.args.p_participated_minutes, 45);
 assert.equal(participantCall.args.p_rpe, 7);
+
+assert.equal(
+  await service.removeParticipant({
+    trainingSessionId: "session-1",
+    teamSeasonId: "ts-1",
+    playerId: "player-1"
+  }),
+  true
+);
+assert.ok(calls.some(call => call.op === "delete" && call.table === "training_participants"));
 
 assert.equal(await service.archiveSession("session-1"), true);
 
@@ -270,6 +324,11 @@ assert.match(trainingViewSource, /p360-edit-session/);
 assert.match(trainingViewSource, /p360-edit-external/);
 assert.match(trainingViewSource, /updateSession\(/);
 assert.match(trainingViewSource, /updateExternalDevelopment\(/);
+assert.match(trainingViewSource, /p360-save-edit-block/);
+assert.match(trainingViewSource, /p360-remove-participant/);
+assert.match(trainingViewSource, /saveBlock\(/);
+assert.match(trainingViewSource, /deleteBlock\(/);
+assert.match(trainingViewSource, /removeParticipant\(/);
 
 const externalCall = calls.find(call => call.name === "iq_v4_create_external_development");
 assert.equal(externalCall.args.p_team_season_id, "ts-1");
