@@ -419,7 +419,31 @@ async function runViewport(browser, name, viewport) {
   await attendanceRow.locator(".p360-att-minutes").fill("50");
   await attendanceRow.locator(".p360-att-rpe").fill("7");
   await attendanceRow.locator(".p360-att-notes").fill("Smoke carga");
-  await attendanceRow.locator(".p360-save-attendance").click();
+  const saveAttendanceButton = attendanceRow.locator(".p360-save-attendance");
+  await saveAttendanceButton.evaluate(el => {
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+  });
+  await page.waitForTimeout(80);
+  const attendanceButtonGeometry = await saveAttendanceButton.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  assertCondition(
+    attendanceButtonGeometry.top >= 0
+      && attendanceButtonGeometry.bottom <= attendanceButtonGeometry.viewportHeight
+      && attendanceButtonGeometry.left >= 0
+      && attendanceButtonGeometry.right <= attendanceButtonGeometry.viewportWidth,
+    name,
+    "Guardar asistencia no queda completamente dentro del viewport"
+  );
+  await saveAttendanceButton.click();
   await page.waitForFunction(() => window.__p360.attendanceCalls.length === 1);
   await page.waitForFunction(() => {
     const card = [...document.querySelectorAll(".p360-session-card")]
@@ -434,7 +458,31 @@ async function runViewport(browser, name, viewport) {
   assertCondition(attendanceCall.rpe === 7, name, "Asistencia no envía RPE");
 
   // External development.
-  await page.click('[data-p360-tab="external"]');
+  const externalTab = page.locator('[data-p360-tab="external"]');
+  await externalTab.evaluate(el => {
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+  });
+  await page.waitForTimeout(80);
+  const externalTabGeometry = await externalTab.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  assertCondition(
+    externalTabGeometry.top >= 0
+      && externalTabGeometry.bottom <= externalTabGeometry.viewportHeight
+      && externalTabGeometry.left >= 0
+      && externalTabGeometry.right <= externalTabGeometry.viewportWidth,
+    name,
+    "La pestaña Desarrollo externo no queda dentro del viewport"
+  );
+  await externalTab.click();
   await page.locator("#p360-create-external-panel").evaluate(el => { el.open = true; });
   await page.fill("#p360-external-date", "2026-02-10");
   await page.dispatchEvent("#p360-external-date", "change");
