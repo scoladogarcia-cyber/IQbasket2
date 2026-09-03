@@ -105,7 +105,7 @@ set search_path = ''
 as $$
   select
     auth.uid() is not null
-    and public.iq_v3_can_manage_team_season(p_to_team_season_id);
+    and public.iq_v3_can_manage_roster(p_to_team_season_id);
 $$;
 
 create or replace function public.iq_v3_can_approve_transfer_request()
