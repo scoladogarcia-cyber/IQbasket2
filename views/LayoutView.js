@@ -29,6 +29,7 @@ export class LayoutView {
     if (['boxscore', 'registro'].includes(r)) return 'boxscore';
     if (['team', 'equipo'].includes(r)) return 'team';
     if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
+    if (['training', 'entrenamientos', 'development', 'desarrollo'].includes(r)) return 'training';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
@@ -210,6 +211,7 @@ export class LayoutView {
 
     const isComparatorRestricted = userRole === "JUGADOR" || userRole === "FAMILIA_TUTOR";
     const isAiRestricted = userRole === "JUGADOR";
+    const isTrainingRestricted = ["JUGADOR", "FAMILIA_TUTOR", "VISOR", "INVITADO"].includes(userRole);
 
     const navGroups = [
       {
@@ -227,6 +229,20 @@ export class LayoutView {
           { key: "players", labelKey: "players", fallback: "Jugadores", route: "players", svg: '<circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 1 0-16 0"></path>' },
           { key: "games", labelKey: "games", fallback: "Partidos", route: "games", svg: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>' },
           { key: "lineups", labelKey: "lineups", fallback: "Quintetos", route: "lineups", svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><circle cx="19" cy="11" r="2"></circle>' }
+        ]
+      },
+      {
+        titleKey: "player360.development",
+        defaultTitle: "DESARROLLO",
+        items: [
+          {
+            key: "training",
+            labelKey: "player360.training.nav",
+            fallback: "Entrenamientos",
+            route: "training",
+            disabled: isTrainingRestricted,
+            svg: '<path d="M6 5v14"></path><path d="M18 5v14"></path><path d="M3 8v8"></path><path d="M21 8v8"></path><path d="M6 12h12"></path>'
+          }
         ]
       },
       {
@@ -426,6 +442,10 @@ export class LayoutView {
               <a href="#/players" class="drawer-item">
                 <span class="drawer-icon">👤</span>
                 <span>${LayoutView.t("players", "Jugadores")}</span>
+              </a>
+              <a href="${isTrainingRestricted ? 'javascript:void(0);' : '#/training'}" class="drawer-item ${isTrainingRestricted ? 'disabled-link' : ''}" data-route-key="training">
+                <span class="drawer-icon">🏋️</span>
+                <span>${LayoutView.t("player360.training.nav", "Entrenamientos")}${isTrainingRestricted ? ' 🔒' : ''}</span>
               </a>
               <a href="#/lineups" class="drawer-item">
                 <span class="drawer-icon">🏀</span>
@@ -993,6 +1013,7 @@ if (I18n && typeof I18n.subscribe === "function") {
         dashboard: "dashboard",
         team: "team",
         players: "players",
+        training: "player360.training.nav",
         games: "games",
         lineups: "lineups",
         advanced: "advanced_stats",
