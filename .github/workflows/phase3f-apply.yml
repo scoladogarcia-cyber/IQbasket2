@@ -1,0 +1,89 @@
+name: Phase 3F Apply
+
+on:
+  push:
+    branches:
+      - feature/season-roster-history-v2
+    paths:
+      - ".github/phase3f-apply-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Apply and verify Phase 3F
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Check database secret
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Reconfirm preflight immediately before apply
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_preflight_v3_phase3f_roster_permissions_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | tail -n 1)
+          test "${LAST##*,}" = "t"
+
+      - name: Apply Phase 3F function-only migration
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260903_apply_v3_phase3f_roster_permissions.sql
+
+      - name: Assert post-apply smoke is rollback-only
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/drafts/20260903_smoke_v3_phase3f_rbac_behavior_rollback.sql
+          test "$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$FILE")" -eq 1
+          test "$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$FILE" || true)" -eq 0
+          test "$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$FILE")" -eq 1
+
+      - name: Run post-apply RBAC behavior smoke
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/drafts/20260903_smoke_v3_phase3f_rbac_behavior_rollback.sql
+
+      - name: Run Phase 3F final verification
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260903_verify_v3_phase3f_summary_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | tail -n 1)
+          test "${LAST##*,}" = "t"
+
+      - name: Require database secret
+        if: steps.check.outputs.ready != 'true'
+        run: exit 1
