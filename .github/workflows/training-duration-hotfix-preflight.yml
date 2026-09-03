@@ -1,0 +1,45 @@
+name: Training Duration Hotfix Preflight
+
+on:
+  push:
+    branches:
+      - fix/mobile-training-invited-readonly-v1
+    paths:
+      - ".github/workflows/training-duration-hotfix-preflight.yml"
+      - "supabase/ready/20260903_preflight_fix_v4_training_duration_attendance.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Read-only training hotfix preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Run read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_fix_v4_training_duration_attendance.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^TRAINING_DURATION_HOTFIX_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
