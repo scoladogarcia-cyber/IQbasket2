@@ -126,8 +126,11 @@ const playerViewSource=readFileSync(
   "utf8"
 );
 assert.match(playerViewSource,/WellnessSupportPanel/);
-assert.match(playerViewSource,/tabs\.push\(\{ id: "wellness", label: "🌱 Apoyo" \}\)/);
-assert.match(playerViewSource,/this\.activeTab === "wellness"/);
+assert.match(playerViewSource,/tabs\.push\(\{ id: "nutrition", label: "🥤 Nutrición" \}\)/);
+assert.match(playerViewSource,/tabs\.push\(\{ id: "recovery", label: "🌙 Recuperación" \}\)/);
+assert.doesNotMatch(playerViewSource,/id: "wellness", label: "🌱 Apoyo"/);
+assert.match(playerViewSource,/this\.activeTab === "nutrition"/);
+assert.match(playerViewSource,/this\.activeTab === "recovery"/);
 assert.match(playerViewSource,/this\.wellnessPanel\.bind/);
 
 console.log("PLAYER360_PHASE4E2_SERVICE_ROUTE_OK");
