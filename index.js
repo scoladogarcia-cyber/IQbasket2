@@ -409,25 +409,58 @@ export class IQBasketApp {
     }
   }
 
+  /**
+   * Limpia únicamente el contexto local de la sesión cerrada.
+   * Mantiene preferencias no sensibles (por ejemplo, idioma) y fuerza
+   * una recarga limpia de datos al autenticar una cuenta diferente.
+   */
+  _clearSessionContext() {
+    this.isAuthenticated = false;
+    this.userEmail = "";
+    this.userRole = UserRole.INVITADO;
+    this.teamId = "";
+    this.currentRoute = "dashboard";
+    this.routeParams = {};
+
+    this.permissionService.clear();
+    DataStore.isLoaded = false;
+
+    const sessionKeys = [
+      "iq_user_email",
+      "iq_user_role",
+      "iq_user_name",
+      "iq_user_lastname",
+      "iq_user_phone",
+      "iq_user_teams_map",
+      "iq_simulated_role",
+      "iq_active_team_id",
+      "iq_active_season"
+    ];
+
+    sessionKeys.forEach((key) => localStorage.removeItem(key));
+    sessionStorage.removeItem("iq_sidebar_scroll");
+  }
+
   bindLayoutEvents() {
-    const logoutBtn = document.getElementById("btn-logout");
-    if (logoutBtn && !logoutBtn.dataset.bound) {
+    const logoutButtons = document.querySelectorAll('[data-session-action="logout"]');
+    logoutButtons.forEach((logoutBtn) => {
+      if (logoutBtn.dataset.bound) return;
+
       logoutBtn.dataset.bound = "true";
       logoutBtn.addEventListener("click", async (e) => {
         e.preventDefault();
+        e.stopPropagation();
+
         try {
           if (supabase) await supabase.auth.signOut();
         } catch (err) {
           console.warn("Nota al cerrar sesión:", err);
         }
-        this.isAuthenticated = false;
-        this.permissionService.clear();
-        DataStore.isLoaded = false;
-        localStorage.removeItem("iq_simulated_role");
-        localStorage.removeItem("iq_user_role");
+
+        this._clearSessionContext();
         this.render();
       });
-    }
+    });
 
     const handleLanguageChange = async (e) => {
       const lang = e.target.value;
