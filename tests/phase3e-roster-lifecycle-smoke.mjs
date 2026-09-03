@@ -355,7 +355,8 @@ async function runLifecycle(browser, name, viewport) {
   await page.fill("#add-p-effective-date", "2026-02-10");
 
   await acceptAlert(page, async () => {
-    await page.click('#form-add-player button[type="submit"]');
+    await page.locator("#form-add-player").scrollIntoViewIfNeeded();
+    await page.locator("#form-add-player").evaluate(form => form.requestSubmit());
     await page.waitForFunction(() => window.__lifecycle.createCalls.length === 1);
   });
 
