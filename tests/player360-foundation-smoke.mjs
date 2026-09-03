@@ -210,6 +210,58 @@ for (const role of [UserRole.ANALISTA, UserRole.PREPARADOR_FISICO]) {
 assert.equal(has(UserRole.VISOR, Permission.VIEW_LONGITUDINAL_ANALYTICS), false);
 assert.equal(has(UserRole.VISOR, Permission.VIEW_AI_INSIGHTS), false);
 
+// Phase 4E: privacy administration is granular and does not enable wellness data.
+for (const permission of [
+  Permission.VIEW_PRIVACY_AUTHORIZATIONS,
+  Permission.CREATE_PRIVACY_AUTHORIZATION,
+  Permission.REVOKE_PRIVACY_AUTHORIZATION,
+  Permission.VIEW_SENSITIVE_ACCESS_GRANTS,
+  Permission.GRANT_SENSITIVE_ACCESS,
+  Permission.REVOKE_SENSITIVE_ACCESS,
+  Permission.VIEW_PRIVACY_AUDIT
+]) {
+  assert.equal(has(UserRole.ADMIN, permission), true, `ADMIN debe disponer de ${permission}`);
+}
+assert.equal(has(UserRole.ADMIN, Permission.REQUEST_SENSITIVE_ACCESS), true);
+for (const role of [
+  UserRole.ENTRENADOR,
+  UserRole.ANALISTA,
+  UserRole.PREPARADOR_FISICO
+]) {
+  assert.equal(has(role, Permission.REQUEST_SENSITIVE_ACCESS), true);
+  assert.equal(has(role, Permission.GRANT_SENSITIVE_ACCESS), false);
+  assert.equal(has(role, Permission.REVOKE_SENSITIVE_ACCESS), false);
+  assert.equal(has(role, Permission.CREATE_PRIVACY_AUTHORIZATION), false);
+  assert.equal(has(role, Permission.VIEW_PRIVACY_AUDIT), false);
+}
+for (const role of [
+  UserRole.JUGADOR,
+  UserRole.FAMILIA_TUTOR,
+  UserRole.VISOR,
+  UserRole.INVITADO
+]) {
+  assert.equal(has(role, Permission.REQUEST_SENSITIVE_ACCESS), false);
+  assert.equal(has(role, Permission.GRANT_SENSITIVE_ACCESS), false);
+  assert.equal(has(role, Permission.CREATE_PRIVACY_AUTHORIZATION), false);
+}
+
+// 4E is only an authorization substrate: restricted modules remain disabled for
+// ordinary roles until each module has its own approved data model and policies.
+for (const role of [
+  UserRole.ADMIN,
+  UserRole.ENTRENADOR,
+  UserRole.ANALISTA,
+  UserRole.PREPARADOR_FISICO,
+  UserRole.JUGADOR,
+  UserRole.FAMILIA_TUTOR,
+  UserRole.VISOR,
+  UserRole.INVITADO
+]) {
+  assert.equal(has(role, Permission.VIEW_NUTRITION), false);
+  assert.equal(has(role, Permission.VIEW_RECOVERY), false);
+  assert.equal(has(role, Permission.VIEW_NEURO_DATA), false);
+}
+
 // Guard against accidentally duplicated ROLE_PERMISSIONS blocks in source.
 const permissionSource = readFileSync(
   new URL("../security/permissions.js", import.meta.url),
