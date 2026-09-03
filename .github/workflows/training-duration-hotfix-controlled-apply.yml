@@ -1,0 +1,163 @@
+name: Training Duration Hotfix Controlled Apply
+
+on:
+  push:
+    branches:
+      - fix/mobile-training-invited-readonly-v1
+    paths:
+      - ".github/training-duration-hotfix-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Apply + verify + rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static SQL guard
+        run: node tests/training-duration-hotfix-sql.mjs
+
+      - name: Capture training baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.training_blocks)::text || '|' ||
+              (select count(*) from public.training_participants)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text;
+          " | tr -d '[:space:]')
+          echo "TRAINING_HOTFIX_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_fix_v4_training_duration_attendance.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^TRAINING_DURATION_HOTFIX_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Apply training hotfix
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260903_fix_v4_training_duration_attendance.sql
+
+      - name: Verify training hotfix
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_fix_v4_training_duration_attendance.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^TRAINING_DURATION_HOTFIX_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Run installed functional smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260903_smoke_fix_v4_training_duration_attendance_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^TRAINING_DURATION_HOTFIX_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Verify final baseline and function
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_fix_v4_training_duration_attendance.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^TRAINING_DURATION_HOTFIX_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.training_blocks)::text || '|' ||
+              (select count(*) from public.training_participants)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text;
+          " | tr -d '[:space:]')
+          echo "TRAINING_HOTFIX_POST_APPLY_BASELINE=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"
+
+      - name: Emergency rollback if validation fails after apply
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Restoring pre-hotfix training create RPC."
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260903_rollback_fix_v4_training_duration_attendance.sql
+
+      - name: Verify emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select position(
+              'TRAINING_DURATION_MISMATCH' in pg_get_functiondef(
+                'public.iq_v4_create_training_session(uuid,date,text,text,integer,numeric,time without time zone,time without time zone,jsonb,jsonb)'::regprocedure
+              )
+            )=0;
+          " | tr -d '[:space:]')
+          test "$RESULT" = "t"
+
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.training_blocks)::text || '|' ||
+              (select count(*) from public.training_participants)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text;
+          " | tr -d '[:space:]')
+          echo "TRAINING_HOTFIX_AFTER_EMERGENCY_ROLLBACK=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"
