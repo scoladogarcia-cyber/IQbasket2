@@ -81,6 +81,37 @@ Deberá registrar como mínimo:
 - coste/tokens cuando aplique;
 - autor o proceso que solicitó la interpretación.
 
+## Seguridad por acción
+
+Phase 4D no reutiliza permisos genéricos de Player 360 ni permisos del módulo de
+evaluaciones para operaciones distintas.
+
+La autorización queda separada en cinco capacidades:
+
+- ver analítica longitudinal;
+- generar snapshots longitudinales deterministas;
+- ver insights de IA;
+- generar insights de IA;
+- revisar/aprobar/rechazar/archivar insights de IA.
+
+En frontend estas acciones se representan con permisos independientes
+(`VIEW_LONGITUDINAL_ANALYTICS`, `GENERATE_LONGITUDINAL_ANALYTICS`,
+`VIEW_AI_INSIGHTS`, `GENERATE_AI_INSIGHTS` y
+`REVIEW_AI_INSIGHTS`). En backend, RLS y RPC utilizan helpers separados para
+cada acción.
+
+Matriz inicial de mínimo privilegio:
+
+- ADMIN y ENTRENADOR: lectura, generación y revisión;
+- ANALISTA y PREPARADOR_FISICO: lectura y generación, sin revisión humana;
+- VISOR, JUGADOR, FAMILIA_TUTOR e INVITADO: sin nuevas capacidades 4D en esta
+  fase;
+- SUPERADMIN: conserva la regla global existente.
+
+Los conjuntos iniciales pueden coincidir en algunas acciones, pero los límites
+permanecen desacoplados para evolucionar hacia ABAC por recurso, audiencia,
+jugador, equipo-temporada y sensibilidad sin rehacer el esquema.
+
 ## Siguiente puerta de control
 
 Antes de instalar la persistencia 4D:
