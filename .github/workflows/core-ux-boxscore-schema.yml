@@ -1,0 +1,34 @@
+name: Core UX BoxScore Schema
+
+on:
+  push:
+    branches:
+      - feature/core-ux-completion-v1
+    paths:
+      - ".github/workflows/core-ux-boxscore-schema.yml"
+      - "supabase/ready/20260903_core_ux_boxscore_schema_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Read-only BoxScore schema diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Inspect schema
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv             --file=supabase/ready/20260903_core_ux_boxscore_schema_readonly.sql
