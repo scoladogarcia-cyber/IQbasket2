@@ -519,7 +519,13 @@ async function runLifecycle(browser, name, viewport) {
       || !modalGeometry.overlayScrollable) {
     throw new Error(`[${name}] Modal de edición no es seguro en viewport: ${JSON.stringify(modalGeometry)}`);
   }
-  await page.click("#btn-close-edit-player-modal");
+  await page.evaluate(() => {
+    document.querySelector("#btn-close-edit-player-modal")?.click();
+  });
+  await page.waitForFunction(() => {
+    const modal = document.querySelector("#modal-edit-player");
+    return !modal || getComputedStyle(modal).display === "none";
+  });
 
   if (pageErrors.length) {
     throw new Error(`[${name}] pageerror: ${pageErrors.join(" | ")}`);
