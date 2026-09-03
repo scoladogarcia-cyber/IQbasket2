@@ -31,5 +31,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Season head-coach history regression
+        run: node tests/season-head-coach-history-regression.mjs
+
       - name: Build
         run: npm run build
