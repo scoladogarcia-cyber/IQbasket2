@@ -7,6 +7,7 @@
 import { DataStore } from "../services/DataStore.js";
 import { ApprovalCenterService, RequestType } from "../services/ApprovalCenterService.js";
 import { Permission } from "../security/PermissionService.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 export class ApprovalCenterView {
   constructor(supabase, authController) {
@@ -24,6 +25,14 @@ export class ApprovalCenterView {
     this.isLoading = false;
   }
 
+  t(key, fallback = "", params = {}) {
+    let text = TranslationStore?.t?.(key, fallback) || fallback || key;
+    Object.entries(params || {}).forEach(([name, value]) => {
+      text = String(text).replaceAll(`{${name}}`, String(value ?? ""));
+    });
+    return text;
+  }
+
   _escape(value = "") {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -36,25 +45,44 @@ export class ApprovalCenterView {
   _statusMeta(status = "") {
     const normalized = String(status || "").toUpperCase();
     if (normalized === "PENDING") {
-      return { label: "Pendiente", icon: "⏳", bg: "#fef3c7", fg: "#92400e", border: "#fde68a" };
+      return { label: this.t("approvals.status_pending", "Pendiente"), icon: "⏳", bg: "#fef3c7", fg: "#92400e", border: "#fde68a" };
     }
     if (normalized === "APPROVED") {
-      return { label: "Aprobada", icon: "✓", bg: "#dcfce7", fg: "#166534", border: "#86efac" };
+      return { label: this.t("approvals.status_approved", "Aprobada"), icon: "✓", bg: "#dcfce7", fg: "#166534", border: "#86efac" };
     }
     if (normalized === "REJECTED") {
-      return { label: "Rechazada", icon: "×", bg: "#fee2e2", fg: "#991b1b", border: "#fca5a5" };
+      return { label: this.t("approvals.status_rejected", "Rechazada"), icon: "×", bg: "#fee2e2", fg: "#991b1b", border: "#fca5a5" };
     }
     if (normalized === "CANCELLED") {
-      return { label: "Cancelada", icon: "—", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
+      return { label: this.t("approvals.status_cancelled", "Cancelada"), icon: "—", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
     }
     return { label: normalized || "Estado", icon: "•", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
   }
 
   _typeMeta(type) {
     if (type === RequestType.GAME_LOCK) {
-      return { label: "Cierre de partido", icon: "🔒", bg: "#fff7ed", fg: "#9a3412" };
+      return { label: this.t("approvals.type_game_lock", "Cierre de partido"), icon: "🔒", bg: "#fff7ed", fg: "#9a3412" };
     }
-    return { label: "Acceso a equipo", icon: "👥", bg: "#eff6ff", fg: "#1d4ed8" };
+    return { label: this.t("approvals.type_team_access", "Acceso a equipo"), icon: "👥", bg: "#eff6ff", fg: "#1d4ed8" };
+  }
+
+  _itemTitle(item) {
+    if (item.type === RequestType.GAME_LOCK) {
+      return this.t("approvals.game_title", "Cerrar partido vs {opponent}", {
+        opponent: item.opponent || item.title || "Rival"
+      });
+    }
+    return item.title || item.actor || this.t("approvals.type_team_access", "Acceso a equipo");
+  }
+
+  _itemSubtitle(item) {
+    if (item.type === RequestType.GAME_LOCK) {
+      return [item.gameDate || "", item.requestedRole || ""].filter(Boolean).join(" · ");
+    }
+    return this.t("approvals.access_subtitle", "Acceso a {team} como {role}", {
+      team: item.teamName || "equipo",
+      role: item.requestedRole || "VISOR"
+    });
   }
 
   _formatDate(value) {
@@ -89,8 +117,8 @@ export class ApprovalCenterView {
     if (!this.auth?.canPreview?.(Permission.VIEW_APPROVAL_CENTER)) {
       container.innerHTML = `
         <div style="padding:24px;background:#ffffff;border:1px solid #fecaca;border-radius:12px;color:#991b1b;">
-          <h2 style="margin:0 0 8px;font-size:18px;">🔒 Acceso restringido</h2>
-          <p style="margin:0;">Tu perfil no puede consultar la Bandeja de Solicitudes.</p>
+          <h2 style="margin:0 0 8px;font-size:18px;">🔒 ${this.t("approvals.restricted", "Acceso restringido")}</h2>
+          <p style="margin:0;">${this.t("approvals.restricted_body", "Tu perfil no puede consultar la Bandeja de Solicitudes.")}</p>
         </div>
       `;
       return;
@@ -106,7 +134,7 @@ export class ApprovalCenterView {
       <div style="max-width:1180px;margin:0 auto;padding:4px 0 80px;">
         <div style="padding:28px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;text-align:center;color:#475569;">
           <div style="font-size:28px;margin-bottom:8px;">⏳</div>
-          <strong>Cargando solicitudes...</strong>
+          <strong>${this.t("approvals.loading", "Cargando solicitudes...")}</strong>
         </div>
       </div>
     `;
@@ -138,7 +166,7 @@ export class ApprovalCenterView {
     const warningMarkup = (this.state.errors || []).length > 0
       ? `
         <div style="margin-bottom:14px;padding:12px 14px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:12px;">
-          ⚠️ La bandeja se ha cargado parcialmente. ${this._escape((this.state.errors || []).map(error => error.message).join(" · "))}
+          ⚠️ ${this.t("approvals.partial", "La bandeja se ha cargado parcialmente.")} ${this._escape((this.state.errors || []).map(error => error.message).join(" · "))}
         </div>
       `
       : "";
@@ -152,8 +180,8 @@ export class ApprovalCenterView {
         <header style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
           <div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <h1 style="margin:0;color:#0f172a;font-size:24px;font-weight:900;">📥 Bandeja de Solicitudes</h1>
-              ${pending > 0 ? `<span style="padding:4px 9px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;">${pending} pendiente${pending === 1 ? "" : "s"}</span>` : ""}
+              <h1 style="margin:0;color:#0f172a;font-size:24px;font-weight:900;">📥 ${this.t("approvals.title", "Bandeja de Solicitudes")}</h1>
+              ${pending > 0 ? `<span style="padding:4px 9px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;">${pending} ${this.t("approvals.pending", "Pendientes").toLowerCase()}</span>` : ""}
             </div>
             <p style="margin:6px 0 0;color:#64748b;font-size:13px;line-height:1.45;max-width:720px;">
               Unifica solicitudes de acceso y cierres de partido. Las acciones disponibles dependen siempre de tus permisos reales y del equipo/temporada seleccionados.
@@ -161,21 +189,21 @@ export class ApprovalCenterView {
           </div>
           <button type="button" id="btn-refresh-approval-center"
                   style="min-height:44px;padding:9px 14px;border-radius:9px;border:1px solid #cbd5e1;background:#ffffff;color:#0f172a;font-weight:800;cursor:pointer;">
-            ↻ Actualizar
+            ↻ ${this.t("approvals.refresh", "Actualizar")}
           </button>
         </header>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px;">
           <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:13px;">
-            <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;">Total visible</div>
+            <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;">${this.t("approvals.total", "Total")}</div>
             <div style="font-size:24px;color:#0f172a;font-weight:900;margin-top:3px;">${total}</div>
           </div>
           <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:13px;">
-            <div style="font-size:11px;color:#92400e;font-weight:800;text-transform:uppercase;">Pendientes</div>
+            <div style="font-size:11px;color:#92400e;font-weight:800;text-transform:uppercase;">${this.t("approvals.pending", "Pendientes")}</div>
             <div style="font-size:24px;color:#78350f;font-weight:900;margin-top:3px;">${pending}</div>
           </div>
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:13px;">
-            <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;">Resueltas</div>
+            <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;">${this.t("approvals.resolved", "Resueltas")}</div>
             <div style="font-size:24px;color:#334155;font-weight:900;margin-top:3px;">${resolved}</div>
           </div>
         </div>
@@ -183,9 +211,9 @@ export class ApprovalCenterView {
         ${warningMarkup}
 
         <div role="tablist" aria-label="Filtrar solicitudes" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-          ${this._renderFilterButton("PENDING", `Pendientes (${pending})`)}
-          ${this._renderFilterButton("RESOLVED", `Historial (${resolved})`)}
-          ${this._renderFilterButton("ALL", `Todas (${total})`)}
+          ${this._renderFilterButton("PENDING", `${this.t("approvals.pending", "Pendientes")} (${pending})`)}
+          ${this._renderFilterButton("RESOLVED", `${this.t("approvals.history", "Historial")} (${resolved})`)}
+          ${this._renderFilterButton("ALL", `${this.t("approvals.all", "Todas")} (${total})`)}
         </div>
 
         <div id="approval-center-list" style="display:grid;gap:10px;">
@@ -228,16 +256,16 @@ export class ApprovalCenterView {
               <span style="padding:3px 8px;border-radius:999px;background:${type.bg};color:${type.fg};font-size:11px;font-weight:900;">${type.icon} ${type.label}</span>
               <span style="padding:3px 8px;border-radius:999px;background:${status.bg};color:${status.fg};border:1px solid ${status.border};font-size:11px;font-weight:900;">${status.icon} ${status.label}</span>
             </div>
-            <h2 style="margin:0;color:#0f172a;font-size:15px;font-weight:900;overflow-wrap:anywhere;">${this._escape(item.title)}</h2>
-            <div style="margin-top:4px;color:#475569;font-size:12px;line-height:1.45;overflow-wrap:anywhere;">${this._escape(item.subtitle || "")}</div>
+            <h2 style="margin:0;color:#0f172a;font-size:15px;font-weight:900;overflow-wrap:anywhere;">${this._escape(this._itemTitle(item))}</h2>
+            <div style="margin-top:4px;color:#475569;font-size:12px;line-height:1.45;overflow-wrap:anywhere;">${this._escape(this._itemSubtitle(item))}</div>
             ${detail ? `<div style="margin-top:7px;padding:8px 10px;border-radius:8px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.45;overflow-wrap:anywhere;">${detail}</div>` : ""}
             ${created ? `<div style="margin-top:7px;color:#94a3b8;font-size:11px;">${created}</div>` : ""}
           </div>
 
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-            <a href="${targetLink}" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;text-decoration:none;font-size:12px;font-weight:800;">Ver contexto</a>
-            ${actions && item.canApprove ? `<button type="button" class="btn-approval-approve" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:#166534;color:#ffffff;font-size:12px;font-weight:900;cursor:pointer;">✓ Aprobar</button>` : ""}
-            ${actions && item.canReject ? `<button type="button" class="btn-approval-reject" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">Rechazar</button>` : ""}
+            <a href="${targetLink}" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;text-decoration:none;font-size:12px;font-weight:800;">${this.t("approvals.view_context", "Ver contexto")}</a>
+            ${actions && item.canApprove ? `<button type="button" class="btn-approval-approve" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:#166534;color:#ffffff;font-size:12px;font-weight:900;cursor:pointer;">✓ ${this.t("approvals.approve", "Aprobar")}</button>` : ""}
+            ${actions && item.canReject ? `<button type="button" class="btn-approval-reject" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">${this.t("approvals.reject", "Rechazar")}</button>` : ""}
           </div>
         </div>
       </article>
@@ -249,8 +277,8 @@ export class ApprovalCenterView {
     return `
       <div style="padding:34px 20px;text-align:center;background:#ffffff;border:1px dashed #cbd5e1;border-radius:14px;color:#64748b;">
         <div style="font-size:28px;margin-bottom:8px;">${isPending ? "✅" : "📭"}</div>
-        <strong style="display:block;color:#334155;margin-bottom:4px;">${isPending ? "No tienes solicitudes pendientes" : "No hay solicitudes en este filtro"}</strong>
-        <span style="font-size:12px;">La bandeja se actualizará al entrar de nuevo o al pulsar Actualizar.</span>
+        <strong style="display:block;color:#334155;margin-bottom:4px;">${isPending ? this.t("approvals.empty_pending", "No tienes solicitudes pendientes") : this.t("approvals.empty_filter", "No hay solicitudes en este filtro")}</strong>
+        <span style="font-size:12px;">${this.t("approvals.empty_help", "La bandeja se actualizará al entrar de nuevo o al pulsar Actualizar.")}</span>
       </div>
     `;
   }
@@ -276,8 +304,8 @@ export class ApprovalCenterView {
         const item = this._findItem(event.currentTarget.dataset.requestId);
         if (!item) return;
         const confirmation = item.type === RequestType.GAME_LOCK
-          ? "¿Aprobar y cerrar este partido? Quedará bloqueado hasta que un Admin/Superadmin lo reabra."
-          : "¿Aprobar esta solicitud de acceso?";
+          ? this.t("approvals.approve_lock_confirm", "¿Aprobar y cerrar este partido? Quedará bloqueado hasta que un Admin/Superadmin lo reabra.")
+          : this.t("approvals.approve_access_confirm", "¿Aprobar esta solicitud de acceso?");
         if (!confirm(confirmation)) return;
 
         await this._runAction(event.currentTarget, async () => {
@@ -294,7 +322,7 @@ export class ApprovalCenterView {
         const item = this._findItem(event.currentTarget.dataset.requestId);
         if (!item) return;
         const note = item.type === RequestType.GAME_LOCK
-          ? prompt("Motivo del rechazo (opcional):", "")
+          ? prompt(this.t("approvals.reject_reason", "Motivo del rechazo (opcional):"), "")
           : null;
         if (item.type === RequestType.GAME_LOCK && note === null) return;
 
@@ -311,7 +339,7 @@ export class ApprovalCenterView {
       await this._loadAndRender();
     } catch (error) {
       console.error("[ApprovalCenterView] Error resolviendo solicitud:", error);
-      alert(`❌ No se pudo completar la acción: ${error?.message || error}`);
+      alert(`❌ ${this.t("approvals.action_error", "No se pudo completar la acción.")} ${error?.message || error}`);
       button.disabled = false;
       button.style.opacity = "1";
     }
