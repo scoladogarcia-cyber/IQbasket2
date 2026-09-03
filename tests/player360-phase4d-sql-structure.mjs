@@ -29,6 +29,10 @@ const installedSmoke = fs.readFileSync(
   new URL("../supabase/drafts/20260903_smoke_v4_phase4d_installed_rollback.sql", import.meta.url),
   "utf8"
 );
+const controlledApplyWorkflow = fs.readFileSync(
+  new URL("../.github/workflows/player360-phase4d-controlled-apply.yml", import.meta.url),
+  "utf8"
+);
 
 for (const table of ["player_longitudinal_snapshots", "player_ai_insights"]) {
   assert.match(rehearsal, new RegExp(`create table public\\.${table}\\s*\\(`, "i"));
@@ -148,5 +152,21 @@ assert.match(installedSmoke, /iq_v4_save_ai_insight/i);
 assert.match(installedSmoke, /iq_v4_review_ai_insight/i);
 assert.match(installedSmoke, /\brollback\s*;/i);
 assert.doesNotMatch(installedSmoke, /\bcommit\s*;/i);
+
+assert.match(
+  controlledApplyWorkflow,
+  /paths:\s*[\s\S]*\.github\/player360-phase4d-apply-trigger\.txt/i,
+  "El apply 4D debe requerir un trigger explícito."
+);
+assert.match(controlledApplyWorkflow, /Reconfirm Phase 4D preflight/i);
+assert.match(controlledApplyWorkflow, /Apply Phase 4D/i);
+assert.match(controlledApplyWorkflow, /Verify Phase 4D/i);
+assert.match(controlledApplyWorkflow, /Run installed functional smoke with rollback/i);
+assert.match(controlledApplyWorkflow, /Emergency rollback if post-apply validation fails/i);
+assert.match(controlledApplyWorkflow, /Verify Phase 4D emergency rollback/i);
+assert.match(
+  controlledApplyWorkflow,
+  /if:\s*failure\(\)\s*&&\s*steps\.apply\.outcome\s*==\s*'success'/i
+);
 
 console.log("PLAYER360_PHASE4D_SQL_STRUCTURE_OK");
