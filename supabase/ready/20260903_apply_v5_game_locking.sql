@@ -2,6 +2,7 @@
 -- IQBasket V5 · Game locking lifecycle
 -- Additive schema + RBAC v2 integration + defense-in-depth immutable game guards.
 -- =============================================================================
+-- Rehearsal trigger: validated through GitHub Actions before controlled apply.
 
 begin;
 
