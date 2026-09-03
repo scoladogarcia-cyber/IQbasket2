@@ -466,6 +466,10 @@ export class LayoutView {
                 <span class="drawer-icon">🏋️</span>
                 <span>${LayoutView.t("player360.training.nav", "Entrenamientos")}${isTrainingRestricted ? ' 🔒' : ''}</span>
               </a>
+              <a href="${isNutritionRestricted ? 'javascript:void(0);' : '#/nutrition'}" class="drawer-item ${isNutritionRestricted ? 'disabled-link' : ''}" data-route-key="nutrition">
+                <span class="drawer-icon">🥤</span>
+                <span>${LayoutView.t("player360.nutrition.nav", "Nutrición")}${isNutritionRestricted ? ' 🔒' : ''}</span>
+              </a>
               <a href="#/lineups" class="drawer-item">
                 <span class="drawer-icon">🏀</span>
                 <span>${LayoutView.t("lineups", "Quintetos")}</span>
