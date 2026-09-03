@@ -286,8 +286,10 @@ for (const permission of [
   assert.equal(has(UserRole.INVITADO, permission), false, `INVITADO no debe modificar mediante ${permission}`);
 }
 assert.equal(has(UserRole.INVITADO, Permission.VIEW_PRIVATE_PLAYER_EVALUATION), false);
-assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), false);
-assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_RECOVERY), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_NUTRITION), false);
 
 // Phase 4E: privacy administration is granular and does not enable wellness data.
 for (const permission of [
