@@ -75,7 +75,74 @@ create table if not exists public.game_lock_history (
 create index if not exists ix_game_lock_history_game_created
   on public.game_lock_history(game_id, created_at desc);
 
--- 3) RBAC v2 helpers: lock management is deliberately narrower than game editing.
+-- 3) Self-contained RBAC helpers.
+-- They mirror the currently used role/team scope without depending on historical
+-- helper migrations that may not be installed in every environment.
+create or replace function public.iq_v5_current_email()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select lower(coalesce(auth.jwt() ->> 'email', ''));
+$$;
+
+create or replace function public.iq_v5_current_role()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_email text := public.iq_v5_current_email();
+  v_role text;
+begin
+  if v_email = 'scolado@nechigroup.com' then
+    return 'SUPERADMIN';
+  end if;
+
+  select upper(coalesce(up.role, 'INVITADO'))
+  into v_role
+  from public.user_profiles up
+  where lower(up.email) = v_email
+  limit 1;
+
+  return coalesce(v_role, 'INVITADO');
+end;
+$$;
+
+create or replace function public.iq_v5_can_access_team(target_team_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    public.iq_v5_current_role() = 'SUPERADMIN'
+    or exists (
+      select 1
+      from public.user_profiles up
+      where lower(up.email) = public.iq_v5_current_email()
+        and (
+          up.team_id = target_team_id
+          or target_team_id = any(coalesce(up.allowed_team_ids, '{}'::uuid[]))
+          or (
+            public.iq_v5_current_role() = 'ADMIN'
+            and up.club_id is not null
+            and exists (
+              select 1
+              from public.teams t
+              where t.id = target_team_id
+                and t.club_id = up.club_id
+            )
+          )
+        )
+    );
+$$;
+
 create or replace function public.iq_v5_can_manage_game_lock(target_game_id uuid)
 returns boolean
 language sql
@@ -87,8 +154,8 @@ as $$
     select 1
     from public.games g
     where g.id = target_game_id
-      and public.iq_current_role() in ('SUPERADMIN','ADMIN')
-      and public.iq_can_access_team(g.team_id)
+      and public.iq_v5_current_role() in ('SUPERADMIN','ADMIN')
+      and public.iq_v5_can_access_team(g.team_id)
   );
 $$;
 
@@ -104,8 +171,8 @@ as $$
     from public.games g
     where g.id = target_game_id
       and upper(coalesce(g.edit_state, 'OPEN')) = 'OPEN'
-      and public.iq_current_role() in ('ENTRENADOR','ANALISTA')
-      and public.iq_can_access_team(g.team_id)
+      and public.iq_v5_current_role() in ('ENTRENADOR','ANALISTA')
+      and public.iq_v5_can_access_team(g.team_id)
   );
 $$;
 
@@ -157,7 +224,7 @@ begin
         game_id, action, actor_id, actor_role, reason
       )
       values (
-        old.id, 'LOCKED', auth.uid(), public.iq_current_role(), new.lock_reason
+        old.id, 'LOCKED', auth.uid(), public.iq_v5_current_role(), new.lock_reason
       );
     elsif v_new_state = 'OPEN' then
       new.reopened_at := now();
@@ -167,7 +234,7 @@ begin
         game_id, action, actor_id, actor_role, reason
       )
       values (
-        old.id, 'REOPENED', auth.uid(), public.iq_current_role(), new.lock_reason
+        old.id, 'REOPENED', auth.uid(), public.iq_v5_current_role(), new.lock_reason
       );
     else
       raise exception 'GAME_EDIT_STATE_INVALID'
@@ -390,7 +457,7 @@ begin
   values (
     p_game_id,
     auth.uid(),
-    public.iq_current_role(),
+    public.iq_v5_current_role(),
     nullif(trim(p_reason), '')
   )
   returning id into v_request_id;
@@ -403,7 +470,7 @@ begin
     v_request_id,
     'REQUESTED',
     auth.uid(),
-    public.iq_current_role(),
+    public.iq_v5_current_role(),
     nullif(trim(p_reason), '')
   );
 
@@ -488,7 +555,7 @@ begin
       v_pending_request_id,
       'REQUEST_APPROVED',
       auth.uid(),
-      public.iq_current_role(),
+      public.iq_v5_current_role(),
       nullif(trim(p_reason), '')
     );
   end if;
@@ -568,7 +635,7 @@ begin
       else 'REQUEST_REJECTED'
     end,
     auth.uid(),
-    public.iq_current_role(),
+    public.iq_v5_current_role(),
     coalesce(nullif(trim(p_resolution_note), ''), v_request.request_reason)
   );
 end;
@@ -595,12 +662,18 @@ for select
 to authenticated
 using (public.iq_v5_can_manage_game_lock(game_id));
 
+revoke all on function public.iq_v5_current_email() from public, anon;
+revoke all on function public.iq_v5_current_role() from public, anon;
+revoke all on function public.iq_v5_can_access_team(uuid) from public, anon;
 revoke all on function public.iq_v5_can_manage_game_lock(uuid) from public, anon;
 revoke all on function public.iq_v5_can_request_game_lock(uuid) from public, anon;
 revoke all on function public.iq_v5_request_game_lock(uuid,text) from public, anon;
 revoke all on function public.iq_v5_set_game_edit_state(uuid,text,text) from public, anon;
 revoke all on function public.iq_v5_resolve_game_lock_request(uuid,text,text) from public, anon;
 
+grant execute on function public.iq_v5_current_email() to authenticated;
+grant execute on function public.iq_v5_current_role() to authenticated;
+grant execute on function public.iq_v5_can_access_team(uuid) to authenticated;
 grant execute on function public.iq_v5_can_manage_game_lock(uuid) to authenticated;
 grant execute on function public.iq_v5_can_request_game_lock(uuid) to authenticated;
 grant execute on function public.iq_v5_request_game_lock(uuid,text) to authenticated;
