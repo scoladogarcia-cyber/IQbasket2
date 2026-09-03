@@ -26,7 +26,7 @@ create or replace function public.iq_v4_update_training_session(
   p_start_time time default null,
   p_end_time time default null,
   p_blocks jsonb default null,
-  p_participants jsonb default null
+  p_participant_ids jsonb default '[]'::jsonb
 )
 returns uuid
 language plpgsql
@@ -43,7 +43,6 @@ declare
   v_keep_block_ids uuid[] := '{}'::uuid[];
   v_selected_player_ids uuid[] := '{}'::uuid[];
   block_item jsonb;
-  participant_item jsonb;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
 
@@ -87,16 +86,16 @@ begin
   if p_blocks is not null and jsonb_typeof(p_blocks)<>'array' then
     raise exception 'TRAINING_BLOCKS_MUST_BE_ARRAY';
   end if;
-  if p_participants is not null and jsonb_typeof(p_participants)<>'array' then
+  if p_participant_ids is not null and jsonb_typeof(p_participant_ids)<>'array' then
     raise exception 'TRAINING_PARTICIPANTS_MUST_BE_ARRAY';
   end if;
 
   -- Build the intended participant selection before changing the date.
-  if p_participants is not null then
-    for participant_item in select value from jsonb_array_elements(p_participants)
+  if p_participant_ids is not null then
+    for v_player_id in
+      select distinct value::uuid
+      from jsonb_array_elements_text(coalesce(p_participant_ids,'[]'::jsonb))
     loop
-      v_player_id := nullif(participant_item->>'player_id','')::uuid;
-      if v_player_id is null then raise exception 'TRAINING_PARTICIPANT_PLAYER_REQUIRED'; end if;
       if not public.iq_v3_player_eligible_on_date(v_player_id,v_team_season_id,p_session_date) then
         raise exception 'PLAYER_NOT_ELIGIBLE_ON_TRAINING_DATE';
       end if;
@@ -197,15 +196,16 @@ begin
       and not (b.id=any(v_keep_block_ids));
   end if;
 
-  if p_participants is not null then
+  if p_participant_ids is not null then
     v_default_attendance := case
       when p_session_date<=current_date then 'PRESENT'
       else 'PLANNED'
     end;
 
-    for participant_item in select value from jsonb_array_elements(p_participants)
+    for v_player_id in
+      select distinct value::uuid
+      from jsonb_array_elements_text(coalesce(p_participant_ids,'[]'::jsonb))
     loop
-      v_player_id := (participant_item->>'player_id')::uuid;
       v_participated_minutes := case
         when v_default_attendance='PRESENT' then v_duration_minutes
         else null
@@ -236,7 +236,7 @@ end;
 $$;
 
 create or replace function public.iq_v4_update_external_development(
-  p_external_session_id uuid,
+  p_external_development_id uuid,
   p_player_id uuid,
   p_activity_date date,
   p_title text,
@@ -265,7 +265,7 @@ begin
 
   select e.team_season_id into v_team_season_id
   from public.external_development_sessions e
-  where e.id=p_external_session_id
+  where e.id=p_external_development_id
   for update;
 
   if v_team_season_id is null then
@@ -296,9 +296,9 @@ begin
       metadata=coalesce(p_metadata,'{}'::jsonb),
       updated_by=auth.uid(),
       updated_at=now()
-  where id=p_external_session_id;
+  where id=p_external_development_id;
 
-  return p_external_session_id;
+  return p_external_development_id;
 end;
 $$;
 
