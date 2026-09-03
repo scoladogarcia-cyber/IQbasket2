@@ -1211,7 +1211,14 @@ export class TrainingView {
       if (target) target.insertAdjacentHTML("beforeend", this._renderBlockRow(blockCounter));
     });
 
-    container.addEventListener("click", async event => {
+    if (this._delegatedClickContainer && this._delegatedClickHandler) {
+      this._delegatedClickContainer.removeEventListener(
+        "click",
+        this._delegatedClickHandler
+      );
+    }
+
+    this._delegatedClickHandler = async event => {
       const removeBlock = event.target.closest(".p360-remove-block");
       if (removeBlock) {
         const rows = container.querySelectorAll(".p360-block-row");
@@ -1282,7 +1289,10 @@ export class TrainingView {
           archive.disabled = false;
         }
       }
-    });
+    };
+
+    container.addEventListener("click", this._delegatedClickHandler);
+    this._delegatedClickContainer = container;
 
     container.querySelector("#p360-training-form")?.addEventListener("submit", async event => {
       event.preventDefault();
