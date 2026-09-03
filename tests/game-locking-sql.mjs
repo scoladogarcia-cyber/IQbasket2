@@ -26,7 +26,7 @@ assert.match(
 );
 assert.match(
   apply,
-  /iq_v5_can_request_game_lock[\s\S]*'ENTRENADOR','ANALISTA'[\s\S]*iq_can_access_team/i,
+  /iq_v5_can_request_game_lock[\s\S]*iq_v5_role_for_game[\s\S]*'ENTRENADOR','ANALISTA'[\s\S]*iq_v5_can_access_team/i,
   "Entrenador/Analista deben poder solicitar cierre sin poder ejecutarlo."
 );
 
