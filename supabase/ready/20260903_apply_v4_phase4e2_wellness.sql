@@ -94,7 +94,7 @@ create table public.player360_wellness_entries (
   status text not null default 'ACTIVE',
   archived_by uuid references public.user_profiles(id) on delete set null,
   archived_at timestamptz,
-  archive_reason text,
+  archive_reason_code text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   updated_by uuid references public.user_profiles(id) on delete set null,
@@ -108,6 +108,11 @@ create table public.player360_wellness_entries (
     check (source_type in ('PLAYER_SELF_REPORT','GUARDIAN_REPORT','STAFF_MANUAL')),
   constraint player360_wellness_entry_status_check
     check (status in ('ACTIVE','ARCHIVED')),
+  constraint player360_wellness_entry_archive_reason_check
+    check (
+      archive_reason_code is null
+      or archive_reason_code in ('USER_ARCHIVE','STAFF_CORRECTION','DATA_QUALITY')
+    ),
   constraint player360_wellness_entry_archive_check
     check (
       (status='ACTIVE' and archived_at is null and archived_by is null)
@@ -225,7 +230,7 @@ as $iq4e2$
       p_player_id,p_team_season_id,lower(trim(p_module)),'UPDATE',upper(trim(p_purpose))
     ),
     'can_archive', public.iq_v4e_can_access_sensitive_resource(
-      p_player_id,p_team_season_id,lower(trim(p_module)),'DELETE',upper(trim(p_purpose))
+      p_player_id,p_team_season_id,lower(trim(p_module)),'UPDATE',upper(trim(p_purpose))
     )
   );
 $iq4e2$;
@@ -405,7 +410,9 @@ begin
   ) then
     raise exception 'PLAYER360_WELLNESS_PLAYER_NOT_ELIGIBLE';
   end if;
-  if jsonb_typeof(p_values)<>'array' or jsonb_array_length(p_values)=0
+  if p_values is null
+     or jsonb_typeof(p_values)<>'array'
+     or jsonb_array_length(p_values)=0
      or jsonb_array_length(p_values)>20 then
     raise exception 'PLAYER360_WELLNESS_VALUES_INVALID';
   end if;
@@ -476,7 +483,6 @@ begin
     update public.player360_wellness_entries
     set entry_date=p_entry_date,
         purpose=v_purpose,
-        source_type=v_source_type,
         updated_by=auth.uid()
     where id=p_entry_id;
 
@@ -590,7 +596,7 @@ begin
   if v_row.status='ARCHIVED' then return true; end if;
 
   if not public.iq_v4e_can_access_sensitive_resource(
-    v_row.player_id,v_row.team_season_id,v_row.module,'DELETE',v_purpose
+    v_row.player_id,v_row.team_season_id,v_row.module,'UPDATE',v_purpose
   ) then
     raise exception 'PLAYER360_WELLNESS_ARCHIVE_DENIED';
   end if;
@@ -599,7 +605,7 @@ begin
   set status='ARCHIVED',
       archived_by=auth.uid(),
       archived_at=now(),
-      archive_reason='USER_ARCHIVE',
+      archive_reason_code='USER_ARCHIVE',
       updated_by=auth.uid()
   where id=p_entry_id;
 
