@@ -407,6 +407,13 @@ export class TrainingView {
           </div>
 
           <div class="p360-form-actions">
+            <button
+              type="button"
+              class="p360-secondary-btn p360-cancel-create"
+              id="p360-cancel-training"
+            >
+              ${escapeHtml(this.t("common.cancel", "Cancelar"))}
+            </button>
             <button type="submit" class="p360-primary-btn">
               ${escapeHtml(this.t("player360.training.save_session", "Guardar sesión"))}
             </button>
@@ -729,6 +736,13 @@ export class TrainingView {
           </div>
 
           <div class="p360-form-actions">
+            <button
+              type="button"
+              class="p360-secondary-btn p360-cancel-create"
+              id="p360-cancel-external"
+            >
+              ${escapeHtml(this.t("common.cancel", "Cancelar"))}
+            </button>
             <button type="submit" class="p360-primary-btn">Guardar desarrollo externo</button>
           </div>
         </form>
@@ -999,7 +1013,12 @@ export class TrainingView {
         }
         .p360-primary-btn { border: 1px solid #1e3a8a; background: #1e3a8a; color: white; }
         .p360-secondary-btn { border: 1px solid #cbd5e1; background: white; color: #334155; }
-        .p360-form-actions { display: flex; justify-content: flex-end; }
+        .p360-form-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
         .p360-section-head { display: flex; justify-content: space-between; gap: 12px; align-items: end; }
         .p360-section-head h2 { margin: 0; font-size: 18px; }
         .p360-section-head p { margin: 4px 0 0; color: #64748b; font-size: 12px; }
@@ -1120,7 +1139,12 @@ export class TrainingView {
           .p360-player-check-grid { grid-template-columns: 1fr; max-height: 240px; }
           .p360-subsection-head { display: grid; }
           .p360-subsection-head .p360-secondary-btn { width: 100%; }
-          .p360-form-actions .p360-primary-btn { width: 100%; }
+          .p360-form-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+          .p360-form-actions .p360-primary-btn,
+          .p360-form-actions .p360-secondary-btn { width: 100%; }
           .p360-session-top { display: grid; }
           .p360-status, .p360-source-badge { justify-self: start; }
           .p360-attendance-row { grid-template-columns: 1fr 1fr; }
@@ -1205,6 +1229,24 @@ export class TrainingView {
     });
 
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
+
+    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
+      const panel = container.querySelector("#p360-create-training-panel");
+      const form = container.querySelector("#p360-training-form");
+      if (!form) return;
+
+      form.reset();
+
+      const blocks = container.querySelector("#p360-blocks-container");
+      if (blocks) blocks.innerHTML = this._renderBlockRow(1);
+      blockCounter = 1;
+
+      const date = form.querySelector("#p360-training-date")?.value || this._defaultDate();
+      this._refreshTrainingPlayerOptions(container, date);
+
+      if (panel) panel.open = false;
+    });
+
     container.querySelector("#p360-add-block")?.addEventListener("click", () => {
       blockCounter += 1;
       const target = container.querySelector("#p360-blocks-container");
@@ -1341,6 +1383,20 @@ export class TrainingView {
     externalDate?.addEventListener("change", () => {
       const select = container.querySelector("#p360-external-player");
       if (select) select.innerHTML = this._renderExternalPlayerOptions(externalDate.value);
+    });
+
+    container.querySelector("#p360-cancel-external")?.addEventListener("click", () => {
+      const panel = container.querySelector("#p360-create-external-panel");
+      const form = container.querySelector("#p360-external-form");
+      if (!form) return;
+
+      form.reset();
+
+      const date = form.querySelector("#p360-external-date")?.value || this._defaultDate();
+      const select = form.querySelector("#p360-external-player");
+      if (select) select.innerHTML = this._renderExternalPlayerOptions(date);
+
+      if (panel) panel.open = false;
     });
 
     container.querySelector("#p360-external-form")?.addEventListener("submit", async event => {
