@@ -218,10 +218,19 @@ export class TrainingView {
     }
   }
 
+  _sessionDuration(session = {}) {
+    const stored = numberOrNull(session.duration_minutes);
+    if (stored !== null && stored > 0) return stored;
+    return minutesBetweenTimes(
+      String(session.start_time || "").slice(0, 5),
+      String(session.end_time || "").slice(0, 5)
+    );
+  }
+
   _sessionSummary() {
     const sessions = this.sessions.filter(session => session.status !== "ARCHIVED");
     const totalMinutes = sessions.reduce(
-      (sum, session) => sum + (Number(session.duration_minutes) || 0),
+      (sum, session) => sum + (this._sessionDuration(session) || 0),
       0
     );
     const intensityValues = sessions
@@ -470,6 +479,11 @@ export class TrainingView {
     );
     const eligible = this._eligiblePlayers(session.session_date)
       .filter(player => !existing.has(String(player.id)));
+    const plannedParticipants = (session.participants || []).filter(
+      participant => String(participant.attendance_status || "").toUpperCase() === "PLANNED"
+    );
+    const canConfirmPlanned = String(session.session_date || "") <= localIsoDate()
+      && plannedParticipants.length > 0;
 
     return `
       <details class="p360-attendance-panel">
@@ -478,6 +492,21 @@ export class TrainingView {
         </summary>
 
         <div class="p360-attendance-list">
+          ${canConfirmPlanned ? `
+            <div class="p360-attendance-bulk">
+              <span>
+                ${plannedParticipants.length} participante${plannedParticipants.length === 1 ? "" : "s"} pendiente${plannedParticipants.length === 1 ? "" : "s"} de confirmar.
+              </span>
+              <button
+                type="button"
+                class="p360-secondary-btn p360-confirm-planned"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                ✓ Marcar planificadas como presentes
+              </button>
+            </div>
+          ` : ""}
+
           ${(session.participants || []).map(participant => {
             const player = directory.get(String(participant.player_id));
             return `
@@ -584,7 +613,7 @@ export class TrainingView {
         </div>
 
         <div class="p360-session-metrics">
-          <span>⏱ ${displayNumber(session.duration_minutes)} min</span>
+          <span>⏱ ${displayNumber(this._sessionDuration(session))} min</span>
           <span>⚡ Intensidad ${displayNumber(session.intensity, 1)}</span>
           <span>👥 ${present}/${(session.participants || []).length} presentes/parciales</span>
           <span>📊 Carga ${displayNumber(load, 1)}</span>
@@ -1100,6 +1129,19 @@ export class TrainingView {
         .p360-block-chip span { color: #64748b; }
         .p360-attendance-panel { border-radius: 10px; }
         .p360-attendance-list { display: grid; gap: 8px; padding: 0 10px 10px; }
+        .p360-attendance-bulk {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: #f8fafc;
+          border: 1px solid #dbe3ee;
+          color: #475569;
+          font-size: 12px;
+          font-weight: 700;
+        }
         .p360-attendance-row {
           display: grid;
           grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto;
@@ -1182,6 +1224,8 @@ export class TrainingView {
           .p360-session-top { display: grid; }
           .p360-status, .p360-source-badge { justify-self: start; }
           .p360-attendance-row { grid-template-columns: 1fr 1fr; }
+          .p360-attendance-bulk { align-items: stretch; flex-direction: column; }
+          .p360-attendance-bulk .p360-secondary-btn { width: 100%; }
           .p360-add-participant-row { display: grid; }
         }
       </style>
@@ -1342,6 +1386,38 @@ export class TrainingView {
         return;
       }
 
+      const confirmPlanned = event.target.closest(".p360-confirm-planned");
+      if (confirmPlanned) {
+        const session = this.sessions.find(
+          item => String(item.id) === String(confirmPlanned.dataset.sessionId)
+        );
+        const planned = (session?.participants || []).filter(
+          participant => String(participant.attendance_status || "").toUpperCase() === "PLANNED"
+        );
+        if (!session || !planned.length) return;
+
+        confirmPlanned.disabled = true;
+        try {
+          const duration = this._sessionDuration(session);
+          for (const participant of planned) {
+            await this.service.setParticipant({
+              trainingSessionId: session.id,
+              playerId: participant.player_id,
+              attendanceStatus: "PRESENT",
+              participatedMinutes: duration,
+              rpe: numberOrNull(participant.rpe),
+              notes: participant.notes || null
+            });
+          }
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error confirmando asistencia planificada:", error);
+          alert(`❌ ${error.message || error}`);
+          confirmPlanned.disabled = false;
+        }
+        return;
+      }
+
       const addParticipant = event.target.closest(".p360-add-participant");
       if (addParticipant) {
         const wrapper = addParticipant.closest(".p360-add-participant-row");
@@ -1359,7 +1435,7 @@ export class TrainingView {
             playerId,
             attendanceStatus: alreadyOccurred ? "PRESENT" : "PLANNED",
             participatedMinutes: alreadyOccurred
-              ? numberOrNull(session?.duration_minutes)
+              ? this._sessionDuration(session)
               : null
           });
           await this.render(this.containerId, this.teamId);
