@@ -13,13 +13,15 @@ La evolución Player 360 se mantiene en la rama segura
 
 - Fase 4A: contratos de observaciones, cobertura y permisos;
 - Fase 4B: sesiones, asistencia, carga y desarrollo externo;
-- Fase 4C RC: evaluación humana, perfil objetivo y gaps deterministas;
-- Fase 4D.1: series longitudinales y evidencia trazable para IA;
+- Fase 4C: evaluación humana, perfil objetivo y gaps deterministas, instalada y validada;
+- Fase 4D.1: series longitudinales, snapshots deterministas y evidencia trazable para IA, instalada y validada;
+- autorización 4D granular para ver/generar analítica, ver/generar IA y revisar IA;
 - rutas y vistas responsive de Entrenamiento y Player 360;
-- pruebas de dominio, servicio, SQL, RBAC y navegador sin escrituras reales.
+- pruebas de dominio, servicio, SQL, RBAC, navegador, preflight, rehearsal y controlled apply.
 
-La rama no debe fusionarse con `main` hasta completar la validación funcional
-de 4C y la revisión de los checks remotos.
+La rama ha completado la validación funcional 4B/4C/4D y está preparada para
+integrarse en `main` mediante PR, manteniendo Recovery/Nutrition/Neuro
+restringidos hasta su fase específica de privacidad/ABAC.
 
 ## Seguridad de la base de datos
 
@@ -63,19 +65,24 @@ node tests/player360-foundation-smoke.mjs
 node tests/player360-phase4b-service-smoke.mjs
 node tests/player360-phase4c-domain-service-smoke.mjs
 node tests/player360-phase4c-route-integration.mjs
+node tests/player360-phase4d-foundation-smoke.mjs
+node tests/player360-phase4d-sql-structure.mjs
+node tests/player360-phase4d-service-smoke.mjs
 node tests/season-head-coach-history-regression.mjs
+node tests/session-switch-regression.mjs
 ```
 
 La rama dispone de GitHub Actions para ejecutar el build automáticamente en pushes y pull requests.
 
 ## Siguiente fase
 
-La Fase 4D.1 incorpora el motor longitudinal determinista y deja preparada su
-persistencia controlada mediante un diseño reversible, preflight solo lectura y
-servicios sin escritura directa. El siguiente bloque validará el ensayo contra
-la base de datos antes de cualquier instalación. Las salidas de IA conservarán
-trazabilidad, cobertura, versión del modelo y separación estricta respecto a
-mediciones y evaluaciones humanas.
+La Fase 4D.1 ya dispone de persistencia controlada instalada para snapshots
+longitudinales e insights de IA, con RLS, RPC de escritura, trazabilidad de
+proveedor/modelo/prompt, revisión humana y rollback explícito. El siguiente
+bloque funcional es completar la experiencia de uso de analítica/IA y abordar
+Recovery/Nutrition/Neuro mediante privacidad y ABAC antes de habilitar datos
+sensibles. Las salidas de IA permanecen separadas de mediciones y evaluaciones
+humanas y no autorizan inferencias causales.
 
 ## Principio de migración
 
