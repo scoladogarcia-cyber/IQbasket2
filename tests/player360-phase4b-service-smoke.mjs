@@ -187,7 +187,7 @@ const updateCall = calls.find(call => call.name === "iq_v4_update_training_sessi
 assert.equal(updateCall.args.p_training_session_id, "session-1");
 assert.equal(updateCall.args.p_title, "Sesión corregida");
 assert.equal(updateCall.args.p_blocks[0].id, "block-1");
-assert.deepEqual(updateCall.args.p_participants, [{ player_id: "player-1" }]);
+assert.deepEqual(updateCall.args.p_participant_ids, ["player-1"]);
 
 const createCall = calls.find(call => call.name === "iq_v4_create_training_session");
 assert.deepEqual(createCall.args, {
@@ -240,7 +240,7 @@ const updatedExternal = await service.updateExternalDevelopment({
 });
 assert.equal(updatedExternal, "external-1");
 const updateExternalCall = calls.find(call => call.name === "iq_v4_update_external_development");
-assert.equal(updateExternalCall.args.p_external_session_id, "external-1");
+assert.equal(updateExternalCall.args.p_external_development_id, "external-1");
 assert.equal(updateExternalCall.args.p_title, "Tecnificación corregida");
 assert.deepEqual(updateExternalCall.args.p_provenance, { source: "edit-test" });
 
