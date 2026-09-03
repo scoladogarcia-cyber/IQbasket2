@@ -149,7 +149,7 @@ export class TranslationsView {
     this.joinRequests = [];
     this.teamDirectory = [];
     this.accessRequestService = new TeamAccessRequestService(supabase);
-    this.staffAssignmentService = new StaffAssignmentService(supabase);
+    this.staffAssignmentService = new StaffAssignmentService(supabase, DataStore);
     this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
     this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
     this.rosterManagementService = new RosterManagementService(supabase, DataStore);
