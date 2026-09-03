@@ -8,6 +8,7 @@ import { supabase } from "../config/database.config.js";
 import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
+import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
 
 class DataStoreService {
   constructor() {
@@ -953,56 +954,16 @@ class DataStoreService {
 
   getTeamCoach(teamId = null, seasonName = null) {
     const targetTeamId = teamId || this.getActiveTeamId();
-    const targetSeasonName = this._formatSeasonDisplayName(
-      seasonName || this.getActiveSeason() || ""
-    ).trim().toLowerCase();
+    const targetSeasonName = seasonName || this.getActiveSeason() || "";
 
-    const canonicalRows = (this.staffAssignments || []).filter((assignment) => {
-      const sameTeam = String(assignment.team_id || assignment.teamId || "")
-        === String(targetTeamId || "");
-      const sameSeason = this._formatSeasonDisplayName(
-        assignment.season_name || assignment.seasonName || ""
-      ).trim().toLowerCase() === targetSeasonName;
-      const headCoach = String(
-        assignment.staff_role || assignment.staffRole || ""
-      ).toUpperCase() === "HEAD_COACH";
-      return sameTeam && sameSeason && headCoach;
+    return resolveHeadCoachName({
+      teamId: targetTeamId,
+      seasonName: targetSeasonName,
+      staffAssignments: this.staffAssignments || [],
+      seasons: this.seasons || [],
+      team: this.getTeamById(targetTeamId),
+      fallback: "Por definir"
     });
-
-    const activeCanonical = canonicalRows.find(
-      assignment => String(assignment.status || "ACTIVE").toUpperCase() === "ACTIVE"
-    );
-
-    if (activeCanonical) {
-      return activeCanonical.staff_name
-        || activeCanonical.staffName
-        || activeCanonical.external_name
-        || activeCanonical.externalName
-        || "Por definir";
-    }
-
-    // Si el scope ya tiene historial canónico pero no asignación activa, no
-    // resucitar un entrenador legacy obsoleto.
-    if (canonicalRows.length > 0) {
-      return "Por definir";
-    }
-
-    // Fallback legacy solo para temporadas aún no migradas al modelo canónico.
-    const season = (this.seasons || []).find(s => {
-      const sameTeam = String(s.team_id || s.teamId || "")
-        === String(targetTeamId || "");
-      const name = this._formatSeasonDisplayName(s.name || "")
-        .trim()
-        .toLowerCase();
-      return sameTeam && (!targetSeasonName || name === targetSeasonName);
-    });
-
-    if (season?.coach_name || season?.coachName) {
-      return season.coach_name || season.coachName;
-    }
-
-    const team = this.getTeamById(targetTeamId);
-    return team?.coach_name || team?.coachName || team?.coach || "Por definir";
   }
 
   getClubCoordinator(clubId, seasonName = null) {
