@@ -47,6 +47,7 @@ function numberOrNull(value) {
 }
 
 function displayNumber(value, digits = 0) {
+  if (value === null || value === undefined || value === "") return "—";
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   return number.toLocaleString(undefined, {
