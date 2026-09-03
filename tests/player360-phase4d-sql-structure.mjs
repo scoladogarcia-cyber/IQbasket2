@@ -98,6 +98,16 @@ assert.doesNotMatch(
   "Revisar IA no puede reutilizar permisos del módulo de evaluaciones."
 );
 
+assert.match(
+  rehearsal,
+  /revoke all on function public\.iq_v4_has_player360_action_role\(uuid,text\[\],text\[\],text\[\]\) from public, anon, authenticated;/i,
+  "El helper genérico debe quedar cerrado incluso ante grants por defecto de Supabase."
+);
+assert.match(
+  rehearsal,
+  /revoke all on function public\.iq_v4_save_ai_insight\([\s\S]*?\) from public, anon, authenticated;/i,
+  "Las RPC de escritura deben revocar grants por defecto antes de conceder authenticated."
+);
 assert.match(rehearsal, /rollback;\s*[\s\S]*snapshots_rolled_back/i);
 assert.doesNotMatch(rehearsal, /\bcommit\s*;/i);
 
