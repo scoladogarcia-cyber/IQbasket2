@@ -322,7 +322,9 @@ async function checkViewport(browser, name, viewport) {
   }
 
   await page.fill("#input-market-search", "");
-  await page.waitForTimeout(50);
+  await page.waitForFunction(() =>
+    document.querySelectorAll(".btn-request-transfer").length > 0
+  );
 
   const requestDialogs = [];
   const requestDialogHandler = async dialog => {
