@@ -169,7 +169,7 @@ language sql
 stable
 security definer
 set search_path=''
-as $
+as $v6_request$
   select
     auth.uid() is not null
     and exists (
@@ -185,7 +185,7 @@ as $
         and upper(coalesce(m.status,'ACTIVE'))='ACTIVE'
         and upper(coalesce(m.function_role,'')) in ('ENTRENADOR','ANALISTA')
     );
-$;
+$v6_request$;
 
 create or replace function public.iq_v6_team_season_freeze_capabilities()
 returns jsonb
