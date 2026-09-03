@@ -140,6 +140,22 @@ revoke all on function public.iq_v4_dual_transfer_reviews_ready(uuid) from publi
 
 grant execute on function public.iq_v4_can_review_transfer_scope(uuid) to authenticated;
 
+-- Keep the original administrative visibility and add requester self-read.
+-- This does not grant any mutation capability.
+drop policy if exists iq_v3_transfer_request_select_authorized
+  on public.roster_transfer_requests;
+
+create policy iq_v3_transfer_request_select_authorized
+  on public.roster_transfer_requests
+  for select
+  to authenticated
+  using (
+    requested_by = auth.uid()
+    or public.iq_v3_is_global_superadmin()
+    or public.iq_v3_can_manage_team_season(from_team_season_id)
+    or public.iq_v3_can_manage_team_season(to_team_season_id)
+  );
+
 -- -----------------------------------------------------------------------------
 -- 3. RLS: reviews are readable by involved scopes/requester, never directly writable.
 -- -----------------------------------------------------------------------------
