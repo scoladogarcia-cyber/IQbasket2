@@ -1,0 +1,68 @@
+name: Team Season Freeze Functional
+
+on:
+  push:
+    branches:
+      - feature/team-season-freeze-v1
+    paths:
+      - ".github/workflows/team-season-freeze-functional.yml"
+      - "supabase/ready/20260903_functional_v6_team_season_freeze_transaction.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    name: Freeze + reopen real data with rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Capture baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v6_team_season_freeze_readonly.sql \
+            | grep '^TEAM_SEASON_FREEZE_BASELINE,' | tail -n 1)
+          test -n "$BEFORE"
+          echo "TEAM_SEASON_FREEZE_BASELINE_BEFORE=$BEFORE" >> "$GITHUB_ENV"
+          echo "Before: $BEFORE"
+
+      - name: Exercise freeze and reopen transactionally
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_functional_v6_team_season_freeze_transaction.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^TEAM_SEASON_FREEZE_FUNCTIONAL,' | tail -n 1)
+          test -n "$CHECK"
+          FINAL=${CHECK##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Confirm rollback preserved baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v6_team_season_freeze_readonly.sql \
+            | grep '^TEAM_SEASON_FREEZE_BASELINE,' | tail -n 1)
+          test -n "$AFTER"
+          echo "Before: $TEAM_SEASON_FREEZE_BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$TEAM_SEASON_FREEZE_BASELINE_BEFORE" = "$AFTER"
