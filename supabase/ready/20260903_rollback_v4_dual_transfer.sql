@@ -13,6 +13,19 @@ revoke execute on function public.iq_v4_review_transfer_side(uuid,text,text,date
 revoke execute on function public.iq_v4_finalize_transfer_request(uuid) from authenticated;
 revoke select on public.roster_transfer_reviews from authenticated;
 
+drop policy if exists iq_v3_transfer_request_select_authorized
+  on public.roster_transfer_requests;
+
+create policy iq_v3_transfer_request_select_authorized
+  on public.roster_transfer_requests
+  for select
+  to authenticated
+  using (
+    public.iq_v3_is_global_superadmin()
+    or public.iq_v3_can_manage_team_season(from_team_season_id)
+    or public.iq_v3_can_manage_team_season(to_team_season_id)
+  );
+
 create or replace function public.iq_v3_approve_transfer_request(
   p_request_id uuid,
   p_last_date_from date,
