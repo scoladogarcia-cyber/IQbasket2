@@ -1,0 +1,45 @@
+name: Player 360 Phase 4E.2 Preflight
+
+on:
+  push:
+    branches:
+      - feature/player360-nutrition-recovery-v1
+    paths:
+      - ".github/workflows/player360-phase4e2-preflight.yml"
+      - "supabase/ready/20260903_preflight_v4_phase4e2_wellness_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Read-only Nutrition + Recovery preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Run Phase 4E.2 preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4e2_wellness_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E2_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
