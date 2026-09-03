@@ -4,29 +4,28 @@ Aplicación web de gestión, registro y analítica de baloncesto.
 
 ## Estado del desarrollo
 
-`main` contiene el modelo histórico v3 validado y Player 360 4A–4D.2:
-temporadas globales, equipo-temporada, plantillas por intervalos, transferencias,
-entrenador principal por temporada, entrenamiento, tecnificación externa,
-evaluación humana, perfil objetivo, gaps, analítica longitudinal real y
-experiencia `Evolución + IA`.
+`main` contiene el modelo histórico v3 validado, Player 360 4A–4D.2 y
+la base de privacidad/ABAC 4E.1.
 
-La rama segura `feature/player360-privacy-abac-v1` desarrolla 4E.1 y ya ha
-instalado en Supabase, mediante Controlled Apply validado, el sustrato de
-privacidad/consentimiento/ABAC:
+La rama segura `feature/player360-nutrition-recovery-v1` incorpora 4E.2 y ya
+ha instalado en Supabase, mediante Controlled Apply validado:
 
-- relaciones verificables SELF/GUARDIAN;
-- autorizaciones de tratamiento por jugador, equipo-temporada, módulo y finalidad;
-- solicitudes de acceso sensible separadas de la concesión;
-- grants por usuario, acción, módulo, finalidad y vigencia;
-- auditoría append-only de cambios de gobierno;
-- prohibición de bypass sensible por SUPERADMIN;
-- auto-grant administrativo bloqueado;
-- IA y exportación sensibles sometidas a autorización/grant explícitos;
-- acceso directo a tablas de gobierno cerrado para `authenticated` y `anon`.
+- catálogo configurable de Nutrition + Recovery;
+- 9 métricas iniciales de hábitos/sensaciones, sin peso, calorías, diagnósticos,
+  medicación ni texto libre;
+- check-ins manuales por fecha y dentro del stint real del jugador;
+- origen manual derivado por backend;
+- lectura/escritura exclusivamente por RPC + ABAC;
+- edición con procedencia original preservada;
+- archivo lógico;
+- pestaña Player 360 `🌱 Apoyo`;
+- flujo `Añadir check-in → Cancelar / Guardar`;
+- recomendaciones deterministas, explicables, no clínicas y sin IA;
+- importación de apps/wearables preparada como evolución futura pero desactivada.
 
-Recovery/Nutrition/Neuro siguen **sin tablas de datos ni UI de captura**. 4E.1
-instala únicamente la capa de gobierno necesaria para poder diseñarlos con
-seguridad.
+Neuro-Cognitive continúa fuera de esta fase. Los datos wellness tampoco se
+mezclan todavía con el snapshot longitudinal 4D porque esa lectura genérica no
+es aún ABAC-aware.
 
 ## Seguridad de la base de datos
 
@@ -77,6 +76,10 @@ node tests/player360-phase4d-orchestrator-smoke.mjs
 # UI real: tests/player360-phase4d-ui-smoke.mjs (Playwright / GitHub Actions)
 node tests/player360-phase4e-privacy-abac-smoke.mjs
 node tests/player360-phase4e-sql-structure.mjs
+node tests/player360-phase4e2-wellness-foundation.mjs
+node tests/player360-phase4e2-sql-structure.mjs
+node tests/player360-phase4e2-service-route.mjs
+# UI real: tests/player360-phase4e2-ui-smoke.mjs (Playwright / GitHub Actions)
 node tests/season-head-coach-history-regression.mjs
 node tests/session-switch-regression.mjs
 ```
@@ -85,15 +88,15 @@ La rama dispone de GitHub Actions para ejecutar el build automáticamente en pus
 
 ## Siguiente fase
 
-La Fase 4E.1 ya dispone de infraestructura de privacidad/ABAC instalada y
-validada. El siguiente bloque será diseñar **Nutrition + Recovery** sobre ese
-sustrato, sin mezclar datos wellness con estadísticas deportivas y sin conceder
-acceso por rol solamente.
+La Fase 4E.2 ya dispone de backend, servicio, UI manual y recomendaciones
+deterministas. La siguiente puerta funcional es gestionar desde la propia app
+las autorizaciones/grants de 4E.1 para que un usuario pueda activar el seguimiento
+sin operaciones manuales de base de datos.
 
-La generación externa de IA sigue bloqueada hasta desplegar un endpoint backend
-seguro y auditable; nunca debe exponerse una clave de proveedor en el navegador.
-Neuro-Cognitive permanecerá para una fase posterior por su mayor sensibilidad y
-complejidad.
+Después se podrán añadir tendencias wellness protegidas y, en una fase posterior,
+adaptadores para importar datos desde apps/wearables. La importación externa y
+la IA sobre wellness siguen desactivadas. Neuro-Cognitive permanece fuera de
+alcance por ahora.
 
 ## Principio de migración
 

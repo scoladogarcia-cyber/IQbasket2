@@ -1,0 +1,10 @@
+Player 360 Phase 4E.2 controlled apply trigger
+Date: 2026-09-03
+Scope: manual Nutrition + Recovery catalog/check-ins only.
+External import: disabled.
+Sensitive clinical/body metrics: excluded.
+AI processing: disabled.
+Preflight: PASS.
+Rollback rehearsal: PASS.
+CI: PASS.
+Retry: 2 after verifier type fix; schema unchanged.

@@ -1,0 +1,122 @@
+name: Player 360 Phase 4E.2 Rehearsal
+
+on:
+  push:
+    branches:
+      - feature/player360-nutrition-recovery-v1
+    paths:
+      - ".github/workflows/player360-phase4e2-rehearsal.yml"
+      - "supabase/drafts/20260903_rehearse_v4_phase4e2_wellness_rollback.sql"
+      - "supabase/ready/20260903_apply_v4_phase4e2_wellness.sql"
+      - "supabase/ready/20260903_preflight_v4_phase4e2_wellness_readonly.sql"
+      - "supabase/ready/20260903_verify_v4_phase4e2_postrollback_readonly.sql"
+      - "tests/player360-phase4e2-sql-structure.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    name: Rehearse Nutrition + Recovery with forced rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Phase 4E.2 SQL structure guard
+        run: node tests/player360-phase4e2-sql-structure.mjs
+
+      - name: Assert rollback-only rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/drafts/20260903_rehearse_v4_phase4e2_wellness_rollback.sql
+          test "$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$FILE")" -eq 1
+          test "$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$FILE" || true)" -eq 0
+          test "$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$FILE")" -eq 1
+
+      - name: Capture legacy baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E2_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4e2_wellness_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E2_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Run Phase 4E.2 rollback rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/drafts/20260903_rehearse_v4_phase4e2_wellness_rollback.sql
+
+      - name: Verify Phase 4E.2 rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4e2_postrollback_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E2_POST_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Assert legacy baseline unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E2_POST_REHEARSAL_BASELINE=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"

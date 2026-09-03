@@ -96,7 +96,8 @@ export const Permission = Object.freeze({
   EDIT_RECOVERY: "EDIT_RECOVERY",
   VIEW_NUTRITION: "VIEW_NUTRITION",
   EDIT_NUTRITION: "EDIT_NUTRITION",
-  VIEW_NEURO_DATA: "VIEW_NEURO_DATA"
+  VIEW_NEURO_DATA: "VIEW_NEURO_DATA",
+  VIEW_WELLNESS_RECOMMENDATIONS: "VIEW_WELLNESS_RECOMMENDATIONS"
 });
 
 const COMMON_READ = [
@@ -171,6 +172,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.CREATE_OBJECTIVE_PROFILE,
     Permission.EDIT_OBJECTIVE_PROFILE,
     Permission.ARCHIVE_OBJECTIVE_PROFILE,
+    Permission.VIEW_RECOVERY,
+    Permission.EDIT_RECOVERY,
+    Permission.VIEW_NUTRITION,
+    Permission.EDIT_NUTRITION,
+    Permission.VIEW_WELLNESS_RECOMMENDATIONS,
     Permission.VIEW_DATA_COVERAGE,
     Permission.VIEW_LONGITUDINAL_ANALYTICS,
     Permission.GENERATE_LONGITUDINAL_ANALYTICS,
@@ -227,6 +233,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.CREATE_OBJECTIVE_PROFILE,
     Permission.EDIT_OBJECTIVE_PROFILE,
     Permission.ARCHIVE_OBJECTIVE_PROFILE,
+    Permission.VIEW_RECOVERY,
+    Permission.EDIT_RECOVERY,
+    Permission.VIEW_NUTRITION,
+    Permission.EDIT_NUTRITION,
+    Permission.VIEW_WELLNESS_RECOMMENDATIONS,
     Permission.VIEW_DATA_COVERAGE,
     Permission.VIEW_LONGITUDINAL_ANALYTICS,
     Permission.GENERATE_LONGITUDINAL_ANALYTICS,
@@ -281,6 +292,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.VIEW_EXTERNAL_DEVELOPMENT,
     Permission.VIEW_PLAYER_EVALUATION,
     Permission.VIEW_OBJECTIVE_PROFILE,
+    Permission.VIEW_RECOVERY,
+    Permission.EDIT_RECOVERY,
+    Permission.VIEW_NUTRITION,
+    Permission.EDIT_NUTRITION,
+    Permission.VIEW_WELLNESS_RECOMMENDATIONS,
     Permission.VIEW_DATA_COVERAGE,
     Permission.VIEW_LONGITUDINAL_ANALYTICS,
     Permission.GENERATE_LONGITUDINAL_ANALYTICS,
@@ -313,6 +329,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.VIEW_CLUBS,
     Permission.VIEW_SEASONS,
     Permission.REQUEST_TEAM_ACCESS,
+    Permission.VIEW_RECOVERY,
+    Permission.EDIT_RECOVERY,
+    Permission.VIEW_NUTRITION,
+    Permission.EDIT_NUTRITION,
+    Permission.VIEW_WELLNESS_RECOMMENDATIONS,
     Permission.VIEW_OWN_PLAYER_360
   ],
 
@@ -340,6 +361,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.VIEW_CLUBS,
     Permission.VIEW_SEASONS,
     Permission.REQUEST_TEAM_ACCESS,
+    Permission.VIEW_RECOVERY,
+    Permission.EDIT_RECOVERY,
+    Permission.VIEW_NUTRITION,
+    Permission.EDIT_NUTRITION,
+    Permission.VIEW_WELLNESS_RECOMMENDATIONS,
     Permission.VIEW_LINKED_PLAYER_360
   ],
 
