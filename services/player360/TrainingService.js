@@ -255,6 +255,74 @@ export class TrainingService {
     return data;
   }
 
+  /**
+   * Creates or updates one training block without replacing the rest of the
+   * session structure. This minimizes accidental data loss during corrections.
+   */
+  async saveBlock({
+    trainingSessionId,
+    blockId = null,
+    blockOrder = 1,
+    title,
+    activityCode = null,
+    objective = null,
+    durationMinutes = null,
+    intensity = null
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(title, "title");
+
+    const payload = {
+      training_session_id: trainingSessionId,
+      block_order: Math.max(1, Number(blockOrder) || 1),
+      title,
+      activity_code: activityCode,
+      objective,
+      duration_minutes: durationMinutes,
+      intensity
+    };
+
+    let query;
+    if (blockId) {
+      query = this.supabase
+        .from("training_blocks")
+        .update(payload)
+        .eq("id", blockId)
+        .eq("training_session_id", trainingSessionId);
+    } else {
+      query = this.supabase
+        .from("training_blocks")
+        .insert(payload);
+    }
+
+    const { data, error } = await query.select("*").single();
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Deletes a block entered by mistake. The parent session and all other blocks
+   * remain intact; RLS validates authorization through the parent session.
+   */
+  async deleteBlock({
+    trainingSessionId,
+    blockId
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(blockId, "blockId");
+
+    const { error } = await this.supabase
+      .from("training_blocks")
+      .delete()
+      .eq("id", blockId)
+      .eq("training_session_id", trainingSessionId);
+
+    if (error) throw error;
+    return true;
+  }
+
   async setParticipant({
     trainingSessionId,
     playerId,
