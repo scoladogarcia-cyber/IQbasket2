@@ -7,7 +7,8 @@
  * - active objective profile;
  * - deterministic gaps.
  *
- * AI, Recovery, Nutrition and Neuro remain outside this view/phase.
+ * Longitudinal AI, Nutrition and Recovery are integrated as modular panels.
+ * Sensitive wellness access remains enforced by backend ABAC.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -580,8 +581,11 @@ export class Player360View {
     if (this.analyticsPanel.isAvailable()) {
       tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
     }
-    if (this.wellnessPanel.isAvailable()) {
-      tabs.push({ id: "wellness", label: "🌱 Apoyo" });
+    if (this.wellnessPanel.isModuleAvailable("nutrition")) {
+      tabs.push({ id: "nutrition", label: "🥤 Nutrición" });
+    }
+    if (this.wellnessPanel.isModuleAvailable("recovery")) {
+      tabs.push({ id: "recovery", label: "🌙 Recuperación" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1076,7 +1080,12 @@ export class Player360View {
   _renderBody() {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
     if (this.activeTab === "analytics") return this.analyticsPanel.render();
-    if (this.activeTab === "wellness") return this.wellnessPanel.render();
+    if (this.activeTab === "nutrition") {
+      return this.wellnessPanel.render({ module:"nutrition",showModuleTabs:false });
+    }
+    if (this.activeTab === "recovery") {
+      return this.wellnessPanel.render({ module:"recovery",showModuleTabs:false });
+    }
     return this._renderEvaluationPanel();
   }
 
@@ -1084,7 +1093,9 @@ export class Player360View {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
         const requested = button.dataset.p360cTab;
-        this.activeTab = ["evaluation", "objective", "analytics", "wellness"].includes(requested)
+        this.activeTab = [
+          "evaluation","objective","analytics","nutrition","recovery"
+        ].includes(requested)
           ? requested
           : "evaluation";
         this._renderLoaded(container);
@@ -1306,7 +1317,11 @@ export class Player360View {
     });
     void this.wellnessPanel.bind(container, {
       onChanged: async () => {
-        this.activeTab = "wellness";
+        if (!["nutrition","recovery"].includes(this.activeTab)) {
+          this.activeTab=this.wellnessPanel.activeModule === "nutrition"
+            ? "nutrition"
+            : "recovery";
+        }
         this._renderLoaded(container);
       }
     });
