@@ -357,7 +357,36 @@ async function runViewport(browser, name, viewport) {
   await page.fill(".p360-block-duration", "25");
   await page.fill(".p360-block-intensity", "8");
 
-  await page.click("#p360-add-block");
+  const addBlockButton = page.locator("#p360-add-block");
+  await addBlockButton.evaluate(el => {
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+  });
+  await page.waitForTimeout(80);
+
+  const addBlockGeometry = await addBlockButton.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+
+  assertCondition(
+    addBlockGeometry.top >= 0
+      && addBlockGeometry.bottom <= addBlockGeometry.viewportHeight
+      && addBlockGeometry.left >= 0
+      && addBlockGeometry.right <= addBlockGeometry.viewportWidth,
+    name,
+    "Añadir bloque no puede situarse completamente dentro del viewport móvil"
+  );
+
+  await addBlockButton.click();
   const blockRows = await page.locator(".p360-block-row").count();
   assertCondition(blockRows === 2, name, "Añadir bloque no funciona");
   const second = page.locator(".p360-block-row").nth(1);
