@@ -79,6 +79,15 @@ jobs:
       - name: Training duration hotfix SQL
         run: node tests/training-duration-hotfix-sql.mjs
 
+      - name: Training + technification edit SQL
+        run: node tests/training-edit-sql.mjs
+
+      - name: Manual boxscore SQL
+        run: node tests/manual-boxscore-sql.mjs
+
+      - name: Core corrections product contract
+        run: node tests/core-corrections-contract.mjs
+
       - name: Mobile invited read-only regression
         run: node tests/mobile-invited-readonly-regression.mjs
 
