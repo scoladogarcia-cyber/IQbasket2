@@ -12,6 +12,7 @@
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { AiPromptBuilder } from "../services/ai/AiPromptBuilder.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class AskAIView {
   /**
@@ -36,22 +37,12 @@ export class AskAIView {
   // CONTROL DE PERMISOS Y LÍMITES MENSUALES POR ROL
   // =========================================================================
   _canAccess() {
-    const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    return role !== "JUGADOR";
+    return Boolean(this.auth?.canPreview?.(Permission.USE_AI));
   }
 
   _getRoleLimit() {
-    const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    const limits = {
-      SUPERADMIN: -1, // Ilimitado
-      ADMIN: 200,
-      ENTRENADOR: 100,
-      SCOUT: 100,
-      ANALISTA: 100,
-      INVITADO: 10,
-      JUGADOR: 0
-    };
-    return limits[role] !== undefined ? limits[role] : 10;
+    const limit = this.auth?.getAiMonthlyLimit?.({ preview: true });
+    return limit === Infinity ? -1 : Number(limit ?? 0);
   }
 
   _getMonthlyUsage() {

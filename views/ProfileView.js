@@ -13,6 +13,7 @@
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class ProfileView {
   /**
@@ -69,7 +70,7 @@ export class ProfileView {
       if (!supabase) return;
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
         .eq("email", email)
         .maybeSingle();
 
@@ -78,7 +79,6 @@ export class ProfileView {
         if (data.first_name) localStorage.setItem("iq_user_name", data.first_name);
         if (data.last_name) localStorage.setItem("iq_user_lastname", data.last_name);
         if (data.phone) localStorage.setItem("iq_user_phone", data.phone);
-        if (data.role) localStorage.setItem("iq_user_role", data.role);
       }
     } catch (err) {
       console.warn("Nota leyendo perfil desde user_profiles:", err);
@@ -106,13 +106,14 @@ export class ProfileView {
     const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
-    const userEmail = localStorage.getItem("iq_user_email") || "usuario@iqbasket.com";
+    const authenticatedUser = this.auth?.getCurrentUser?.();
+    const userEmail = authenticatedUser?.email || "";
 
     if (!this.userProfile && !this.isFetching) {
       await this._fetchUserProfile(userEmail);
     }
 
-    const userRole = (this.userProfile?.role || localStorage.getItem("iq_user_role") || "SUPERADMIN").toUpperCase();
+    const userRole = this.auth?.getAuthenticatedRole?.() || "INVITADO";
     const userName = this.userProfile?.first_name || localStorage.getItem("iq_user_name") || "Usuario";
     const userLastName = this.userProfile?.last_name || localStorage.getItem("iq_user_lastname") || "IQ";
     const userPhone = this.userProfile?.phone || localStorage.getItem("iq_user_phone") || "";
@@ -421,6 +422,10 @@ export class ProfileView {
 
     container.querySelector("#form-profile-data")?.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!this.auth?.can?.(Permission.EDIT_OWN_PROFILE)) {
+        alert("⚠️ No tienes permiso para modificar este perfil.");
+        return;
+      }
       const name = container.querySelector("#input-profile-name")?.value.trim();
       const lastname = container.querySelector("#input-profile-lastname")?.value.trim();
       const phone = container.querySelector("#input-profile-phone")?.value.trim();
@@ -470,6 +475,10 @@ export class ProfileView {
 
     container.querySelector("#form-change-password")?.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!this.auth?.can?.(Permission.CHANGE_OWN_PASSWORD)) {
+        alert("⚠️ No tienes permiso para cambiar la contraseña.");
+        return;
+      }
       const pass1 = container.querySelector("#input-new-password")?.value;
       const pass2 = container.querySelector("#input-repeat-password")?.value;
 

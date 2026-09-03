@@ -12,12 +12,13 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
-    this.syncService = new StatsSyncService(this.supabase);
+    this.syncService = new StatsSyncService(this.supabase, this.auth);
 
     this.sortState = {
       column: "date",
@@ -50,14 +51,10 @@ export class SeasonDashboardView {
     return text;
   }
 
-  _canSync() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+  _canSync(teamId = null) {
+    return Boolean(this.auth?.canPreview?.(Permission.SYNC_DATA, {
+      teamId: teamId || this.currentTeamId || null
+    }));
   }
 
   _formatDateES(dateStr) {
@@ -221,6 +218,90 @@ export class SeasonDashboardView {
     return path;
   }
 
+  _renderEvidenceInsights(kpis = {}, games = []) {
+    if (!Array.isArray(games) || games.length === 0) {
+      return `
+        <div class="insight-item">
+          <div><strong>ℹ️ Sin partidos en el contexto activo</strong></div>
+          <span>No se generan conclusiones hasta disponer de partidos para el equipo y temporada seleccionados.</span>
+        </div>
+      `;
+    }
+
+    const items = [];
+    const tovPct = Number(kpis.tovPct);
+    const netRtg = Number(kpis.netRtg);
+
+    if (Number.isFinite(tovPct) && tovPct > 0) {
+      if (tovPct > 18) {
+        items.push(`
+          <div class="insight-item insight-warning">
+            <div><strong>⚠️ Volumen de pérdidas elevado</strong> <span class="insight-badge badge-alerta">Dato</span></div>
+            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%. Conviene revisar su evolución antes de atribuir una causa.</span>
+          </div>
+        `);
+      } else {
+        items.push(`
+          <div class="insight-item">
+            <div><strong>✅ Control de pérdidas</strong> <span class="insight-badge">Dato</span></div>
+            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%.</span>
+          </div>
+        `);
+      }
+    }
+
+    if (Number.isFinite(netRtg) && netRtg !== 0) {
+      items.push(`
+        <div class="insight-item ${netRtg < 0 ? 'insight-warning' : ''}">
+          <div><strong>${netRtg < 0 ? '⚠️' : '📈'} Net Rating ${netRtg < 0 ? 'negativo' : 'positivo'}</strong> <span class="insight-badge">Dato</span></div>
+          <span>El Net Rating del contexto activo es ${netRtg > 0 ? '+' : ''}${netRtg.toFixed(1)}. Es una descripción del rendimiento observado, no una explicación causal.</span>
+        </div>
+      `);
+    }
+
+    const quarterRows = [];
+    games.forEach(game => {
+      const periods = DataStore.getGamePeriodScores?.(game.id) || [];
+      periods
+        .filter(row => !Boolean(row.is_overtime ?? row.isOvertime) && Number(row.period_number ?? row.periodNumber) >= 1 && Number(row.period_number ?? row.periodNumber) <= 4)
+        .forEach(row => quarterRows.push(row));
+    });
+
+    if (quarterRows.length > 0) {
+      const byQuarter = new Map();
+      quarterRows.forEach(row => {
+        const q = Number(row.period_number ?? row.periodNumber);
+        const entry = byQuarter.get(q) || { diff: 0, count: 0 };
+        entry.diff += Number(row.team_score ?? row.teamScore ?? 0) - Number(row.opponent_score ?? row.opponentScore ?? 0);
+        entry.count += 1;
+        byQuarter.set(q, entry);
+      });
+
+      const ranked = [...byQuarter.entries()]
+        .map(([q, data]) => ({ q, avgDiff: data.count ? data.diff / data.count : 0 }))
+        .sort((a, b) => a.avgDiff - b.avgDiff);
+
+      if (ranked.length > 0) {
+        const worst = ranked[0];
+        items.push(`
+          <div class="insight-item ${worst.avgDiff < 0 ? 'insight-warning' : ''}">
+            <div><strong>🧭 Balance por cuartos</strong> <span class="insight-badge">Dato</span></div>
+            <span>El Q${worst.q} presenta el menor diferencial medio (${worst.avgDiff > 0 ? '+' : ''}${worst.avgDiff.toFixed(1)} puntos) entre los parciales registrados.</span>
+          </div>
+        `);
+      }
+    } else {
+      items.push(`
+        <div class="insight-item">
+          <div><strong>ℹ️ Parciales no evaluables</strong></div>
+          <span>No hay suficientes datos de cuartos para generar una conclusión sobre rendimiento por periodo.</span>
+        </div>
+      `);
+    }
+
+    return items.join("");
+  }
+
   _renderCharts(playedGames = []) {
     if (!playedGames || playedGames.length === 0) return "";
 
@@ -248,21 +329,27 @@ export class SeasonDashboardView {
       const totFga = totFg2a + totFg3a;
       const totFgm = totFg2m + totFg3m;
 
-      const efgVal = totFga > 0 ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1)) : 29.0;
-      const poss = (totFga + 0.44 * totFta + totTov) || 70;
-      const ortg = poss > 0 ? (teamPts / poss) * 100 : 0;
-      const drtg = poss > 0 ? (oppPts / poss) * 100 : 0;
-      
-      const rawNet = Number((ortg - drtg).toFixed(1));
-      const netRating = Math.max(-90, Math.min(40, isNaN(rawNet) ? 0 : rawNet));
+      const efgVal = totFga > 0
+        ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1))
+        : null;
+      const poss = totFga + 0.44 * totFta + totTov;
+      const ortg = poss > 0 ? (teamPts / poss) * 100 : null;
+      const drtg = poss > 0 ? (oppPts / poss) * 100 : null;
+
+      const rawNet = ortg !== null && drtg !== null
+        ? Number((ortg - drtg).toFixed(1))
+        : null;
+      const netRating = rawNet === null
+        ? null
+        : Math.max(-90, Math.min(40, rawNet));
 
       return {
         label: `P${idx + 1}`,
         ptsUs: teamPts,
         ptsThem: oppPts,
-        tov: totTov || Math.round(15 + Math.random() * 25),
+        tov: totTov,
         netRating,
-        efgVal: isNaN(efgVal) ? 29 : efgVal,
+        efgVal,
         orbCount: totOffReb,
         drbCount: totDefReb
       };
@@ -275,11 +362,12 @@ export class SeasonDashboardView {
     const minNet = -90;
     const maxNet = 30;
     const netPoints = gameMetrics.map((m, i) => {
+      if (m.netRating === null) return null;
       const divisor = totalGames > 1 ? (totalGames - 1) : 1;
       const x = (i / divisor) * svgWidth;
       const y = svgHeight - ((m.netRating - minNet) / (maxNet - minNet)) * svgHeight;
       return { x, y, val: m.netRating, label: m.label };
-    });
+    }).filter(Boolean);
     const netCurveD = this._buildSmoothSvgPath(netPoints);
 
     const svgNetRating = `
@@ -290,7 +378,7 @@ export class SeasonDashboardView {
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
             <line x1="0" y1="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" stroke="#e2e8f0" stroke-dasharray="4 4" stroke-width="1.5"/>
-            <path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de posesiones</text>`}
             ${netPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#1e3a8a" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -337,12 +425,13 @@ export class SeasonDashboardView {
     const minEfg = 20;
     const maxEfg = 70;
     const efgPoints = gameMetrics.map((m, i) => {
+      if (m.efgVal === null) return null;
       const clampedEfg = Math.max(minEfg, Math.min(maxEfg, m.efgVal));
       const divisor = totalGames > 1 ? (totalGames - 1) : 1;
       const x = (i / divisor) * svgWidth;
       const y = svgHeight - ((clampedEfg - minEfg) / (maxEfg - minEfg)) * svgHeight;
       return { x, y, val: m.efgVal, label: m.label };
-    });
+    }).filter(Boolean);
     const efgCurveD = this._buildSmoothSvgPath(efgPoints);
 
     const svgEfg = `
@@ -352,7 +441,7 @@ export class SeasonDashboardView {
         </div>
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
-            <path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            ${efgCurveD ? `<path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de tiro</text>`}
             ${efgPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#22c55e" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}%</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -389,26 +478,34 @@ export class SeasonDashboardView {
       </div>
     `;
 
-    // 5. Rebote Ofensivo y Defensivo
-    const rebPoints = gameMetrics.map((m, i) => {
-      const val = 20 + Math.sin(i * 1.2) * 18 + (i % 2 === 0 ? 12 : -5);
+    // 5. Rebote Ofensivo y Defensivo: datos reales del boxscore.
+    const maxReb = Math.max(
+      10,
+      ...gameMetrics.map(m => Math.max(Number(m.orbCount || 0), Number(m.drbCount || 0)))
+    );
+    const buildRebPoints = (key) => gameMetrics.map((m, i) => {
       const divisor = totalGames > 1 ? (totalGames - 1) : 1;
       const x = (i / divisor) * svgWidth;
-      const y = svgHeight - ((val - 0) / (60 - 0)) * svgHeight;
-      return { x, y, val: val.toFixed(1), label: m.label };
+      const val = Number(m[key] || 0);
+      const y = svgHeight - (val / maxReb) * svgHeight;
+      return { x, y, val, label: m.label };
     });
-    const rebCurveD = this._buildSmoothSvgPath(rebPoints);
-    const rebAreaD = `${rebCurveD} L ${svgWidth} ${svgHeight} L 0 ${svgHeight} Z`;
+    const orbPoints = buildRebPoints("orbCount");
+    const drbPoints = buildRebPoints("drbCount");
+    const orbCurveD = this._buildSmoothSvgPath(orbPoints);
+    const drbCurveD = this._buildSmoothSvgPath(drbPoints);
 
     const chartRebound = `
       <div class="chart-flex-wrap">
         <div class="chart-y-axis">
-          <span>60</span><span>45</span><span>30</span><span>15</span><span>0</span>
+          <span>${maxReb}</span><span>${Math.round(maxReb * .75)}</span><span>${Math.round(maxReb * .5)}</span><span>${Math.round(maxReb * .25)}</span><span>0</span>
         </div>
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
-            <path d="${rebAreaD}" fill="rgba(219, 234, 254, 0.65)" />
-            <path d="${rebCurveD}" fill="none" stroke="#475569" stroke-width="2.5" />
+            <path d="${orbCurveD}" fill="none" stroke="#f97316" stroke-width="2.5" />
+            <path d="${drbCurveD}" fill="none" stroke="#1e3a8a" stroke-width="2.5" />
+            ${orbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#f97316"><title>${p.label}: ${p.val} rebotes ofensivos</title></circle>`).join("")}
+            ${drbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#1e3a8a"><title>${p.label}: ${p.val} rebotes defensivos</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
             ${gameMetrics.map(m => `<span>${m.label}</span>`).join("")}
@@ -416,37 +513,62 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> ORB%</span>
-        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> DRB%</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> Reb. ofensivos</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> Reb. defensivos</span>
       </div>
     `;
 
-    // 6. Rendimiento por Cuartos
-    const quarters = [
-      { name: "Q1", us: 6, them: 13 },
-      { name: "Q2", us: 9, them: 13 },
-      { name: "Q3", us: 7, them: 15 },
-      { name: "Q4", us: 7, them: 12 }
-    ];
+    // 6. Rendimiento por Cuartos: promedio real de parciales registrados.
+    const quarterAccumulator = new Map();
+    chronGames.forEach(game => {
+      const periods = DataStore.getGamePeriodScores?.(game.id) || [];
+      periods
+        .filter(row => !Boolean(row.is_overtime ?? row.isOvertime))
+        .forEach(row => {
+          const q = Number(row.period_number ?? row.periodNumber);
+          if (q < 1 || q > 4) return;
+          const entry = quarterAccumulator.get(q) || { us: 0, them: 0, count: 0 };
+          entry.us += Number(row.team_score ?? row.teamScore ?? 0);
+          entry.them += Number(row.opponent_score ?? row.opponentScore ?? 0);
+          entry.count += 1;
+          quarterAccumulator.set(q, entry);
+        });
+    });
 
-    const quarterBars = quarters.map((q) => {
-      const hUs = Math.round((q.us / 16) * 100);
-      const hThem = Math.round((q.them / 16) * 100);
+    const quarters = [1, 2, 3, 4].map(q => {
+      const data = quarterAccumulator.get(q);
+      return {
+        name: `Q${q}`,
+        us: data?.count ? data.us / data.count : null,
+        them: data?.count ? data.them / data.count : null
+      };
+    });
+    const quarterValues = quarters.flatMap(q => [q.us, q.them]).filter(v => v !== null);
+    const maxQuarter = Math.max(10, ...quarterValues);
+    const hasQuarterData = quarterValues.length > 0;
+
+    const quarterBars = hasQuarterData ? quarters.map((q) => {
+      const hUs = q.us === null ? 0 : Math.round((q.us / maxQuarter) * 100);
+      const hThem = q.them === null ? 0 : Math.round((q.them / maxQuarter) * 100);
       return `
         <div class="bar-col" style="flex: 1; max-width: 60px;">
           <div class="bar-pair" style="gap: 6px;">
-            <div class="bar-bar bar-blue" style="height: ${hUs}%; width: 22px;" title="A favor: ${q.us}"></div>
-            <div class="bar-bar bar-orange" style="height: ${hThem}%; width: 22px;" title="En contra: ${q.them}"></div>
+            <div class="bar-bar bar-blue" style="height: ${hUs}%; width: 22px;" title="A favor: ${q.us === null ? 'Sin datos' : q.us.toFixed(1)}"></div>
+            <div class="bar-bar bar-orange" style="height: ${hThem}%; width: 22px;" title="En contra: ${q.them === null ? 'Sin datos' : q.them.toFixed(1)}"></div>
           </div>
           <span class="bar-label" style="font-weight: 800; font-size: 11px;">${q.name}</span>
         </div>
       `;
-    }).join("");
+    }).join("") : "";
 
-    const chartQuarters = `
+    const chartQuarters = hasQuarterData ? `
       <div class="chart-flex-wrap">
         <div class="chart-y-axis">
-          <span>16</span><span>12</span><span>8</span><span>4</span><span>0</span>
+          <span>${Math.round(maxQuarter)}</span>
+          <span>${Math.round(maxQuarter * .75)}</span>
+          <span>${Math.round(maxQuarter * .5)}</span>
+          <span>${Math.round(maxQuarter * .25)}</span>
+          <span>0</span>
         </div>
         <div class="chart-bars-wrap">
           <div class="chart-bars-row" style="justify-content: space-around;">
@@ -457,6 +579,10 @@ export class SeasonDashboardView {
       <div class="chart-legend-box">
         <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> a favor</span>
         <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> en contra</span>
+      </div>
+    ` : `
+      <div style="padding: 28px; text-align: center; color: #64748b; font-size: 12px;">
+        Sin datos de parciales para este contexto.
       </div>
     `;
 
@@ -681,9 +807,29 @@ export class SeasonDashboardView {
         : containerId;
       if (!container) return;
 
-      const games = DataStore.getGames ? (DataStore.getGames(this.currentTeamId) || []) : [];
-      const players = DataStore.getPlayers ? (DataStore.getPlayers(this.currentTeamId) || []) : [];
-      const playerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
+      const activeSeasonContext = DataStore.getActiveSeasonContext?.(this.currentTeamId) || null;
+      const activeSeason = DataStore.getActiveSeasonDisplayName?.(this.currentTeamId)
+        || activeSeasonContext?.name
+        || DataStore.getActiveSeason?.()
+        || "Sin temporada";
+      const activeTeamSeasonId = activeSeasonContext?.team_season_id
+        || activeSeasonContext?.teamSeasonId
+        || DataStore.getActiveTeamSeasonId?.(this.currentTeamId)
+        || null;
+      const activeSeasonId = activeSeasonContext?.legacy_season_id
+        || activeSeasonContext?.legacySeasonId
+        || DataStore.getActiveSeasonId?.(this.currentTeamId)
+        || null;
+
+      const games = DataStore.getGamesForActiveSeason
+        ? (DataStore.getGamesForActiveSeason(this.currentTeamId) || [])
+        : (DataStore.getGames?.(this.currentTeamId) || []);
+      const players = DataStore.getSeasonParticipantPlayers
+        ? (DataStore.getSeasonParticipantPlayers(this.currentTeamId) || [])
+        : (DataStore.getPlayers?.(this.currentTeamId) || []);
+      const gameIds = new Set(games.map(g => String(g.id)));
+      const allPlayerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
+      const playerStats = allPlayerStats.filter(s => gameIds.has(String(s.game_id || s.gameId || "")));
 
       this.cachedGames = games;
       this.cachedPlayerStats = playerStats;
@@ -694,7 +840,7 @@ export class SeasonDashboardView {
       const teamName = activeTeamObj.name || "JMJ Manyanet Sant Andreu";
       const teamCategory = activeTeamObj.category || "Cadete Masculino";
       const teamCompetition = activeTeamObj.competition || "B1";
-      const activeSeason = DataStore.getActiveSeason ? (DataStore.getActiveSeason() || "2026") : "2026";
+      const canSyncPreview = this._canSync(this.currentTeamId);
 
       let kpis = { wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0 };
       if (StatsEngine && typeof StatsEngine.calculateTeamDashboardKPIs === "function") {
@@ -736,7 +882,6 @@ export class SeasonDashboardView {
             .dash-win-loss .l-text { color: #dc2626; }
             
             .dash-top-actions { display: flex; align-items: center; gap: 10px; }
-            .season-select-pill { padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 13px; background: white; cursor: pointer; height: 38px; }
             
             /* TOOLTIP SYSTEM */
             .dash-tooltip-wrapper { position: relative; display: inline-flex; align-items: center; }
@@ -868,12 +1013,9 @@ export class SeasonDashboardView {
             </div>
 
             <div class="dash-top-actions">
-              <button id="btn-sync-data" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                🔄 Sincronizar
+              <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
+                🔄 Sincronizar${canSyncPreview ? '' : ' 🔒'}
               </button>
-              <select class="season-select-pill">
-                <option value="${activeSeason}">${activeSeason}</option>
-              </select>
             </div>
           </div>
 
@@ -1036,22 +1178,7 @@ export class SeasonDashboardView {
               <span>💡 LO MÁS IMPORTANTE</span>
             </div>
             <div class="insights-list">
-              <div class="insight-item insight-warning">
-                <div><strong>⚠️ Aumento de pérdidas</strong> <span class="insight-badge badge-alerta">Alerta</span></div>
-                <span>Las pérdidas han aumentado en los últimos partidos (TOV% ${kpis.tovPct}%). Revisar la toma de decisiones ofensiva.</span>
-              </div>
-              <div class="insight-item insight-danger">
-                <div><strong>⚠️ Pérdidas elevadas</strong> <span class="insight-badge badge-debilidad">Debilidad</span></div>
-                <span>El TOV% de la temporada (${kpis.tovPct}%) está por encima del 18%. Las pérdidas son un problema estructural del equipo.</span>
-              </div>
-              <div class="insight-item insight-warning">
-                <div><strong>⚠️ Diferencia negativa en el tercer cuarto</strong> <span class="insight-badge badge-alerta">Alerta</span></div>
-                <span>El tercer cuarto es el periodo con peor balance defensivo. Concentrar la preparación en ese tramo.</span>
-              </div>
-              <div class="insight-item insight-warning">
-                <div><strong>⚠️ Empeoramiento del Net Rating</strong> <span class="insight-badge badge-alerta">Alerta</span></div>
-                <span>El Net Rating medio (${kpis.netRtg > 0 ? '+' : ''}${kpis.netRtg}) refleja dificultades en los cierres de partido.</span>
-              </div>
+              ${this._renderEvidenceInsights(kpis, this.cachedGames)}
             </div>
           </div>
 
@@ -1060,6 +1187,7 @@ export class SeasonDashboardView {
 
       this._attachSortEventListeners(container);
       this._attachSyncButtonListener(container, this.currentTeamId);
+
     } catch (err) {
       console.error("[SeasonDashboardView] Error renderizando dashboard:", err);
     }

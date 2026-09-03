@@ -12,6 +12,7 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { ReportExporter } from "../services/ReportExporter.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class ReportsView {
   constructor(authController = null) {
@@ -164,7 +165,9 @@ export class ReportsView {
     if (!games.length) return null;
 
     const activeTeamId = DataStore.getActiveTeamId?.();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
 
     // Modo: Todos los partidos combinados (Promedio por partido)
     if (this.selectedGameId === "all") {
@@ -266,7 +269,9 @@ export class ReportsView {
 
   _getSeasonStatsList() {
     const activeTeamId = DataStore.getActiveTeamId?.();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
     const games = this._getFilteredGames();
     const gameIds = new Set(games.map(g => String(g.id)));
 
@@ -793,10 +798,16 @@ export class ReportsView {
 
   _executeDossierPDFExport() {
     const activeTeamId = DataStore.getActiveTeamId?.();
+    if (!this.auth?.can?.(Permission.EXPORT_REPORT, { teamId: activeTeamId })) {
+      alert("⚠️ Tu perfil no tiene permiso para exportar informes.");
+      return false;
+    }
     const teamObj = DataStore.getTeamById?.(activeTeamId) || {};
     const teamName = teamObj.name || "JMJ Manyanet Sant Andreu";
     const allGames = this._getFilteredGames();
-    const allPlayers = DataStore.getPlayers?.(activeTeamId) || [];
+    const allPlayers = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
     const seasonList = this._getSeasonStatsList();
 
     const selectedGames = allGames.filter(g => this.dossierConfig.selectedGameIds.includes(String(g.id)));
@@ -900,8 +911,11 @@ export class ReportsView {
     if (!container) return;
 
     const activeTeamId = DataStore.getActiveTeamId?.();
+    const canExport = Boolean(this.auth?.canPreview?.(Permission.EXPORT_REPORT, { teamId: activeTeamId }));
     const games = this._getFilteredGames();
-    const players = DataStore.getPlayers?.(activeTeamId) || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers?.(activeTeamId)
+      || [];
 
     if (this.dossierConfig.selectedPlayerIds.length === 0 && players.length > 0) {
       this.dossierConfig.selectedPlayerIds = players.map(p => String(p.id));
@@ -953,8 +967,8 @@ export class ReportsView {
             </select>
           ` : ''}
 
-          <button type="button" id="btn-open-dossier-modal" style="margin-left: auto; padding: 8px 16px; border-radius: 8px; border: none; background: #16a34a; color: white; font-weight: 900; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(22,163,74,0.3);">
-            📥 Exportar PDF Personalizado
+          <button type="button" id="btn-open-dossier-modal" ${!canExport ? 'disabled' : ''} style="margin-left: auto; padding: 8px 16px; border-radius: 8px; border: none; background: ${canExport ? '#16a34a' : '#cbd5e1'}; color: ${canExport ? 'white' : '#64748b'}; font-weight: 900; font-size: 12px; cursor: ${canExport ? 'pointer' : 'not-allowed'}; display: flex; align-items: center; gap: 6px; box-shadow: ${canExport ? '0 2px 6px rgba(22,163,74,0.3)' : 'none'};" title="${canExport ? 'Exportar PDF personalizado' : 'Tu perfil no tiene permiso para exportar'}">
+            📥 Exportar PDF Personalizado${canExport ? '' : ' 🔒'}
           </button>
         </div>
 
@@ -1061,6 +1075,11 @@ export class ReportsView {
     });
 
     container.querySelector("#btn-generate-final-dossier")?.addEventListener("click", () => {
+      const activeTeamId = DataStore.getActiveTeamId?.();
+      if (!this.auth?.can?.(Permission.EXPORT_REPORT, { teamId: activeTeamId })) {
+        alert("⚠️ Tu perfil no tiene permiso para exportar informes.");
+        return;
+      }
       this.dossierConfig.includeTeamSummary = container.querySelector("#chk-dos-summary")?.checked ?? true;
       this.dossierConfig.includeColectiveCharts = container.querySelector("#chk-dos-charts")?.checked ?? true;
       this.dossierConfig.includeRosterMatrix = container.querySelector("#chk-dos-matrix")?.checked ?? true;

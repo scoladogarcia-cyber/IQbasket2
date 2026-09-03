@@ -31,13 +31,14 @@ export class GameRepository {
 
   /**
    * Obtiene todos los partidos aplicando filtros de seguridad multitenant.
-   * @param {Object} [filter={}] - Criterios de filtrado (teamId, seasonId, clubId, status).
+   * @param {Object} [filter={}] - Criterios de filtrado (teamId, seasonId legacy, teamSeasonId v3, clubId, status).
    * @returns {Promise<Array<Game>>} Lista de entidades Game instanciadas.
    */
   async getAll(filter = {}) {
     const queryCriteria = {};
     if (filter.teamId) queryCriteria.team_id = filter.teamId;
     if (filter.seasonId) queryCriteria.season_id = filter.seasonId;
+    if (filter.teamSeasonId) queryCriteria.team_season_id = filter.teamSeasonId;
     if (filter.clubId) queryCriteria.club_id = filter.clubId;
     if (filter.status) queryCriteria.status = filter.status;
 
@@ -63,14 +64,23 @@ export class GameRepository {
    * @returns {Promise<Array<Game>>} Partidos con cabecera y resultado.
    */
   async getSummaryList(filter = {}) {
-    const games = await this.getAll(filter);
-    return games.map((game) => {
-      // Retorna una copia sin el array completo de eventos para agilizar la UI
-      return new Game({
-        ...game,
-        events: []
-      });
-    });
+    const queryCriteria = {};
+    if (filter.teamId) queryCriteria.team_id = filter.teamId;
+    if (filter.seasonId) queryCriteria.season_id = filter.seasonId;
+    if (filter.teamSeasonId) queryCriteria.team_season_id = filter.teamSeasonId;
+    if (filter.status) queryCriteria.status = filter.status;
+
+    // Proyección ligera real: no descarga el JSONB `events` para descartarlo
+    // después en el navegador.
+    const rawItems = await this.db.query(
+      this.gamesCollection,
+      queryCriteria,
+      {
+        columns: "id,team_id,season_id,team_season_id,date,time,opponent,competition,round,venue,venue_name,periods_count,period_minutes,status,team_score,opponent_score,observations,video_url,created_at,starter_ids,notes"
+      }
+    );
+
+    return (rawItems || []).map((item) => Game.fromJSON(item));
   }
 
   /**
@@ -81,6 +91,11 @@ export class GameRepository {
    */
   async getByTeamAndSeason(teamId, seasonId) {
     return this.getAll({ teamId, seasonId });
+  }
+
+  async getByTeamSeason(teamSeasonId) {
+    if (!teamSeasonId) return [];
+    return this.getAll({ teamSeasonId });
   }
 
   // =========================================================================

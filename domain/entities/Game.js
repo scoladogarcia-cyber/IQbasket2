@@ -44,7 +44,8 @@ export class Game {
    * @param {Object} params - Parámetros de inicialización del partido.
    * @param {string|null} [params.id=null] - Identificador único universal (UUID).
    * @param {string|null} [params.teamId=null] - ID del equipo propio asociado.
-   * @param {string|null} [params.seasonId=null] - ID de la temporada asociada.
+   * @param {string|null} [params.seasonId=null] - ID legacy de public.seasons durante la transición.
+   * @param {string|null} [params.teamSeasonId=null] - ID v3 del contexto equipo-temporada.
    * @param {string|null} [params.clubId=null] - ID del club o tenant para aislamiento multiclub.
    * @param {string|null} [params.date=null] - Fecha del partido (YYYY-MM-DD).
    * @param {string} [params.time=""] - Hora del encuentro (HH:mm).
@@ -79,6 +80,7 @@ export class Game {
     id = null,
     teamId = null,
     seasonId = null,
+    teamSeasonId = null,
     clubId = null,
     date = null,
     time = "",
@@ -113,6 +115,7 @@ export class Game {
     this.id = id;
     this.teamId = teamId;
     this.seasonId = seasonId;
+    this.teamSeasonId = teamSeasonId;
     this.clubId = clubId;
 
     // Metadatos y calendario del encuentro
@@ -261,6 +264,7 @@ export class Game {
       id: this.id,
       team_id: this.teamId,
       season_id: this.seasonId,
+      team_season_id: this.teamSeasonId,
       club_id: this.clubId,
       date: this.date,
       time: this.time,
@@ -303,6 +307,7 @@ export class Game {
       id: row.id,
       teamId: row.team_id ?? row.teamId,
       seasonId: row.season_id ?? row.seasonId,
+      teamSeasonId: row.team_season_id ?? row.teamSeasonId,
       clubId: row.club_id ?? row.clubId,
       date: row.date,
       time: row.time,

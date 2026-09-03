@@ -65,9 +65,7 @@ export class StatsImportEngine {
           player_id: pId,
           starter: Boolean(row.starter),
           minutes: Number(calculated.minutes || 0),
-          minutes_seconds: Math.round(Number(calculated.minutes || 0) * 60),
           points: calculated.points,
-          pts: calculated.points,
           fg2_made: calculated.fg2Made,
           fg2_attempted: calculated.fg2Attempted,
           fg3_made: calculated.fg3Made,
@@ -76,7 +74,6 @@ export class StatsImportEngine {
           ft_attempted: calculated.ftAttempted,
           off_reb: calculated.offReb,
           def_reb: calculated.defReb,
-          rebounds: calculated.totalRebounds,
           rebounds_offensive: calculated.offReb,
           rebounds_defensive: calculated.defReb,
           assists: calculated.assists,
@@ -86,22 +83,20 @@ export class StatsImportEngine {
           blocks_received: calculated.blocksReceived,
           turnovers: calculated.turnovers,
           fouls_committed: calculated.foulsCommitted,
-          fouls: calculated.foulsCommitted,
           fouls_drawn: calculated.foulsDrawn,
           fouls_received: calculated.foulsDrawn,
           plus_minus: Number(row.plus_minus ?? row.plusMinus ?? 0),
-          valuation: calculated.pir,
-          val: calculated.pir,
-          pir: calculated.pir,
-          efficiency: calculated.efficiency,
-          game_score: calculated.gameScore
+          evaluation: calculated.pir,
+          game_score: calculated.gameScore,
+          true_shooting_pct: calculated.tsPct,
+          efg_pct: calculated.eFG
         };
       });
 
       // 2. Sobrescribir en `player_game_stats` mediante upsert por clave única (game_id, player_id)
       const { error: pgsErr } = await this.supabase
         .from("player_game_stats")
-        .upsert(processedRows, { onConflict: "game_id, player_id" });
+        .upsert(processedRows, { onConflict: "game_id,player_id" });
 
       if (pgsErr) throw new Error(`Error en upsert player_game_stats: ${pgsErr.message}`);
 
@@ -150,22 +145,14 @@ export class StatsImportEngine {
         const seasonTotals = StatsAggregator.aggregatePlayerSeasonStats(rows);
         if (!seasonTotals) return;
 
-        const ppg = seasonTotals.averages?.ppg || 0;
-        const rpg = seasonTotals.averages?.rpg || 0;
-        const apg = seasonTotals.averages?.apg || 0;
-        const pir = seasonTotals.averages?.pir || seasonTotals.averages?.valuation || 0;
-        const gp = seasonTotals.totals?.gp || rows.length;
+        const ppg = seasonTotals.perGame?.ppg || 0;
 
+        // El esquema actual de players solo dispone de `ppg` como agregado.
+        // RPG/APG/PIR/GP se persistirán en las tablas de métricas v3, no en columnas
+        // inexistentes del registro maestro del jugador.
         await this.supabase
           .from("players")
-          .update({
-            ppg,
-            rpg,
-            apg,
-            val: pir,
-            games_played: gp,
-            updated_at: new Date().toISOString()
-          })
+          .update({ ppg })
           .eq("id", pid);
       });
 

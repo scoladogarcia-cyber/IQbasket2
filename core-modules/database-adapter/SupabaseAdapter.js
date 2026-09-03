@@ -280,11 +280,14 @@ export class SupabaseAdapter extends DatabaseInterface {
    * @override
    * @param {string} collection - Nombre de la tabla.
    * @param {Object} queryObj - Criterios de coincidencia exacta.
-   * @param {Object} [options={}] - Opciones ({ limit, offset, orderBy, ascending }).
+   * @param {Object} [options={}] - Opciones ({ columns, limit, offset, orderBy, ascending }).
    * @returns {Promise<Array<Object>>}
    */
   async query(collection, queryObj = {}, options = {}) {
-    let queryBuilder = this.client.from(collection).select("*");
+    const columns = typeof options.columns === "string" && options.columns.trim()
+      ? options.columns
+      : "*";
+    let queryBuilder = this.client.from(collection).select(columns);
 
     // Filtros clave-valor
     if (queryObj && typeof queryObj === "object") {

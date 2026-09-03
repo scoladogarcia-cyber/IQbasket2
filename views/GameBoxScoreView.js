@@ -30,14 +30,8 @@ export class GameBoxScoreView {
   }
 
   _canEdit() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+    // El BoxScore es una vista de consulta para todos los roles.
+    return false;
   }
 
   async render(containerId = "dashboard-content-area", targetGameId = null) {
@@ -45,7 +39,9 @@ export class GameBoxScoreView {
     if (!container) return;
 
     this.games = DataStore.getGames() || [];
-    this.players = DataStore.getPlayers() || [];
+    this.players = DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
+      || DataStore.getPlayers()
+      || [];
 
     if (this.games.length === 0) {
       container.innerHTML = `

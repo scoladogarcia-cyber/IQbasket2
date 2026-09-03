@@ -74,7 +74,10 @@ export class AdvancedStatsView {
       : games.filter(g => Number(g.team_score ?? g.teamScore ?? 0) > 0 || Number(g.opponent_score ?? g.opponentScore ?? 0) > 0);
 
     const totalTeamGamesCount = Math.max(1, playedGames.length);
-    const players = DataStore.getPlayers(activeTeamId) || DataStore.getPlayers() || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
+      || DataStore.getPlayers(activeTeamId)
+      || DataStore.getPlayers()
+      || [];
     const allStats = DataStore.getPlayerGameStats() || [];
 
     if (games.length === 0) {

@@ -7,6 +7,7 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class LiveScoreHUDView {
   constructor(authController = null, gameId = null) {
@@ -83,8 +84,21 @@ export class LiveScoreHUDView {
     if (!container) return;
     this.container = container;
 
+    if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME)) {
+      container.innerHTML = `
+        <div style="padding:24px;background:white;border:1px solid #fecaca;border-radius:12px;color:#991b1b;">
+          <h3 style="margin-top:0;">🔒 Acceso restringido</h3>
+          <p style="margin-bottom:0;">Tu perfil no tiene permiso para registrar estadísticas en vivo.</p>
+        </div>`;
+      return;
+    }
+
     const activeTeamId = DataStore.getActiveTeamId ? DataStore.getActiveTeamId() : null;
-    const allPlayers = (DataStore.getPlayers ? (DataStore.getPlayers(activeTeamId) || DataStore.getPlayers()) : []) || [];
+    const allPlayers = (
+      DataStore.getPlayersEligibleOnDate
+        ? (DataStore.getPlayersEligibleOnDate(activeTeamId, new Date().toISOString().slice(0, 10)) || [])
+        : (DataStore.getPlayers?.(activeTeamId) || DataStore.getPlayers?.() || [])
+    );
 
     if (this.roster.length === 0 && allPlayers.length > 0) {
       this.roster = allPlayers.map((p, idx) => ({

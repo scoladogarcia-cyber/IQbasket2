@@ -18,6 +18,89 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { supabase } from "../config/database.config.js";
 import { LanguageSettingsView } from "./LanguageSettingsView.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission, UserRole, UNIQUE_SUPERADMIN_EMAIL } from "../security/PermissionService.js";
+import { TeamAccessRequestService } from "../services/TeamAccessRequestService.js";
+import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
+import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
+import { SeasonManagementView } from "./SeasonManagementView.js";
+import { RosterManagementService } from "../services/roster/RosterManagementService.js";
+import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
+
+function normalizeIsoDate(value = "") {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    ? raw
+    : null;
+}
+
+function todayLocalIsoDate() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function shiftIsoDate(value, days) {
+  const iso = normalizeIsoDate(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + Number(days || 0));
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function seasonDateBounds(context = null) {
+  return {
+    start: normalizeIsoDate(context?.start_date || context?.startDate || ""),
+    end: normalizeIsoDate(context?.end_date || context?.endDate || "")
+  };
+}
+
+function isDateInsideSeason(value, context = null) {
+  const iso = normalizeIsoDate(value);
+  if (!iso) return false;
+  const { start, end } = seasonDateBounds(context);
+  return (!start || iso >= start) && (!end || iso <= end);
+}
+
+function maxIsoDate(...values) {
+  const dates = values.map(normalizeIsoDate).filter(Boolean).sort();
+  return dates.length ? dates.at(-1) : null;
+}
+
+function formatRosterIntervals(player = {}) {
+  const stints = Array.isArray(player.rosterStints) ? player.rosterStints : [];
+  if (stints.length > 0) {
+    return [...stints]
+      .sort((a, b) => String(a.valid_from || "").localeCompare(String(b.valid_from || "")))
+      .map(stint => {
+        const from = normalizeIsoDate(stint.valid_from) || "?";
+        const until = normalizeIsoDate(stint.valid_until) || "abierto";
+        return `${from} → ${until}`;
+      })
+      .join(" · ");
+  }
+
+  const from = normalizeIsoDate(player.rosterFirstFrom);
+  const until = normalizeIsoDate(player.rosterLastUntil);
+  return from ? `${from} → ${until || "abierto"}` : "Sin intervalo histórico";
+}
 
 export class TranslationsView {
   /**
@@ -26,13 +109,13 @@ export class TranslationsView {
    */
   constructor(authController = null) {
     this.auth = authController;
-    this.currentUserRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    this.simulatedRole = localStorage.getItem("iq_simulated_role") || null;
+    this.currentUserRole = this.auth?.getAuthenticatedRole?.() || UserRole.INVITADO;
+    this.simulatedRole = this.auth?.previewRole || null;
 
     const effectiveRole = this.getEffectiveRole();
-    this.activeTab = ["JUGADOR", "INVITADO"].includes(effectiveRole) 
-      ? "requests" 
-      : (["ENTRENADOR", "ANALISTA", "SCOUT"].includes(effectiveRole) ? "players" : "club");
+    this.activeTab = [UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole)
+      ? "requests"
+      : ([UserRole.ENTRENADOR, UserRole.ANALISTA, UserRole.PREPARADOR_FISICO].includes(effectiveRole) ? "players" : "club");
       
     this.clubSubView = "list"; // 'list' | 'edit-club' | 'edit-team'
     this.selectedTeamForEdit = null;
@@ -62,17 +145,22 @@ export class TranslationsView {
     // Temporadas
     this.seasonsList = [];
 
-    // Solicitudes de adhesión a equipos
-    const storedRequests = localStorage.getItem("iq_team_join_requests");
-    this.joinRequests = storedRequests ? JSON.parse(storedRequests) : [];
+    // Solicitudes de adhesión multiusuario (Supabase es la fuente de verdad).
+    this.joinRequests = [];
+    this.teamDirectory = [];
+    this.accessRequestService = new TeamAccessRequestService(supabase);
+    this.staffAssignmentService = new StaffAssignmentService(supabase);
+    this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
+    this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
+    this.rosterManagementService = new RosterManagementService(supabase, DataStore);
+    this.rosterState = null;
+    this.transferRequestService = new TransferRequestService(supabase);
+    this.transferRequestCapabilities = { ready: false };
+    this.transfers = [];
 
     // Mapa de Asignaciones Multiequipo (Usuario Email -> [IDs de Equipos])
     const storedAssignments = localStorage.getItem("iq_user_teams_map");
     this.userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
-
-    // Traspasos
-    const storedTransfers = localStorage.getItem("iq_transfers");
-    this.transfers = storedTransfers ? JSON.parse(storedTransfers) : [];
 
     // Perfiles
     this.profilesList = [];
@@ -84,7 +172,9 @@ export class TranslationsView {
   }
 
   getEffectiveRole() {
-    return this.simulatedRole || this.currentUserRole;
+    this.currentUserRole = this.auth?.getAuthenticatedRole?.() || this.currentUserRole || UserRole.INVITADO;
+    this.simulatedRole = this.auth?.previewRole || null;
+    return this.auth?.getEffectiveRole?.() || this.simulatedRole || this.currentUserRole;
   }
 
   showSyncOverlay(message = "⚡ Sincronizando con Supabase...") {
@@ -114,64 +204,99 @@ export class TranslationsView {
     if (overlay) overlay.style.display = "none";
   }
 
+  _permissionForAction(action) {
+    const map = {
+      VIEW_TAB_CLUB: Permission.VIEW_CLUBS,
+      MANAGE_CLUB_DATA: Permission.MANAGE_CLUBS,
+      CREATE_TEAM: Permission.MANAGE_TEAMS,
+      VIEW_TAB_USERS: Permission.VIEW_USERS,
+      INVITE_USERS: Permission.INVITE_USERS,
+      MANAGE_ROLES: Permission.ASSIGN_STANDARD_ROLES,
+      ASSIGN_TEAMS_TO_USER: Permission.APPROVE_TEAM_ACCESS,
+      APPROVE_JOIN_REQUESTS: Permission.APPROVE_TEAM_ACCESS,
+      VIEW_TAB_PLAYERS: Permission.VIEW_ROSTER,
+      MANAGE_PLAYERS: Permission.MANAGE_ROSTER,
+      REQUEST_TRANSFERS: Permission.REQUEST_TRANSFER,
+      APPROVE_TRANSFERS: Permission.APPROVE_TRANSFER,
+      VIEW_TAB_SEASONS: Permission.VIEW_SEASONS,
+      CREATE_SEASON: Permission.MANAGE_SEASONS,
+      VIEW_TAB_REQUESTS: Permission.REQUEST_TEAM_ACCESS,
+      REQUEST_JOIN_CLUB: Permission.REQUEST_TEAM_ACCESS,
+      EDIT_DATA: Permission.MANAGE_ROSTER
+    };
+    return map[action] || null;
+  }
+
   _can(action) {
-    const role = this.getEffectiveRole();
-    switch (action) {
-      case "VIEW_TAB_TRANSLATIONS":
-      case "CREATE_CLUB":
-      case "ASSIGN_ADMIN_ROLE":
-      case "DELETE_SEASON":
-      case "DELETE_CLUB":
-      case "DELETE_TEAM":
-      case "VIEW_TAB_SIMULATION":
-      case "MODIFY_ACTIVE_ROLE":
-        return role === "SUPERADMIN";
+    const effectiveRole = this.getEffectiveRole();
 
-      case "VIEW_TAB_CLUB":
-      case "MANAGE_CLUB_DATA":
-        return ["SUPERADMIN", "ADMIN"].includes(role);
-
-      case "CREATE_TEAM":
-        return role === "SUPERADMIN";
-
-      case "VIEW_TAB_USERS":
-      case "INVITE_USERS":
-      case "MANAGE_ROLES":
-      case "ASSIGN_TEAMS_TO_USER":
-      case "APPROVE_JOIN_REQUESTS":
-        return ["SUPERADMIN", "ADMIN"].includes(role);
-
-      case "VIEW_TAB_PLAYERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "MANAGE_PLAYERS":
-      case "APPROVE_TRANSFERS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      case "VIEW_TAB_SEASONS":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "CREATE_SEASON":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      case "VIEW_TAB_REQUESTS":
-      case "REQUEST_JOIN_CLUB":
-        return ["ENTRENADOR", "ANALISTA", "SCOUT", "JUGADOR", "INVITADO"].includes(role);
-
-      case "EDIT_DATA":
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(role);
-
-      default:
-        return false;
+    if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
+      return effectiveRole === UserRole.SUPERADMIN;
     }
+
+    if (action === "ASSIGN_ADMIN_ROLE") {
+      return Boolean(this.auth?.canPreview?.(Permission.ASSIGN_PRIVILEGED_ROLES));
+    }
+
+    if (action === "EDIT_DATA") {
+      return Boolean(
+        this.auth?.canPreview?.(Permission.MANAGE_CLUBS) ||
+        this.auth?.canPreview?.(Permission.MANAGE_ROSTER) ||
+        this.auth?.canPreview?.(Permission.MANAGE_SEASONS) ||
+        this.auth?.canPreview?.(Permission.EDIT_GAME)
+      );
+    }
+
+    const permission = this._permissionForAction(action);
+    return permission ? Boolean(this.auth?.canPreview?.(permission)) : false;
+  }
+
+  _canReal(action, context = {}) {
+    if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
+      return this.auth?.getAuthenticatedRole?.() === UserRole.SUPERADMIN;
+    }
+    if (action === "ASSIGN_ADMIN_ROLE") {
+      return Boolean(this.auth?.can?.(Permission.ASSIGN_PRIVILEGED_ROLES, context));
+    }
+    const permission = this._permissionForAction(action);
+    return permission ? Boolean(this.auth?.can?.(permission, context)) : false;
   }
 
   async _fetchProfiles() {
     try {
-      if (!supabase) return;
-      const { data, error } = await supabase.from("user_profiles").select("*").order("created_at", { ascending: false });
+      if (!supabase || !this.auth?.can?.(Permission.VIEW_USERS)) {
+        this.profilesList = [];
+        return;
+      }
+
+      let query = supabase
+        .from("user_profiles")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
+        .order("created_at", { ascending: false });
+      const currentUser = this.auth.getCurrentUser?.();
+
+      if (this.auth.getAuthenticatedRole?.() === UserRole.ADMIN) {
+        const adminTeamIds = (currentUser?.allowedTeamIds || []).map(String).filter(Boolean);
+        if (adminTeamIds.length === 0) {
+          this.profilesList = [];
+          return;
+        }
+        query = query.overlaps("assigned_team_ids", adminTeamIds);
+      }
+
+      const { data, error } = await query;
       if (!error && data) {
-        this.profilesList = data;
+        this.profilesList = this.auth.getAuthenticatedRole?.() === UserRole.SUPERADMIN
+          ? data
+          : data.filter(p => String(p.email || "").toLowerCase() !== UNIQUE_SUPERADMIN_EMAIL);
+
+        this.profilesList.forEach(profile => {
+          const ids = Array.isArray(profile.assigned_team_ids)
+            ? profile.assigned_team_ids.map(String)
+            : [];
+          this.userTeamAssignments[profile.email] = ids;
+        });
+        this._saveAssignmentsLocal();
       }
     } catch (e) {
       console.warn("Error leyendo perfiles:", e);
@@ -182,20 +307,100 @@ export class TranslationsView {
     try {
       const activeTeamId = DataStore.getActiveTeamId();
       if (!supabase) return;
-      const { data, error } = await supabase.from("seasons").select("*").order("created_at", { ascending: false });
+      let query = supabase.from("seasons").select("*").order("created_at", { ascending: false });
+      if (activeTeamId) query = query.eq("team_id", activeTeamId);
+      const { data, error } = await query;
       
       if (!error && data && data.length > 0) {
         this.seasonsList = data;
       } else {
+        const dataStoreSeasons = DataStore.getSeasons?.(activeTeamId) || [];
         const storedSeasons = localStorage.getItem("iq_seasons");
-        this.seasonsList = storedSeasons ? JSON.parse(storedSeasons) : [
-          { id: "d7a70e68-d3d1-4ae9-b590-3d3291bd8a4d", name: "2026", team_id: activeTeamId }
-        ];
+        this.seasonsList = dataStoreSeasons.length > 0
+          ? dataStoreSeasons
+          : (storedSeasons ? JSON.parse(storedSeasons) : []);
       }
       this._saveSeasonsLocal();
     } catch (e) {
       console.warn("Error leyendo temporadas de Supabase:", e);
     }
+  }
+
+  async _refreshCurrentAuthorizationProfile() {
+    try {
+      const current = this.auth?.getCurrentUser?.();
+      if (!supabase || !current?.email) return false;
+
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("id,email,first_name,last_name,phone,role,status,assigned_team_ids,linked_player_id,created_at")
+        .eq("email", current.email)
+        .maybeSingle();
+
+      if (error || !data) return false;
+
+      const beforeIds = (current.allowedTeamIds || []).map(String).sort().join(",");
+      const refreshed = this.auth.setCurrentUser?.({
+        ...current,
+        ...data,
+        email: current.email
+      });
+      const afterIds = (refreshed?.allowedTeamIds || []).map(String).sort().join(",");
+
+      if (beforeIds !== afterIds) {
+        DataStore.setPermissionService?.(this.auth);
+        DataStore.isLoaded = false;
+        await DataStore.init(null, true);
+      }
+      return true;
+    } catch (e) {
+      console.warn("No se pudo refrescar el alcance del usuario:", e);
+      return false;
+    }
+  }
+
+  async _fetchTeamDirectory() {
+    try {
+      this.teamDirectory = await this.accessRequestService.listTeamDirectory();
+    } catch (e) {
+      console.warn("Error cargando directorio de equipos:", e);
+      this.teamDirectory = [];
+    }
+  }
+
+  async _fetchJoinRequests() {
+    try {
+      this.joinRequests = await this.accessRequestService.listRequests();
+      this._saveRequestsLocal();
+    } catch (e) {
+      console.warn("Error cargando solicitudes de acceso:", e);
+      this.joinRequests = [];
+    }
+  }
+
+  async _requestTeamAccess(teamId) {
+    await this.accessRequestService.requestAccess(teamId);
+    await this._fetchJoinRequests();
+  }
+
+  async _reviewTeamAccess(requestId, approve) {
+    await this.accessRequestService.reviewRequest(requestId, approve);
+    await Promise.all([
+      this._fetchJoinRequests(),
+      this._fetchProfiles()
+    ]);
+  }
+
+  async _saveStaffAssignment({ clubId = null, teamId = null, seasonName, role, staffName }) {
+    const assignment = await this.staffAssignmentService.upsertAssignment({
+      clubId,
+      teamId,
+      seasonName,
+      role,
+      staffName
+    });
+    DataStore.setStaffAssignmentLocal?.(assignment);
+    return assignment;
   }
 
   _saveSeasonsLocal() {
@@ -210,17 +415,80 @@ export class TranslationsView {
     localStorage.setItem("iq_user_teams_map", JSON.stringify(this.userTeamAssignments));
   }
 
-  _saveTransfersLocal() {
-    localStorage.setItem("iq_transfers", JSON.stringify(this.transfers));
+  async _persistUserTeamAssignments(email, teamIds = []) {
+    if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+      throw new Error("No tienes permiso para asignar equipos a usuarios.");
+    }
+
+    const normalizedIds = [...new Set((teamIds || []).map(String))];
+    for (const teamId of normalizedIds) {
+      if (!this.auth.can(Permission.APPROVE_TEAM_ACCESS, { teamId })) {
+        throw new Error("No puedes asignar uno o más equipos fuera de tu alcance.");
+      }
+    }
+
+    const targetProfile = this.profilesList.find(p => String(p.email || "").toLowerCase() === String(email || "").toLowerCase());
+    if (targetProfile?.club_id && !this.auth.can(Permission.APPROVE_TEAM_ACCESS, { clubId: targetProfile.club_id })) {
+      throw new Error("No puedes gestionar usuarios de otro club.");
+    }
+
+    let finalIds = normalizedIds;
+    if (this.auth?.getAuthenticatedRole?.() === UserRole.ADMIN) {
+      const ownClubTeamIds = new Set((DataStore.getTeams() || []).map(t => String(t.id)));
+      const existingIds = Array.isArray(targetProfile?.assigned_team_ids)
+        ? targetProfile.assigned_team_ids.map(String)
+        : [];
+      const externalIds = existingIds.filter(id => !ownClubTeamIds.has(id));
+      finalIds = [...new Set([...externalIds, ...normalizedIds])];
+    }
+
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ assigned_team_ids: finalIds })
+      .eq("email", email);
+
+    if (error) throw error;
+
+    this.userTeamAssignments[email] = finalIds;
+    this._saveAssignmentsLocal();
+  }
+
+  async _refreshTransferRequests(targetTeamSeasonId = null) {
+    try {
+      this.transferRequestCapabilities = await this.transferRequestService.getCapabilities({ force: true });
+      if (!this.transferRequestCapabilities?.ready || !targetTeamSeasonId) {
+        this.transfers = [];
+        return this.transfers;
+      }
+
+      this.transfers = await this.transferRequestService.listPending({
+        targetTeamSeasonId
+      });
+      return this.transfers;
+    } catch (error) {
+      console.warn("No se pudieron cargar las solicitudes persistentes de traspaso:", error);
+      this.transferRequestCapabilities = { ready: false };
+      this.transfers = [];
+      return [];
+    }
   }
 
   async _fetchTranslationsForLang(langCode) {
     try {
       if (!supabase) return;
       const normLang = langCode === "cat" ? "ca" : langCode;
-      const { data, error } = await supabase.from("translations").select("*");
+
+      let query = supabase
+        .from("translations")
+        .select("key,language_code,translation,created_at,updated_at");
+
+      query = normLang === "ca"
+        ? query.in("language_code", ["ca", "cat"])
+        : query.eq("language_code", normLang);
+
+      const { data, error } = await query;
       if (!error && data) {
-        this.dbTranslations = data.filter(d => d.language_code === normLang || d.language_code === langCode);
+        this.dbTranslations = data;
       }
     } catch (e) {
       console.warn("Error cargando traducciones de Supabase:", e);
@@ -228,29 +496,22 @@ export class TranslationsView {
   }
 
   async _fetchAllMarketPlayers(force = false) {
-    if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) return;
-
-    try {
-      if (!supabase) return;
-      const [pRes, tRes] = await Promise.all([
-        supabase.from("players").select("*"),
-        supabase.from("teams").select("*")
-      ]);
-
-      if (!pRes.error && pRes.data) {
-        const teams = tRes.data || DataStore.getTeams() || [];
-        this.allMarketPlayers = pRes.data.map(p => {
-          const teamObj = teams.find(t => String(t.id).toLowerCase() === String(p.team_id).toLowerCase());
-          return {
-            ...p,
-            team_name: teamObj ? teamObj.name : 'Otro Equipo'
-          };
-        });
-        this.isMarketLoaded = true;
-      }
-    } catch (e) {
-      console.warn("Error cargando mercado global:", e);
+    if (this.isMarketLoaded && !force && this.allMarketPlayers.length > 0) {
+      return this.allMarketPlayers;
     }
+
+    const targetTeamSeasonId = this.rosterState?.teamSeasonId || null;
+    if (!targetTeamSeasonId) {
+      throw new Error("No se pudo resolver la temporada activa del equipo de destino.");
+    }
+
+    const rows = await this.transferRequestService.listMarket({
+      targetTeamSeasonId
+    });
+
+    this.allMarketPlayers = rows || [];
+    this.isMarketLoaded = true;
+    return this.allMarketPlayers;
   }
 
   _renderMarketTable(container) {
@@ -287,7 +548,8 @@ export class TranslationsView {
           <tbody>
             ${paginatedPlayers.length > 0 ? paginatedPlayers.map(p => {
               const isMyTeam = String(p.team_id).toLowerCase() === String(activeTeamId).toLowerCase();
-              const existingTransfer = this.transfers.find(t => String(t.playerId) === String(p.id) && t.status === "PENDIENTE");
+              const existingTransfer = Boolean(p.pending_to_target)
+                || this.transfers.some(t => String(t.playerId) === String(p.id) && t.status === "PENDING");
 
               return `
                 <tr>
@@ -300,7 +562,7 @@ export class TranslationsView {
                     ` : (existingTransfer ? `
                       <span class="badge-pending">⏳ Solicitado</span>
                     ` : `
-                      <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name || ''} ${p.last_name || ''}" data-team-origin="${p.team_id}">
+                      <button type="button" class="btn-request-transfer btn-secondary-sm" data-id="${p.id}" data-name="${p.first_name || ''} ${p.last_name || ''}" data-team-season-origin="${p.from_team_season_id || ''}">
                         ⚡ Fichar
                       </button>
                     `)}
@@ -322,24 +584,43 @@ export class TranslationsView {
     `;
 
     tableContainer.querySelectorAll(".btn-request-transfer").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
+        if (!this.auth?.can?.(Permission.REQUEST_TRANSFER, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para solicitar traspasos.");
+          return;
+        }
+        if (!this.transferRequestCapabilities?.ready) {
+          alert("⚠️ Las solicitudes persistentes de traspaso todavía no están disponibles.");
+          return;
+        }
+
         const playerId = e.currentTarget.getAttribute("data-id");
         const playerName = e.currentTarget.getAttribute("data-name");
-        const originTeamId = e.currentTarget.getAttribute("data-team-origin");
+        const fromTeamSeasonId = e.currentTarget.getAttribute("data-team-season-origin");
+        const targetTeamSeasonId = this.rosterState?.teamSeasonId || null;
 
-        this.transfers.push({
-          id: "tr-" + Date.now(),
-          playerId,
-          playerName,
-          originTeamId,
-          targetTeamId: activeTeamId,
-          status: "PENDIENTE",
-          date: new Date().toLocaleDateString()
-        });
-        this._saveTransfersLocal();
+        if (!playerId || !fromTeamSeasonId || !targetTeamSeasonId) {
+          alert("⚠️ No se pudo resolver el jugador o el ámbito temporal del traspaso.");
+          return;
+        }
 
-        alert(`✅ Solicitud de fichaje enviada para ${playerName}.`);
-        this._renderMarketTable(container);
+        this.showSyncOverlay("📩 Registrando solicitud de traspaso...");
+        try {
+          await this.transferRequestService.requestTransfer({
+            playerId,
+            fromTeamSeasonId,
+            toTeamSeasonId: targetTeamSeasonId
+          });
+
+          await this._refreshTransferRequests(targetTeamSeasonId);
+          this.hideSyncOverlay();
+          alert(`✅ Solicitud de fichaje registrada para ${playerName}.`);
+          this._renderMarketTable(container);
+        } catch (error) {
+          this.hideSyncOverlay();
+          console.error("Error registrando solicitud de traspaso:", error);
+          alert(`❌ No se pudo registrar el traspaso: ${error.message || error}`);
+        }
       });
     });
 
@@ -362,35 +643,100 @@ export class TranslationsView {
     const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
     if (!container) return;
 
+    const activeTeamId = DataStore.getActiveTeamId();
+
     if (this.seasonsList.length === 0) await this._fetchSeasons();
-    if (this.activeTab === "users") await this._fetchProfiles();
+
+    if (this.activeTab === "players") {
+      try {
+        this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+      } catch (error) {
+        console.warn("No se pudo cargar la plantilla v3 por temporada:", error);
+        this.rosterState = null;
+      }
+
+      if (this._can("REQUEST_TRANSFERS") || this._can("APPROVE_TRANSFERS")) {
+        await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
+      } else {
+        this.transfers = [];
+      }
+    }
+
+    if (this._can("APPROVE_JOIN_REQUESTS") || this.activeTab === "requests") {
+      await this._fetchJoinRequests();
+    }
+
+    if (this.activeTab === "users") {
+      await this._fetchProfiles();
+    }
+
+    if (this.activeTab === "requests") {
+      await this._refreshCurrentAuthorizationProfile();
+      await this._fetchTeamDirectory();
+    }
     if (this.activeTab === "translations") await this._fetchTranslationsForLang(this.selectedLangForEdit);
+    if (this.activeTab === "seasons") {
+      try {
+        await this.seasonManagementView.load();
+      } catch (error) {
+        console.warn("No se pudo cargar la gestión v3 de temporadas:", error);
+      }
+    }
 
     const effectiveRole = this.getEffectiveRole();
     const isReadOnly = !this._can("EDIT_DATA");
-    const activeTeamId = DataStore.getActiveTeamId();
-    const currentUserEmail = localStorage.getItem("iq_user_email") || "";
+    const currentUserEmail = this.auth?.getCurrentUser?.()?.email || "";
     
-    const players = DataStore.getPlayers() || [];
+    const currentActiveSeasonContext = DataStore.getActiveSeasonContext?.(activeTeamId) || null;
+    const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
+      || DataStore.getActiveSeason()
+      || "Sin temporada";
+
+    const teamPlayers = DataStore.getPlayers() || [];
+    const players = this.activeTab === "players" && this.rosterState
+      ? this.rosterState.activePlayers
+      : teamPlayers;
+    const availableRosterPlayers = this.activeTab === "players"
+      ? (this.rosterState?.availablePlayers || [])
+      : [];
+    const historicalRosterPlayers = this.activeTab === "players"
+      ? (this.rosterState?.historicalPlayers || [])
+      : [];
+    const rosterContextName = this.rosterState?.context?.name
+      ? String(this.rosterState.context.name).replace(/^(\d{4})\s*[-\/]\s*(\d{4})$/, "$1/$2")
+      : currentActiveSeasonName;
+    const rosterBackendReady = Boolean(this.rosterState?.capabilities?.ready);
+    const rosterRemovalReady = Boolean(
+      rosterBackendReady && this.rosterState?.capabilities?.supports_seed_exclusion
+    );
+    const transferRequestReady = Boolean(this.transferRequestCapabilities?.ready);
+    const transferMarketReady = Boolean(
+      transferRequestReady && this.transferRequestCapabilities?.market_directory
+    );
+    const rosterTeamSeasonId = this.rosterState?.teamSeasonId || null;
+    const rosterReferenceDate = this.rosterState?.referenceDate
+      || normalizeIsoDate(currentActiveSeasonContext?.start_date)
+      || normalizeIsoDate(currentActiveSeasonContext?.end_date)
+      || todayLocalIsoDate();
+    const rosterSeasonContext = this.rosterState?.context || currentActiveSeasonContext;
+    const rosterSeasonBounds = seasonDateBounds(rosterSeasonContext);
+
     const realClubs = DataStore.getClubs() || [];
     const realTeams = DataStore.getTeams() || [];
+    const directoryTeams = this.teamDirectory.length > 0 ? this.teamDirectory : realTeams;
+    const myAssignedTeamIds = this.auth?.getCurrentUser?.()?.allowedTeamIds || [];
 
-    const pendingTransfersList = this.transfers.filter(t => t.status === "PENDIENTE");
+    const pendingTransfersList = this.transfers.filter(t => t.status === "PENDING");
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
-    const currentActiveSeasonName = DataStore.getActiveSeason() || "2026";
+    const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
 
-    if (["JUGADOR", "INVITADO"].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
+    if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
       this.activeTab = "requests";
     }
 
-    const myAssignedTeamIds = this.userTeamAssignments[currentUserEmail] || [];
-    const allowedSelectableTeams = (effectiveRole === "SUPERADMIN")
-      ? realTeams 
-      : realTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+    const allowedSelectableTeams = realTeams;
 
-    const visibleProfiles = (effectiveRole === "SUPERADMIN")
-      ? this.profilesList 
-      : this.profilesList.filter(p => p.role !== "SUPERADMIN");
+    const visibleProfiles = this.profilesList;
 
     const canModifyActiveRole = this._can("MODIFY_ACTIVE_ROLE");
 
@@ -420,8 +766,11 @@ export class TranslationsView {
                 <option value="ADMIN" ${effectiveRole === 'ADMIN' ? 'selected' : ''}>🔑 Admin Club</option>
                 <option value="ENTRENADOR" ${effectiveRole === 'ENTRENADOR' ? 'selected' : ''}>📋 Entrenador</option>
                 <option value="ANALISTA" ${effectiveRole === 'ANALISTA' ? 'selected' : ''}>📈 Analista</option>
+                <option value="PREPARADOR_FISICO" ${effectiveRole === 'PREPARADOR_FISICO' ? 'selected' : ''}>💪 Preparador físico</option>
                 <option value="JUGADOR" ${effectiveRole === 'JUGADOR' ? 'selected' : ''}>👤 Jugador</option>
-                <option value="INVITADO" ${effectiveRole === 'INVITADO' ? 'selected' : ''}>👁️ Invitado (Demo)</option>
+                <option value="FAMILIA_TUTOR" ${effectiveRole === 'FAMILIA_TUTOR' ? 'selected' : ''}>👪 Familia / Tutor</option>
+                <option value="VISOR" ${effectiveRole === 'VISOR' ? 'selected' : ''}>👁️ Visor</option>
+                <option value="INVITADO" ${effectiveRole === 'INVITADO' ? 'selected' : ''}>🧪 Invitado (Demo)</option>
               </select>
             </div>
           </div>
@@ -450,7 +799,7 @@ export class TranslationsView {
 
           ${this._can("VIEW_TAB_SEASONS") ? `
             <button class="tab-btn ${this.activeTab === 'seasons' ? 'active' : ''}" data-tab="seasons">
-              📅 ${this.t("tab_seasons", "Temporadas")} (${this.seasonsList.length})
+              📅 ${this.t("tab_seasons", "Temporadas")} (${this.seasonManagementView.state?.seasons?.length ?? this.seasonsList.length})
             </button>
           ` : ''}
 
@@ -502,7 +851,21 @@ export class TranslationsView {
                   <div class="form-group">
                     <label>Temporada en Pantalla</label>
                     <select id="select-guest-active-season">
-                      ${this.seasonsList.map(s => `<option value="${s.name}" ${String(s.name) === String(currentActiveSeasonName) ? 'selected' : ''}>${s.name}</option>`).join("")}
+                      ${requestSeasonContexts.length > 0
+                        ? requestSeasonContexts.map(s => {
+                            const value = s.team_season_id || s.teamSeasonId || s.name;
+                            const rawLabel = String(s.name || "");
+                            const match = rawLabel.match(/^(\\d{4})\\s*[-\\/]\\s*(\\d{4})$/);
+                            const label = match ? `${match[1]}/${match[2]}` : rawLabel;
+                            const activeValue = currentActiveSeasonContext?.team_season_id
+                              || currentActiveSeasonContext?.teamSeasonId
+                              || currentActiveSeasonContext?.name
+                              || currentActiveSeasonName;
+                            const selected = String(value) === String(activeValue)
+                              || String(label) === String(currentActiveSeasonName);
+                            return `<option value="${value}" ${selected ? 'selected' : ''}>${label}</option>`;
+                          }).join("")
+                        : `<option value="" disabled selected>Sin temporadas vinculadas</option>`}
                     </select>
                   </div>
                 </div>
@@ -527,13 +890,13 @@ export class TranslationsView {
                       </tr>
                     </thead>
                     <tbody>
-                      ${realTeams.length > 0 ? realTeams.map(team => {
+                      ${directoryTeams.length > 0 ? directoryTeams.map(team => {
                         const existingReq = this.joinRequests.find(r => r.userEmail === currentUserEmail && String(r.teamId) === String(team.id));
                         const isAlreadyAssigned = myAssignedTeamIds.includes(String(team.id));
 
                         return `
                           <tr>
-                            <td><strong>${team.name}</strong></td>
+                            <td><strong>${team.name}</strong>${team.club_name ? `<div style="font-size:10px;color:#64748b;">${team.club_name}</div>` : ''}</td>
                             <td><span class="badge-category">${team.category || 'General'}</span></td>
                             <td>${team.competition || 'Oficial'}</td>
                             <td>
@@ -573,7 +936,7 @@ export class TranslationsView {
                   <div class="card-title"><span>👑</span> CREAR UN NUEVO CLUB (EXCLUSIVO SUPERADMIN)</div>
                   <form id="form-create-club" class="grid-2-cols">
                     <div class="form-group"><label>Nombre del Club *</label><input type="text" id="club-new-name" placeholder="Ej. CB Sants" required /></div>
-                    <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
+                    <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="club-new-coordinator" placeholder="Ej. Marc Soler" /></div>
                     <div class="form-group"><label>Teléfono</label><input type="text" id="club-new-phone" placeholder="Ej. +34 600 000 000" /></div>
                     <div class="form-group"><label>Dirección</label><input type="text" id="club-new-address" placeholder="Ej. Av. de Roma 12" /></div>
                     <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Club</button></div>
@@ -589,7 +952,7 @@ export class TranslationsView {
                     <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="team-new-name" placeholder="Ej. Mini Femení B" required /></div>
                     <div class="form-group"><label>Categoría *</label><input type="text" id="team-new-category" placeholder="Ej. Mini / Alevín" required /></div>
                     <div class="form-group"><label>Competición *</label><input type="text" id="team-new-competition" placeholder="Ej. B1 / Preferente" required /></div>
-                    <div class="form-group"><label>Entrenador Principal *</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" required /></div>
+                    <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="team-new-coach" placeholder="Ej. Teo Raichman" /></div>
                     <div class="form-group"><label>Color Principal</label><input type="color" id="team-new-color" value="#ea580c" style="width: 100%; height: 38px; border: none; cursor: pointer;" /></div>
                     <div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">+ Crear Equipo Completo</button></div>
                   </form>
@@ -601,7 +964,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Nombre del Club</th><th>Coordinador</th><th>Teléfono</th><th>Dirección</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${c.coordinator_name || 'No asignado'}</td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
+                    <tbody>${realClubs.length > 0 ? realClubs.map(c => `<tr><td><strong>${c.name || 'Sin Nombre'}</strong></td><td>${DataStore.getClubCoordinator?.(c.id, currentActiveSeasonName) || c.coordinator_name || 'No asignado'}<div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${c.phone || '-'}</td><td>${c.address || '-'}</td><td style="text-align: right;"><button type="button" class="btn-edit-club btn-outline-sm" data-id="${c.id}">✏️ Editar Club</button></td></tr>`).join("") : `<tr><td colspan="5" style="text-align: center; color: #64748b;">No hay clubs registrados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -611,7 +974,7 @@ export class TranslationsView {
                 <div class="table-responsive">
                   <table class="data-table">
                     <thead><tr><th>Club</th><th>Equipo</th><th>Categoría</th><th>Entrenador</th><th>Estado</th><th style="text-align: right;">Acción</th></tr></thead>
-                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${t.coach_name || t.coach || 'Por definir'}</strong></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
+                    <tbody>${allowedSelectableTeams.length > 0 ? allowedSelectableTeams.map(t => { const isTeamActive = String(t.id).trim().toLowerCase() === String(activeTeamId).trim().toLowerCase(); return `<tr class="${isTeamActive ? 'active-team-row' : ''}"><td><strong>${t.clubName || 'Club'}</strong></td><td>${t.name}</td><td><span class="badge-category">${t.category || '-'}</span></td><td><strong>${DataStore.getTeamCoach?.(t.id, currentActiveSeasonName) || t.coach_name || t.coach || 'Por definir'}</strong><div style="font-size:10px;color:#94a3b8;">${currentActiveSeasonName}</div></td><td>${isTeamActive ? `<span class="badge-active-team">🟢 Activo Actual</span>` : `<button type="button" class="btn-set-active-team btn-outline-sm" data-id="${t.id}">Activar</button>`}</td><td style="text-align: right;"><button type="button" class="btn-edit-team btn-secondary-sm" data-id="${t.id}">⚙️ Configurar</button></td></tr>`; }).join("") : `<tr><td colspan="6" style="text-align: center; color: #64748b;">No hay equipos registrados asignados.</td></tr>`}</tbody>
                   </table>
                 </div>
               </div>
@@ -629,7 +992,7 @@ export class TranslationsView {
                   <div class="form-group"><label>Nombre del Equipo *</label><input type="text" id="edit-team-name" value="${this.selectedTeamForEdit?.name || ''}" ${isReadOnly ? 'disabled' : ''} required /></div>
                   <div class="form-group"><label>Categoría</label><input type="text" id="edit-team-category" value="${this.selectedTeamForEdit?.category || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Competición</label><input type="text" id="edit-team-competition" value="${this.selectedTeamForEdit?.competition || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
-                  <div class="form-group"><label>Entrenador Principal</label><input type="text" id="edit-team-coach" value="${this.selectedTeamForEdit?.coach_name || this.selectedTeamForEdit?.coach || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Entrenador Principal · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-team-coach" value="${DataStore.getTeamCoach?.(this.selectedTeamForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Color Principal</label><input type="color" id="edit-team-color" value="${this.selectedTeamForEdit?.color || '#ea580c'}" style="width: 100%; height: 38px; border: none; cursor: pointer;" ${isReadOnly ? 'disabled' : ''} /></div>
                   ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Cambios Equipo</button></div>` : ''}
                 </form>
@@ -645,7 +1008,7 @@ export class TranslationsView {
 
                 <form id="form-edit-club" class="grid-2-cols">
                   <div class="form-group"><label>Nombre del Club *</label><input type="text" id="edit-club-name" value="${this.selectedClubForEdit?.name || ''}" ${!this._can("MANAGE_CLUB_DATA") ? 'disabled' : ''} required /></div>
-                  <div class="form-group"><label>Nombre del Coordinador</label><input type="text" id="edit-club-coordinator" value="${this.selectedClubForEdit?.coordinator_name || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
+                  <div class="form-group"><label>Coordinador · temporada ${currentActiveSeasonName}</label><input type="text" id="edit-club-coordinator" value="${DataStore.getClubCoordinator?.(this.selectedClubForEdit?.id, currentActiveSeasonName) || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Teléfono</label><input type="text" id="edit-club-phone" value="${this.selectedClubForEdit?.phone || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   <div class="form-group"><label>Dirección</label><input type="text" id="edit-club-address" value="${this.selectedClubForEdit?.address || ''}" ${isReadOnly ? 'disabled' : ''} /></div>
                   ${!isReadOnly ? `<div style="grid-column: 1 / -1; text-align: right;"><button type="submit" class="btn-primary">💾 Guardar Datos del Club</button></div>` : ''}
@@ -664,14 +1027,16 @@ export class TranslationsView {
                   <div class="card-title" style="color: #b45309;"><span>📩</span> SOLICITUDES DE TRASPASO PENDIENTES (${pendingTransfersList.length})</div>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead><tr><th>Jugador</th><th>Equipo Solicitante</th><th style="text-align: right;">Acciones</th></tr></thead>
+                      <thead><tr><th>Jugador</th><th>Origen</th><th>Destino</th><th style="text-align: right;">Acciones</th></tr></thead>
                       <tbody>
                         ${pendingTransfersList.map(tr => {
+                          const originTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.originTeamId).toLowerCase());
                           const targetTeam = realTeams.find(t => String(t.id).toLowerCase() === String(tr.targetTeamId).toLowerCase());
                           return `
                             <tr>
                               <td><strong>${tr.playerName}</strong></td>
-                              <td><span class="badge-category">${targetTeam ? targetTeam.name : 'Nuevo Equipo'}</span></td>
+                              <td><span class="badge-category">${originTeam ? originTeam.name : 'Equipo origen'}</span></td>
+                              <td><span class="badge-active-team">${targetTeam ? targetTeam.name : 'Equipo destino'}</span></td>
                               <td style="text-align: right; display: flex; justify-content: flex-end; gap: 8px;">
                                 <button type="button" class="btn-approve-transfer btn-secondary-sm" data-id="${tr.id}" data-player-id="${tr.playerId}" data-target-team="${tr.targetTeamId}" style="background: #16a34a; color: white;">🟢 Aprobar Traspaso</button>
                                 <button type="button" class="btn-reject-transfer btn-danger-sm" data-id="${tr.id}">🔴 Rechazar</button>
@@ -686,6 +1051,7 @@ export class TranslationsView {
               ` : ''}
 
               <!-- BOTÓN PARA ABRIR SUBPANTALLA DEL MERCADO -->
+              ${this._can("REQUEST_TRANSFERS") && transferMarketReady ? `
               <div class="config-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
                   <h3 style="margin: 0; font-size: 15px; color: #1e3a8a; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
@@ -695,11 +1061,21 @@ export class TranslationsView {
                   🔍 Abrir Mercado / Fichar Jugador
                 </button>
               </div>
+              ` : ''}
+
+              ${this._can("REQUEST_TRANSFERS") && !transferMarketReady ? `
+                <div class="read-only-banner">
+                  ${transferRequestReady
+                    ? 'El directorio seguro del mercado todavía no está disponible. Las solicitudes existentes siguen operativas, pero las nuevas búsquedas quedan desactivadas.'
+                    : 'El backend persistente de traspasos todavía no está disponible. El mercado queda desactivado para evitar solicitudes locales no auditables.'}
+                </div>
+              ` : ''}
 
               <!-- BLOQUE DE AÑADIR JUGADOR NUEVO -->
               ${this._can("MANAGE_PLAYERS") ? `
                 <div class="config-card">
-                  <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO A LA PLANTILLA</div>
+                  <div class="card-title"><span>👥</span> AÑADIR JUGADOR NUEVO · ${rosterContextName}</div>
+                   ${!rosterBackendReady ? '<div class="read-only-banner" style="margin-bottom:12px;">La gestión histórica de plantilla está en modo lectura hasta aplicar el backend v3 de roster.</div>' : ''}
                   <form id="form-add-player" class="grid-4-cols">
                     <div class="form-group"><label>Nombre *</label><input type="text" id="add-p-name" placeholder="Ej. Pablo" required /></div>
                     <div class="form-group"><label>Apellidos *</label><input type="text" id="add-p-lastname" placeholder="Ej. García" required /></div>
@@ -710,35 +1086,95 @@ export class TranslationsView {
                         <option value="Base">Base</option><option value="Escolta">Escolta</option><option value="Alero">Alero</option><option value="Ala-pívot">Ala-pívot</option><option value="Pívot">Pívot</option>
                       </select>
                     </div>
+                    <div class="form-group">
+                      <label>Primer día elegible *</label>
+                      <input type="date" id="add-p-effective-date" value="${rosterReferenceDate || ''}" ${rosterSeasonBounds.start ? `min="${rosterSeasonBounds.start}"` : ''} ${rosterSeasonBounds.end ? `max="${rosterSeasonBounds.end}"` : ''} required />
+                    </div>
                     <div style="grid-column: 1 / -1; text-align: right;">
-                      <button type="submit" class="btn-secondary">+ Crear y Añadir a la Plantilla</button>
+                      <button type="submit" class="btn-secondary" ${rosterBackendReady && rosterTeamSeasonId ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'}>+ Crear y Añadir a la Plantilla</button>
                     </div>
                   </form>
                 </div>
               ` : ''}
 
-              <!-- JUGADORES PLANTILLA ACTIVA -->
+              <!-- JUGADORES PLANTILLA DE LA TEMPORADA ACTIVA -->
               <div class="config-card">
-                <div class="card-title"><span>📋</span> JUGADORES EN TU PLANTILLA ACTIVA (${players.length})</div>
+                <div class="card-title"><span>📋</span> PLANTILLA ${rosterContextName} · ${rosterReferenceDate} (${players.length})</div>
+                ${this.rosterState && !this.rosterState.persisted ? `
+                  <div style="font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;margin-bottom:12px;">
+                    Esta temporada parte de la plantilla anterior como base. El primer cambio la guardará como plantilla independiente.
+                  </div>
+                ` : ''}
                 <div class="players-grid">
                   ${players.length > 0 ? players.map(p => `
                     <div class="player-card ${p.status === 'TRASPASADO' ? 'player-transferred' : ''}">
                       <div>
                         <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
                         <div style="font-size: 11px; color: #64748b;">
-                          ${p.primary_position || p.position || 'Jugador'} • ${p.status === 'TRASPASADO' ? '⚠️ Traspasado (Histórico)' : 'Activo'}
+                          ${p.primary_position || p.position || 'Jugador'} • ${p.rosterCurrentFrom ? `Elegible desde ${p.rosterCurrentFrom}` : (p.rosterInherited ? 'Base heredada' : 'Activo en esta temporada')}
                         </div>
                       </div>
-                      ${this._can("MANAGE_PLAYERS") ? `<button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>` : ''}
+                      ${this._can("MANAGE_PLAYERS") ? `
+                        <div class="player-card-actions">
+                          <button type="button" class="btn-edit-player-modal btn-edit-link" data-id="${p.id}">✏️ Editar</button>
+                          <button type="button" class="btn-remove-player-season btn-danger-sm" data-id="${p.id}" ${rosterRemovalReady && rosterTeamSeasonId ? '' : 'disabled'}>
+                            Quitar
+                          </button>
+                        </div>
+                      ` : ''}
                     </div>
-                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores registrados en esta plantilla.</p>`}
+                  `).join("") : `<p style="font-size: 13px; color: #64748b; grid-column: 1/-1;">No hay jugadores en esta temporada.</p>`}
                 </div>
               </div>
 
+              ${historicalRosterPlayers.length > 0 ? `
+                <div class="config-card">
+                  <div class="card-title"><span>🕘</span> HISTÓRICO DE PLANTILLA · ${rosterContextName} (${historicalRosterPlayers.length})</div>
+                  <div style="font-size:11px;color:#64748b;margin:-6px 0 12px;">
+                    Jugadores que participaron en esta temporada pero no están elegibles en la fecha de referencia ${rosterReferenceDate}.
+                  </div>
+                  <div class="players-grid">
+                    ${historicalRosterPlayers.map(p => `
+                      <div class="player-card player-transferred">
+                        <div>
+                          <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+                          <div style="font-size:11px;color:#64748b;">
+                            ${p.primary_position || p.position || 'Jugador'} · ${formatRosterIntervals(p)}
+                          </div>
+                        </div>
+                        ${this._can("MANAGE_PLAYERS") && rosterBackendReady ? `
+                          <button type="button" class="btn-reactivate-player-season btn-secondary-sm" data-id="${p.id}">
+                            + Reincorporar
+                          </button>
+                        ` : ''}
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ''}
+
+              ${availableRosterPlayers.length > 0 && this._can("MANAGE_PLAYERS") ? `
+                <div class="config-card">
+                  <div class="card-title"><span>↩️</span> JUGADORES DEL EQUIPO FUERA DE ${rosterContextName}</div>
+                  <div class="players-grid">
+                    ${availableRosterPlayers.map(p => `
+                      <div class="player-card">
+                        <div>
+                          <strong>#${p.jersey ?? p.number ?? '?'} ${p.first_name || ''} ${p.last_name || ''}</strong>
+                          <div style="font-size:11px;color:#64748b;">${p.primary_position || p.position || 'Jugador'} · No inscrito en esta temporada</div>
+                        </div>
+                        <button type="button" class="btn-reactivate-player-season btn-secondary-sm" data-id="${p.id}">
+                          + Añadir
+                        </button>
+                      </div>
+                    `).join("")}
+                  </div>
+                </div>
+              ` : ''}
               <!-- MODAL DE EDICIÓN DE JUGADOR -->
-              <div id="modal-edit-player" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 500px; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-edit-player" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-sm">
+                  <div class="iq-modal-header">
                     <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">✏️ Editar Datos del Jugador</h3>
                     <button type="button" id="btn-close-edit-player-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
                   </div>
@@ -755,29 +1191,32 @@ export class TranslationsView {
                       </select>
                     </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
-                      <label>Estado del Jugador</label>
+                      <label>Estado general del jugador</label>
                       <select id="edit-p-status" ${isReadOnly ? 'disabled' : ''}>
                         <option value="Activo">Activo</option>
                         <option value="Lesionado">Lesionado</option>
                         <option value="Inactivo">Inactivo</option>
-                        <option value="TRASPASADO">Traspasado (Histórico)</option>
+                        <option value="TRASPASADO">Traspasado (estado legacy)</option>
                       </select>
+                      <small style="font-size:10px;color:#64748b;line-height:1.35;">
+                        Este estado descriptivo no cambia la elegibilidad por temporada. Para dar de baja o reincorporar al jugador utiliza «Quitar» / «Reincorporar», que conservan el historial por fechas.
+                      </small>
                     </div>
                     <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                       <button type="button" id="btn-cancel-edit-player" class="btn-outline-sm">Cancelar</button>
-                      ${!isReadOnly ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
+                      ${!isReadOnly && rosterBackendReady && rosterTeamSeasonId ? `<button type="submit" class="btn-primary">💾 Guardar Cambios</button>` : ''}
                     </div>
                   </form>
                 </div>
               </div>
 
               <!-- SUBPANTALLA / MODAL DEL MERCADO GLOBAL -->
-              <div id="modal-market-global" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 850px; max-height: 90vh; overflow-y: auto; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-market-global" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-lg">
+                  <div class="iq-modal-header">
                     <div>
                       <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">🔄 Mercado de Fichajes Global</h3>
-                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Mostrando todos los jugadores registrados en la base de datos de Supabase.</p>
+                      <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Solo se muestran jugadores con un periodo activo en otro equipo de la misma temporada. No se exponen datos privados de otros equipos.</p>
                     </div>
                     <button type="button" id="btn-close-market-modal" class="btn-outline-sm" style="font-size: 16px; padding: 4px 10px;">✕</button>
                   </div>
@@ -850,16 +1289,19 @@ export class TranslationsView {
                   <div class="form-group">
                     <label>Rol Asignado *</label>
                     <select id="new-user-role">
-                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="SUPERADMIN">Superadmin</option><option value="ADMIN">Administrador de Club</option>` : ''}
+                      ${this._can("ASSIGN_ADMIN_ROLE") ? `<option value="ADMIN">Administrador de Club</option>` : ''}
                       <option value="ENTRENADOR" selected>Entrenador</option>
                       <option value="ANALISTA">Analista</option>
+                      <option value="PREPARADOR_FISICO">Preparador físico</option>
                       <option value="JUGADOR">Jugador</option>
-                      <option value="INVITADO">Invitado (Solo Lectura)</option>
+                      <option value="FAMILIA_TUTOR">Familia / Tutor</option>
+                      <option value="VISOR">Visor (Solo Lectura)</option>
+                      <option value="INVITADO">Invitado (Demo)</option>
                     </select>
                   </div>
                   <div class="form-group">
                     <label>🔑 Contraseña Temporal *</label>
-                    <input type="text" id="new-user-pass" value="BasketIQ2026" required />
+                    <input type="password" id="new-user-pass" placeholder="Contraseña temporal segura" autocomplete="new-password" required />
                   </div>
                   <div style="grid-column: 1 / -1; text-align: right;">
                     <button type="submit" id="btn-submit-create-user" class="btn-primary">✉️ Dar de Alta e Invitar Usuario</button>
@@ -888,6 +1330,9 @@ export class TranslationsView {
                           .map(t => t.name);
 
                         const userHasPending = this.joinRequests.some(r => r.userEmail === prof.email && r.status === 'PENDIENTE');
+                        const isUniqueSuperadmin = String(prof.email || "").toLowerCase() === UNIQUE_SUPERADMIN_EMAIL;
+                        const isProtectedAdmin = prof.role === UserRole.ADMIN && !this._can("ASSIGN_ADMIN_ROLE");
+                        const roleSelectDisabled = isUniqueSuperadmin || isProtectedAdmin;
 
                         return `
                           <tr>
@@ -897,24 +1342,29 @@ export class TranslationsView {
                             </td>
                             <td>${prof.email || '-'}</td>
                             <td>
-                              <select class="select-user-role" data-id="${prof.id}" ${(!this._can("ASSIGN_ADMIN_ROLE") && prof.role === 'SUPERADMIN') ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
-                                ${effectiveRole === 'SUPERADMIN' ? `<option value="SUPERADMIN" ${prof.role === 'SUPERADMIN' ? 'selected' : ''}>Superadmin</option>` : ''}
-                                <option value="ADMIN" ${prof.role === 'ADMIN' ? 'selected' : ''}>Administrador de Club</option>
-                                <option value="ENTRENADOR" ${prof.role === 'ENTRENADOR' ? 'selected' : ''}>Entrenador</option>
-                                <option value="ANALISTA" ${prof.role === 'ANALISTA' ? 'selected' : ''}>Analista</option>
-                                <option value="JUGADOR" ${prof.role === 'JUGADOR' ? 'selected' : ''}>Jugador</option>
-                                <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Solo Lectura)</option>
+                              <select class="select-user-role" data-id="${prof.id}" ${roleSelectDisabled ? 'disabled' : ''} style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+                                ${isUniqueSuperadmin ? `<option value="SUPERADMIN" selected>Superadmin único</option>` : ''}
+                                ${!isUniqueSuperadmin && this._can("ASSIGN_ADMIN_ROLE") ? `<option value="ADMIN" ${prof.role === 'ADMIN' ? 'selected' : ''}>Administrador de Club</option>` : ''}
+                                ${!isUniqueSuperadmin ? `
+                                  <option value="ENTRENADOR" ${prof.role === 'ENTRENADOR' ? 'selected' : ''}>Entrenador</option>
+                                  <option value="ANALISTA" ${['ANALISTA','SCOUT'].includes(prof.role) ? 'selected' : ''}>Analista</option>
+                                  <option value="PREPARADOR_FISICO" ${prof.role === 'PREPARADOR_FISICO' ? 'selected' : ''}>Preparador físico</option>
+                                  <option value="JUGADOR" ${prof.role === 'JUGADOR' ? 'selected' : ''}>Jugador</option>
+                                  <option value="FAMILIA_TUTOR" ${prof.role === 'FAMILIA_TUTOR' ? 'selected' : ''}>Familia / Tutor</option>
+                                  <option value="VISOR" ${['VISOR','VIEWER'].includes(prof.role) ? 'selected' : ''}>Visor</option>
+                                  <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Demo)</option>
+                                ` : ''}
                               </select>
                             </td>
                             <td>
-                              ${prof.role === 'SUPERADMIN' 
+                              ${isUniqueSuperadmin
                                 ? '<span class="badge-active-team">🌍 Todos los Equipos</span>' 
                                 : (assignedTeamNames.length > 0 
                                     ? `<span class="badge-category">${assignedTeamNames.join(', ')}</span>` 
                                     : '<span class="badge-inactive">Sin Equipos</span>')}
                             </td>
                             <td style="text-align: right; display: flex; justify-content: flex-end; gap: 6px;">
-                              <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}" title="Guardar Rol">💾 Guardar Rol</button>
+                              <button type="button" class="btn-save-user-role btn-secondary-sm" data-id="${prof.id}" title="Guardar Rol" ${roleSelectDisabled ? 'disabled style="opacity:.5;cursor:not-allowed;"' : ''}>💾 Guardar Rol</button>
                               <button type="button" class="btn-open-user-card btn-outline-sm" data-email="${prof.email}">📇 Ver Ficha / Equipos</button>
                             </td>
                           </tr>
@@ -926,9 +1376,9 @@ export class TranslationsView {
               </div>
 
               <!-- MODAL FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO -->
-              <div id="modal-user-card" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
-                <div class="config-card" style="width: 100%; max-width: 600px; margin: 20px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div id="modal-user-card" class="iq-modal-overlay" style="display:none;">
+                <div class="config-card iq-modal-card iq-modal-card-md">
+                  <div class="iq-modal-header">
                     <h3 style="margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 800;">📇 FICHA TÉCNICA Y ASIGNACIÓN DE EQUIPOS</h3>
                     <button type="button" id="btn-close-user-card-modal" class="btn-outline-sm" style="font-size: 14px;">✕</button>
                   </div>
@@ -940,57 +1390,13 @@ export class TranslationsView {
             </div>
           ` : ''}
 
-          <!-- PESTAÑA 4: TEMPORADAS -->
-          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS") ? `
-            <div class="config-card">
-              <div class="card-title"><span>📅</span> TEMPORADAS REGISTRADAS EN SUPABASE (${this.seasonsList.length})</div>
-
-              ${this._can("CREATE_SEASON") ? `
-                <form id="form-create-season" class="grid-inline" style="margin-bottom: 20px;">
-                  <div class="form-group" style="flex: 2;">
-                    <label>Nombre de la Nueva Temporada *</label>
-                    <input type="text" id="input-new-season-name" placeholder="Ej. 2026 o 2026/2027" required />
-                  </div>
-                  <div style="align-self: flex-end;">
-                    <button type="submit" class="btn-primary">+ Añadir Temporada</button>
-                  </div>
-                </form>
-              ` : ''}
-
-              <div class="seasons-list" style="display: flex; flex-direction: column; gap: 10px;">
-                ${this.seasonsList.length > 0 ? this.seasonsList.map(s => {
-                  const sNameClean = String(s.name).trim();
-                  const activeClean = String(currentActiveSeasonName).trim();
-                  const isSeasonActive = sNameClean === activeClean || activeClean.includes(sNameClean) || sNameClean.includes(activeClean);
-
-                  return `
-                    <div class="season-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-                      <div style="display: flex; align-items: center; gap: 10px; flex: 1; max-width: 380px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #475569;">Temporada:</span>
-                        <input type="text" class="input-season-edit" data-id="${s.id}" value="${s.name}" ${isReadOnly ? 'disabled' : ''} style="font-weight: 800; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;" />
-                      </div>
-
-                      <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="${isSeasonActive ? 'badge-active-team' : 'badge-inactive'}">
-                          ${isSeasonActive ? '🟢 Activa' : '⚪ Inactiva'}
-                        </span>
-
-                        ${!isReadOnly ? `
-                          <button type="button" class="btn-save-season-name btn-secondary-sm" data-id="${s.id}">💾 Guardar Nombre</button>
-                        ` : ''}
-
-                        ${!isSeasonActive ? `<button type="button" class="btn-activate-season btn-outline-sm" data-id="${s.id}" data-name="${s.name}">Activar</button>` : ''}
-
-                        ${this._can("DELETE_SEASON") ? `
-                          <button type="button" class="btn-delete-season btn-danger-sm" data-id="${s.id}" title="Eliminar Temporada">🗑️</button>
-                        ` : ''}
-                      </div>
-                    </div>
-                  `;
-                }).join("") : `<p style="font-size: 13px; color: #64748b;">No hay temporadas registradas en Supabase.</p>`}
-              </div>
-            </div>
-          ` : ''}
+          <!-- PESTAÑA 4: TEMPORADAS V3 -->
+          ${this.activeTab === 'seasons' && this._can("VIEW_TAB_SEASONS")
+            ? this.seasonManagementView.renderMarkup({
+                activeTeamId,
+                canManage: this._can("CREATE_SEASON")
+              })
+            : ''}
 
           <!-- PESTAÑA 5: IDIOMAS Y TRADUCCIONES (SUPERADMIN) -->
           ${this.activeTab === 'translations' && this._can("VIEW_TAB_TRANSLATIONS") ? `
@@ -1012,8 +1418,11 @@ export class TranslationsView {
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ADMIN" style="padding: 14px; text-align: left; font-weight: 800;">🔑 Simular ADMIN CLUB</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ENTRENADOR" style="padding: 14px; text-align: left; font-weight: 800;">📋 Simular ENTRENADOR</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="ANALISTA" style="padding: 14px; text-align: left; font-weight: 800;">📈 Simular ANALISTA</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="PREPARADOR_FISICO" style="padding: 14px; text-align: left; font-weight: 800;">💪 Simular PREPARADOR FÍSICO</button>
                 <button type="button" class="btn-simulate-role btn-outline-sm" data-role="JUGADOR" style="padding: 14px; text-align: left; font-weight: 800;">👤 Simular JUGADOR</button>
-                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular INVITADO (Demo)</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="FAMILIA_TUTOR" style="padding: 14px; text-align: left; font-weight: 800;">👪 Simular FAMILIA / TUTOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="VISOR" style="padding: 14px; text-align: left; font-weight: 800;">👁️ Simular VISOR</button>
+                <button type="button" class="btn-simulate-role btn-outline-sm" data-role="INVITADO" style="padding: 14px; text-align: left; font-weight: 800;">🧪 Simular INVITADO (Demo)</button>
               </div>
 
               ${this.simulatedRole ? `
@@ -1074,10 +1483,61 @@ export class TranslationsView {
         .badge-inactive { background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
 
         .players-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        .player-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .player-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .player-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+        .iq-modal-overlay {
+          position: fixed;
+          inset: 0;
+          width: 100%;
+          height: 100dvh;
+          box-sizing: border-box;
+          background: rgba(15, 23, 42, 0.75);
+          backdrop-filter: blur(4px);
+          z-index: 10020;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          align-items: flex-start;
+          justify-content: center;
+          padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(12px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+        }
+        .iq-modal-card {
+          width: 100%;
+          max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          box-sizing: border-box;
+          margin: auto 0;
+        }
+        .iq-modal-card-sm { max-width: 500px; }
+        .iq-modal-card-md { max-width: 600px; }
+        .iq-modal-card-lg { max-width: 850px; }
+        .iq-modal-header {
+          position: sticky;
+          top: -20px;
+          z-index: 2;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          margin: -4px -4px 16px;
+          padding: 4px 4px 10px;
+          background: white;
+          border-bottom: 1px solid #f1f5f9;
+        }
 
         @media (max-width: 868px) {
           .grid-2-cols, .grid-4-cols, .players-grid { grid-template-columns: 1fr !important; }
+          .player-card { align-items: flex-start; flex-wrap: wrap; }
+          .player-card-actions { width: 100%; justify-content: flex-start; }
+          .iq-modal-card { margin: 0; max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 14px; }
+          .iq-modal-header { top: -14px; margin: -2px -2px 12px; padding-top: 2px; }
         }
       </style>
     `;
@@ -1105,6 +1565,7 @@ export class TranslationsView {
     if (formCreateClub) {
       formCreateClub.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!this._canReal("CREATE_CLUB")) return alert("⚠️ Solo el Superadmin puede crear clubes.");
         const name = container.querySelector("#club-new-name")?.value.trim();
         const coordinator = container.querySelector("#club-new-coordinator")?.value.trim();
         const phone = container.querySelector("#club-new-phone")?.value.trim();
@@ -1123,6 +1584,15 @@ export class TranslationsView {
           }]).select().single();
 
           if (error) throw error;
+
+          if (coordinator !== undefined) {
+            await this._saveStaffAssignment({
+              clubId: data.id,
+              seasonName: currentActiveSeasonName,
+              role: StaffRole.COORDINATOR,
+              staffName: coordinator
+            });
+          }
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1150,6 +1620,7 @@ export class TranslationsView {
         const color = container.querySelector("#team-new-color")?.value || "#ea580c";
 
         if (!name || !clubId) return alert("Introduce los campos obligatorios del equipo.");
+        if (!this.auth?.can?.(Permission.MANAGE_TEAMS, { clubId })) return alert("⚠️ No tienes permiso para crear equipos en este club.");
 
         this.showSyncOverlay("⚡ Creando nuevo equipo en Supabase...");
         try {
@@ -1164,6 +1635,14 @@ export class TranslationsView {
           }]).select().single();
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId,
+            teamId: data.id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.HEAD_COACH,
+            staffName: coach
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(data.id, true);
@@ -1215,15 +1694,24 @@ export class TranslationsView {
         const competition = container.querySelector("#edit-team-competition")?.value.trim();
         const coach = container.querySelector("#edit-team-coach")?.value.trim();
         const color = container.querySelector("#edit-team-color")?.value;
+        if (!this.auth?.can?.(Permission.MANAGE_TEAMS, { teamId: id })) return alert("⚠️ No tienes permiso para modificar este equipo.");
 
         this.showSyncOverlay("💾 Actualizando equipo en Supabase...");
         try {
           if (!supabase) throw new Error("Supabase no configurado");
           const { error } = await supabase.from("teams").update({
-            name, category, competition, coach_name: coach, color
+            name, category, competition, color
           }).eq("id", id);
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId: this.selectedTeamForEdit?.club_id || this.selectedTeamForEdit?.clubId || null,
+            teamId: id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.HEAD_COACH,
+            staffName: coach
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1249,15 +1737,23 @@ export class TranslationsView {
         const coordinator = container.querySelector("#edit-club-coordinator")?.value.trim();
         const phone = container.querySelector("#edit-club-phone")?.value.trim();
         const address = container.querySelector("#edit-club-address")?.value.trim();
+        if (!this.auth?.can?.(Permission.MANAGE_CLUBS, { clubId: id })) return alert("⚠️ No tienes permiso para modificar este club.");
 
         this.showSyncOverlay("💾 Actualizando club en Supabase...");
         try {
           if (!supabase) throw new Error("Supabase no configurado");
           const { error } = await supabase.from("clubs").update({
-            name, coordinator_name: coordinator, phone, address
+            name, phone, address
           }).eq("id", id);
 
           if (error) throw error;
+
+          await this._saveStaffAssignment({
+            clubId: id,
+            seasonName: currentActiveSeasonName,
+            role: StaffRole.COORDINATOR,
+            staffName: coordinator
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1282,22 +1778,31 @@ export class TranslationsView {
         const lastName = container.querySelector("#add-p-lastname")?.value.trim();
         const jersey = Number(container.querySelector("#add-p-number")?.value || 0);
         const position = container.querySelector("#add-p-position")?.value || "Alero";
+        const effectiveDate = normalizeIsoDate(
+          container.querySelector("#add-p-effective-date")?.value
+        );
 
         if (!firstName || !lastName) return alert("Introduce nombre y apellidos del jugador.");
+        if (!effectiveDate) return alert("Indica el primer día en que el jugador será elegible.");
+        if (!isDateInsideSeason(effectiveDate, rosterSeasonContext)) {
+          return alert("⚠️ El primer día elegible debe estar dentro de las fechas de la temporada.");
+        }
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para añadir jugadores a esta plantilla.");
 
-        this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla en Supabase...");
+        this.showSyncOverlay("⚡ Añadiendo jugador a la plantilla de la temporada...");
         try {
-          if (!supabase) throw new Error("Supabase no configurado");
-          const { error } = await supabase.from("players").insert([{
-            team_id: activeTeamId,
-            first_name: firstName,
-            last_name: lastName,
-            jersey: jersey,
-            primary_position: position,
-            status: "Activo"
-          }]);
+          if (!rosterBackendReady || !rosterTeamSeasonId) {
+            throw new Error("La gestión de plantilla por temporada todavía no está disponible.");
+          }
 
-          if (error) throw error;
+          await this.rosterManagementService.createPlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            firstName,
+            lastName,
+            jersey,
+            primaryPosition: position,
+            effectiveDate
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1348,19 +1853,28 @@ export class TranslationsView {
         const jersey = Number(container.querySelector("#edit-p-number")?.value || 0);
         const position = container.querySelector("#edit-p-position")?.value;
         const status = container.querySelector("#edit-p-status")?.value;
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
 
-        this.showSyncOverlay("💾 Guardando cambios del jugador en Supabase...");
+        this.showSyncOverlay("💾 Guardando cambios del jugador...");
         try {
-          if (!supabase) throw new Error("Supabase no configurado");
-          const { error } = await supabase.from("players").update({
+          if (!rosterBackendReady || !rosterTeamSeasonId) {
+            throw new Error("La edición de plantilla por temporada todavía no está disponible.");
+          }
+          await DataStore.updatePlayer(pId, {
             first_name: firstName,
             last_name: lastName,
-            jersey: jersey,
-            primary_position: position,
-            status: status
-          }).eq("id", pId);
+            status
+          }, Permission.EDIT_PLAYER_MASTER);
 
-          if (error) throw error;
+          if (rosterBackendReady && rosterTeamSeasonId) {
+            await this.rosterManagementService.setMember({
+              teamSeasonId: rosterTeamSeasonId,
+              playerId: pId,
+              status: "ACTIVE",
+              jersey,
+              primaryPosition: position
+            });
+          }
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
@@ -1376,16 +1890,139 @@ export class TranslationsView {
       });
     }
 
+    // 5B. ALTA/BAJA DE JUGADOR EN LA TEMPORADA ACTIVA
+    container.querySelectorAll(".btn-remove-player-season").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const playerId = btn.getAttribute("data-id");
+        const player = players.find(p => String(p.id) === String(playerId));
+        if (!player || !rosterTeamSeasonId || !rosterRemovalReady) return;
+
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, {
+          teamId: activeTeamId,
+          teamSeasonId: rosterTeamSeasonId
+        })) {
+          alert("⚠️ No tienes permiso para modificar esta plantilla.");
+          return;
+        }
+
+        const playerName = [player.first_name, player.last_name].filter(Boolean).join(" ") || player.name || "este jugador";
+        if (!confirm(
+          `Quitar a ${playerName} de ${rosterContextName}?\n\n`
+          + "Si solo fue heredado de la temporada anterior y todavía no participó, se excluirá sin crear un historial falso. "
+          + "Si ya participó, se conservarán todos sus datos y se cerrará su periodo de elegibilidad."
+        )) return;
+
+        const requestedLastDate = prompt(
+          "Último día en que el jugador puede participar en esta temporada (AAAA-MM-DD):",
+          rosterReferenceDate || ""
+        );
+        if (requestedLastDate === null) return;
+        const lastEligibleDate = normalizeIsoDate(requestedLastDate);
+        if (!lastEligibleDate) {
+          alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
+        if (!isDateInsideSeason(lastEligibleDate, rosterSeasonContext)) {
+          alert("⚠️ El último día elegible debe estar dentro de las fechas de la temporada.");
+          return;
+        }
+
+        this.showSyncOverlay("💾 Actualizando plantilla de la temporada...");
+        try {
+          await this.rosterManagementService.removePlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            playerId,
+            lastEligibleDate
+          });
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          this.hideSyncOverlay();
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error quitando jugador de temporada:", err);
+          alert(`❌ No se pudo quitar al jugador de esta temporada: ${err.message || err}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reactivate-player-season").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const playerId = btn.getAttribute("data-id");
+        if (!playerId || !rosterTeamSeasonId || !rosterBackendReady) return;
+
+        if (!this.auth?.can?.(Permission.MANAGE_ROSTER, {
+          teamId: activeTeamId,
+          teamSeasonId: rosterTeamSeasonId
+        })) {
+          alert("⚠️ No tienes permiso para modificar esta plantilla.");
+          return;
+        }
+
+        const player = [...historicalRosterPlayers, ...availableRosterPlayers]
+          .find(item => String(item.id) === String(playerId));
+        const earliestRejoinDate = player?.rosterLastUntil
+          ? shiftIsoDate(player.rosterLastUntil, 1)
+          : null;
+        const suggestedRejoinDate = maxIsoDate(rosterReferenceDate, earliestRejoinDate)
+          || rosterReferenceDate
+          || "";
+
+        const requestedFirstDate = prompt(
+          "Primer día en que el jugador puede participar en esta temporada (AAAA-MM-DD):",
+          suggestedRejoinDate
+        );
+        if (requestedFirstDate === null) return;
+        const firstEligibleDate = normalizeIsoDate(requestedFirstDate);
+        if (!firstEligibleDate) {
+          alert("⚠️ Introduce una fecha válida con formato AAAA-MM-DD.");
+          return;
+        }
+        if (!isDateInsideSeason(firstEligibleDate, rosterSeasonContext)) {
+          alert("⚠️ El primer día elegible debe estar dentro de las fechas de la temporada.");
+          return;
+        }
+        if (player?.rosterLastUntil && firstEligibleDate <= player.rosterLastUntil) {
+          alert(`⚠️ La reincorporación debe ser posterior al último periodo cerrado (${player.rosterLastUntil}).`);
+          return;
+        }
+
+        this.showSyncOverlay("💾 Añadiendo jugador a la temporada...");
+        try {
+          await this.rosterManagementService.reactivatePlayer({
+            teamSeasonId: rosterTeamSeasonId,
+            playerId,
+            firstEligibleDate
+          });
+          DataStore.isLoaded = false;
+          await DataStore.init(activeTeamId, true);
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          this.hideSyncOverlay();
+          await this.render(containerId);
+        } catch (err) {
+          this.hideSyncOverlay();
+          console.error("Error reactivando jugador en temporada:", err);
+          alert(`❌ No se pudo añadir al jugador a esta temporada: ${err.message || err}`);
+        }
+      });
+    });
+
     // 6. MERCADO DE FICHAJES (MODAL Y TABLA)
     container.querySelector("#btn-open-market-modal")?.addEventListener("click", async () => {
-      this.showSyncOverlay("⚡ Cargando mercado global de jugadores...");
-      await this._fetchAllMarketPlayers(true);
-      this.hideSyncOverlay();
-
-      const modal = container.querySelector("#modal-market-global");
-      if (modal) {
-        modal.style.display = "flex";
-        this._renderMarketTable(container);
+      this.showSyncOverlay("⚡ Cargando jugadores elegibles de la temporada...");
+      try {
+        await this._fetchAllMarketPlayers(true);
+        const modal = container.querySelector("#modal-market-global");
+        if (modal) {
+          modal.style.display = "flex";
+          this._renderMarketTable(container);
+        }
+      } catch (error) {
+        console.error("Error cargando directorio seguro de traspasos:", error);
+        alert(`❌ No se pudo cargar el mercado de esta temporada: ${error.message || error}`);
+      } finally {
+        this.hideSyncOverlay();
       }
     });
 
@@ -1455,19 +2092,16 @@ export class TranslationsView {
       `;
 
       modalContent.querySelectorAll(".btn-approve-join-req").forEach(btn => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
+          if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) return alert("⚠️ No tienes permiso para aprobar accesos.");
           const reqId = e.currentTarget.getAttribute("data-id");
           const email = e.currentTarget.getAttribute("data-email");
           const teamId = e.currentTarget.getAttribute("data-team-id");
 
-          const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-          if (reqObj) reqObj.status = "APROBADO";
-          this._saveRequestsLocal();
-
-          if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
-          if (!this.userTeamAssignments[email].includes(String(teamId))) {
-            this.userTeamAssignments[email].push(String(teamId));
-            this._saveAssignmentsLocal();
+          try {
+            await this._reviewTeamAccess(reqId, true);
+          } catch (err) {
+            return alert(`❌ No se pudo conceder el acceso: ${err.message}`);
           }
 
           alert(`🟢 Solicitud aprobada. Se ha concedido acceso a ${email}.`);
@@ -1476,15 +2110,23 @@ export class TranslationsView {
         });
       });
 
-      modalContent.querySelector("#form-save-user-teams-assignment")?.addEventListener("submit", (e) => {
+      modalContent.querySelector("#form-save-user-teams-assignment")?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+          alert("⚠️ No tienes permiso para asignar equipos.");
+          return;
+        }
         const selectedIds = [];
         modalContent.querySelectorAll(".chk-assign-team:checked").forEach(chk => {
           selectedIds.push(chk.value);
         });
 
-        this.userTeamAssignments[userProf.email] = selectedIds;
-        this._saveAssignmentsLocal();
+        try {
+          await this._persistUserTeamAssignments(userProf.email, selectedIds);
+        } catch (err) {
+          alert(`❌ No se pudo guardar la asignación: ${err.message}`);
+          return;
+        }
 
         alert(`✅ Equipos actualizados correctamente para ${userProf.email}.`);
         container.querySelector("#modal-user-card").style.display = "none";
@@ -1499,15 +2141,16 @@ export class TranslationsView {
         const reqId = e.currentTarget.getAttribute("data-id");
         const email = e.currentTarget.getAttribute("data-email");
         const teamId = e.currentTarget.getAttribute("data-team-id");
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS, { teamId })) {
+          alert("⚠️ No tienes permiso para aprobar accesos a este equipo.");
+          return;
+        }
 
-        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-        if (reqObj) reqObj.status = "APROBADO";
-        this._saveRequestsLocal();
-
-        if (!this.userTeamAssignments[email]) this.userTeamAssignments[email] = [];
-        if (!this.userTeamAssignments[email].includes(String(teamId))) {
-          this.userTeamAssignments[email].push(String(teamId));
-          this._saveAssignmentsLocal();
+        try {
+          await this._reviewTeamAccess(reqId, true);
+        } catch (err) {
+          alert(`❌ No se pudo conceder el acceso: ${err.message}`);
+          return;
         }
 
         alert(`🟢 Solicitud aprobada. Se ha concedido acceso al equipo a ${email}.`);
@@ -1519,10 +2162,17 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         const reqId = e.currentTarget.getAttribute("data-id");
+        if (!this.auth?.can?.(Permission.APPROVE_TEAM_ACCESS)) {
+          alert("⚠️ No tienes permiso para rechazar solicitudes.");
+          return;
+        }
 
-        const reqObj = this.joinRequests.find(r => String(r.id) === String(reqId));
-        if (reqObj) reqObj.status = "RECHAZADO";
-        this._saveRequestsLocal();
+        try {
+          await this._reviewTeamAccess(reqId, false);
+        } catch (err) {
+          alert(`❌ No se pudo rechazar la solicitud: ${err.message}`);
+          return;
+        }
 
         alert("🔴 Solicitud de adhesión rechazada.");
         await this.render(containerId);
@@ -1567,31 +2217,33 @@ export class TranslationsView {
     // Selector de Temporada Activa en Pantalla (Invitado / Jugador)
     container.querySelector("#select-guest-active-season")?.addEventListener("change", async (e) => {
       const newSeason = e.target.value;
+      if (!newSeason) return;
+
+      if (typeof DataStore.setActiveTeamAndSeason === "function") {
+        DataStore.setActiveTeamAndSeason(null, newSeason);
+      }
       localStorage.setItem("iq_active_season", newSeason);
-      alert(`🟢 Temporada ${newSeason} seleccionada.`);
+      DataStore.isLoaded = false;
+      await DataStore.init(activeTeamId, true);
+
+      const label = e.target.options[e.target.selectedIndex]?.textContent || newSeason;
+      alert(`🟢 Temporada ${label} seleccionada.`);
       if (window.iqApp) await window.iqApp.render();
     });
 
     // Evento Solicitar unirse a equipo
     container.querySelectorAll(".btn-request-join-team").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         const teamId = e.currentTarget.getAttribute("data-id");
         const teamName = e.currentTarget.getAttribute("data-name");
 
-        const requestObj = {
-          id: "req-" + Date.now(),
-          userEmail: currentUserEmail,
-          teamId: teamId,
-          teamName: teamName,
-          status: "PENDIENTE",
-          date: new Date().toLocaleDateString()
-        };
-
-        this.joinRequests.push(requestObj);
-        this._saveRequestsLocal();
-
-        alert(`✉️ Solicitud enviada correctamente para unirse a ${teamName}. La solicitud ha sido notificada al Superadmin y a los Administradores.`);
-        this.render(containerId);
+        try {
+          await this._requestTeamAccess(teamId);
+          alert(`✉️ Solicitud enviada correctamente para unirse a ${teamName}. La solicitud ya es visible para los administradores autorizados y el Superadmin.`);
+          await this.render(containerId);
+        } catch (err) {
+          alert(`❌ No se pudo registrar la solicitud: ${err.message}`);
+        }
       });
     });
 
@@ -1604,11 +2256,19 @@ export class TranslationsView {
 
         const fullName = container.querySelector("#new-user-name")?.value.trim() || "";
         const email = container.querySelector("#new-user-email")?.value.trim();
-        const role = container.querySelector("#new-user-role")?.value || "ENTRENADOR";
-        const tempPassword = container.querySelector("#new-user-pass")?.value || "BasketIQ2026";
+        const role = container.querySelector("#new-user-role")?.value || UserRole.ENTRENADOR;
+        const tempPassword = container.querySelector("#new-user-pass")?.value || "";
 
         if (!fullName || !email || !tempPassword) {
           alert("⚠️ Completa los campos obligatorios para dar de alta al usuario.");
+          return;
+        }
+        if (!this.auth?.can?.(Permission.INVITE_USERS)) {
+          alert("⚠️ No tienes permiso para invitar usuarios.");
+          return;
+        }
+        if (!this.auth?.canAssignRole?.(role, email)) {
+          alert("⚠️ No tienes permiso para asignar ese rol. Solo scolado@nechigroup.com puede ser Superadmin.");
           return;
         }
 
@@ -1620,35 +2280,30 @@ export class TranslationsView {
 
         try {
           if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: email,
-            password: tempPassword,
-            options: {
-              data: {
-                first_name: firstName,
-                last_name: lastName,
-                role: role
-              }
+          const activeTeam = DataStore.getTeamById(activeTeamId);
+          const { data: functionData, error: functionError } = await supabase.functions.invoke("admin-users", {
+            body: {
+              action: "create-user",
+              email,
+              password: tempPassword,
+              firstName,
+              lastName,
+              role,
+              clubId: activeTeam?.club_id || activeTeam?.clubId || null,
+              teamIds: activeTeamId ? [activeTeamId] : []
             }
           });
 
-          if (authError) {
+          if (functionError || functionData?.error) {
             this.hideSyncOverlay();
-            alert(`❌ Error al crear cuenta en Supabase Auth: ${authError.message}`);
+            alert(`❌ Error al crear usuario: ${functionData?.error || functionError?.message || "Error desconocido"}`);
             return;
-          }
-
-          if (authData?.user) {
-            await supabase
-              .from("user_profiles")
-              .update({ role: role, first_name: firstName, last_name: lastName })
-              .eq("email", email);
           }
 
           await this._fetchProfiles();
           this.hideSyncOverlay();
 
-          alert(`✅ Usuario "${fullName}" (${role}) registrado con éxito con la contraseña temporal "${tempPassword}".`);
+          alert(`✅ Usuario "${fullName}" (${role}) registrado con éxito.`);
           await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
@@ -1667,6 +2322,17 @@ export class TranslationsView {
         if (!selectEl) return;
 
         const newRole = selectEl.value;
+        const userObj = this.profilesList.find(p => String(p.id) === String(userId));
+        const activeUserEmail = this.auth?.getCurrentUser?.()?.email || "";
+        if (!userObj) return;
+        if (String(userObj.email || "").toLowerCase() === String(activeUserEmail).toLowerCase()) {
+          alert("⚠️ No puedes modificar tu propio rol.");
+          return;
+        }
+        if (!this.auth?.canAssignRole?.(newRole, userObj.email)) {
+          alert("⚠️ No tienes permiso para asignar ese rol.");
+          return;
+        }
         this.showSyncOverlay("💾 Actualizando rol del usuario...");
 
         try {
@@ -1682,14 +2348,8 @@ export class TranslationsView {
             return;
           }
 
-          const userObj = this.profilesList.find(p => String(p.id) === String(userId));
           if (userObj) {
             userObj.role = newRole;
-            const activeUserEmail = localStorage.getItem("iq_user_email");
-            if (userObj.email === activeUserEmail) {
-              localStorage.setItem("iq_user_role", newRole);
-              localStorage.removeItem("iq_simulated_role");
-            }
           }
 
           this.hideSyncOverlay();
@@ -1708,38 +2368,130 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         const trId = e.currentTarget.getAttribute("data-id");
-        const playerId = e.currentTarget.getAttribute("data-player-id");
         const targetTeamId = e.currentTarget.getAttribute("data-target-team");
-
-        this.showSyncOverlay("⚡ Procesando y aprobando traspaso en Supabase...");
+        if (!this.auth?.can?.(Permission.APPROVE_TRANSFER, { teamId: targetTeamId })) {
+          alert("⚠️ No tienes permiso para aprobar este traspaso.");
+          return;
+        }
 
         try {
-          if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { error } = await supabase
-            .from("players")
-            .update({ team_id: targetTeamId, status: "Activo" })
-            .eq("id", playerId);
+          const [rosterCapabilities, requestCapabilities] = await Promise.all([
+            this.rosterManagementService.getCapabilities(),
+            this.transferRequestService.getCapabilities()
+          ]);
 
-          if (error) {
-            this.hideSyncOverlay();
-            alert(`❌ Error al actualizar equipo del jugador en Supabase: ${error.message}`);
-            return;
+          if (!rosterCapabilities?.ready || !rosterCapabilities?.supports_multiple_stints) {
+            throw new Error("El backend temporal de traspasos todavía no está aplicado.");
+          }
+          if (!requestCapabilities?.ready || !requestCapabilities?.persistent_requests) {
+            throw new Error("El backend persistente de solicitudes de traspaso todavía no está aplicado.");
+          }
+
+          if (this.auth?.getAuthenticatedRole?.() !== UserRole.SUPERADMIN) {
+            throw new Error("Los traspasos entre equipos están restringidos temporalmente al SUPERADMIN hasta implantar la aprobación doble origen/destino.");
           }
 
           const transferObj = this.transfers.find(t => String(t.id) === String(trId));
-          if (transferObj) transferObj.status = "APROBADO";
-          this._saveTransfersLocal();
+          if (!transferObj?.id) {
+            throw new Error("La solicitud ya no está pendiente o no se pudo recuperar.");
+          }
+
+          const defaultFirstDateTo = maxIsoDate(
+            rosterReferenceDate || todayLocalIsoDate(),
+            rosterSeasonBounds.start ? shiftIsoDate(rosterSeasonBounds.start, 1) : null
+          );
+          const defaultLastDateFrom = shiftIsoDate(defaultFirstDateTo, -1);
+
+          const requestedLastDateFrom = prompt(
+            "Último día elegible en el equipo de origen (AAAA-MM-DD):",
+            defaultLastDateFrom || ""
+          );
+          if (requestedLastDateFrom === null) return;
+          const lastDateFrom = normalizeIsoDate(requestedLastDateFrom);
+
+          const requestedFirstDateTo = prompt(
+            "Primer día elegible en el equipo de destino (AAAA-MM-DD):",
+            defaultFirstDateTo
+          );
+          if (requestedFirstDateTo === null) return;
+          const firstDateTo = normalizeIsoDate(requestedFirstDateTo);
+
+          if (!lastDateFrom || !firstDateTo) {
+            alert("⚠️ Las dos fechas del traspaso deben tener formato AAAA-MM-DD.");
+            return;
+          }
+          if (!isDateInsideSeason(lastDateFrom, rosterSeasonContext)
+              || !isDateInsideSeason(firstDateTo, rosterSeasonContext)) {
+            alert("⚠️ Las fechas de salida y alta deben estar dentro de la temporada.");
+            return;
+          }
+          if (firstDateTo <= lastDateFrom) {
+            alert("⚠️ La fecha de alta en destino debe ser posterior al último día en origen.");
+            return;
+          }
+
+          this.showSyncOverlay("⚡ Procesando traspaso temporal seguro...");
+
+          await this.transferRequestService.approveTransfer({
+            requestId: transferObj.id,
+            lastDateFrom,
+            firstDateTo
+          });
 
           DataStore.isLoaded = false;
           await DataStore.init(activeTeamId, true);
+          this.rosterState = await this.rosterManagementService.loadForTeam(activeTeamId);
+          await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
           this.hideSyncOverlay();
 
-          alert("🟢 ¡Traspaso aprobado! El jugador ya forma parte del nuevo equipo.");
+          alert(`🟢 Traspaso aprobado. Último día en origen: ${lastDateFrom}. Alta en destino: ${firstDateTo}.`);
           await this.render(containerId);
         } catch (err) {
           this.hideSyncOverlay();
           console.error("Error aprobando traspaso:", err);
           alert(`❌ Error durante el traspaso: ${err.message}`);
+        }
+      });
+    });
+
+    container.querySelectorAll(".btn-reject-transfer").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const requestId = e.currentTarget.getAttribute("data-id");
+        const transferObj = this.transfers.find(
+          item => String(item.id) === String(requestId)
+        );
+        const targetTeamId = transferObj?.targetTeamId || activeTeamId;
+
+        if (!this.auth?.can?.(Permission.APPROVE_TRANSFER, { teamId: targetTeamId })) {
+          alert("⚠️ No tienes permiso para rechazar este traspaso.");
+          return;
+        }
+        if (!transferObj?.id) {
+          alert("⚠️ La solicitud ya no está pendiente.");
+          return;
+        }
+
+        const reason = prompt(
+          "Motivo del rechazo (opcional):",
+          ""
+        );
+        if (reason === null) return;
+
+        this.showSyncOverlay("🛑 Registrando rechazo del traspaso...");
+        try {
+          await this.transferRequestService.rejectTransfer({
+            requestId: transferObj.id,
+            reason
+          });
+          await this._refreshTransferRequests(this.rosterState?.teamSeasonId || null);
+          this.hideSyncOverlay();
+          alert("🔴 Solicitud de traspaso rechazada.");
+          await this.render(containerId);
+        } catch (error) {
+          this.hideSyncOverlay();
+          console.error("Error rechazando traspaso:", error);
+          alert(`❌ No se pudo rechazar el traspaso: ${error.message || error}`);
         }
       });
     });
@@ -1750,6 +2502,10 @@ export class TranslationsView {
         e.preventDefault();
         const teamId = e.currentTarget.getAttribute("data-id");
         if (!teamId) return;
+        if (!this.auth?.can?.(Permission.SELECT_TEAM, { teamId })) {
+          alert("⚠️ No tienes permiso para activar este equipo.");
+          return;
+        }
 
         this.showSyncOverlay("⚡ Activando equipo en el sistema...");
 
@@ -1786,6 +2542,10 @@ export class TranslationsView {
         const seasonName = inputName?.value.trim();
 
         if (!seasonName) return;
+        if (!this.auth?.can?.(Permission.MANAGE_SEASONS, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para crear temporadas en este equipo.");
+          return;
+        }
 
         this.showSyncOverlay("⚡ Registrando nueva temporada en Supabase...");
 
@@ -1824,6 +2584,10 @@ export class TranslationsView {
         const inp = container.querySelector(`.input-season-edit[data-id="${id}"]`);
         const newName = inp?.value.trim();
         if (!newName) return;
+        if (!this.auth?.can?.(Permission.MANAGE_SEASONS, { teamId: activeTeamId })) {
+          alert("⚠️ No tienes permiso para modificar temporadas.");
+          return;
+        }
 
         this.showSyncOverlay("💾 Actualizando temporada...");
         try {
@@ -1857,6 +2621,10 @@ export class TranslationsView {
     container.querySelectorAll(".btn-delete-season").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         const seasonId = e.currentTarget.getAttribute("data-id");
+        if (!this._canReal("DELETE_SEASON")) {
+          alert("⚠️ Solo el Superadmin puede eliminar temporadas.");
+          return;
+        }
         if (confirm("⚠️ ¿Estás seguro de eliminar esta temporada de Supabase?")) {
           this.showSyncOverlay("🗑️ Eliminando temporada en Supabase...");
           try {
@@ -1879,6 +2647,20 @@ export class TranslationsView {
       });
     });
 
+    if (this.activeTab === "seasons") {
+      this.seasonManagementView.bindEvents(container, {
+        onBackendUnavailable: () => {
+          alert("ℹ️ Esta acción no está disponible para tu rol o el backend seguro no está activo.");
+        },
+        onChanged: async () => {
+          await this.render(containerId);
+        },
+        onError: (error) => {
+          alert(`❌ No se pudo completar la operación: ${error?.message || error}`);
+        }
+      });
+    }
+
     // PESTAÑA IDIOMAS: GUARDAR EN SUPABASE
     if (this.activeTab === "translations") {
       this.languageSettingsView.bindEvents(container);
@@ -1887,6 +2669,10 @@ export class TranslationsView {
         if (btn.textContent.includes("Guardar Traducciones")) {
           btn.addEventListener("click", async (e) => {
             e.preventDefault();
+            if (!this.auth?.can?.(Permission.MANAGE_TRANSLATIONS)) {
+              alert("⚠️ No tienes permiso para modificar traducciones.");
+              return;
+            }
             this.showSyncOverlay("💾 Guardando diccionario completo en Supabase...");
             try {
               if (TranslationStore && typeof TranslationStore.saveAllToSupabase === "function") {
@@ -1909,9 +2695,12 @@ export class TranslationsView {
       btn.addEventListener("click", async (e) => {
         const roleToSimulate = e.currentTarget.getAttribute("data-role");
         
-        this.simulatedRole = roleToSimulate;
+        if (!this.auth?.setPreviewRole?.(roleToSimulate)) {
+          alert("⚠️ Solo el Superadmin puede simular roles.");
+          return;
+        }
+        this.simulatedRole = this.auth.previewRole;
         localStorage.setItem("iq_simulated_role", roleToSimulate);
-        localStorage.setItem("iq_user_role", roleToSimulate);
 
         alert(`🎭 Simulación activada: La app muestra la interfaz de '${roleToSimulate}'.`);
         await this.render(containerId);
@@ -1921,9 +2710,10 @@ export class TranslationsView {
     const resetSimBtn = container.querySelector("#btn-reset-simulation") || container.querySelector("#btn-stop-simulation");
     if (resetSimBtn) {
       resetSimBtn.addEventListener("click", async () => {
+        this.auth?.clearPreviewRole?.();
         this.simulatedRole = null;
+        this.currentUserRole = this.auth?.getAuthenticatedRole?.() || UserRole.INVITADO;
         localStorage.removeItem("iq_simulated_role");
-        localStorage.setItem("iq_user_role", "SUPERADMIN");
 
         alert("🔴 Simulación desactivada. Volviendo a control total de SUPERADMIN.");
         await this.render(containerId);
@@ -1932,10 +2722,10 @@ export class TranslationsView {
 
     if (canModifyActiveRole) {
       container.querySelector("#select-demo-role")?.addEventListener("change", async (e) => {
-        this.currentUserRole = e.target.value;
-        this.simulatedRole = null;
-        localStorage.removeItem("iq_simulated_role");
-        localStorage.setItem("iq_user_role", this.currentUserRole);
+        const previewRole = e.target.value;
+        if (!this.auth?.setPreviewRole?.(previewRole)) return;
+        this.simulatedRole = this.auth.previewRole;
+        localStorage.setItem("iq_simulated_role", previewRole);
         await this.render(containerId);
       });
     }

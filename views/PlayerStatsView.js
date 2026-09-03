@@ -15,6 +15,7 @@ import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { AdvancedPlayerStatsCalculator } from "../domain/stats/AdvancedPlayerStatsCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
@@ -54,23 +55,11 @@ export class PlayerStatsView {
   // CONTROL DE PERMISOS POR ROL
   // =========================================================================
   _canEditFullProfile() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT")
-    );
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_PLAYER_MASTER));
   }
 
   _canEditNotes() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_TACTICAL_NOTES));
   }
 
   // =========================================================================
@@ -790,10 +779,17 @@ export class PlayerStatsView {
     if (!container) return;
 
     const targetTeamId = teamId || DataStore.getActiveTeamId();
-    this.players = DataStore.getPlayers(targetTeamId) || [];
-    this.playerStats = DataStore.getPlayerGameStats() || [];
+    this.players = DataStore.getSeasonParticipantPlayers?.(targetTeamId)
+      || DataStore.getPlayers(targetTeamId)
+      || [];
 
-    const gamesList = DataStore.getGames(targetTeamId) || [];
+    const gamesList = DataStore.getGamesForActiveSeason?.(targetTeamId)
+      || DataStore.getGames(targetTeamId)
+      || [];
+    const gameIds = new Set(gamesList.map(game => String(game.id)));
+    this.playerStats = (DataStore.getPlayerGameStats() || []).filter(
+      stat => gameIds.has(String(stat.game_id || stat.gameId || ""))
+    );
     this.gamesMap = new Map(gamesList.map(g => [g.id, g]));
 
     // CASO A: DETALLE DE JUGADOR (#/player/UUID)

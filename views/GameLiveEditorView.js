@@ -12,6 +12,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
+import { Permission } from "../security/PermissionService.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -43,14 +44,13 @@ export class GameLiveEditorView {
   }
 
   _canEditFullBoxScore() {
-    if (!this.auth || typeof this.auth.hasRole !== "function") return true;
-    return (
-      this.auth.hasRole("SUPERADMIN") ||
-      this.auth.hasRole("ADMIN") ||
-      this.auth.hasRole("SCOUT") ||
-      this.auth.hasRole("ENTRENADOR") ||
-      this.auth.hasRole("ANALISTA")
-    );
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME));
+  }
+
+  _canDeleteGame(game = null) {
+    const teamId = game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId();
+    const seasonId = game?.season_id || game?.seasonId || null;
+    return Boolean(this.auth?.canPreview?.(Permission.DELETE_GAME, { teamId, seasonId }));
   }
 
   _generateUUID() {
@@ -68,7 +68,10 @@ export class GameLiveEditorView {
     if (!container) return;
 
     this.teamId = teamId || DataStore.getActiveTeamId();
-    this.players = DataStore.getPlayers(this.teamId) || [];
+    this.players = DataStore.getPlayersEligibleOnDate?.(
+      this.teamId,
+      new Date().toISOString().slice(0, 10)
+    ) || DataStore.getPlayers(this.teamId) || [];
 
     if (gameId && gameId !== this.teamId) {
       await this._openEditForm(gameId, container);
@@ -84,6 +87,9 @@ export class GameLiveEditorView {
 
   async _renderGamesList(container, teamId) {
     this.games = DataStore.getGames(teamId) || [];
+    const canCreateGame = Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId }));
+    const canRecordLive = Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId }));
+    const canEditGame = Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId }));
 
     const chronologicalGames = [...this.games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     const pCodeMap = new Map();
@@ -155,12 +161,12 @@ export class GameLiveEditorView {
           </div>
 
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button class="btn-open-court-direct" data-id="${g.id}" style="background: #0284c7; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
-              🏀 Pista / Edición
+            <button class="btn-open-court-direct" data-id="${g.id}" aria-disabled="${!canEditGame}" style="background: ${canEditGame ? '#0284c7' : '#e2e8f0'}; color: ${canEditGame ? '#ffffff' : '#64748b'}; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canEditGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 4px;">
+              🏀 Pista / Edición${canEditGame ? '' : ' 🔒'}
             </button>
             <button onclick="window.location.hash='#/boxscore/${g.id}'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📋 Boxscore</button>
             <button onclick="window.location.hash='#/reports'" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 44px;">📊 Informe</button>
-            <button class="btn-delete-game-direct" data-id="${g.id}" style="background: #fee2e2; border: 1px solid #fca5a5; font-size: 18px; cursor: pointer; color: #dc2626; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="Eliminar partido">🗑️</button>
+            <button class="btn-delete-game-direct" data-id="${g.id}" ${!this._canDeleteGame(g) ? 'disabled' : ''} style="background: ${this._canDeleteGame(g) ? '#fee2e2' : '#f1f5f9'}; border: 1px solid ${this._canDeleteGame(g) ? '#fca5a5' : '#cbd5e1'}; font-size: 18px; cursor: ${this._canDeleteGame(g) ? 'pointer' : 'not-allowed'}; color: ${this._canDeleteGame(g) ? '#dc2626' : '#94a3b8'}; min-height: 44px; min-width: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;" title="${this._canDeleteGame(g) ? 'Eliminar partido' : 'Tu rol no puede eliminar partidos'}">🗑️</button>
           </div>
         </div>
       `;
@@ -175,10 +181,10 @@ export class GameLiveEditorView {
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button id="btn-create-game-hud" style="background: #f97316; color: #ffffff; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(249,115,22,0.3);">
-              ⚡ Nueva Anotación en Vivo (HUD Pro)
+            <button id="btn-create-game-hud" aria-disabled="${!canRecordLive}" style="background: ${canRecordLive ? '#f97316' : '#e2e8f0'}; color: ${canRecordLive ? '#ffffff' : '#64748b'}; border: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 900; cursor: ${canRecordLive ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; box-shadow: ${canRecordLive ? '0 4px 10px rgba(249,115,22,0.3)' : 'none'};">
+              ⚡ Nueva Anotación en Vivo (HUD Pro)${canRecordLive ? '' : ' 🔒'}
             </button>
-            <button id="btn-create-game" style="background: #0f172a; color: #ffffff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="btn-create-game" aria-disabled="${!canCreateGame}" style="background: ${canCreateGame ? '#0f172a' : '#e2e8f0'}; color: ${canCreateGame ? '#ffffff' : '#64748b'}; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: ${canCreateGame ? 'pointer' : 'not-allowed'}; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
               + 🏀 Registro Rápido
             </button>
           </div>
@@ -205,24 +211,36 @@ export class GameLiveEditorView {
     `;
 
     container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
+      if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId })) {
+        alert("⚠️ Tu perfil puede consultar partidos, pero no registrar una anotación en vivo.");
+        return;
+      }
       new LiveScoreHUDView(this.auth).render("dashboard-content-area");
     });
 
     container.querySelectorAll(".btn-open-court-direct").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.getAttribute("data-id");
+        if (!this.auth?.canPreview?.(Permission.EDIT_GAME, { teamId })) {
+          alert("⚠️ Tu perfil puede consultar el partido y su BoxScore, pero no editarlo.");
+          return;
+        }
         this.entrySubMode = "court";
         this._openEditForm(id, container);
       });
     });
 
     container.querySelector("#btn-create-game")?.addEventListener("click", () => {
+      if (!this.auth?.canPreview?.(Permission.CREATE_GAME, { teamId })) {
+        alert("⚠️ Tu perfil no tiene permiso para registrar nuevos partidos.");
+        return;
+      }
       const activeTeam = DataStore.getTeamById(teamId) || {};
       const newGameId = this._generateUUID();
       this.currentGame = {
         id: newGameId,
         team_id: teamId,
-        season_id: DataStore.getActiveSeasonId(),
+        season_id: DataStore.getActiveSeasonId(teamId),
         date: new Date().toISOString().split("T")[0],
         time: "18:00",
         opponent: "",
@@ -261,6 +279,14 @@ export class GameLiveEditorView {
         
         const id = e.currentTarget.getAttribute("data-id");
         if (!id) return;
+        const game = this.games.find(g => String(g.id) === String(id));
+        if (!this.auth?.can?.(Permission.DELETE_GAME, {
+          teamId: game?.team_id || game?.teamId || teamId,
+          seasonId: game?.season_id || game?.seasonId || null
+        })) {
+          alert("⚠️ Tu rol no puede eliminar partidos.");
+          return;
+        }
 
         if (!confirm(this.t("confirm_delete_game", "¿Estás seguro de que deseas eliminar este partido? Se borrarán todas sus estadísticas, cuartos y jugadas asociadas."))) {
           return;
@@ -292,6 +318,17 @@ export class GameLiveEditorView {
   }
 async _openEditForm(gameId, container) {
     this.currentGame = DataStore.getGameById(gameId) || {};
+
+    const gameTeamId = this.currentGame.team_id || this.currentGame.teamId || this.teamId;
+    const eligiblePlayers = DataStore.getPlayersEligibleOnDate?.(
+      gameTeamId,
+      this.currentGame.date
+    ) || DataStore.getPlayers(gameTeamId) || [];
+    const seasonParticipants = DataStore.getSeasonParticipantPlayers?.(gameTeamId)
+      || DataStore.getPlayers(gameTeamId)
+      || [];
+    this.players = eligiblePlayers;
+
     let existingPeriods = DataStore.getGamePeriodScores(gameId) || [];
 
     // Si no estaban cargados por separado, extraerlos del objeto de partido
@@ -318,6 +355,21 @@ async _openEditForm(gameId, container) {
     }
 
     const pStats = DataStore.getPlayerGameStats(null, gameId) || [];
+
+    // Historical truth is preserved: if a legacy game already contains stats
+    // for a player, keep that player visible even if a later roster correction
+    // makes the inferred stint incomplete.
+    const playerMap = new Map(this.players.map(player => [String(player.id), player]));
+    pStats.forEach(stat => {
+      const playerId = String(stat.player_id ?? stat.playerId ?? "");
+      if (!playerId || playerMap.has(playerId)) return;
+      const historicalPlayer = seasonParticipants.find(
+        player => String(player.id) === playerId
+      );
+      if (historicalPlayer) playerMap.set(playerId, historicalPlayer);
+    });
+    this.players = [...playerMap.values()];
+
     this.currentGameStats = this.players.map(p => {
       const existing = pStats.find(s => String(s.player_id ?? s.playerId) === String(p.id));
       return existing ? { ...existing } : {
@@ -329,15 +381,13 @@ async _openEditForm(gameId, container) {
 
     let loadedEvents = DataStore.getGameEvents(gameId);
 
-    if ((!loadedEvents || loadedEvents.length === 0) && gameId && this.supabase) {
+    if ((!loadedEvents || loadedEvents.length === 0) && gameId) {
       try {
-        const { data, error } = await this.supabase
-          .from("game_events")
-          .select("*")
-          .eq("game_id", gameId)
-          .order("created_at", { ascending: true });
+        const data = typeof DataStore.loadGameEvents === "function"
+          ? await DataStore.loadGameEvents([gameId])
+          : [];
 
-        if (!error && data && data.length > 0) {
+        if (data && data.length > 0) {
           loadedEvents = data.map(ev => {
             const pObj = this.players.find(p => String(p.id) === String(ev.player_id));
             return {
@@ -349,7 +399,9 @@ async _openEditForm(gameId, container) {
               period: Number(ev.period || 1),
               isOvertime: Number(ev.period || 1) > 4,
               isOpponent: !ev.player_id && String(ev.action_type || '').includes("opp"),
-              coordinates: (ev.coord_x !== null && ev.coord_y !== null) ? { x: Number(ev.coord_x), y: Number(ev.coord_y), made: ev.made } : null
+              coordinates: (ev.coord_x !== null && ev.coord_y !== null)
+                ? { x: Number(ev.coord_x), y: Number(ev.coord_y), made: ev.made }
+                : null
             };
           });
         }

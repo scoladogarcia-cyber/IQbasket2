@@ -33,7 +33,9 @@ export class LineupsView {
    */
   _getLineupsData() {
     const games = DataStore.getGames() || [];
-    const players = DataStore.getPlayers() || [];
+    const players = DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
+      || DataStore.getPlayers()
+      || [];
     const playersMap = new Map(players.map(p => [String(p.id), p]));
 
     if (players.length === 0) return [];

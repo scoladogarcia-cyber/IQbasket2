@@ -11,8 +11,8 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
 
-const ALLOWED_ROLES = ["superadmin", "admin", "entrenador", "analista", "scout"];
 
 export class EasyStatsEntryView {
   /**
@@ -43,9 +43,7 @@ export class EasyStatsEntryView {
   }
 
   _canAccess() {
-    if (!this.authController || typeof this.authController.hasRole !== "function") return true;
-    const role = (localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN").toLowerCase().trim();
-    return ALLOWED_ROLES.includes(role);
+    return Boolean(this.authController?.canPreview?.(Permission.EDIT_GAME));
   }
 
   async render(containerId = "dashboard-content-area", gameId = null) {
@@ -61,7 +59,10 @@ export class EasyStatsEntryView {
 
     const allGames = DataStore.getGames() || [];
     this.game = (this.gameId ? allGames.find(g => String(g.id) === String(this.gameId)) : null) || allGames[0] || {};
-    this.players = DataStore.getPlayers(this.game.team_id || DataStore.getActiveTeamId()) || [];
+    this.players = DataStore.getPlayersEligibleOnDate?.(
+      this.game.team_id || DataStore.getActiveTeamId(),
+      this.game.date
+    ) || DataStore.getPlayers(this.game.team_id || DataStore.getActiveTeamId()) || [];
     this.gameStats = DataStore.getPlayerGameStats(null, this.game.id) || [];
     this.periodScores = DataStore.getGamePeriodScores(this.game.id) || [];
 

@@ -16,6 +16,9 @@ import { supabase } from "./config/database.config.js";
 import { DataStore } from "./services/DataStore.js";
 import { TranslationStore } from "./services/TranslationStore.js";
 import { I18n } from "./services/I18nService.js";
+import { AuthorizationContextService } from "./services/security/AuthorizationContextService.js";
+import { PermissionService, Permission, UserRole } from "./security/PermissionService.js";
+import { ROUTE_PERMISSIONS } from "./security/permissions.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
@@ -40,36 +43,24 @@ import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
 export class IQBasketApp {
   constructor() {
     this.isAuthenticated = false;
-    this.userEmail = localStorage.getItem("iq_user_email") || "scolado@nechigroup.com";
-    this.userRole = localStorage.getItem("iq_user_role") || "SUPERADMIN";
+    this.userEmail = "";
+    this.userRole = UserRole.INVITADO;
     this.currentRoute = "dashboard";
     this.routeParams = {};
-    this.teamId = localStorage.getItem("iq_active_team_id") || "e7f88dd1-7b8e-4b60-acbd-d5b40b5acd22";
+    this.teamId = localStorage.getItem("iq_active_team_id") || "";
     this.translationsLoaded = false;
 
+    // Única fuente de verdad para autorización. localStorage queda solo como caché de UI.
+    this.permissionService = new PermissionService();
+    this.authController = this.permissionService;
+    this.authorizationContextService = new AuthorizationContextService(supabase);
+
+    // Se elimina el bypass histórico { can: () => true }.
     this.gameController = new GameController(
-      null, 
-      { can: () => true }, 
+      null,
+      this.authController,
       { supabase }
     );
-
-    // Controlador de autorización compartido entre vistas
-    this.authController = {
-      getCurrentUser: () => {
-        const role = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || this.userRole;
-        return {
-          email: localStorage.getItem("iq_user_email") || this.userEmail,
-          role: role,
-          firstName: localStorage.getItem("iq_user_name") || "",
-          lastName: localStorage.getItem("iq_user_lastname") || ""
-        };
-      },
-      hasRole: (role) => {
-        const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || this.userRole;
-        if (Array.isArray(role)) return role.includes(activeRole);
-        return ["SUPERADMIN", "ADMIN", "ENTRENADOR", "ANALISTA", "SCOUT"].includes(activeRole);
-      }
-    };
 
     this.views = {
       auth: new AuthView(),
@@ -168,6 +159,88 @@ export class IQBasketApp {
     `;
   }
 
+  /**
+   * Aplica la identidad autenticada y normaliza su rol/alcance con PermissionService.
+   * El rol guardado en localStorage es únicamente una caché visual.
+   */
+  _applyAuthenticatedUser(authUser, profileData = null) {
+    if (!authUser?.email) return null;
+
+    const mergedProfile = {
+      ...(profileData || {}),
+      id: authUser.id || profileData?.id || null,
+      email: authUser.email,
+      role: profileData?.role || authUser.user_metadata?.role || UserRole.INVITADO,
+      first_name: profileData?.first_name || authUser.user_metadata?.first_name || "",
+      last_name: profileData?.last_name || authUser.user_metadata?.last_name || ""
+    };
+
+    const normalizedUser = this.permissionService.setCurrentUser(mergedProfile);
+    if (!normalizedUser) return null;
+
+    this.userEmail = normalizedUser.email;
+    this.userRole = normalizedUser.role;
+    this.isAuthenticated = true;
+
+    localStorage.setItem("iq_user_email", normalizedUser.email);
+    localStorage.setItem("iq_user_role", normalizedUser.role);
+    localStorage.setItem("iq_user_name", mergedProfile.first_name || "");
+    localStorage.setItem("iq_user_lastname", mergedProfile.last_name || "");
+    localStorage.removeItem("iq_simulated_role");
+
+    // Compatibilidad visual temporal: la seguridad NO usa este mapa.
+    const cachedAssignments = JSON.parse(localStorage.getItem("iq_user_teams_map") || "{}");
+    cachedAssignments[normalizedUser.email] = normalizedUser.allowedTeamIds || [];
+    localStorage.setItem("iq_user_teams_map", JSON.stringify(cachedAssignments));
+
+    if (typeof DataStore.setPermissionService === "function") {
+      DataStore.setPermissionService(this.permissionService);
+    }
+
+    return normalizedUser;
+  }
+
+  async _enrichAuthenticatedProfile(authUser, profileData = null) {
+    const baseProfile = {
+      ...(profileData || {}),
+      id: authUser?.id || profileData?.id || null,
+      email: authUser?.email || profileData?.email || ""
+    };
+
+    try {
+      return await this.authorizationContextService.enrichProfile(baseProfile);
+    } catch (error) {
+      console.warn("[RBAC] No se pudo cargar el contexto v3; se mantiene compatibilidad legacy:", error.message);
+      return baseProfile;
+    }
+  }
+
+  /**
+   * Restaura una sesión Supabase válida al recargar la SPA.
+   */
+  async restoreAuthenticatedSession() {
+    if (!supabase) return false;
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data?.session?.user) return false;
+
+      const authUser = data.session.user;
+      const email = authUser.email || "";
+      const { data: profileData } = await supabase
+        .from("user_profiles")
+        .select("id,email,first_name,last_name,phone,role,global_role,status,assigned_team_ids,linked_player_id,created_at")
+        .eq("email", email)
+        .maybeSingle();
+
+      const enrichedProfile = await this._enrichAuthenticatedProfile(authUser, profileData);
+      this._applyAuthenticatedUser(authUser, enrichedProfile);
+      return true;
+    } catch (err) {
+      console.warn("[RBAC] No se pudo restaurar la sesión:", err);
+      return false;
+    }
+  }
+
   bindAuthEvents() {
     const authLangSelect = document.getElementById("auth-lang-toggle");
     if (authLangSelect) {
@@ -254,31 +327,15 @@ export class IQBasketApp {
 
           const { data: profileData } = await supabase
             .from("user_profiles")
-            .select("*")
+            .select("id,email,first_name,last_name,phone,role,global_role,status,assigned_team_ids,linked_player_id,created_at")
             .eq("email", emailInput)
             .maybeSingle();
 
-          let roleToAssign = "INVITADO";
-          let firstName = emailInput.split("@")[0];
-          let lastName = "";
-
-          if (profileData && profileData.role) {
-            roleToAssign = String(profileData.role).toUpperCase();
-            firstName = profileData.first_name || firstName;
-            lastName = profileData.last_name || "";
-          } else if (emailInput.toLowerCase() === "scolado@nechigroup.com") {
-            roleToAssign = "SUPERADMIN";
+          const enrichedProfile = await this._enrichAuthenticatedProfile(authData.user, profileData);
+          const normalizedUser = this._applyAuthenticatedUser(authData.user, enrichedProfile);
+          if (!normalizedUser) {
+            throw new Error("No se pudo resolver el perfil de autorización.");
           }
-
-          localStorage.setItem("iq_user_email", emailInput);
-          localStorage.setItem("iq_user_role", roleToAssign);
-          localStorage.setItem("iq_user_name", firstName);
-          localStorage.setItem("iq_user_lastname", lastName);
-          localStorage.removeItem("iq_simulated_role");
-
-          this.userEmail = emailInput;
-          this.userRole = roleToAssign;
-          this.isAuthenticated = true;
 
           await DataStore.init(this.teamId, true);
           this.render();
@@ -329,17 +386,17 @@ export class IQBasketApp {
             return;
           }
 
-          localStorage.setItem("iq_user_name", firstName);
-          localStorage.setItem("iq_user_lastname", lastName);
-          localStorage.setItem("iq_user_email", email);
-          localStorage.setItem("iq_user_role", assignedRole);
-          localStorage.removeItem("iq_simulated_role");
+          const normalizedUser = this._applyAuthenticatedUser(authData.user, {
+            email,
+            first_name: firstName,
+            last_name: lastName,
+            role: assignedRole
+          });
+          if (!normalizedUser) {
+            throw new Error("No se pudo inicializar el perfil INVITADO.");
+          }
 
-          this.userEmail = email;
-          this.userRole = assignedRole;
-          this.isAuthenticated = true;
-
-          alert(`✅ ¡Bienvenido ${firstName}! Tu cuenta ha sido creada con perfil INVITADO (Solo Lectura).`);
+          alert(`✅ ¡Bienvenido ${firstName}! Tu cuenta ha sido creada con perfil INVITADO (Demo / acceso limitado).`);
 
           await DataStore.init(this.teamId, true);
           this.render();
@@ -364,8 +421,10 @@ export class IQBasketApp {
           console.warn("Nota al cerrar sesión:", err);
         }
         this.isAuthenticated = false;
+        this.permissionService.clear();
         DataStore.isLoaded = false;
         localStorage.removeItem("iq_simulated_role");
+        localStorage.removeItem("iq_user_role");
         this.render();
       });
     }
@@ -407,6 +466,11 @@ export class IQBasketApp {
 
     const handleTeamChange = async (e) => {
       const newTeamId = e.target.value;
+      if (!this.permissionService.can(Permission.SELECT_TEAM, { teamId: newTeamId })) {
+        alert("⚠️ No tienes permiso para acceder a este equipo.");
+        this.render();
+        return;
+      }
       this.teamId = newTeamId;
       localStorage.setItem("iq_active_team_id", newTeamId);
       
@@ -489,11 +553,14 @@ export class IQBasketApp {
     const parts = rawHash.split("/");
     const targetRoute = parts[0].toLowerCase();
     
-    // Guarda de seguridad por rol
-    const activeRole = localStorage.getItem("iq_simulated_role") || localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    
-    if (["JUGADOR", "INVITADO"].includes(activeRole) && ["comparator", "comparador", "ask", "ask-ai", "pregunta", "preguntale", "ai", "ia"].includes(targetRoute)) {
-      alert("⚠️ Tu rol no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
+    // Guarda centralizada por permiso. En modo simulación usa el rol de previsualización.
+    const requiredPermission = ROUTE_PERMISSIONS[targetRoute];
+    const routeContext = {
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    };
+    if (requiredPermission && this.isAuthenticated && !this.permissionService.canPreview(requiredPermission, routeContext)) {
+      alert("⚠️ Tu perfil no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
       window.location.hash = "#/dashboard";
       this.currentRoute = "dashboard";
       this.routeParams = {};
@@ -535,24 +602,22 @@ export class IQBasketApp {
       return;
     }
 
-    // 1. Determinar rol y email
-    const simulated = localStorage.getItem("iq_simulated_role");
-    this.userRole = simulated || localStorage.getItem("iq_user_role") || "SUPERADMIN";
-    const userEmail = localStorage.getItem("iq_user_email") || "";
+    // 1. El rol visual se resolverá de nuevo tras cargar el contexto activo.
+    this.userRole = this.permissionService.getEffectiveRole({
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    });
+    const userEmail = this.permissionService.getCurrentUser()?.email || "";
 
-    // 2. Validar equipos autorizados
-    const storedAssignments = localStorage.getItem("iq_user_teams_map");
-    const userTeamAssignments = storedAssignments ? JSON.parse(storedAssignments) : {};
-    const myAssignedTeamIds = userTeamAssignments[userEmail] || [];
-
+    // 2. Equipos visibles según alcance autenticado (no según localStorage).
     const allTeams = DataStore.getTeams() || [];
-    const allowedTeams = (this.userRole === "SUPERADMIN")
+    const allowedTeams = this.permissionService.getAuthenticatedRole() === UserRole.SUPERADMIN
       ? allTeams
-      : allTeams.filter(t => myAssignedTeamIds.includes(String(t.id)));
+      : allTeams.filter(t => this.permissionService.canAccessTeam(t.id));
 
     let storedActiveTeamId = localStorage.getItem("iq_active_team_id");
     
-    if (this.userRole !== "SUPERADMIN" && allowedTeams.length > 0) {
+    if (this.permissionService.getAuthenticatedRole() !== UserRole.SUPERADMIN && allowedTeams.length > 0) {
       const isAuthorized = allowedTeams.some(t => String(t.id) === String(storedActiveTeamId));
       if (!isAuthorized) {
         storedActiveTeamId = allowedTeams[0].id;
@@ -566,6 +631,11 @@ export class IQBasketApp {
       this.showLoadingOverlay("preload_title");
       await DataStore.init(this.teamId, true);
     }
+
+    this.userRole = this.permissionService.getEffectiveRole({
+      teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+    });
 
     appContainer.innerHTML = LayoutView.wrap(
       `<div id="dashboard-content-area"></div>`, 
@@ -686,9 +756,10 @@ export class IQBasketApp {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const app = new IQBasketApp();
   window.iqApp = app;
+  await app.restoreAuthenticatedSession();
   app.parseHashRoute();
   app.render();
 });

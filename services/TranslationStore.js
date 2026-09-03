@@ -428,6 +428,10 @@ export class TranslationStore {
 
   static currentLang = localStorage.getItem("iq_lang") || "es";
 
+  // Evita reconsultar el diccionario remoto en cada render/cambio de pantalla.
+  // Las traducciones editadas desde administración actualizan la caché local al guardar.
+  static remoteCacheTtlMs = 6 * 60 * 60 * 1000;
+
   static normalizeLang(langCode = "es") {
     const code = String(langCode || "es").trim().toLowerCase();
     return code === "cat" ? "ca" : code;
@@ -455,6 +459,7 @@ export class TranslationStore {
     this.dictionaries[code] = { ...(this.dictionaries[code] || {}), ...dict };
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(`iq_dict_${code}`, JSON.stringify(this.dictionaries[code]));
+      localStorage.setItem(`iq_dict_sync_${code}`, String(Date.now()));
     }
   }
 
@@ -477,36 +482,66 @@ export class TranslationStore {
     }
   }
 
-  static async initAllTranslations() {
+  /**
+   * Mantiene el nombre histórico por compatibilidad, pero carga únicamente
+   * el idioma activo y usa una caché temporal. Antes descargaba los 4 idiomas
+   * completos en cada sincronización.
+   */
+  static async initAllTranslations(forceRefresh = false) {
     try {
-      // 1. Cargar caché de LocalStorage primero
+      const lang = this.normalizeLang(this.currentLang || "es");
+      let hasCachedDictionary = false;
+
+      // 1. Hidratar únicamente el idioma activo desde LocalStorage.
       if (typeof localStorage !== "undefined") {
-        for (const lang of ["es", "ca", "en", "fr"]) {
-          const cached = localStorage.getItem(`iq_dict_${lang}`);
-          if (cached) {
-            try {
-              this.dictionaries[lang] = { ...this.dictionaries[lang], ...JSON.parse(cached) };
-            } catch {
-              // continuar
-            }
+        const cached = localStorage.getItem(`iq_dict_${lang}`);
+        if (cached) {
+          try {
+            this.dictionaries[lang] = {
+              ...this.dictionaries[lang],
+              ...JSON.parse(cached)
+            };
+            hasCachedDictionary = true;
+          } catch {
+            // Si la caché estuviera dañada, se recuperará desde Supabase.
+          }
+        }
+
+        if (!forceRefresh && hasCachedDictionary) {
+          const lastSync = Number(localStorage.getItem(`iq_dict_sync_${lang}`) || 0);
+          if (lastSync > 0 && (Date.now() - lastSync) < this.remoteCacheTtlMs) {
+            return;
           }
         }
       }
 
-      // 2. Sincronizar desde Supabase
+      // 2. Sincronizar solo el idioma activo y solo las columnas necesarias.
       if (supabase) {
-        const { data, error } = await supabase.from("translations").select("*");
-        if (!error && data) {
+        let query = supabase
+          .from("translations")
+          .select("key,language_code,translation,updated_at");
+
+        if (lang === "ca") {
+          query = query.in("language_code", ["ca", "cat"]);
+        } else {
+          query = query.eq("language_code", lang);
+        }
+
+        const { data, error } = await query;
+
+        if (!error && Array.isArray(data)) {
           data.forEach(item => {
-            const lang = this.normalizeLang(item.language_code);
-            if (!this.dictionaries[lang]) this.dictionaries[lang] = {};
-            this.dictionaries[lang][item.key] = item.translation;
+            const itemLang = this.normalizeLang(item.language_code);
+            if (!this.dictionaries[itemLang]) this.dictionaries[itemLang] = {};
+            this.dictionaries[itemLang][item.key] = item.translation;
           });
 
           if (typeof localStorage !== "undefined") {
-            Object.keys(this.dictionaries).forEach(lang => {
-              localStorage.setItem(`iq_dict_${lang}`, JSON.stringify(this.dictionaries[lang]));
-            });
+            localStorage.setItem(
+              `iq_dict_${lang}`,
+              JSON.stringify(this.dictionaries[lang] || {})
+            );
+            localStorage.setItem(`iq_dict_sync_${lang}`, String(Date.now()));
           }
         }
       }
