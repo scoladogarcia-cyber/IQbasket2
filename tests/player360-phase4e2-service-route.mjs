@@ -134,7 +134,7 @@ const wellnessPanelSource=readFileSync(
   new URL("../views/player360/WellnessSupportPanel.js",import.meta.url),
   "utf8"
 );
-assert.match(wellnessPanelSource,/this\.activeModule = "nutrition"/);
+assert.match(wellnessPanelSource,/this\.activeModule = "recovery"/);
 assert.match(wellnessPanelSource,/_visibleModules\(\)/);
 assert.match(wellnessPanelSource,/this\.allowedModules/);
 
@@ -143,6 +143,7 @@ const nutritionViewSource=readFileSync(
   "utf8"
 );
 assert.match(nutritionViewSource,/modules: \["nutrition"\]/);
+assert.match(nutritionViewSource,/this\.panel\.activeModule = "nutrition"/);
 assert.match(nutritionViewSource,/Permission\.VIEW_NUTRITION/);
 assert.match(nutritionViewSource,/WellnessSupportPanel/);
 assert.match(nutritionViewSource,/#\/nutrition\//);
