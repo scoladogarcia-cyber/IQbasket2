@@ -23,6 +23,7 @@ export class LayoutView {
   static _normalizeRouteKey(route) {
     const r = String(route || '').toLowerCase().trim();
     if (['partidos', 'games', 'game', 'live'].includes(r)) return 'games';
+    if (['approvals', 'requests', 'solicitudes', 'bandeja'].includes(r)) return 'approvals';
     if (['advanced', 'advanced_stats'].includes(r)) return 'advanced';
     if (['heatmap', 'calor', 'shotchart'].includes(r)) return 'heatmap';
     if (['easy-entry', 'easy', 'entrada-facil', 'live-entry'].includes(r)) return 'easy-entry';
@@ -218,7 +219,8 @@ export class LayoutView {
         titleKey: "general",
         defaultTitle: "GENERAL",
         items: [
-          { key: "dashboard", labelKey: "dashboard", fallback: "Dashboard", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' }
+          { key: "dashboard", labelKey: "dashboard", fallback: "Dashboard", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' },
+          { key: "approvals", labelKey: "approval_center", fallback: "Solicitudes", route: "approvals", svg: '<path d="M4 4h16v16H4z"></path><path d="M4 9h16"></path><path d="M8 13h8"></path><path d="M8 17h5"></path>' }
         ]
       },
       {
@@ -435,6 +437,10 @@ export class LayoutView {
               <button type="button" id="btn-close-drawer" class="drawer-close">&times;</button>
             </div>
             <div class="drawer-grid">
+              <a href="#/approvals" class="drawer-item" data-route-key="approvals">
+                <span class="drawer-icon">📥</span>
+                <span>${LayoutView.t("approval_center", "Solicitudes")}</span>
+              </a>
               <a href="#/advanced" class="drawer-item">
                 <span class="drawer-icon">📈</span>
                 <span>${LayoutView.t("advanced_stats", "Stats Avanzadas")}</span>
