@@ -10,6 +10,7 @@ on:
       - "supabase/drafts/20260903_rehearse_v4_phase4b_training_external_rollback.sql"
       - "supabase/ready/20260903_verify_v4_phase4b_postrollback_readonly.sql"
       - ".github/workflows/player360-phase4b-rehearsal.yml"
+      - "tests/player360-phase4b-sql-structure.mjs"
   workflow_dispatch:
 
 permissions:
