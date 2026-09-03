@@ -71,7 +71,7 @@ export class WellnessSupportPanel {
     this.context = null;
     this.backendAvailable = false;
     this.lastError = null;
-    this.activeModule = "nutrition";
+    this.activeModule = "recovery";
     this.editorOpen = false;
     this.editingEntryId = null;
     this.data = {
