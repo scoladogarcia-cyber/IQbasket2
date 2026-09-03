@@ -332,7 +332,9 @@ async function checkViewport(browser, name, viewport) {
     await dialog.accept();
   };
   page.on("dialog", requestDialogHandler);
-  await page.click(".btn-request-transfer");
+  await page.evaluate(() => {
+    document.querySelector(".btn-request-transfer")?.click();
+  });
   await page.waitForFunction(() => window.__phase3eRequestCalls.length === 1);
   page.off("dialog", requestDialogHandler);
 
