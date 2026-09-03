@@ -1,0 +1,75 @@
+name: Apply Team Season Freeze V6
+
+on:
+  push:
+    branches:
+      - feature/team-season-freeze-v1
+    paths:
+      - "supabase/ready/APPLY_TEAM_SEASON_FREEZE_V6"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Controlled team-season freeze V6 apply
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Read-only preflight and baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v6_team_season_freeze_readonly.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^TEAM_SEASON_FREEZE_PREFLIGHT,' | tail -n 1)
+          test -n "$CHECK"
+          FINAL=${CHECK##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+          BASELINE=$(printf '%s\n' "$OUT" | grep '^TEAM_SEASON_FREEZE_BASELINE,' | tail -n 1)
+          test -n "$BASELINE"
+          echo "TEAM_SEASON_FREEZE_BASELINE_BEFORE=$BASELINE" >> "$GITHUB_ENV"
+
+      - name: Apply additive V6 backend
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260903_apply_v6_team_season_freeze.sql
+
+      - name: Verify installed backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v6_team_season_freeze_readonly.sql)
+          echo "$OUT"
+          VERIFY=$(printf '%s\n' "$OUT" | grep '^TEAM_SEASON_FREEZE_VERIFY,' | tail -n 1)
+          test -n "$VERIFY"
+          FINAL=${VERIFY##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Confirm domain data unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v6_team_season_freeze_readonly.sql \
+            | grep '^TEAM_SEASON_FREEZE_BASELINE,' | tail -n 1)
+          test -n "$AFTER"
+          echo "Before: $TEAM_SEASON_FREEZE_BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$TEAM_SEASON_FREEZE_BASELINE_BEFORE" = "$AFTER"
