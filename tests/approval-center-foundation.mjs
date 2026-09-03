@@ -21,6 +21,10 @@ const permissions = fs.readFileSync(
   new URL("../security/permissions.js", import.meta.url),
   "utf8"
 );
+const translations = fs.readFileSync(
+  new URL("../services/TranslationStore.js", import.meta.url),
+  "utf8"
+);
 const gameLockService = fs.readFileSync(
   new URL("../services/games/GameLockService.js", import.meta.url),
   "utf8"
@@ -171,6 +175,32 @@ assert.match(
   /import\s+\{\s*ApprovalCenterView\s*\}\s+from\s+["']\.\/views\/ApprovalCenterView\.js["']/,
   "El router de compatibilidad debe importar ApprovalCenterView."
 );
+assert.equal(
+  (translations.match(/approval_center:\s*"/g) || []).length,
+  4,
+  "El acceso a la bandeja debe tener fallback ES/CA/EN/FR."
+);
+assert.equal(
+  (translations.match(/"approvals\.title":\s*"/g) || []).length,
+  4,
+  "El título de la bandeja debe tener fallback ES/CA/EN/FR."
+);
+assert.match(
+  view,
+  /TranslationStore/,
+  "La vista debe usar el sistema de traducción existente."
+);
+assert.match(
+  view,
+  /_itemTitle\(item\)/,
+  "La presentación de títulos debe resolverse en la vista y no en el servicio."
+);
+assert.doesNotMatch(
+  service,
+  /Cerrar partido vs|Acceso a \$\{request\.teamName/,
+  "El agregador no debe contener copy de presentación."
+);
+
 assert.match(
   gameLockService,
   /async listRequests\(gameIds = \[\], \{ status = null \} = \{\}\)/,
