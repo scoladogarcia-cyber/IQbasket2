@@ -1,0 +1,38 @@
+name: Core Corrections Backend Preflight
+
+on:
+  push:
+    branches:
+      - feature/core-corrections-v1
+    paths:
+      - ".github/workflows/core-corrections-preflight.yml"
+      - "supabase/ready/20260903_preflight_v4_phase4b_edit_training_external_readonly.sql"
+      - "supabase/ready/20260903_preflight_v7_manual_boxscore_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Training edit preflight
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4b_edit_training_external_readonly.sql
+      - name: Manual boxscore preflight
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v7_manual_boxscore_readonly.sql
