@@ -398,8 +398,6 @@ as $$
 declare
   season_start date;
   season_end date;
-  activity_scope uuid;
-  activity_module text;
 begin
   select sc.start_date, sc.end_date
     into season_start, season_end
@@ -425,7 +423,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   session_scope uuid;
   activity_scope uuid;
@@ -458,7 +456,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.iq_v4_validate_training_participant()
 returns trigger
@@ -504,6 +502,8 @@ as $$
 declare
   season_start date;
   season_end date;
+  activity_scope uuid;
+  activity_module text;
 begin
   select sc.start_date, sc.end_date
     into season_start, season_end
@@ -546,7 +546,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create trigger trg_player360_activity_types_touch
 before update on public.player360_activity_types
