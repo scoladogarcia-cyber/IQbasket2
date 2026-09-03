@@ -1,0 +1,96 @@
+name: Game Locking Rehearsal
+
+on:
+  push:
+    branches:
+      - feature/game-locking-v1
+    paths:
+      - ".github/workflows/game-locking-rehearsal.yml"
+      - "supabase/ready/20260903_apply_v5_game_locking.sql"
+      - "supabase/ready/20260903_verify_v5_game_locking_readonly.sql"
+      - "supabase/ready/20260903_rollback_v5_game_locking.sql"
+
+permissions:
+  contents: read
+
+jobs:
+  rehearsal:
+    name: Apply + verify + rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Capture baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v5_game_locking_readonly.sql \
+            | grep '^GAME_LOCK_BASELINE,' | tail -n 1)
+          test -n "$BEFORE"
+          echo "GAME_LOCK_BASELINE_BEFORE=$BEFORE" >> "$GITHUB_ENV"
+
+      - name: Build transactional rehearsal script
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          apply_path = Path("supabase/ready/20260903_apply_v5_game_locking.sql")
+          verify_path = Path("supabase/ready/20260903_verify_v5_game_locking_readonly.sql")
+
+          apply_sql = apply_path.read_text()
+          verify_sql = verify_path.read_text()
+          marker = "commit;"
+          index = apply_sql.lower().rfind(marker)
+          if index < 0:
+              raise SystemExit("Final COMMIT not found in apply SQL")
+
+          rehearsal = (
+              apply_sql[:index]
+              + "\n-- Verification while the migration is still inside the transaction.\n"
+              + verify_sql
+              + "\nrollback;\n"
+          )
+          Path("/tmp/iqbasket_game_lock_rehearsal.sql").write_text(rehearsal)
+          PY
+
+      - name: Rehearse migration and verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=/tmp/iqbasket_game_lock_rehearsal.sql)
+          echo "$OUT"
+          VERIFY=$(printf '%s\n' "$OUT" | grep '^GAME_LOCK_VERIFY,' | tail -n 1)
+          test -n "$VERIFY"
+          FINAL=${VERIFY##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then
+            echo "Verification failed: $VERIFY"
+            exit 1
+          fi
+
+      - name: Confirm rollback preserved baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v5_game_locking_readonly.sql \
+            | grep '^GAME_LOCK_BASELINE,' | tail -n 1)
+          test -n "$AFTER"
+          echo "Before: $GAME_LOCK_BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$GAME_LOCK_BASELINE_BEFORE" = "$AFTER"
