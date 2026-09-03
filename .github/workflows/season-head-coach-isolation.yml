@@ -1,0 +1,66 @@
+name: Season Head Coach Isolation
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - "services/StaffAssignmentService.js"
+      - "services/DataStore.js"
+      - "views/TranslationsView.js"
+      - "tests/season-head-coach-history-regression.mjs"
+      - "supabase/drafts/20260903_smoke_v3_head_coach_season_isolation_rollback.sql"
+      - ".github/workflows/season-head-coach-isolation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-smoke:
+    name: Real DB coach season isolation with rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Assert rollback-only structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/drafts/20260903_smoke_v3_head_coach_season_isolation_rollback.sql
+          test "$(grep -Eic '^[[:space:]]*begin;[[:space:]]*$' "$FILE")" -eq 1
+          test "$(grep -Eic '^[[:space:]]*commit;[[:space:]]*$' "$FILE" || true)" -eq 0
+          test "$(grep -Eic '^[[:space:]]*rollback;[[:space:]]*$' "$FILE")" -eq 1
+
+      - name: Run season isolation smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/drafts/20260903_smoke_v3_head_coach_season_isolation_rollback.sql
+
+      - name: Verify no smoke coach persisted
+        shell: bash
+        run: |
+          set -euo pipefail
+          COUNT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select count(*)
+            from public.team_season_staff_assignments
+            where external_name = 'ZZ_SMOKE_SEASON_COACH';
+          " | tr -d '[:space:]')
+          echo "POST_ROLLBACK_SMOKE_COACHES=$COUNT"
+          test "$COUNT" = "0"
