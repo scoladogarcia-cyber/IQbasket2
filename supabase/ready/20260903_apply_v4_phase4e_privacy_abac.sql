@@ -679,6 +679,13 @@ begin
   where id = p_relationship_id
   for update;
   if v_row.id is null then raise exception 'PLAYER360_PRIVACY_RELATION_NOT_FOUND'; end if;
+  if not exists (
+    select 1 from public.roster_memberships rm
+    where rm.team_season_id = p_team_season_id
+      and rm.player_id = v_row.player_id
+  ) then
+    raise exception 'PLAYER360_PRIVACY_RELATION_SCOPE_MISMATCH';
+  end if;
 
   update public.player360_subject_relationships
   set status='REVOKED', revoked_by=auth.uid(), revoked_at=now(),
@@ -725,6 +732,28 @@ begin
     where rm.team_season_id=p_team_season_id and rm.player_id=p_player_id
   ) then
     raise exception 'PLAYER360_PRIVACY_PLAYER_SCOPE_INVALID';
+  end if;
+
+  if upper(trim(p_authorization_type)) = 'GUARDIAN_CONSENT' then
+    if p_representative_user_id is null
+       or not exists (
+         select 1
+         from public.player360_subject_relationships r
+         where r.user_id = p_representative_user_id
+           and r.player_id = p_player_id
+           and r.relationship_type = 'GUARDIAN'
+           and r.status = 'ACTIVE'
+           and r.valid_from <= now()
+           and (r.valid_until is null or r.valid_until > now())
+         union all
+         select 1
+         from public.user_profiles up
+         where up.id = p_representative_user_id
+           and up.linked_player_id = p_player_id
+           and upper(coalesce(up.global_role, up.role, '')) = 'FAMILIA_TUTOR'
+       ) then
+      raise exception 'PLAYER360_PRIVACY_GUARDIAN_RELATION_REQUIRED';
+    end if;
   end if;
 
   select array_agg(distinct lower(trim(x))) into v_modules
@@ -873,6 +902,19 @@ begin
   end if;
   if not public.iq_v4e_user_has_player_context(p_user_id,p_player_id,p_team_season_id) then
     raise exception 'PLAYER360_PRIVACY_TARGET_SCOPE_INVALID';
+  end if;
+
+  if p_request_id is not null
+     and not exists (
+       select 1
+       from public.player360_sensitive_access_requests r
+       where r.id = p_request_id
+         and r.requested_by = p_user_id
+         and r.player_id = p_player_id
+         and r.team_season_id = p_team_season_id
+         and r.status = 'PENDING'
+     ) then
+    raise exception 'PLAYER360_PRIVACY_REQUEST_SCOPE_MISMATCH';
   end if;
 
   select array_agg(distinct lower(trim(x))) into v_modules
