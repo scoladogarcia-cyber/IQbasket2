@@ -28,6 +28,7 @@ import { ReportsView } from "./views/ReportsView.js";
 import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
+import { TrainingView } from "./views/TrainingView.js";
 
 class App {
   constructor() {
@@ -130,6 +131,14 @@ class App {
 
       case "team":
         this.currentView = new TeamStatsView(this.supabase, this.authController);
+        await this.currentView.render(contentAreaId, this.teamId);
+        break;
+
+      case "training":
+      case "entrenamientos":
+      case "development":
+      case "desarrollo":
+        this.currentView = new TrainingView(this.supabase, this.authController);
         await this.currentView.render(contentAreaId, this.teamId);
         break;
 
