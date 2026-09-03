@@ -16,9 +16,19 @@ assert.match(apply, /create table if not exists public\.game_lock_history/i);
 assert.match(apply, /create unique index if not exists ux_game_lock_requests_one_pending/i);
 
 assert.match(apply, /create or replace function public\.iq_v5_current_role\(\)/i);
+assert.match(
+  apply,
+  /if coalesce\(v_role, 'INVITADO'\) = 'SUPERADMIN'[\s\S]*return 'INVITADO'/i,
+  "La base debe reservar SUPERADMIN a la identidad maestra, incluso ante perfiles malformados."
+);
 assert.match(apply, /create or replace function public\.iq_v5_can_access_team\(target_team_id uuid\)/i);
 assert.match(apply, /create or replace function public\.iq_v5_role_for_game\(target_game_id uuid\)/i);
 assert.match(apply, /team_season_memberships[\s\S]*team_seasons/i);
+assert.match(
+  apply,
+  /function_role[\s\S]*in \('ADMIN','ENTRENADOR','ANALISTA'\)/i,
+  "SUPERADMIN no debe poder delegarse mediante una membresía de equipo-temporada."
+);
 assert.match(
   apply,
   /iq_v5_can_manage_game_lock[\s\S]*iq_v5_role_for_game[\s\S]*'SUPERADMIN','ADMIN'[\s\S]*iq_v5_can_access_team/i,
