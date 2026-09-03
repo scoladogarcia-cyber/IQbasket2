@@ -28,6 +28,10 @@ export class SeasonFreezeService {
     return normalizeStatus(scope.data_status || scope.dataStatus || "ACTIVE") === "FROZEN";
   }
 
+  isFrozen(scope = {}) {
+    return SeasonFreezeService.isFrozen(scope);
+  }
+
   async getCapabilities() {
     if (!this.supabase) return { ready: false, reason: "NO_DATABASE" };
     const { data, error } = await this.supabase.rpc("iq_v6_team_season_freeze_capabilities");
