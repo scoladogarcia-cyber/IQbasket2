@@ -150,8 +150,13 @@ async function installFixture(page, viewportName) {
     window.__p360 = {
       viewportName,
       createCalls: [],
+      updateCalls: [],
+      blockSaveCalls: [],
+      blockDeleteCalls: [],
+      participantRemoveCalls: [],
       attendanceCalls: [],
       externalCalls: [],
+      externalUpdateCalls: [],
       archiveCalls: [],
       sessions: [
         {
@@ -257,6 +262,77 @@ async function installFixture(page, viewportName) {
       return id;
     };
 
+    view.service.updateSession = async args => {
+      window.__p360.updateCalls.push(structuredClone(args));
+      const session = window.__p360.sessions.find(
+        item => item.id === args.trainingSessionId
+      );
+      if (!session) throw new Error("TEST_SESSION_NOT_FOUND");
+
+      Object.assign(session, {
+        session_date: args.sessionDate,
+        title: args.title,
+        objective: args.objective,
+        duration_minutes: args.durationMinutes,
+        intensity: args.intensity,
+        start_time: args.startTime,
+        end_time: args.endTime
+      });
+      return structuredClone(session);
+    };
+
+    view.service.saveBlock = async args => {
+      window.__p360.blockSaveCalls.push(structuredClone(args));
+      const session = window.__p360.sessions.find(
+        item => item.id === args.trainingSessionId
+      );
+      if (!session) throw new Error("TEST_SESSION_NOT_FOUND");
+
+      let block = (session.blocks || []).find(item => item.id === args.blockId);
+      if (!block) {
+        block = {
+          id: "block-added-" + window.__p360.blockSaveCalls.length,
+          training_session_id: session.id
+        };
+        session.blocks.push(block);
+      }
+      Object.assign(block, {
+        block_order: args.blockOrder,
+        title: args.title,
+        activity_code: args.activityCode,
+        objective: args.objective,
+        duration_minutes: args.durationMinutes,
+        intensity: args.intensity
+      });
+      return structuredClone(block);
+    };
+
+    view.service.deleteBlock = async args => {
+      window.__p360.blockDeleteCalls.push(structuredClone(args));
+      const session = window.__p360.sessions.find(
+        item => item.id === args.trainingSessionId
+      );
+      if (session) {
+        session.blocks = (session.blocks || []).filter(
+          item => item.id !== args.blockId
+        );
+      }
+      return true;
+    };
+
+    view.service.removeParticipant = async args => {
+      window.__p360.participantRemoveCalls.push(structuredClone(args));
+      const session = window.__p360.sessions.find(
+        item => item.id === args.trainingSessionId
+      );
+      if (session) {
+        session.participants = (session.participants || []).filter(
+          item => item.player_id !== args.playerId
+        );
+      }
+      return true;
+    };
+
     view.service.setParticipant = async args => {
       window.__p360.attendanceCalls.push(structuredClone(args));
       const session = window.__p360.sessions.find(
@@ -297,6 +373,34 @@ async function installFixture(page, viewportName) {
       const session = window.__p360.sessions.find(item => item.id === id);
       if (session) session.status = "ARCHIVED";
       return true;
+    };
+
+    view.service.updateExternalDevelopment = async args => {
+      window.__p360.externalUpdateCalls.push(structuredClone(args));
+      const session = window.__p360.external.find(
+        item => item.id === args.externalSessionId
+      );
+      if (!session) throw new Error("TEST_EXTERNAL_NOT_FOUND");
+
+      Object.assign(session, {
+        player_id: args.playerId,
+        activity_date: args.activityDate,
+        title: args.title,
+        activity_code: args.activityCode,
+        provider_type: args.providerType,
+        provider_name: args.providerName,
+        objective: args.objective,
+        duration_minutes: args.durationMinutes,
+        intensity: args.intensity,
+        rpe: args.rpe,
+        notes: args.notes
+      });
+      session.internal_load =
+        Number.isFinite(Number(args.durationMinutes))
+        && Number.isFinite(Number(args.rpe))
+          ? Number(args.durationMinutes) * Number(args.rpe)
+          : null;
+      return structuredClone(session);
     };
 
     view.service.createExternalDevelopment = async args => {
@@ -604,6 +708,46 @@ async function runViewport(browser, name, viewport) {
     "Desarrollo externo desaparece tras guardar asistencia: " + JSON.stringify(postAttendanceState)
   );
 
+  // Correct an existing training and one of its blocks without recreating it.
+  const editExistingCard = page.locator(".p360-session-card").filter({ hasText: "Sesión existente" });
+  await editExistingCard.locator(".p360-edit-session").click();
+  await page.waitForSelector(".p360-training-edit-form");
+
+  const blockEditRow = page.locator(".p360-training-edit-form .p360-edit-block-row").first();
+  await blockEditRow.locator(".p360-edit-block-title").fill("Finalizaciones corregidas");
+  await blockEditRow.locator(".p360-edit-block-duration").fill("25");
+  await blockEditRow.locator(".p360-save-edit-block").click();
+  await page.waitForFunction(() => window.__p360.blockSaveCalls.length === 1);
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".p360-session-card")]
+      .some(card => card.textContent?.includes("Finalizaciones corregidas"))
+  );
+
+  await page.fill(".p360-training-edit-form .p360-edit-training-title", "Sesión existente corregida");
+  await page.fill(".p360-training-edit-form .p360-edit-training-start", "17:45");
+  await page.fill(".p360-training-edit-form .p360-edit-training-end", "19:15");
+  await page.fill(".p360-training-edit-form .p360-edit-training-intensity", "7");
+  const editDuration = await page.locator(".p360-training-edit-form .p360-edit-training-duration").inputValue();
+  assertCondition(editDuration === "90", name, "La edición no recalcula duración desde horario");
+
+  await page.locator(".p360-training-edit-form").evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => window.__p360.updateCalls.length === 1);
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".p360-session-card")]
+      .some(card => card.textContent?.includes("Sesión existente corregida"))
+  );
+
+  const trainingCorrection = await page.evaluate(() => ({
+    update: window.__p360.updateCalls[0],
+    block: window.__p360.blockSaveCalls[0],
+    session: window.__p360.sessions.find(item => item.id === "session-existing")
+  }));
+  assertCondition(trainingCorrection.update.durationMinutes === 90, name, "Corrección de sesión envía duración incorrecta");
+  assertCondition(trainingCorrection.update.startTime === "17:45", name, "Corrección de sesión pierde hora inicio");
+  assertCondition(trainingCorrection.update.endTime === "19:15", name, "Corrección de sesión pierde hora fin");
+  assertCondition(trainingCorrection.block.title === "Finalizaciones corregidas", name, "Corrección de bloque no persiste");
+  assertCondition(trainingCorrection.session.title === "Sesión existente corregida", name, "Histórico no refleja la corrección");
+
   // External development.
   const externalTab = page.locator('[data-p360-tab="external"]');
   await externalTab.evaluate(el => {
@@ -679,6 +823,28 @@ async function runViewport(browser, name, viewport) {
     "Externo pierde provenance de UI"
   );
 
+  // Correct an existing external-development / technification record.
+  const existingExternalCard = page.locator(".p360-external-card").filter({ hasText: "Tecnificación tiro" });
+  await existingExternalCard.locator(".p360-edit-external").click();
+  await page.waitForSelector(".p360-external-edit-form");
+  await page.fill(".p360-external-edit-form .p360-edit-external-title", "Tecnificación tiro corregida");
+  await page.fill(".p360-external-edit-form .p360-edit-external-duration", "65");
+  await page.fill(".p360-external-edit-form .p360-edit-external-rpe", "6");
+  await page.locator(".p360-external-edit-form").evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => window.__p360.externalUpdateCalls.length === 1);
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".p360-external-card")]
+      .some(card => card.textContent?.includes("Tecnificación tiro corregida"))
+  );
+
+  const externalCorrection = await page.evaluate(() => ({
+    call: window.__p360.externalUpdateCalls[0],
+    record: window.__p360.external.find(item => item.id === "external-existing")
+  }));
+  assertCondition(externalCorrection.call.durationMinutes === 65, name, "Corrección externa pierde duración");
+  assertCondition(externalCorrection.call.rpe === 6, name, "Corrección externa pierde RPE");
+  assertCondition(externalCorrection.record.title === "Tecnificación tiro corregida", name, "Tecnificación corregida no refresca");
+
   const finalGeometry = await page.evaluate(() => ({
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     formWidth: document.querySelector(".p360-training-view")?.getBoundingClientRect().width || 0,
@@ -702,6 +868,8 @@ async function runViewport(browser, name, viewport) {
     createCall,
     attendanceCall,
     externalCall,
+    trainingCorrection,
+    externalCorrection,
     finalGeometry,
     result: "PASS"
   }));
