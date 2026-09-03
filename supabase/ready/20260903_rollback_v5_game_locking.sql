@@ -57,6 +57,11 @@ begin
 end
 $child_policies$;
 
+revoke execute on function public.iq_v5_current_email() from authenticated;
+revoke execute on function public.iq_v5_current_role() from authenticated;
+revoke execute on function public.iq_v5_can_access_team(uuid) from authenticated;
+revoke execute on function public.iq_v5_can_manage_game_lock(uuid) from authenticated;
+revoke execute on function public.iq_v5_can_request_game_lock(uuid) from authenticated;
 revoke execute on function public.iq_v5_request_game_lock(uuid,text) from authenticated;
 revoke execute on function public.iq_v5_set_game_edit_state(uuid,text,text) from authenticated;
 revoke execute on function public.iq_v5_resolve_game_lock_request(uuid,text,text) from authenticated;
