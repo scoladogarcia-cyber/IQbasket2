@@ -30,14 +30,14 @@ for (const table of [
 ]) {
   assert.match(
     normalized,
-    new RegExp("create\\\\s+table\\\\s+public\\\\." + table + "\\\\s*\\\\("),
+    new RegExp("create\\s+table\\s+public\\." + table + "\\s*\\("),
     "Falta tabla " + table
   );
   assert.match(
     normalized,
     new RegExp(
-      "alter\\\\s+table\\\\s+public\\\\." + table
-      + "\\\\s+enable\\\\s+row\\\\s+level\\\\s+security"
+      "alter\\s+table\\s+public\\." + table
+      + "\\s+enable\\s+row\\s+level\\s+security"
     ),
     "RLS no activada en " + table
   );
@@ -58,7 +58,7 @@ for (const fn of [
 ]) {
   assert.match(
     normalized,
-    new RegExp("create\\\\s+or\\\\s+replace\\\\s+function\\\\s+public\\\\." + fn),
+    new RegExp("create\\s+or\\s+replace\\s+function\\s+public\\." + fn),
     "Falta función " + fn
   );
 }
