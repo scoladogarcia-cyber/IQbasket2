@@ -20,6 +20,46 @@ with checks as (
     to_regprocedure('public.iq_v3_is_global_superadmin()') is not null as superadmin_helper_ok,
     not exists (
       select 1
+      from (values ('id'),('team_id'),('season_id')) required(column_name)
+      where not exists (
+        select 1 from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='team_seasons'
+          and c.column_name=required.column_name
+      )
+    ) as team_season_columns_ok,
+    not exists (
+      select 1
+      from (values ('user_id'),('team_season_id'),('function_role'),('status')) required(column_name)
+      where not exists (
+        select 1 from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='team_season_memberships'
+          and c.column_name=required.column_name
+      )
+    ) as team_membership_columns_ok,
+    not exists (
+      select 1
+      from (values ('user_id'),('club_id'),('season_id'),('function_role'),('status')) required(column_name)
+      where not exists (
+        select 1 from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='club_season_memberships'
+          and c.column_name=required.column_name
+      )
+    ) as club_membership_columns_ok,
+    not exists (
+      select 1
+      from (values ('id'),('start_date'),('end_date')) required(column_name)
+      where not exists (
+        select 1 from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='season_catalog'
+          and c.column_name=required.column_name
+      )
+    ) as season_catalog_columns_ok,
+    not exists (
+      select 1
       from (values
         ('id'),('player_id'),('from_team_season_id'),('to_team_season_id'),
         ('status'),('workflow_version'),('requested_by'),('requested_at'),
@@ -52,6 +92,10 @@ select
     and request_permission_ok
     and roster_permission_ok
     and superadmin_helper_ok
+    and team_season_columns_ok
+    and team_membership_columns_ok
+    and club_membership_columns_ok
+    and season_catalog_columns_ok
     and request_columns_ok
   ) as ok
 from checks;
