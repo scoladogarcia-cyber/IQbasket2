@@ -248,6 +248,11 @@ export class PrivacyAccessEvaluator {
     }
 
     if (relation === PLAYER360_SUBJECT_RELATION.SELF) {
+      if (normalizedPurpose !== PLAYER360_PRIVACY_PURPOSE.PLAYER_SELF_SERVICE) {
+        return decision(false, PLAYER360_ABAC_REASON.DENY_UNSUPPORTED_PURPOSE, {
+          audit: true
+        });
+      }
       return decision(true, PLAYER360_ABAC_REASON.ALLOW_RESTRICTED_SELF, {
         audit: true,
         noClientProviderSecrets: normalizedAction === PLAYER360_PRIVACY_ACTION.AI_PROCESS,
@@ -257,6 +262,11 @@ export class PrivacyAccessEvaluator {
     }
 
     if (relation === PLAYER360_SUBJECT_RELATION.GUARDIAN) {
+      if (normalizedPurpose !== PLAYER360_PRIVACY_PURPOSE.FAMILY_SUPPORT) {
+        return decision(false, PLAYER360_ABAC_REASON.DENY_UNSUPPORTED_PURPOSE, {
+          audit: true
+        });
+      }
       const representativeId =
         processingAuthorization.representative_user_id
         ?? processingAuthorization.representativeUserId
@@ -276,6 +286,17 @@ export class PrivacyAccessEvaluator {
         noClientProviderSecrets: normalizedAction === PLAYER360_PRIVACY_ACTION.AI_PROCESS,
         humanReview: normalizedAction === PLAYER360_PRIVACY_ACTION.AI_PROCESS,
         explicitExportGrant: normalizedAction === PLAYER360_PRIVACY_ACTION.EXPORT
+      });
+    }
+
+    if (
+      ![
+        PLAYER360_PRIVACY_PURPOSE.SPORT_PERFORMANCE,
+        PLAYER360_PRIVACY_PURPOSE.OPERATIONS
+      ].includes(normalizedPurpose)
+    ) {
+      return decision(false, PLAYER360_ABAC_REASON.DENY_UNSUPPORTED_PURPOSE, {
+        audit: true
       });
     }
 
