@@ -53,11 +53,11 @@ export class SeasonFreezeService {
   }
 
   canRequestFreeze(scope = {}) {
-    return !SeasonFreezeService.isFrozen(scope)
-      && Boolean(this.auth?.canPreview?.(
-        Permission.REQUEST_TEAM_SEASON_FREEZE,
-        scopeContext(scope)
-      ));
+    if (SeasonFreezeService.isFrozen(scope) || this.canFreeze(scope)) return false;
+    return Boolean(this.auth?.canPreview?.(
+      Permission.REQUEST_TEAM_SEASON_FREEZE,
+      scopeContext(scope)
+    ));
   }
 
   canReviewRequests(scope = {}) {
