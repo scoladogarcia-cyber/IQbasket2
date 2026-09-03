@@ -89,7 +89,7 @@ begin
       p_game_id,
       v_player_id,
       coalesce((v_item->>'starter')::boolean,false),
-      coalesce(nullif(v_item->>'minutes','')::numeric,0),
+      coalesce(nullif(v_item->>'minutes','')::integer,0),
       coalesce(nullif(v_item->>'points','')::integer,0),
       coalesce(nullif(v_item->>'fg2_made','')::integer,0),
       coalesce(nullif(v_item->>'fg2_attempted','')::integer,0),
@@ -132,7 +132,7 @@ begin
   end loop;
 
   update public.games
-  set starter_ids=coalesce(p_starter_ids,'{}'::uuid[])
+  set starter_ids=to_jsonb(coalesce(p_starter_ids,'{}'::uuid[]))
   where id=p_game_id;
 
   return jsonb_build_object(
