@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - qa/core-user-flows-v1
+      - fix/mobile-nutrition-navigation-v1
     paths:
       - "views/TrainingView.js"
       - "views/GameBoxScoreView.js"
