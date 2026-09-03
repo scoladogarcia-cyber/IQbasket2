@@ -174,7 +174,7 @@ language sql
 stable
 security definer
 set search_path=''
-as $$
+as $
   select
     auth.uid() is not null
     and exists (
@@ -182,8 +182,15 @@ as $$
       where ts.id=p_team_season_id
         and upper(coalesce(ts.data_status,'ACTIVE'))='ACTIVE'
     )
-    and public.iq_v6_role_for_team_season(p_team_season_id) in ('ENTRENADOR','ANALISTA');
-$$;
+    and exists (
+      select 1
+      from public.team_season_memberships m
+      where m.team_season_id=p_team_season_id
+        and m.user_id=auth.uid()
+        and upper(coalesce(m.status,'ACTIVE'))='ACTIVE'
+        and upper(coalesce(m.function_role,'')) in ('ENTRENADOR','ANALISTA')
+    );
+$;
 
 create or replace function public.iq_v6_team_season_freeze_capabilities()
 returns jsonb
