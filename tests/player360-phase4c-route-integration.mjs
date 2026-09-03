@@ -63,6 +63,10 @@ const guest = new PermissionService({
   assigned_team_ids: [teamId],
   allowed_team_season_ids: [teamSeasonId]
 });
-assert.equal(guest.can(Permission.VIEW_PLAYER_360, context), false);
+assert.equal(guest.can(Permission.VIEW_PLAYER_360, context), true);
+assert.equal(guest.can(Permission.CREATE_PLAYER_EVALUATION, context), false);
+assert.equal(guest.can(Permission.EDIT_PLAYER_EVALUATION, context), false);
+assert.equal(guest.can(Permission.CREATE_OBJECTIVE_PROFILE, context), false);
+assert.equal(guest.can(Permission.EDIT_OBJECTIVE_PROFILE, context), false);
 
 console.log("PLAYER360_PHASE4C_ROUTE_INTEGRATION_OK");
