@@ -25,7 +25,10 @@ for (const permission of [
   Permission.VIEW_OBJECTIVE_PROFILE,
   Permission.VIEW_DATA_COVERAGE,
   Permission.VIEW_LONGITUDINAL_ANALYTICS,
-  Permission.VIEW_AI_INSIGHTS
+  Permission.VIEW_AI_INSIGHTS,
+  Permission.VIEW_RECOVERY,
+  Permission.VIEW_NUTRITION,
+  Permission.VIEW_WELLNESS_RECOMMENDATIONS
 ]) {
   assert.equal(has(permission), true, `INVITADO debe consultar ${permission}`);
 }
@@ -60,8 +63,11 @@ for (const permission of [
 }
 
 assert.equal(has(Permission.VIEW_PRIVATE_PLAYER_EVALUATION), false);
-assert.equal(has(Permission.VIEW_RECOVERY), false);
-assert.equal(has(Permission.VIEW_NUTRITION), false);
+assert.equal(has(Permission.VIEW_RECOVERY), true);
+assert.equal(has(Permission.EDIT_RECOVERY), false);
+assert.equal(has(Permission.VIEW_NUTRITION), true);
+assert.equal(has(Permission.EDIT_NUTRITION), false);
+assert.equal(has(Permission.VIEW_WELLNESS_RECOMMENDATIONS), true);
 assert.equal(has(Permission.VIEW_PRIVACY_AUTHORIZATIONS), false);
 
 const layoutSource = readFileSync(
