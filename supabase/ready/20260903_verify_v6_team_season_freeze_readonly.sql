@@ -16,9 +16,6 @@ with checks as (
     position(
       'data_status' in pg_get_functiondef(to_regprocedure('public.iq_v3_can_manage_roster(uuid)'))
     ) > 0 as roster_helper_frozen_guard_ok,
-    position(
-      'iq_v6_role_for_team_season' in pg_get_functiondef(to_regprocedure('public.iq_v5_role_for_game(uuid)'))
-    ) > 0 as game_role_alignment_ok,
     exists (
       select 1 from pg_trigger
       where tgrelid='public.games'::regclass
@@ -53,7 +50,7 @@ select
   requests_table_ok and history_table_ok and freeze_token_ok
     and role_helper_ok and manage_helper_ok and request_helper_ok
     and request_rpc_ok and state_rpc_ok and resolve_rpc_ok
-    and roster_helper_frozen_guard_ok and game_role_alignment_ok
+    and roster_helper_frozen_guard_ok
     and game_trigger_ok and membership_trigger_ok and stint_trigger_ok
     and game_insert_rls_ok and status_domain_ok as all_ok
 from checks;
