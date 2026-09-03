@@ -1,6 +1,6 @@
 -- =============================================================================
 -- IQBasket V5 · Game locking preflight (READ ONLY)
--- Verifies the installed schema required by the self-contained lock RBAC.
+-- Verifies only stable tables/columns used by the self-contained contextual RBAC.
 -- =============================================================================
 
 with checks as (
@@ -8,6 +8,8 @@ with checks as (
     to_regclass('public.games') is not null as games_table_ok,
     to_regclass('public.teams') is not null as teams_table_ok,
     to_regclass('public.user_profiles') is not null as profiles_table_ok,
+    to_regclass('public.team_seasons') is not null as team_seasons_table_ok,
+    to_regclass('public.team_season_memberships') is not null as memberships_table_ok,
     to_regclass('public.player_game_stats') is not null as player_stats_table_ok,
     to_regclass('public.team_game_stats') is not null as team_stats_table_ok,
     to_regclass('public.game_events') is not null as game_events_table_ok,
@@ -16,9 +18,7 @@ with checks as (
     to_regclass('public.play_by_play_events') is not null as play_by_play_table_ok,
     not exists (
       select 1
-      from (values
-        ('email'),('role'),('team_id'),('allowed_team_ids'),('club_id')
-      ) as required_columns(column_name)
+      from (values ('id'),('email'),('role')) as required_columns(column_name)
       where not exists (
         select 1
         from information_schema.columns c
@@ -26,11 +26,29 @@ with checks as (
           and c.table_name='user_profiles'
           and c.column_name=required_columns.column_name
       )
-    ) as profile_scope_columns_ok,
-    exists (
-      select 1 from information_schema.columns
-      where table_schema='public' and table_name='teams' and column_name='club_id'
-    ) as team_club_column_ok,
+    ) as profile_identity_columns_ok,
+    not exists (
+      select 1
+      from (values ('id'),('team_id')) as required_columns(column_name)
+      where not exists (
+        select 1
+        from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='team_seasons'
+          and c.column_name=required_columns.column_name
+      )
+    ) as team_season_columns_ok,
+    not exists (
+      select 1
+      from (values ('user_id'),('team_season_id'),('function_role'),('status')) as required_columns(column_name)
+      where not exists (
+        select 1
+        from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='team_season_memberships'
+          and c.column_name=required_columns.column_name
+      )
+    ) as membership_columns_ok,
     exists (
       select 1 from information_schema.columns
       where table_schema='public' and table_name='games' and column_name='team_id'
@@ -63,14 +81,17 @@ select
   games_table_ok,
   teams_table_ok,
   profiles_table_ok,
+  team_seasons_table_ok,
+  memberships_table_ok,
   player_stats_table_ok,
   team_stats_table_ok,
   game_events_table_ok,
   period_scores_table_ok,
   lineup_stats_table_ok,
   play_by_play_table_ok,
-  profile_scope_columns_ok,
-  team_club_column_ok,
+  profile_identity_columns_ok,
+  team_season_columns_ok,
+  membership_columns_ok,
   game_team_ok,
   game_team_season_ok,
   child_game_id_columns_ok,
@@ -78,14 +99,17 @@ select
     games_table_ok
     and teams_table_ok
     and profiles_table_ok
+    and team_seasons_table_ok
+    and memberships_table_ok
     and player_stats_table_ok
     and team_stats_table_ok
     and game_events_table_ok
     and period_scores_table_ok
     and lineup_stats_table_ok
     and play_by_play_table_ok
-    and profile_scope_columns_ok
-    and team_club_column_ok
+    and profile_identity_columns_ok
+    and team_season_columns_ok
+    and membership_columns_ok
     and game_team_ok
     and game_team_season_ok
     and child_game_id_columns_ok
