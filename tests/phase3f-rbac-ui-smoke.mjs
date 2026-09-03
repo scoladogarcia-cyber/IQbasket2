@@ -29,8 +29,10 @@ async function renderRole(page, spec) {
     app.teamId = TEAM_A;
     app.currentRoute = "settings";
     app.permissionService.setCurrentUser({
-      id: `70000000-0000-4000-8000-${spec.role.padEnd(12, "0").slice(0,12)}`,
-      email: `${spec.role.toLowerCase()}@example.test`,
+      id: "70000000-0000-4000-8000-000000000001",
+      email: spec.role === "SUPERADMIN"
+        ? "scolado@nechigroup.com"
+        : `${spec.role.toLowerCase()}@example.test`,
       role: spec.role,
       global_role: spec.role === "SUPERADMIN" ? "SUPERADMIN" : null,
       assigned_team_ids: [TEAM_A],
