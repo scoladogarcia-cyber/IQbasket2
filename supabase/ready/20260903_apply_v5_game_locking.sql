@@ -75,9 +75,10 @@ create table if not exists public.game_lock_history (
 create index if not exists ix_game_lock_history_game_created
   on public.game_lock_history(game_id, created_at desc);
 
--- 3) Self-contained RBAC helpers.
--- They mirror the currently used role/team scope without depending on historical
--- helper migrations that may not be installed in every environment.
+-- 3) Self-contained contextual RBAC helpers.
+-- The lock subsystem reads stable identity fields plus v3 team-season memberships.
+-- Legacy team arrays are read dynamically from to_jsonb(user_profiles), so the
+-- migration does not depend on optional historical columns being present.
 create or replace function public.iq_v5_current_email()
 returns text
 language sql
@@ -115,32 +116,127 @@ $$;
 
 create or replace function public.iq_v5_can_access_team(target_team_id uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = ''
 as $$
-  select
-    public.iq_v5_current_role() = 'SUPERADMIN'
-    or exists (
-      select 1
-      from public.user_profiles up
-      where lower(up.email) = public.iq_v5_current_email()
-        and (
-          up.team_id = target_team_id
-          or target_team_id = any(coalesce(up.allowed_team_ids, '{}'::uuid[]))
-          or (
-            public.iq_v5_current_role() = 'ADMIN'
-            and up.club_id is not null
-            and exists (
-              select 1
-              from public.teams t
-              where t.id = target_team_id
-                and t.club_id = up.club_id
-            )
-          )
-        )
-    );
+declare
+  v_profile jsonb;
+  v_user_id uuid;
+  v_role text := public.iq_v5_current_role();
+begin
+  if target_team_id is null then
+    return false;
+  end if;
+
+  if v_role = 'SUPERADMIN' then
+    return true;
+  end if;
+
+  select to_jsonb(up), up.id
+  into v_profile, v_user_id
+  from public.user_profiles up
+  where lower(up.email) = public.iq_v5_current_email()
+  limit 1;
+
+  if v_user_id is null then
+    return false;
+  end if;
+
+  -- Contextual v3 membership is the preferred source of truth.
+  if exists (
+    select 1
+    from public.team_season_memberships m
+    join public.team_seasons ts on ts.id = m.team_season_id
+    where m.user_id = v_user_id
+      and ts.team_id = target_team_id
+      and upper(coalesce(m.status, 'ACTIVE')) = 'ACTIVE'
+  ) then
+    return true;
+  end if;
+
+  -- Transitional legacy scope: optional fields are read as JSON, never referenced
+  -- as SQL columns, so environments with older user_profiles remain compatible.
+  if coalesce(v_profile ->> 'team_id', '') = target_team_id::text then
+    return true;
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements_text(
+      case
+        when jsonb_typeof(v_profile -> 'assigned_team_ids') = 'array'
+          then v_profile -> 'assigned_team_ids'
+        else '[]'::jsonb
+      end
+    ) as item(value)
+    where item.value = target_team_id::text
+  ) then
+    return true;
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements_text(
+      case
+        when jsonb_typeof(v_profile -> 'allowed_team_ids') = 'array'
+          then v_profile -> 'allowed_team_ids'
+        else '[]'::jsonb
+      end
+    ) as item(value)
+    where item.value = target_team_id::text
+  ) then
+    return true;
+  end if;
+
+  if v_role = 'ADMIN'
+     and nullif(v_profile ->> 'club_id', '') is not null
+     and exists (
+       select 1
+       from public.teams t
+       where t.id = target_team_id
+         and t.club_id::text = v_profile ->> 'club_id'
+     ) then
+    return true;
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.iq_v5_role_for_game(target_game_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_role text;
+begin
+  if public.iq_v5_current_role() = 'SUPERADMIN' then
+    return 'SUPERADMIN';
+  end if;
+
+  select upper(m.function_role)
+  into v_role
+  from public.games g
+  join public.team_season_memberships m
+    on m.team_season_id = g.team_season_id
+  where g.id = target_game_id
+    and m.user_id = auth.uid()
+    and upper(coalesce(m.status, 'ACTIVE')) = 'ACTIVE'
+  order by case upper(m.function_role)
+    when 'ADMIN' then 1
+    when 'ENTRENADOR' then 2
+    when 'ANALISTA' then 3
+    else 10
+  end
+  limit 1;
+
+  return coalesce(v_role, public.iq_v5_current_role());
+end;
 $$;
 
 create or replace function public.iq_v5_can_manage_game_lock(target_game_id uuid)
@@ -154,7 +250,7 @@ as $$
     select 1
     from public.games g
     where g.id = target_game_id
-      and public.iq_v5_current_role() in ('SUPERADMIN','ADMIN')
+      and public.iq_v5_role_for_game(g.id) in ('SUPERADMIN','ADMIN')
       and public.iq_v5_can_access_team(g.team_id)
   );
 $$;
@@ -171,7 +267,7 @@ as $$
     from public.games g
     where g.id = target_game_id
       and upper(coalesce(g.edit_state, 'OPEN')) = 'OPEN'
-      and public.iq_v5_current_role() in ('ENTRENADOR','ANALISTA')
+      and public.iq_v5_role_for_game(g.id) in ('ENTRENADOR','ANALISTA')
       and public.iq_v5_can_access_team(g.team_id)
   );
 $$;
@@ -224,7 +320,7 @@ begin
         game_id, action, actor_id, actor_role, reason
       )
       values (
-        old.id, 'LOCKED', auth.uid(), public.iq_v5_current_role(), new.lock_reason
+        old.id, 'LOCKED', auth.uid(), public.iq_v5_role_for_game(old.id), new.lock_reason
       );
     elsif v_new_state = 'OPEN' then
       new.reopened_at := now();
@@ -234,7 +330,7 @@ begin
         game_id, action, actor_id, actor_role, reason
       )
       values (
-        old.id, 'REOPENED', auth.uid(), public.iq_v5_current_role(), new.lock_reason
+        old.id, 'REOPENED', auth.uid(), public.iq_v5_role_for_game(old.id), new.lock_reason
       );
     else
       raise exception 'GAME_EDIT_STATE_INVALID'
@@ -457,7 +553,7 @@ begin
   values (
     p_game_id,
     auth.uid(),
-    public.iq_v5_current_role(),
+    public.iq_v5_role_for_game(p_game_id),
     nullif(trim(p_reason), '')
   )
   returning id into v_request_id;
@@ -470,7 +566,7 @@ begin
     v_request_id,
     'REQUESTED',
     auth.uid(),
-    public.iq_v5_current_role(),
+    public.iq_v5_role_for_game(p_game_id),
     nullif(trim(p_reason), '')
   );
 
@@ -555,7 +651,7 @@ begin
       v_pending_request_id,
       'REQUEST_APPROVED',
       auth.uid(),
-      public.iq_v5_current_role(),
+      public.iq_v5_role_for_game(p_game_id),
       nullif(trim(p_reason), '')
     );
   end if;
@@ -635,7 +731,7 @@ begin
       else 'REQUEST_REJECTED'
     end,
     auth.uid(),
-    public.iq_v5_current_role(),
+    public.iq_v5_role_for_game(v_request.game_id),
     coalesce(nullif(trim(p_resolution_note), ''), v_request.request_reason)
   );
 end;
@@ -665,6 +761,7 @@ using (public.iq_v5_can_manage_game_lock(game_id));
 revoke all on function public.iq_v5_current_email() from public, anon;
 revoke all on function public.iq_v5_current_role() from public, anon;
 revoke all on function public.iq_v5_can_access_team(uuid) from public, anon;
+revoke all on function public.iq_v5_role_for_game(uuid) from public, anon;
 revoke all on function public.iq_v5_can_manage_game_lock(uuid) from public, anon;
 revoke all on function public.iq_v5_can_request_game_lock(uuid) from public, anon;
 revoke all on function public.iq_v5_request_game_lock(uuid,text) from public, anon;
@@ -674,6 +771,7 @@ revoke all on function public.iq_v5_resolve_game_lock_request(uuid,text,text) fr
 grant execute on function public.iq_v5_current_email() to authenticated;
 grant execute on function public.iq_v5_current_role() to authenticated;
 grant execute on function public.iq_v5_can_access_team(uuid) to authenticated;
+grant execute on function public.iq_v5_role_for_game(uuid) to authenticated;
 grant execute on function public.iq_v5_can_manage_game_lock(uuid) to authenticated;
 grant execute on function public.iq_v5_can_request_game_lock(uuid) to authenticated;
 grant execute on function public.iq_v5_request_game_lock(uuid,text) to authenticated;
