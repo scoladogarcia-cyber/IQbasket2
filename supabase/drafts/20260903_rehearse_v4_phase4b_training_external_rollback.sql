@@ -400,7 +400,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   scope_found boolean := false;
   season_start date;
@@ -423,7 +423,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.iq_v4_validate_training_block()
 returns trigger
@@ -505,7 +505,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   scope_found boolean := false;
   season_start date;
@@ -554,7 +554,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create trigger trg_player360_activity_types_touch
 before update on public.player360_activity_types
