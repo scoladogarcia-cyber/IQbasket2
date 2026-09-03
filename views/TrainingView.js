@@ -689,15 +689,26 @@ export class TrainingView {
 
         ${this._renderAttendanceEditor(session, directory)}
 
-        ${this._can(Permission.DELETE_TRAINING) ? `
+        ${(this._canEditTrainingRecord() || this._can(Permission.DELETE_TRAINING)) ? `
           <div class="p360-card-actions">
-            <button
-              type="button"
-              class="p360-danger-link p360-archive-session"
-              data-session-id="${escapeHtml(session.id)}"
-            >
-              Archivar sesión
-            </button>
+            ${this._canEditTrainingRecord() ? `
+              <button
+                type="button"
+                class="p360-link-btn p360-edit-session"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                ✏️ Editar sesión
+              </button>
+            ` : ""}
+            ${this._can(Permission.DELETE_TRAINING) ? `
+              <button
+                type="button"
+                class="p360-danger-link p360-archive-session"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                Archivar sesión
+              </button>
+            ` : ""}
           </div>
         ` : ""}
       </article>
@@ -913,6 +924,15 @@ export class TrainingView {
 
                     ${session.objective ? `<p class="p360-card-text"><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>` : ""}
                     ${session.notes ? `<p class="p360-card-text"><strong>Nota:</strong> ${escapeHtml(session.notes)}</p>` : ""}
+                    ${this._canEditExternalRecord() ? `
+                      <div class="p360-card-actions">
+                        <button type="button"
+                          class="p360-link-btn p360-edit-external"
+                          data-external-id="${escapeHtml(session.id)}">
+                          ✏️ Editar tecnificación
+                        </button>
+                      </div>
+                    ` : ""}
                   </article>
                 `;
               }).join("")
@@ -1306,10 +1326,20 @@ export class TrainingView {
     if (externalTab) externalTab.setAttribute("aria-selected", String(external));
   }
 
-  _refreshTrainingPlayerOptions(container, date) {
+  _refreshTrainingPlayerOptions(container, date, selectedIds = null, lockedIds = null) {
     const target = container.querySelector("#p360-training-player-options");
     if (!target) return;
-    target.innerHTML = this._renderParticipantChecklist(date);
+
+    const currentSelected = selectedIds || [
+      ...target.querySelectorAll('input[name="p360-training-player"]:checked')
+    ].map(input => input.value);
+
+    const editing=this._editingSession();
+    const confirmed = lockedIds || (editing?.participants || [])
+      .filter(item => String(item.attendance_status || "PLANNED").toUpperCase() !== "PLANNED")
+      .map(item => item.player_id);
+
+    target.innerHTML = this._renderParticipantChecklist(date,currentSelected,confirmed);
     this._bindParticipantSelectionTools(container);
   }
 
@@ -1322,7 +1352,7 @@ export class TrainingView {
 
     container.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
       container.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
-        input.checked = false;
+        if (!input.disabled) input.checked = false;
       });
     });
   }
@@ -1341,6 +1371,7 @@ export class TrainingView {
         }
 
         return {
+          id: row.dataset.blockId || null,
           block_order: index + 1,
           title: title || code || `Bloque ${index + 1}`,
           activity_code: code || null,
