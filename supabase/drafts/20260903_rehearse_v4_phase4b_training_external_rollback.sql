@@ -1,6 +1,7 @@
 -- =============================================================================
 -- IQBasket v4 · Phase 4B Rehearsal · FORCED ROLLBACK
 -- Date: 2026-09-03
+-- Generated from current Phase 4B apply migration.
 -- =============================================================================
 
 -- =============================================================================
@@ -399,29 +400,30 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
 declare
+  scope_found boolean := false;
   season_start date;
   season_end date;
 begin
-  select sc.start_date, sc.end_date
-    into season_start, season_end
+  select true, sc.start_date, sc.end_date
+    into scope_found, season_start, season_end
   from public.team_seasons ts
   join public.season_catalog sc on sc.id = ts.season_id
   where ts.id = new.team_season_id;
 
-  if season_start is null then
+  if not coalesce(scope_found, false) then
     raise exception 'TEAM_SEASON_NOT_FOUND';
   end if;
 
-  if new.session_date < season_start
+  if (season_start is not null and new.session_date < season_start)
      or (season_end is not null and new.session_date > season_end) then
     raise exception 'TRAINING_DATE_OUTSIDE_SEASON';
   end if;
 
   return new;
 end;
-$$;
+$;
 
 create or replace function public.iq_v4_validate_training_block()
 returns trigger
@@ -503,24 +505,25 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
 declare
+  scope_found boolean := false;
   season_start date;
   season_end date;
   activity_scope uuid;
   activity_module text;
 begin
-  select sc.start_date, sc.end_date
-    into season_start, season_end
+  select true, sc.start_date, sc.end_date
+    into scope_found, season_start, season_end
   from public.team_seasons ts
   join public.season_catalog sc on sc.id = ts.season_id
   where ts.id = new.team_season_id;
 
-  if season_start is null then
+  if not coalesce(scope_found, false) then
     raise exception 'TEAM_SEASON_NOT_FOUND';
   end if;
 
-  if new.activity_date < season_start
+  if (season_start is not null and new.activity_date < season_start)
      or (season_end is not null and new.activity_date > season_end) then
     raise exception 'EXTERNAL_DEVELOPMENT_DATE_OUTSIDE_SEASON';
   end if;
@@ -551,7 +554,7 @@ begin
 
   return new;
 end;
-$$;
+$;
 
 create trigger trg_player360_activity_types_touch
 before update on public.player360_activity_types
