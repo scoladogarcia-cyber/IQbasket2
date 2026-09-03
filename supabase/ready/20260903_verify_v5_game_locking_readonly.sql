@@ -16,6 +16,7 @@ with checks as (
     to_regclass('public.game_lock_history') is not null as history_table_ok,
     to_regprocedure('public.iq_v5_current_role()') is not null as role_helper_ok,
     to_regprocedure('public.iq_v5_can_access_team(uuid)') is not null as access_helper_ok,
+    to_regprocedure('public.iq_v5_role_for_game(uuid)') is not null as contextual_role_helper_ok,
     to_regprocedure('public.iq_v5_can_manage_game_lock(uuid)') is not null as manage_helper_ok,
     to_regprocedure('public.iq_v5_can_request_game_lock(uuid)') is not null as request_helper_ok,
     to_regprocedure('public.iq_v5_request_game_lock(uuid,text)') is not null as request_rpc_ok,
@@ -82,6 +83,7 @@ select
     and history_table_ok
     and role_helper_ok
     and access_helper_ok
+    and contextual_role_helper_ok
     and manage_helper_ok
     and request_helper_ok
     and request_rpc_ok
