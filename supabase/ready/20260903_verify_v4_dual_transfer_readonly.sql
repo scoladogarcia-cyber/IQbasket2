@@ -25,6 +25,14 @@ with checks as (
         and tablename='roster_transfer_reviews'
         and policyname='iq_v4_transfer_reviews_select_authorized'
     ) as review_rls_policy_ok,
+    exists (
+      select 1
+      from pg_policies
+      where schemaname='public'
+        and tablename='roster_transfer_requests'
+        and policyname='iq_v3_transfer_request_select_authorized'
+        and position('requested_by = auth.uid()' in lower(coalesce(qual, ''))) > 0
+    ) as requester_self_read_ok,
     position(
       'DUAL_TRANSFER_REVIEWS_REQUIRED'
       in pg_get_functiondef('public.iq_v3_approve_transfer_request(uuid,date,date)'::regprocedure)
@@ -52,6 +60,7 @@ select
     and review_v4_ok
     and finalize_v4_ok
     and review_rls_policy_ok
+    and requester_self_read_ok
     and legacy_guard_reviews_ok
     and legacy_guard_dates_ok
     and finalizer_superadmin_ok
