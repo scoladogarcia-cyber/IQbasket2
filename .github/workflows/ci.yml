@@ -109,6 +109,9 @@ jobs:
       - name: Team-season freeze UI contract
         run: node tests/team-season-freeze-ui-contract.mjs
 
+      - name: SaaS P0 anonymous mutation hardening
+        run: node tests/saas-p0-anon-hardening-sql.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
