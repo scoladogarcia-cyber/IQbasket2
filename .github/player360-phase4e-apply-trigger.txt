@@ -1,0 +1,5 @@
+Player 360 Phase 4E controlled apply trigger
+Date: 2026-09-03
+Reason: CI PASS + read-only preflight PASS + two rollback rehearsals PASS.
+Scope: privacy/consent/ABAC governance foundation only.
+No Nutrition/Recovery/Neuro data tables are created.
