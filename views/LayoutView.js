@@ -211,7 +211,7 @@ export class LayoutView {
 
     const isComparatorRestricted = userRole === "JUGADOR" || userRole === "FAMILIA_TUTOR";
     const isAiRestricted = userRole === "JUGADOR";
-    const isTrainingRestricted = ["JUGADOR", "FAMILIA_TUTOR", "VISOR", "INVITADO"].includes(userRole);
+    const isTrainingRestricted = ["JUGADOR", "FAMILIA_TUTOR", "VISOR"].includes(userRole);
 
     const navGroups = [
       {
@@ -926,16 +926,18 @@ export class LayoutView {
 
           .mobile-drawer-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
+            width: 100vw;
+            height: 100dvh;
+            min-height: 100dvh;
             background-color: rgba(15, 23, 42, 0.75);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
             z-index: 1050;
             display: none;
             align-items: flex-end;
+            overflow: hidden;
+            overscroll-behavior: contain;
           }
 
           .mobile-drawer-overlay.open {
@@ -944,16 +946,19 @@ export class LayoutView {
 
           .mobile-drawer-content {
             width: 100%;
+            min-height: 0;
             background-color: #ffffff;
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
             padding: 16px;
-            padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
-            max-height: min(82dvh, 720px);
+            padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+            max-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)));
             overflow-y: auto;
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
             touch-action: pan-y;
+            scrollbar-gutter: stable;
           }
 
           .drawer-header {

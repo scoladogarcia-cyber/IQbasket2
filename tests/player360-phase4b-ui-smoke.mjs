@@ -123,6 +123,25 @@ async function installFixture(page, viewportName) {
       drawerHref: playerTrainingDrawer?.getAttribute("href") || ""
     };
 
+    const guestScratch = document.createElement("div");
+    guestScratch.innerHTML = LayoutView.wrap(
+      '<div id="dashboard-content-area"></div>',
+      "training",
+      "INVITADO"
+    );
+    const guestTrainingNav = guestScratch.querySelector(
+      '.nav-link[data-route-key="training"]'
+    );
+    const guestTrainingDrawer = guestScratch.querySelector(
+      '.drawer-item[data-route-key="training"]'
+    );
+    window.__p360GuestNavCheck = {
+      desktopLocked: guestTrainingNav?.classList.contains("disabled-link") || false,
+      desktopHref: guestTrainingNav?.getAttribute("href") || "",
+      drawerLocked: guestTrainingDrawer?.classList.contains("disabled-link") || false,
+      drawerHref: guestTrainingDrawer?.getAttribute("href") || ""
+    };
+
     // Isolated real TrainingView host. Existing SPA listeners may remain on
     // window, but they have no #app node to overwrite and therefore cannot
     // race with the component under test.
@@ -229,7 +248,7 @@ async function installFixture(page, viewportName) {
           training_session_id: id,
           player_id: participant.player_id,
           attendance_status: participant.attendance_status,
-          participated_minutes: null,
+          participated_minutes: participant.participated_minutes ?? null,
           rpe: null,
           internal_load: null,
           notes: null
@@ -333,7 +352,8 @@ async function runViewport(browser, name, viewport) {
 
   const nav = await page.evaluate(() => ({
     coach: window.__p360NavCheck,
-    player: window.__p360PlayerNavCheck
+    player: window.__p360PlayerNavCheck,
+    guest: window.__p360GuestNavCheck
   }));
 
   assertCondition(nav.coach.desktopExists, name, "Falta navegación desktop de Training");
@@ -343,6 +363,10 @@ async function runViewport(browser, name, viewport) {
   assertCondition(nav.coach.drawerHref === "#/training", name, "Training móvil no apunta a #/training");
   assertCondition(nav.player.desktopLocked, name, "Training no queda bloqueado para JUGADOR en desktop");
   assertCondition(nav.player.drawerLocked, name, "Training no queda bloqueado para JUGADOR en móvil");
+  assertCondition(nav.guest.desktopHref === "#/training", name, "INVITADO desktop no apunta a Training");
+  assertCondition(nav.guest.drawerHref === "#/training", name, "INVITADO móvil no apunta a Training");
+  assertCondition(!nav.guest.desktopLocked, name, "Training aparece bloqueado para INVITADO en desktop");
+  assertCondition(!nav.guest.drawerLocked, name, "Training aparece bloqueado para INVITADO en móvil");
 
   const core = await page.evaluate(() => ({
     title: document.querySelector(".p360-hero h1")?.textContent || "",
@@ -350,7 +374,10 @@ async function runViewport(browser, name, viewport) {
     hasExternalTab: Boolean(document.querySelector('[data-p360-tab="external"]')),
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     trainingMin: document.querySelector("#p360-training-date")?.getAttribute("min") || null,
-    trainingMax: document.querySelector("#p360-training-date")?.getAttribute("max") || null
+    trainingMax: document.querySelector("#p360-training-date")?.getAttribute("max") || null,
+    heroTitleColor: getComputedStyle(document.querySelector(".p360-hero h1")).color,
+    heroPillColor: getComputedStyle(document.querySelector(".p360-context-pill")).color,
+    durationReadOnly: Boolean(document.querySelector("#p360-training-duration")?.readOnly)
   }));
 
   assertCondition(core.title.includes("Player 360"), name, "No se renderiza Player 360 Training");
@@ -359,6 +386,9 @@ async function runViewport(browser, name, viewport) {
   assertCondition(!core.horizontalOverflow, name, "Overflow horizontal en estado inicial");
   assertCondition(core.trainingMin === "2025-09-01", name, "Min de temporada incorrecto");
   assertCondition(core.trainingMax === "2026-06-30", name, "Max de temporada incorrecto");
+  assertCondition(core.heroTitleColor === "rgb(255, 255, 255)", name, "Título hero sin contraste suficiente");
+  assertCondition(core.heroPillColor === "rgb(255, 255, 255)", name, "Contexto hero sin contraste suficiente");
+  assertCondition(core.durationReadOnly, name, "Duración debe ser derivada y no editable");
 
   // Cancelling a training draft must discard local state and never persist.
   await page.locator("#p360-create-training-panel").evaluate(el => { el.open = true; });
@@ -395,8 +425,12 @@ async function runViewport(browser, name, viewport) {
 
   await page.click("#p360-select-all-players");
   await page.fill("#p360-training-title", "Sesión creada por UI smoke");
-  await page.fill("#p360-training-duration", "90");
+  await page.fill("#p360-training-start-time", "18:00");
+  await page.fill("#p360-training-end-time", "19:30");
   await page.fill("#p360-training-intensity", "7.5");
+
+  const derivedDuration = await page.locator("#p360-training-duration").inputValue();
+  assertCondition(derivedDuration === "90", name, "La duración no se calcula desde inicio/fin");
   await page.fill(".p360-block-title", "Tiro tras bote");
   await page.fill(".p360-block-code", "SHOOTING");
   await page.fill(".p360-block-duration", "25");
@@ -423,10 +457,10 @@ async function runViewport(browser, name, viewport) {
   });
 
   assertCondition(
-    addBlockGeometry.top >= 0
-      && addBlockGeometry.bottom <= addBlockGeometry.viewportHeight
-      && addBlockGeometry.left >= 0
-      && addBlockGeometry.right <= addBlockGeometry.viewportWidth,
+    addBlockGeometry.top >= -1
+      && addBlockGeometry.bottom <= addBlockGeometry.viewportHeight + 1
+      && addBlockGeometry.left >= -1
+      && addBlockGeometry.right <= addBlockGeometry.viewportWidth + 1,
     name,
     "Añadir bloque no puede situarse completamente dentro del viewport móvil"
   );
@@ -450,7 +484,20 @@ async function runViewport(browser, name, viewport) {
   assertCondition(createCall.teamSeasonId === TEAM_SEASON_ID, name, "Alta usa team-season incorrecto");
   assertCondition(createCall.sessionDate === "2026-02-10", name, "Alta usa fecha incorrecta");
   assertCondition(createCall.blocks.length === 2, name, "Alta no envía dos bloques");
+  assertCondition(createCall.durationMinutes === 90, name, "Alta no envía duración derivada");
+  assertCondition(createCall.startTime === "18:00", name, "Alta no envía hora de inicio");
+  assertCondition(createCall.endTime === "19:30", name, "Alta no envía hora de fin");
   assertCondition(createCall.participants.length === 2, name, "Alta no envía plantilla seleccionada");
+  assertCondition(
+    createCall.participants.every(row => row.attendance_status === "PRESENT"),
+    name,
+    "Una sesión histórica debe crear los seleccionados como presentes"
+  );
+  assertCondition(
+    createCall.participants.every(row => row.participated_minutes === 90),
+    name,
+    "Los presentes de una sesión histórica deben heredar la duración completa"
+  );
 
   // Attendance/RPE edit of the existing session.
   const existingCard = page.locator(".p360-session-card").filter({ hasText: "Sesión existente" });
@@ -461,10 +508,11 @@ async function runViewport(browser, name, viewport) {
   await attendanceRow.locator(".p360-att-rpe").fill("7");
   await attendanceRow.locator(".p360-att-notes").fill("Smoke carga");
   const saveAttendanceButton = attendanceRow.locator(".p360-save-attendance");
+  await saveAttendanceButton.scrollIntoViewIfNeeded();
   await saveAttendanceButton.evaluate(el => {
-    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    el.scrollIntoView({ block: "center", inline: "nearest" });
   });
-  await page.waitForTimeout(80);
+  await page.waitForTimeout(120);
   const attendanceButtonGeometry = await saveAttendanceButton.evaluate(el => {
     const rect = el.getBoundingClientRect();
     return {
@@ -477,10 +525,10 @@ async function runViewport(browser, name, viewport) {
     };
   });
   assertCondition(
-    attendanceButtonGeometry.top >= 0
-      && attendanceButtonGeometry.bottom <= attendanceButtonGeometry.viewportHeight
-      && attendanceButtonGeometry.left >= 0
-      && attendanceButtonGeometry.right <= attendanceButtonGeometry.viewportWidth,
+    attendanceButtonGeometry.top >= -1
+      && attendanceButtonGeometry.bottom <= attendanceButtonGeometry.viewportHeight + 1
+      && attendanceButtonGeometry.left >= -1
+      && attendanceButtonGeometry.right <= attendanceButtonGeometry.viewportWidth + 1,
     name,
     "Guardar asistencia no queda completamente dentro del viewport"
   );

@@ -1489,8 +1489,9 @@ export class TranslationsView {
         .iq-modal-overlay {
           position: fixed;
           inset: 0;
-          width: 100%;
+          width: 100vw;
           height: 100dvh;
+          min-height: 100dvh;
           box-sizing: border-box;
           background: rgba(15, 23, 42, 0.75);
           backdrop-filter: blur(4px);
@@ -1508,12 +1509,16 @@ export class TranslationsView {
         }
         .iq-modal-card {
           width: 100%;
+          min-height: 0;
           max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
           overflow-y: auto;
+          overflow-x: hidden;
           overscroll-behavior: contain;
           -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
           box-sizing: border-box;
           margin: auto 0;
+          padding-bottom: max(16px, env(safe-area-inset-bottom));
         }
         .iq-modal-card-sm { max-width: 500px; }
         .iq-modal-card-md { max-width: 600px; }
@@ -1536,7 +1541,12 @@ export class TranslationsView {
           .grid-2-cols, .grid-4-cols, .players-grid { grid-template-columns: 1fr !important; }
           .player-card { align-items: flex-start; flex-wrap: wrap; }
           .player-card-actions { width: 100%; justify-content: flex-start; }
-          .iq-modal-card { margin: 0; max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 14px; }
+          .iq-modal-card {
+            margin: 0;
+            max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            padding: 14px;
+            padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+          }
           .iq-modal-header { top: -14px; margin: -2px -2px 12px; padding-top: 2px; }
         }
       </style>

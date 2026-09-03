@@ -122,6 +122,21 @@ const COMMON_READ = [
   Permission.VIEW_SEASONS
 ];
 
+const INVITED_SPORTING_READ = [
+  Permission.VIEW_PLAYER_COMPARISON,
+  Permission.USE_COMPARATOR,
+  Permission.USE_AI,
+  Permission.VIEW_FAMILY_ADVISOR,
+  Permission.VIEW_PLAYER_360,
+  Permission.VIEW_TRAINING,
+  Permission.VIEW_EXTERNAL_DEVELOPMENT,
+  Permission.VIEW_PLAYER_EVALUATION,
+  Permission.VIEW_OBJECTIVE_PROFILE,
+  Permission.VIEW_DATA_COVERAGE,
+  Permission.VIEW_LONGITUDINAL_ANALYTICS,
+  Permission.VIEW_AI_INSIGHTS
+];
+
 export const ROLE_PERMISSIONS = Object.freeze({
   [UserRole.SUPERADMIN]: Object.values(Permission),
 
@@ -386,12 +401,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
 
   [UserRole.INVITADO]: [
     ...COMMON_READ,
-    Permission.VIEW_PLAYER_COMPARISON,
-    Permission.USE_COMPARATOR,
-    Permission.USE_AI,
-    Permission.VIEW_FAMILY_ADVISOR,
-    Permission.EDIT_OWN_PROFILE,
-    Permission.CHANGE_OWN_PASSWORD,
+    ...INVITED_SPORTING_READ,
     Permission.REQUEST_TEAM_ACCESS
   ]
 });

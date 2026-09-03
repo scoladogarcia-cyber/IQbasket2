@@ -47,12 +47,33 @@ function numberOrNull(value) {
 }
 
 function displayNumber(value, digits = 0) {
+  if (value === null || value === undefined || value === "") return "—";
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
   return number.toLocaleString(undefined, {
     maximumFractionDigits: digits,
     minimumFractionDigits: 0
   });
+}
+
+/**
+ * Calculates same-day duration from two HH:MM values.
+ * Returns null for incomplete/invalid ranges so UI and backend cannot diverge.
+ */
+function minutesBetweenTimes(startTime = "", endTime = "") {
+  const parse = value => {
+    const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return null;
+    return (hours * 60) + minutes;
+  };
+
+  const start = parse(startTime);
+  const end = parse(endTime);
+  if (start === null || end === null || end <= start) return null;
+  return end - start;
 }
 
 function playerName(player = null) {
@@ -198,10 +219,19 @@ export class TrainingView {
     }
   }
 
+  _sessionDuration(session = {}) {
+    const stored = numberOrNull(session.duration_minutes);
+    if (stored !== null && stored > 0) return stored;
+    return minutesBetweenTimes(
+      String(session.start_time || "").slice(0, 5),
+      String(session.end_time || "").slice(0, 5)
+    );
+  }
+
   _sessionSummary() {
     const sessions = this.sessions.filter(session => session.status !== "ARCHIVED");
     const totalMinutes = sessions.reduce(
-      (sum, session) => sum + (Number(session.duration_minutes) || 0),
+      (sum, session) => sum + (this._sessionDuration(session) || 0),
       0
     );
     const intensityValues = sessions
@@ -349,17 +379,26 @@ export class TrainingView {
 
             <label>
               <span>${escapeHtml(this.t("player360.training.start_time", "Inicio"))}</span>
-              <input type="time" id="p360-training-start-time" />
+              <input type="time" id="p360-training-start-time" required />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.end_time", "Fin"))}</span>
-              <input type="time" id="p360-training-end-time" />
+              <input type="time" id="p360-training-end-time" required />
             </label>
 
             <label>
-              <span>${escapeHtml(this.t("player360.training.duration", "Duración total (min)"))}</span>
-              <input type="number" id="p360-training-duration" min="1" max="600" inputmode="numeric" />
+              <span>${escapeHtml(this.t("player360.training.duration", "Duración calculada (min)"))}</span>
+              <input
+                type="number"
+                id="p360-training-duration"
+                min="1"
+                max="600"
+                inputmode="numeric"
+                readonly
+                aria-readonly="true"
+                placeholder="Inicio + fin"
+              />
             </label>
 
             <label>
@@ -441,6 +480,11 @@ export class TrainingView {
     );
     const eligible = this._eligiblePlayers(session.session_date)
       .filter(player => !existing.has(String(player.id)));
+    const plannedParticipants = (session.participants || []).filter(
+      participant => String(participant.attendance_status || "").toUpperCase() === "PLANNED"
+    );
+    const canConfirmPlanned = String(session.session_date || "") <= localIsoDate()
+      && plannedParticipants.length > 0;
 
     return `
       <details class="p360-attendance-panel">
@@ -449,6 +493,21 @@ export class TrainingView {
         </summary>
 
         <div class="p360-attendance-list">
+          ${canConfirmPlanned ? `
+            <div class="p360-attendance-bulk">
+              <span>
+                ${plannedParticipants.length} participante${plannedParticipants.length === 1 ? "" : "s"} pendiente${plannedParticipants.length === 1 ? "" : "s"} de confirmar.
+              </span>
+              <button
+                type="button"
+                class="p360-secondary-btn p360-confirm-planned"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                ✓ Marcar planificadas como presentes
+              </button>
+            </div>
+          ` : ""}
+
           ${(session.participants || []).map(participant => {
             const player = directory.get(String(participant.player_id));
             return `
@@ -555,7 +614,7 @@ export class TrainingView {
         </div>
 
         <div class="p360-session-metrics">
-          <span>⏱ ${displayNumber(session.duration_minutes)} min</span>
+          <span>⏱ ${displayNumber(this._sessionDuration(session))} min</span>
           <span>⚡ Intensidad ${displayNumber(session.intensity, 1)}</span>
           <span>👥 ${present}/${(session.participants || []).length} presentes/parciales</span>
           <span>📊 Carga ${displayNumber(load, 1)}</span>
@@ -832,10 +891,15 @@ export class TrainingView {
           color: white;
           border-radius: 16px;
         }
-        .p360-hero h1 { margin: 0 0 6px; font-size: clamp(22px, 4vw, 30px); }
+        .p360-hero h1 {
+          margin: 0 0 6px;
+          font-size: clamp(22px, 4vw, 30px);
+          color: #ffffff !important;
+        }
         .p360-hero p { margin: 0; color: #dbeafe; max-width: 760px; line-height: 1.5; }
         .p360-context-pill {
           flex: 0 0 auto;
+          color: #ffffff !important;
           padding: 8px 12px;
           border-radius: 999px;
           background: rgba(255,255,255,.12);
@@ -1066,6 +1130,19 @@ export class TrainingView {
         .p360-block-chip span { color: #64748b; }
         .p360-attendance-panel { border-radius: 10px; }
         .p360-attendance-list { display: grid; gap: 8px; padding: 0 10px 10px; }
+        .p360-attendance-bulk {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: #f8fafc;
+          border: 1px solid #dbe3ee;
+          color: #475569;
+          font-size: 12px;
+          font-weight: 700;
+        }
         .p360-attendance-row {
           display: grid;
           grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto;
@@ -1128,7 +1205,11 @@ export class TrainingView {
         }
 
         @media (max-width: 640px) {
-          .p360-training-view { padding: 12px; gap: 14px; }
+          .p360-training-view {
+            padding: 12px;
+            padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+            gap: 14px;
+          }
           .p360-hero { display: grid; border-radius: 12px; }
           .p360-context-pill { justify-self: start; white-space: normal; }
           .p360-kpi-grid { grid-template-columns: 1fr 1fr; }
@@ -1148,6 +1229,8 @@ export class TrainingView {
           .p360-session-top { display: grid; }
           .p360-status, .p360-source-badge { justify-self: start; }
           .p360-attendance-row { grid-template-columns: 1fr 1fr; }
+          .p360-attendance-bulk { align-items: stretch; flex-direction: column; }
+          .p360-attendance-bulk .p360-secondary-btn { width: 100%; }
           .p360-add-participant-row { display: grid; }
         }
       </style>
@@ -1228,6 +1311,18 @@ export class TrainingView {
       this._refreshTrainingPlayerOptions(container, trainingDate.value);
     });
 
+    const trainingStart = container.querySelector("#p360-training-start-time");
+    const trainingEnd = container.querySelector("#p360-training-end-time");
+    const trainingDuration = container.querySelector("#p360-training-duration");
+    const syncTrainingDuration = () => {
+      if (!trainingDuration) return null;
+      const duration = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
+      trainingDuration.value = duration === null ? "" : String(duration);
+      return duration;
+    };
+    trainingStart?.addEventListener("input", syncTrainingDuration);
+    trainingEnd?.addEventListener("input", syncTrainingDuration);
+
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
 
     container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
@@ -1296,6 +1391,38 @@ export class TrainingView {
         return;
       }
 
+      const confirmPlanned = event.target.closest(".p360-confirm-planned");
+      if (confirmPlanned) {
+        const session = this.sessions.find(
+          item => String(item.id) === String(confirmPlanned.dataset.sessionId)
+        );
+        const planned = (session?.participants || []).filter(
+          participant => String(participant.attendance_status || "").toUpperCase() === "PLANNED"
+        );
+        if (!session || !planned.length) return;
+
+        confirmPlanned.disabled = true;
+        try {
+          const duration = this._sessionDuration(session);
+          for (const participant of planned) {
+            await this.service.setParticipant({
+              trainingSessionId: session.id,
+              playerId: participant.player_id,
+              attendanceStatus: "PRESENT",
+              participatedMinutes: duration,
+              rpe: numberOrNull(participant.rpe),
+              notes: participant.notes || null
+            });
+          }
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error confirmando asistencia planificada:", error);
+          alert(`❌ ${error.message || error}`);
+          confirmPlanned.disabled = false;
+        }
+        return;
+      }
+
       const addParticipant = event.target.closest(".p360-add-participant");
       if (addParticipant) {
         const wrapper = addParticipant.closest(".p360-add-participant-row");
@@ -1304,10 +1431,17 @@ export class TrainingView {
 
         addParticipant.disabled = true;
         try {
+          const session = this.sessions.find(
+            item => String(item.id) === String(addParticipant.dataset.sessionId)
+          );
+          const alreadyOccurred = String(session?.session_date || "") <= localIsoDate();
           await this.service.setParticipant({
             trainingSessionId: addParticipant.dataset.sessionId,
             playerId,
-            attendanceStatus: "PLANNED"
+            attendanceStatus: alreadyOccurred ? "PRESENT" : "PLANNED",
+            participatedMinutes: alreadyOccurred
+              ? this._sessionDuration(session)
+              : null
           });
           await this.render(this.containerId, this.teamId);
         } catch (error) {
@@ -1352,9 +1486,20 @@ export class TrainingView {
         .map(input => input.value)
         .filter(Boolean);
 
+      const startTime = form.querySelector("#p360-training-start-time")?.value || "";
+      const endTime = form.querySelector("#p360-training-end-time")?.value || "";
+      const durationMinutes = minutesBetweenTimes(startTime, endTime);
+
+      if (durationMinutes === null) {
+        alert("⚠️ Indica una hora de inicio y fin válidas. La hora de fin debe ser posterior al inicio.");
+        return;
+      }
+
+      const alreadyOccurred = String(date) <= localIsoDate();
       const participants = selectedPlayers.map(playerId => ({
         player_id: playerId,
-        attendance_status: "PLANNED"
+        attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
+        participated_minutes: alreadyOccurred ? durationMinutes : null
       }));
 
       submit.disabled = true;
@@ -1364,10 +1509,10 @@ export class TrainingView {
           sessionDate: date,
           title,
           objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
-          durationMinutes: numberOrNull(form.querySelector("#p360-training-duration")?.value),
+          durationMinutes,
           intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
-          startTime: form.querySelector("#p360-training-start-time")?.value || null,
-          endTime: form.querySelector("#p360-training-end-time")?.value || null,
+          startTime,
+          endTime,
           blocks: this._collectBlocks(form),
           participants
         });
