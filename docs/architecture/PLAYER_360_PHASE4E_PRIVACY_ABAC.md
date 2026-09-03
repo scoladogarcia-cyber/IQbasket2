@@ -12,6 +12,31 @@ sensibilidad `WELLNESS_RESTRICTED` (Recovery, Nutrition y Neuro-Cognitive).
 3. grant concreto de acceso por usuario/acción/finalidad;
 4. auditoría de cambios de autorización.
 
+## Estado de despliegue · 2026-09-03
+
+Phase 4E.1 está **instalada en Supabase** mediante Controlled Apply.
+
+Evidencia de validación:
+
+- CI de dominio/RBAC/SQL: PASS;
+- preflight read-only: PASS;
+- rehearsal rollback-only #1: PASS;
+- rehearsal rollback-only #2: PASS;
+- baseline antes/después de rehearsal:
+  `17|14|144|23|22|1|1|0|0|0`;
+- apply controlado: PASS;
+- verificador post-apply: PASS;
+- smoke instalado: PASS;
+- rollback de filas sintéticas del smoke: PASS;
+- baseline post-apply:
+  `17|14|144|23|22|1|1|0|0|0`;
+- filas 4E tras smoke:
+  `0|0|0|0|0`;
+- rollback de emergencia: no necesario.
+
+La instalación crea únicamente recursos de gobierno y helpers ABAC. No contiene
+datos wellness reales ni habilita Nutrition, Recovery o Neuro-Cognitive.
+
 ## Principios
 
 - RBAC sigue siendo la primera barrera, pero no basta para datos sensibles.
@@ -105,15 +130,19 @@ pueden solicitar acceso, no concedérselo a sí mismos.
 
 ## Secuencia de despliegue
 
-1. CI del evaluador puro.
-2. Preflight read-only contra Supabase.
-3. Rehearsal transaccional completo con rollback forzado.
-4. Verificación de ausencia total de objetos 4E tras rehearsal.
-5. Preparación de apply/rollback independientes.
-6. Controlled Apply.
-7. Smoke instalado con datos sintéticos y rollback de filas.
-8. Confirmar baseline 4A–4D sin cambios.
-9. Solo entonces diseñar Nutrition/Recovery.
+La secuencia 4E.1 ya se completó:
+
+1. CI del evaluador puro;
+2. preflight read-only contra Supabase;
+3. rehearsal transaccional con rollback forzado;
+4. repetición del rehearsal tras guard de paridad apply/rehearsal;
+5. apply/rollback independientes;
+6. Controlled Apply;
+7. smoke instalado con datos sintéticos y rollback de filas;
+8. baseline 4A–4D confirmado sin cambios.
+
+El preflight original esperaba ausencia de objetos 4E y, por tanto, **no debe
+reutilizarse ahora como si 4E no estuviera instalada**.
 
 ## No incluido todavía
 
