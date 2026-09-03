@@ -1,0 +1,64 @@
+name: Player 360 Phase 4B UI
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - "views/TrainingView.js"
+      - "views/LayoutView.js"
+      - "index.js"
+      - "security/permissions.js"
+      - "services/player360/TrainingService.js"
+      - "config/player360.config.js"
+      - "tests/player360-phase4b-ui-smoke.mjs"
+      - ".github/workflows/player360-phase4b-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Training desktop + mobile without DB writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/player360-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/player360-vite.log
+          exit 1
+
+      - name: Run Player 360 Phase 4B browser smoke
+        env:
+          PLAYER360_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/player360-phase4b-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/player360-vite.log || true

@@ -39,6 +39,8 @@ import { TranslationsView } from "./views/TranslationsView.js";
 import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
 import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
+import { TrainingView } from "./views/TrainingView.js";
+import { Player360View } from "./views/Player360View.js";
 
 export class IQBasketApp {
   constructor() {
@@ -78,6 +80,8 @@ export class IQBasketApp {
       comparator: new ComparatorView(this.authController),
       reports: new ReportsView(this.authController),
       familyadvisor: new FamilyAdvisorView(this.authController),
+      training: new TrainingView(supabase, this.authController),
+      player360: new Player360View(supabase, this.authController),
       settings: new TranslationsView(this.authController),
       ask: new AskAIView(this.authController),
       profile: new ProfileView(this.authController),
@@ -588,9 +592,14 @@ export class IQBasketApp {
     
     // Guarda centralizada por permiso. En modo simulación usa el rol de previsualización.
     const requiredPermission = ROUTE_PERMISSIONS[targetRoute];
+    const routePlayerId = ["player360", "player-360", "desarrollo-jugador"].includes(targetRoute)
+      ? parts[1] || null
+      : null;
     const routeContext = {
       teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
-      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null,
+      playerId: routePlayerId,
+      playerTeamId: this.teamId || DataStore.getActiveTeamId?.() || null
     };
     if (requiredPermission && this.isAuthenticated && !this.permissionService.canPreview(requiredPermission, routeContext)) {
       alert("⚠️ Tu perfil no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
@@ -740,6 +749,24 @@ export class IQBasketApp {
       case "quintetos":
         if (this.views.lineups) await this.views.lineups.render(contentArea);
         break;
+
+      case "training":
+      case "entrenamientos":
+      case "development":
+      case "desarrollo":
+        if (this.views.training) {
+          await this.views.training.render(contentArea, this.teamId);
+        }
+        break;
+
+      case "player360":
+      case "player-360":
+      case "desarrollo-jugador":
+        if (this.views.player360) {
+          await this.views.player360.render(contentArea, this.routeParams.id, this.teamId);
+        }
+        break;
+
 
       case "comparator":
       case "comparador":

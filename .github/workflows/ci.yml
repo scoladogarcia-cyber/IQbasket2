@@ -31,6 +31,33 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Player 360 Phase 4A foundation smoke
+        run: node tests/player360-foundation-smoke.mjs
+
+      - name: Player 360 Phase 4B training service smoke
+        run: node tests/player360-phase4b-service-smoke.mjs
+
+      - name: Player 360 Phase 4B route integration
+        run: node tests/player360-phase4b-route-integration.mjs
+
+      - name: Player 360 Phase 4C SQL structure
+        run: node tests/player360-phase4c-sql-structure.mjs
+
+      - name: Player 360 Phase 4C domain and service smoke
+        run: node tests/player360-phase4c-domain-service-smoke.mjs
+
+      - name: Player 360 Phase 4C route and RBAC integration
+        run: node tests/player360-phase4c-route-integration.mjs
+
+      - name: Player 360 Phase 4D longitudinal foundation
+        run: node tests/player360-phase4d-foundation-smoke.mjs
+
+      - name: Player 360 Phase 4D SQL structure
+        run: node tests/player360-phase4d-sql-structure.mjs
+
+      - name: Player 360 Phase 4D service boundary
+        run: node tests/player360-phase4d-service-smoke.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 

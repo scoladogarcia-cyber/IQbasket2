@@ -1,0 +1,70 @@
+name: Player 360 Phase 4B Rehearsal
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - "supabase/ready/20260903_preflight_v4_phase4b_training_external_readonly.sql"
+      - "supabase/ready/20260903_apply_v4_phase4b_training_external.sql"
+      - "supabase/drafts/20260903_rehearse_v4_phase4b_training_external_rollback.sql"
+      - "supabase/ready/20260903_verify_v4_phase4b_postrollback_readonly.sql"
+      - ".github/workflows/player360-phase4b-rehearsal.yml"
+      - "tests/player360-phase4b-sql-structure.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase4b-rehearsal:
+    name: Preflight + real DB forced rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Structural SQL guards
+        run: node tests/player360-phase4b-sql-structure.mjs
+
+      - name: Run read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4b_training_external_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4B_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Run real Phase 4B rehearsal with forced rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/drafts/20260903_rehearse_v4_phase4b_training_external_rollback.sql
+
+      - name: Verify clean rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4b_postrollback_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4B_POST_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'

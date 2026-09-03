@@ -1,4 +1,5 @@
 import { chromium } from "@playwright/test";
+import { installBrowserNetworkStubs } from "./browser-test-support.mjs";
 
 const BASE_URL = process.env.PHASE3E_BASE_URL || "http://127.0.0.1:4173";
 const TEAM_A = "11111111-1111-4111-8111-111111111111";
@@ -156,6 +157,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   for (const spec of cases) {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await installBrowserNetworkStubs(page);
     await renderRole(page, spec);
 
     const state = await page.evaluate(() => ({

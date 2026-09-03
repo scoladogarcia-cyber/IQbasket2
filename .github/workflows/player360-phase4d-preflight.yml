@@ -1,0 +1,49 @@
+name: Player 360 Phase 4D Preflight
+
+on:
+  push:
+    branches:
+      - feature/player360-core-v1
+    paths:
+      - ".github/workflows/player360-phase4d-preflight.yml"
+      - "supabase/ready/20260903_preflight_v4_phase4d_longitudinal_ai_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Read-only Phase 4D preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Assert SQL is read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/ready/20260903_preflight_v4_phase4d_longitudinal_ai_readonly.sql
+          if grep -Eiq '^[[:space:]]*(insert|update|delete|truncate|alter|drop|create|grant|revoke|call)[[:space:]]' "$FILE"; then
+            echo "Unsafe SQL statement detected in Phase 4D preflight."
+            exit 1
+          fi
+      - name: Run Phase 4D preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4d_longitudinal_ai_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4D_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
