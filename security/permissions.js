@@ -132,23 +132,6 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.REQUEST_TRANSFER,
     Permission.MANAGE_ROSTER,
     Permission.MANAGE_SEASONS,
-    Permission.VIEW_PLAYER_360,
-    Permission.VIEW_TRAINING,
-    Permission.CREATE_TRAINING,
-    Permission.EDIT_TRAINING,
-    Permission.DELETE_TRAINING,
-    Permission.VIEW_EXTERNAL_DEVELOPMENT,
-    Permission.CREATE_EXTERNAL_DEVELOPMENT,
-    Permission.EDIT_EXTERNAL_DEVELOPMENT,
-    Permission.VIEW_PLAYER_EVALUATION,
-    Permission.VIEW_PRIVATE_PLAYER_EVALUATION,
-    Permission.CREATE_PLAYER_EVALUATION,
-    Permission.EDIT_PLAYER_EVALUATION,
-    Permission.VIEW_OBJECTIVE_PROFILE,
-    Permission.VIEW_DATA_COVERAGE,
-    Permission.VIEW_AI_INSIGHTS,
-    Permission.GENERATE_AI_INSIGHTS,
-    Permission.EXPORT_PLAYER_360,
     Permission.VIEW_USERS,
     Permission.INVITE_USERS,
     Permission.ASSIGN_STANDARD_ROLES,
@@ -190,7 +173,24 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.REQUEST_TEAM_ACCESS,
     Permission.REQUEST_TRANSFER,
     Permission.MANAGE_ROSTER,
-    Permission.MANAGE_SEASONS
+    Permission.MANAGE_SEASONS,
+    Permission.VIEW_PLAYER_360,
+    Permission.VIEW_TRAINING,
+    Permission.CREATE_TRAINING,
+    Permission.EDIT_TRAINING,
+    Permission.DELETE_TRAINING,
+    Permission.VIEW_EXTERNAL_DEVELOPMENT,
+    Permission.CREATE_EXTERNAL_DEVELOPMENT,
+    Permission.EDIT_EXTERNAL_DEVELOPMENT,
+    Permission.VIEW_PLAYER_EVALUATION,
+    Permission.VIEW_PRIVATE_PLAYER_EVALUATION,
+    Permission.CREATE_PLAYER_EVALUATION,
+    Permission.EDIT_PLAYER_EVALUATION,
+    Permission.VIEW_OBJECTIVE_PROFILE,
+    Permission.VIEW_DATA_COVERAGE,
+    Permission.VIEW_AI_INSIGHTS,
+    Permission.GENERATE_AI_INSIGHTS,
+    Permission.EXPORT_PLAYER_360
   ],
 
   [UserRole.ANALISTA]: [
@@ -207,10 +207,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.MANAGE_REPORTS,
     Permission.USE_AI,
     Permission.VIEW_FAMILY_ADVISOR,
-    Permission.REQUEST_TEAM_ACCESS
-  ],
-
-  [UserRole.PREPARADOR_FISICO]: [
+    Permission.REQUEST_TEAM_ACCESS,
     Permission.VIEW_PLAYER_360,
     Permission.VIEW_TRAINING,
     Permission.VIEW_EXTERNAL_DEVELOPMENT,
@@ -231,10 +228,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.MANAGE_REPORTS,
     Permission.USE_AI,
     Permission.VIEW_FAMILY_ADVISOR,
-    Permission.REQUEST_TEAM_ACCESS
-  ],
-
-  [UserRole.JUGADOR]: [
+    Permission.REQUEST_TEAM_ACCESS,
     Permission.VIEW_PLAYER_360,
     Permission.VIEW_TRAINING,
     Permission.VIEW_EXTERNAL_DEVELOPMENT,
@@ -242,6 +236,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.VIEW_OBJECTIVE_PROFILE,
     Permission.VIEW_DATA_COVERAGE,
     Permission.VIEW_AI_INSIGHTS,
+    Permission.GENERATE_AI_INSIGHTS,
     Permission.EXPORT_PLAYER_360
   ],
 
