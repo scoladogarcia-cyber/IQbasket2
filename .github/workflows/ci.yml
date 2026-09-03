@@ -37,5 +37,8 @@ jobs:
       - name: Player 360 Phase 4B training service smoke
         run: node tests/player360-phase4b-service-smoke.mjs
 
+      - name: Season head-coach history regression
+        run: node tests/season-head-coach-history-regression.mjs
+
       - name: Build
         run: npm run build
