@@ -53,10 +53,25 @@ export class TrainingService {
     const { data, error } = await this.supabase.rpc("iq_v4_training_capabilities");
     if (error) throw error;
 
-    this._capabilities = data || {
-      ready: false,
-      training_core: false,
-      external_development: false
+    let editCapabilities = {};
+    try {
+      const { data: editData, error: editError } = await this.supabase.rpc(
+        "iq_core_ux_training_edit_capabilities"
+      );
+      if (!editError && editData) editCapabilities = editData;
+    } catch {
+      // Compatibilidad con entornos donde el backend de edición aún no está instalado.
+    }
+
+    this._capabilities = {
+      ...(data || {
+        ready: false,
+        training_core: false,
+        external_development: false
+      }),
+      update_training: Boolean(editCapabilities.update_training),
+      update_external_development: Boolean(editCapabilities.update_external_development),
+      frozen_season_guard: Boolean(editCapabilities.frozen_season_guard)
     };
 
     return this._capabilities;
@@ -181,6 +196,43 @@ export class TrainingService {
     return data;
   }
 
+  async updateSession({
+    trainingSessionId,
+    sessionDate,
+    title,
+    objective = null,
+    durationMinutes = null,
+    intensity = null,
+    startTime = null,
+    endTime = null,
+    blocks = [],
+    participantIds = []
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(sessionDate, "sessionDate");
+    assertRequired(title, "title");
+
+    const { data, error } = await this.supabase.rpc(
+      "iq_v4_update_training_session",
+      {
+        p_training_session_id: trainingSessionId,
+        p_session_date: sessionDate,
+        p_title: title,
+        p_objective: objective,
+        p_duration_minutes: durationMinutes,
+        p_intensity: intensity,
+        p_start_time: startTime,
+        p_end_time: endTime,
+        p_blocks: normalizeArray(blocks),
+        p_participant_ids: normalizeArray(participantIds)
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
   async setParticipant({
     trainingSessionId,
     playerId,
@@ -280,6 +332,56 @@ export class TrainingService {
       "iq_v4_create_external_development",
       {
         p_team_season_id: teamSeasonId,
+        p_player_id: playerId,
+        p_activity_date: activityDate,
+        p_title: title,
+        p_activity_code: activityCode,
+        p_activity_type_id: activityTypeId,
+        p_provider_type: providerType,
+        p_provider_name: providerName,
+        p_objective: objective,
+        p_duration_minutes: durationMinutes,
+        p_intensity: intensity,
+        p_rpe: rpe,
+        p_source_type: sourceType,
+        p_notes: notes,
+        p_provenance: provenance && typeof provenance === "object" ? provenance : {},
+        p_metadata: metadata && typeof metadata === "object" ? metadata : {}
+      }
+    );
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateExternalDevelopment({
+    externalDevelopmentId,
+    playerId,
+    activityDate,
+    title,
+    activityCode = null,
+    activityTypeId = null,
+    providerType = null,
+    providerName = null,
+    objective = null,
+    durationMinutes = null,
+    intensity = null,
+    rpe = null,
+    sourceType = "EXTERNAL_COACH",
+    notes = null,
+    provenance = {},
+    metadata = {}
+  } = {}) {
+    this._assertReady();
+    assertRequired(externalDevelopmentId, "externalDevelopmentId");
+    assertRequired(playerId, "playerId");
+    assertRequired(activityDate, "activityDate");
+    assertRequired(title, "title");
+
+    const { data, error } = await this.supabase.rpc(
+      "iq_v4_update_external_development",
+      {
+        p_external_development_id: externalDevelopmentId,
         p_player_id: playerId,
         p_activity_date: activityDate,
         p_title: title,
