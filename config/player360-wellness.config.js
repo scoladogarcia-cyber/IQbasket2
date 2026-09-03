@@ -138,13 +138,106 @@ export const PLAYER360_WELLNESS_PROHIBITED_DEFAULT_CODES = Object.freeze([
   "CLINICAL_SYMPTOMS"
 ]);
 
+export const WELLNESS_RECOMMENDATION_PRIORITY = Object.freeze({
+  INFO: "INFO",
+  SUPPORT: "SUPPORT",
+  REVIEW: "REVIEW"
+});
+
+export const WELLNESS_RECOMMENDATION_RULES = Object.freeze([
+  Object.freeze({
+    module: "recovery",
+    metric_code: "SLEEP_QUALITY",
+    trigger: "LTE",
+    threshold: 2,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_SLEEP_ROUTINE",
+    title: "Protege tu rutina de descanso",
+    message: "Hoy prioriza una rutina de descanso estable y reduce cambios innecesarios antes de la siguiente sesión."
+  }),
+  Object.freeze({
+    module: "recovery",
+    metric_code: "FATIGUE",
+    trigger: "GTE",
+    threshold: 4,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.REVIEW,
+    code: "REVIEW_FATIGUE_LOAD",
+    title: "Revisa la carga del día",
+    message: "La fatiga percibida es alta. Conviene revisar con el staff la intensidad prevista y priorizar calidad de ejecución."
+  }),
+  Object.freeze({
+    module: "recovery",
+    metric_code: "MUSCLE_SORENESS",
+    trigger: "GTE",
+    threshold: 4,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.REVIEW,
+    code: "REVIEW_MUSCLE_LOAD",
+    title: "Ajusta la exigencia si es necesario",
+    message: "La molestia muscular percibida es alta. Revisa sensaciones con el staff antes de aumentar la carga."
+  }),
+  Object.freeze({
+    module: "recovery",
+    metric_code: "READINESS",
+    trigger: "LTE",
+    threshold: 2,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.REVIEW,
+    code: "REVIEW_READINESS",
+    title: "Prioriza calidad sobre cantidad",
+    message: "La preparación percibida es baja. Antes de la sesión, revisa objetivos y carga para mantener una ejecución de calidad."
+  }),
+  Object.freeze({
+    module: "nutrition",
+    metric_code: "HYDRATION_ADHERENCE",
+    trigger: "LTE",
+    threshold: 2,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_HYDRATION_PLAN",
+    title: "Recupera tu pauta de hidratación",
+    message: "Vuelve a la pauta de hidratación que ya tengas definida y distribúyela de forma regular durante el día."
+  }),
+  Object.freeze({
+    module: "nutrition",
+    metric_code: "MEAL_REGULARITY",
+    trigger: "LTE",
+    threshold: 2,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_MEAL_REGULARITY",
+    title: "Gana regularidad",
+    message: "Intenta recuperar una pauta regular de ingestas acorde con tu planificación habitual."
+  }),
+  Object.freeze({
+    module: "nutrition",
+    metric_code: "PRE_TRAINING_FUELING",
+    trigger: "EQ",
+    threshold: false,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_PRE_ACTIVITY_ROUTINE",
+    title: "Prepara mejor la próxima sesión",
+    message: "Para la próxima sesión, planifica con antelación tu pauta habitual previa a la actividad."
+  }),
+  Object.freeze({
+    module: "nutrition",
+    metric_code: "POST_TRAINING_RECOVERY",
+    trigger: "EQ",
+    threshold: false,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_POST_ACTIVITY_ROUTINE",
+    title: "Cierra mejor la sesión",
+    message: "Recupera tu pauta habitual posterior a la actividad para reforzar la consistencia de recuperación."
+  })
+]);
+
 export const PLAYER360_WELLNESS_CONFIG = Object.freeze({
   contractVersion: "PLAYER360_WELLNESS_V1",
   supportedModules: Object.freeze(["nutrition", "recovery"]),
   supportedValueTypes: Object.freeze(Object.values(WELLNESS_VALUE_TYPE)),
   allowFreeTextValue: false,
+  manualInputEnabled: true,
+  externalImportEnabled: false,
+  recommendationsEnabled: true,
   aiProcessingEnabled: false,
-  defaultMetrics: PLAYER360_WELLNESS_DEFAULT_METRICS
+  defaultMetrics: PLAYER360_WELLNESS_DEFAULT_METRICS,
+  recommendationRules: WELLNESS_RECOMMENDATION_RULES
 });
 
 export default PLAYER360_WELLNESS_CONFIG;
