@@ -79,6 +79,9 @@ jobs:
       - name: Training duration hotfix SQL
         run: node tests/training-duration-hotfix-sql.mjs
 
+      - name: Mobile invited read-only regression
+        run: node tests/mobile-invited-readonly-regression.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
