@@ -110,12 +110,7 @@ begin
     return 'SUPERADMIN';
   end if;
 
-  select case
-    when upper(m.function_role) in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO') then 'ADMIN'
-    when upper(m.function_role)='ENTRENADOR' then 'ENTRENADOR'
-    when upper(m.function_role)='ANALISTA' then 'ANALISTA'
-    else upper(m.function_role)
-  end
+  select upper(m.function_role)
   into v_role
   from public.team_season_memberships m
   where m.team_season_id=p_team_season_id
@@ -135,7 +130,7 @@ begin
     return v_role;
   end if;
 
-  select 'ADMIN'
+  select upper(cm.function_role)
   into v_role
   from public.team_seasons ts
   join public.teams t on t.id=ts.team_id
@@ -209,36 +204,7 @@ as $$
   );
 $$;
 
--- 4. Align game lifecycle contextual role resolution with the frontend: club
--- and team COORDINADOR/DIRECTOR_DEPORTIVO are admin-like for lock governance.
-create or replace function public.iq_v5_role_for_game(target_game_id uuid)
-returns text
-language plpgsql
-stable
-security definer
-set search_path=''
-as $$
-declare
-  v_role text;
-  v_team_season_id uuid;
-begin
-  if public.iq_v5_current_role() = 'SUPERADMIN' then
-    return 'SUPERADMIN';
-  end if;
-
-  select g.team_season_id into v_team_season_id
-  from public.games g where g.id=target_game_id;
-
-  if v_team_season_id is null then
-    return public.iq_v5_current_role();
-  end if;
-
-  v_role := public.iq_v6_role_for_team_season(v_team_season_id);
-  return coalesce(v_role, public.iq_v5_current_role());
-end;
-$$;
-
--- 5. Frozen roster is immutable even for SUPERADMIN. Reopening the season is
+-- 4. Frozen roster is immutable even for SUPERADMIN. Reopening the season is
 -- the explicit lifecycle action that re-enables roster changes.
 create or replace function public.iq_v3_can_manage_roster(
   target_team_season_id uuid
@@ -285,7 +251,7 @@ as $$
     );
 $$;
 
--- 6. Defense-in-depth: block direct game and roster writes while frozen.
+-- 5. Defense-in-depth: block direct game and roster writes while frozen.
 create or replace function public.iq_v6_guard_frozen_team_season_game()
 returns trigger
 language plpgsql
@@ -395,7 +361,7 @@ with check (
   )
 );
 
--- 7. Request workflow.
+-- 6. Request workflow.
 create or replace function public.iq_v6_request_team_season_freeze(
   p_team_season_id uuid,
   p_reason text default null
@@ -437,7 +403,7 @@ exception
 end;
 $$;
 
--- 8. Direct freeze/reopen. Games locked by this lifecycle carry a unique token.
+-- 7. Direct freeze/reopen. Games locked by this lifecycle carry a unique token.
 create or replace function public.iq_v6_set_team_season_data_state(
   p_team_season_id uuid,
   p_target_state text,
@@ -662,7 +628,7 @@ begin
 end;
 $$;
 
--- 9. RLS + grants. Direct authenticated writes are never required.
+-- 8. RLS + grants. Direct authenticated writes are never required.
 alter table public.team_season_freeze_requests enable row level security;
 alter table public.team_season_freeze_history enable row level security;
 
