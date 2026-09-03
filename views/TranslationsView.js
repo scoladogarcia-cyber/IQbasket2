@@ -23,6 +23,7 @@ import { TeamAccessRequestService } from "../services/TeamAccessRequestService.j
 import { StaffAssignmentService, StaffRole } from "../services/StaffAssignmentService.js";
 import { SeasonManagementService } from "../services/seasons/SeasonManagementService.js";
 import { SeasonManagementView } from "./SeasonManagementView.js";
+import { SeasonFreezeService } from "../services/seasons/SeasonFreezeService.js";
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
 
@@ -152,7 +153,12 @@ export class TranslationsView {
     this.accessRequestService = new TeamAccessRequestService(supabase);
     this.staffAssignmentService = new StaffAssignmentService(supabase, DataStore);
     this.seasonManagementService = new SeasonManagementService(supabase, DataStore);
-    this.seasonManagementView = new SeasonManagementView(this.seasonManagementService, this.auth);
+    this.seasonFreezeService = new SeasonFreezeService(supabase, this.auth);
+    this.seasonManagementView = new SeasonManagementView(
+      this.seasonManagementService,
+      this.auth,
+      this.seasonFreezeService
+    );
     this.rosterManagementService = new RosterManagementService(supabase, DataStore);
     this.rosterState = null;
     this.transferRequestService = new TransferRequestService(supabase);
