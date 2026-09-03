@@ -257,6 +257,10 @@ async function installFixture(page, viewportName) {
         && Number.isFinite(Number(args.rpe))
           ? Number(args.participatedMinutes) * Number(args.rpe)
           : null;
+
+      // Simulate a small real network turn so the physical tap completes before
+      // TrainingView replaces the DOM after the persisted operation.
+      await new Promise(resolve => setTimeout(resolve, 40));
       return participant.id;
     };
 
