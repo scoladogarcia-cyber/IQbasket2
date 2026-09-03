@@ -252,6 +252,34 @@ export class TranslationsView {
     return permission ? Boolean(this.auth?.canPreview?.(permission)) : false;
   }
 
+  _visibleSettingsTabs() {
+    const definitions = [
+      { key: "club", action: "VIEW_TAB_CLUB" },
+      { key: "players", action: "VIEW_TAB_PLAYERS" },
+      { key: "users", action: "VIEW_TAB_USERS" },
+      { key: "seasons", action: "VIEW_TAB_SEASONS" },
+      { key: "requests", action: "VIEW_TAB_REQUESTS" },
+      { key: "translations", action: "VIEW_TAB_TRANSLATIONS" },
+      { key: "simulation", action: "VIEW_TAB_SIMULATION" }
+    ];
+
+    return definitions
+      .filter(({ action }) => this._can(action))
+      .map(({ key }) => key);
+  }
+
+  _ensureVisibleActiveTab() {
+    const visibleTabs = this._visibleSettingsTabs();
+    if (visibleTabs.includes(this.activeTab)) return this.activeTab;
+
+    // El fallback conserva una entrada útil sin codificar nombres de rol.
+    const preferredOrder = ["requests", "players", "seasons", "club", "users", "translations", "simulation"];
+    this.activeTab = preferredOrder.find(tab => visibleTabs.includes(tab))
+      || visibleTabs[0]
+      || "requests";
+    return this.activeTab;
+  }
+
   _canReal(action, context = {}) {
     if (["VIEW_TAB_TRANSLATIONS", "CREATE_CLUB", "DELETE_SEASON", "DELETE_CLUB", "DELETE_TEAM", "VIEW_TAB_SIMULATION", "MODIFY_ACTIVE_ROLE"].includes(action)) {
       return this.auth?.getAuthenticatedRole?.() === UserRole.SUPERADMIN;
@@ -695,6 +723,10 @@ export class TranslationsView {
 
     const activeTeamId = DataStore.getActiveTeamId();
 
+    // La visibilidad de Configuración se resuelve exclusivamente por permisos.
+    // No se bloquean pestañas por nombre de rol: RBAC decide lectura/escritura.
+    this._ensureVisibleActiveTab();
+
     if (this.seasonsList.length === 0) await this._fetchSeasons();
 
     if (this.activeTab === "players") {
@@ -781,10 +813,6 @@ export class TranslationsView {
     const legacyPendingTransfersList = pendingTransfersList.filter(t => !t.dualWorkflow);
     const pendingJoinRequestsList = this.joinRequests.filter(r => r.status === "PENDIENTE");
     const requestSeasonContexts = DataStore.getSeasons?.(activeTeamId) || [];
-
-    if ([UserRole.JUGADOR, UserRole.FAMILIA_TUTOR, UserRole.VISOR, UserRole.INVITADO].includes(effectiveRole) && !["requests", "players", "seasons"].includes(this.activeTab)) {
-      this.activeTab = "requests";
-    }
 
     const allowedSelectableTeams = realTeams;
 
