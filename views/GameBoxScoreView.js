@@ -9,6 +9,8 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { Permission } from "../security/PermissionService.js";
+import { GameLockService } from "../services/games/GameLockService.js";
 
 export class GameBoxScoreView {
   /**
@@ -29,9 +31,49 @@ export class GameBoxScoreView {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
-  _canEdit() {
-    // El BoxScore es una vista de consulta para todos los roles.
+  _gameContext(game = {}) {
+    const teamId = game.team_id || game.teamId || DataStore.getActiveTeamId?.() || null;
+    const teamSeasonId = game.team_season_id
+      || game.teamSeasonId
+      || DataStore.getActiveTeamSeasonId?.(teamId)
+      || null;
+
+    return {
+      teamId,
+      teamSeasonId,
+      gameId: game.id || null
+    };
+  }
+
+  _isTeamSeasonFrozen(game = {}) {
+    const { teamId } = this._gameContext(game);
+    const context = DataStore.getActiveSeasonContext?.(teamId) || null;
+    return String(context?.data_status || context?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN";
+  }
+
+  /**
+   * Client-side UX gate only. Database RLS and game-lock/freeze triggers remain
+   * authoritative and reject stale or forged writes.
+   */
+  _canEdit(game = null) {
+    if (!game || GameLockService.isLocked(game) || this._isTeamSeasonFrozen(game)) {
+      return false;
+    }
+
+    const context = this._gameContext(game);
+    if (typeof this.auth?.canPreview === "function") {
+      return Boolean(this.auth.canPreview(Permission.EDIT_BOXSCORE, context));
+    }
+    if (typeof this.auth?.can === "function") {
+      return Boolean(this.auth.can(Permission.EDIT_BOXSCORE, context));
+    }
     return false;
+  }
+
+  _readOnlyReason(game = {}) {
+    if (this._isTeamSeasonFrozen(game)) return "Temporada cerrada · solo lectura";
+    if (GameLockService.isLocked(game)) return "Partido cerrado · solo lectura";
+    return "Tu rol puede consultar, pero no editar este BoxScore";
   }
 
   async render(containerId = "dashboard-content-area", targetGameId = null) {
@@ -196,7 +238,8 @@ export class GameBoxScoreView {
     if (typeof starters === "string") {
       try { starters = JSON.parse(starters); } catch (e) { starters = []; }
     }
-    const canEdit = this._canEdit();
+    const canEdit = this._canEdit(currentGame);
+    const readOnlyReason = this._readOnlyReason(currentGame);
 
     let totMin = 0, totPts = 0, totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
     let totRo = 0, totRd = 0, totAst = 0, totRob = 0, totTap = 0, totPer = 0, totFc = 0, totFr = 0, totVal = 0;
@@ -324,7 +367,7 @@ export class GameBoxScoreView {
             <button id="btn-save-boxscore" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">
               💾 ${this.t("save_changes", "Guardar Cambios")}
             </button>
-          ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${this.t("read_only", "Modo Solo Lectura")}</span>`}
+          ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${readOnlyReason}</span>`}
         </div>
 
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">

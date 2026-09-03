@@ -7,7 +7,8 @@
  * - active objective profile;
  * - deterministic gaps.
  *
- * AI, Recovery, Nutrition and Neuro remain outside this view/phase.
+ * Longitudinal analytics and non-clinical Nutrition/Recovery support are integrated
+ * as independently permissioned submodules. Neuro remains outside this view.
  */
 
 import { DataStore } from "../services/DataStore.js";
@@ -581,7 +582,7 @@ export class Player360View {
       tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
     }
     if (this.wellnessPanel.isAvailable()) {
-      tabs.push({ id: "wellness", label: "🌱 Apoyo" });
+      tabs.push({ id: "wellness", label: "🥤 Nutrición + recuperación" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {

@@ -14,6 +14,7 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { APP_CONFIG } from "../config/app.config.js";
+import { Permission, ROLE_PERMISSIONS } from "../security/permissions.js";
 
 export class LayoutView {
   static t(key, fallback = "") {
@@ -31,6 +32,7 @@ export class LayoutView {
     if (['team', 'equipo'].includes(r)) return 'team';
     if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
     if (['training', 'entrenamientos', 'development', 'desarrollo'].includes(r)) return 'training';
+    if (['nutrition', 'nutricion'].includes(r)) return 'nutrition';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
@@ -210,9 +212,12 @@ export class LayoutView {
 
     LayoutView.bindMobileDrawerEvents();
 
-    const isComparatorRestricted = userRole === "JUGADOR" || userRole === "FAMILIA_TUTOR";
-    const isAiRestricted = userRole === "JUGADOR";
-    const isTrainingRestricted = ["JUGADOR", "FAMILIA_TUTOR", "VISOR"].includes(userRole);
+    const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
+    const hasRolePermission = permission => rolePermissions.includes(permission);
+    const isComparatorRestricted = !hasRolePermission(Permission.USE_COMPARATOR);
+    const isAiRestricted = !hasRolePermission(Permission.USE_AI);
+    const isTrainingRestricted = !hasRolePermission(Permission.VIEW_TRAINING);
+    const isNutritionRestricted = !hasRolePermission(Permission.VIEW_NUTRITION);
 
     const navGroups = [
       {
@@ -244,6 +249,14 @@ export class LayoutView {
             route: "training",
             disabled: isTrainingRestricted,
             svg: '<path d="M6 5v14"></path><path d="M18 5v14"></path><path d="M3 8v8"></path><path d="M21 8v8"></path><path d="M6 12h12"></path>'
+          },
+          {
+            key: "nutrition",
+            labelKey: "player360.nutrition.nav",
+            fallback: "Nutrición",
+            route: "nutrition",
+            disabled: isNutritionRestricted,
+            svg: '<path d="M12 2v20"></path><path d="M4 7c4 0 8 2 8 6"></path><path d="M20 5c-4 0-8 2-8 7"></path><path d="M6 18h12"></path>'
           }
         ]
       },

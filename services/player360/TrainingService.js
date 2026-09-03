@@ -181,6 +181,148 @@ export class TrainingService {
     return data;
   }
 
+  /**
+   * Updates the editable metadata of an existing team training session.
+   *
+   * RLS remains authoritative. The team-season scope is included explicitly so
+   * a stale UI can never update a session outside the active context.
+   * When the session duration changes, full-attendance rows that still match
+   * the previous full duration are kept coherent automatically. Partial rows
+   * are intentionally left untouched.
+   */
+  async updateSession({
+    trainingSessionId,
+    teamSeasonId,
+    sessionDate,
+    title,
+    objective = null,
+    durationMinutes = null,
+    intensity = null,
+    startTime = null,
+    endTime = null
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(teamSeasonId, "teamSeasonId");
+    assertRequired(sessionDate, "sessionDate");
+    assertRequired(title, "title");
+
+    const { data: previous, error: previousError } = await this.supabase
+      .from("training_sessions")
+      .select("id,duration_minutes")
+      .eq("id", trainingSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .single();
+
+    if (previousError) throw previousError;
+
+    const { data, error } = await this.supabase
+      .from("training_sessions")
+      .update({
+        session_date: sessionDate,
+        title,
+        objective,
+        duration_minutes: durationMinutes,
+        intensity,
+        start_time: startTime,
+        end_time: endTime
+      })
+      .eq("id", trainingSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    const previousDuration = Number(previous?.duration_minutes);
+    const nextDuration = Number(durationMinutes);
+    if (
+      Number.isFinite(previousDuration)
+      && Number.isFinite(nextDuration)
+      && previousDuration !== nextDuration
+    ) {
+      const { error: participantError } = await this.supabase
+        .from("training_participants")
+        .update({ participated_minutes: nextDuration })
+        .eq("training_session_id", trainingSessionId)
+        .eq("team_season_id", teamSeasonId)
+        .eq("attendance_status", "PRESENT")
+        .eq("participated_minutes", previousDuration);
+
+      if (participantError) throw participantError;
+    }
+
+    return data;
+  }
+
+  /**
+   * Creates or updates one training block without replacing the rest of the
+   * session structure. This minimizes accidental data loss during corrections.
+   */
+  async saveBlock({
+    trainingSessionId,
+    blockId = null,
+    blockOrder = 1,
+    title,
+    activityCode = null,
+    objective = null,
+    durationMinutes = null,
+    intensity = null
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(title, "title");
+
+    const payload = {
+      training_session_id: trainingSessionId,
+      block_order: Math.max(1, Number(blockOrder) || 1),
+      title,
+      activity_code: activityCode,
+      objective,
+      duration_minutes: durationMinutes,
+      intensity
+    };
+
+    let query;
+    if (blockId) {
+      query = this.supabase
+        .from("training_blocks")
+        .update(payload)
+        .eq("id", blockId)
+        .eq("training_session_id", trainingSessionId);
+    } else {
+      query = this.supabase
+        .from("training_blocks")
+        .insert(payload);
+    }
+
+    const { data, error } = await query.select("*").single();
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Deletes a block entered by mistake. The parent session and all other blocks
+   * remain intact; RLS validates authorization through the parent session.
+   */
+  async deleteBlock({
+    trainingSessionId,
+    blockId
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(blockId, "blockId");
+
+    const { error } = await this.supabase
+      .from("training_blocks")
+      .delete()
+      .eq("id", blockId)
+      .eq("training_session_id", trainingSessionId);
+
+    if (error) throw error;
+    return true;
+  }
+
   async setParticipant({
     trainingSessionId,
     playerId,
@@ -208,6 +350,32 @@ export class TrainingService {
 
     if (error) throw error;
     return data;
+  }
+
+  /**
+   * Removes an accidentally assigned participant from a training session.
+   * Absence/excused cases should use setParticipant instead; this method is for
+   * correcting roster-entry mistakes so attendance denominators remain truthful.
+   */
+  async removeParticipant({
+    trainingSessionId,
+    teamSeasonId,
+    playerId
+  } = {}) {
+    this._assertReady();
+    assertRequired(trainingSessionId, "trainingSessionId");
+    assertRequired(teamSeasonId, "teamSeasonId");
+    assertRequired(playerId, "playerId");
+
+    const { error } = await this.supabase
+      .from("training_participants")
+      .delete()
+      .eq("training_session_id", trainingSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .eq("player_id", playerId);
+
+    if (error) throw error;
+    return true;
   }
 
   async archiveSession(trainingSessionId) {
@@ -297,6 +465,56 @@ export class TrainingService {
         p_metadata: metadata && typeof metadata === "object" ? metadata : {}
       }
     );
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Corrects an existing external-development / technification record.
+   * Authorization is enforced by the existing team-season RLS policies.
+   */
+  async updateExternalDevelopment({
+    externalSessionId,
+    teamSeasonId,
+    playerId,
+    activityDate,
+    title,
+    activityCode = null,
+    providerType = null,
+    providerName = null,
+    objective = null,
+    durationMinutes = null,
+    intensity = null,
+    rpe = null,
+    notes = null
+  } = {}) {
+    this._assertReady();
+    assertRequired(externalSessionId, "externalSessionId");
+    assertRequired(teamSeasonId, "teamSeasonId");
+    assertRequired(playerId, "playerId");
+    assertRequired(activityDate, "activityDate");
+    assertRequired(title, "title");
+
+    const { data, error } = await this.supabase
+      .from("external_development_sessions")
+      .update({
+        player_id: playerId,
+        activity_date: activityDate,
+        title,
+        activity_code: activityCode,
+        provider_type: providerType,
+        provider_name: providerName,
+        objective,
+        duration_minutes: durationMinutes,
+        intensity,
+        rpe,
+        notes
+      })
+      .eq("id", externalSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .select("*")
+      .single();
 
     if (error) throw error;
     return data;

@@ -33,6 +33,7 @@ for (const permission of [
 for (const permission of [
   Permission.CREATE_GAME,
   Permission.EDIT_GAME,
+  Permission.EDIT_BOXSCORE,
   Permission.DELETE_GAME,
   Permission.RECORD_LIVE_GAME,
   Permission.CREATE_TRAINING,

@@ -8,6 +8,7 @@ const service = readFileSync(
 );
 const dataStore = readFileSync(new URL("../services/DataStore.js", import.meta.url), "utf8");
 const view = readFileSync(new URL("../views/GameLiveEditorView.js", import.meta.url), "utf8");
+const boxScoreView = readFileSync(new URL("../views/GameBoxScoreView.js", import.meta.url), "utf8");
 
 const teamId = "11111111-1111-4111-8111-111111111111";
 const teamSeasonId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -24,6 +25,7 @@ assert.equal(admin.can(Permission.LOCK_GAME, context), true);
 assert.equal(admin.can(Permission.REOPEN_GAME, context), true);
 assert.equal(admin.can(Permission.REVIEW_GAME_LOCK_REQUESTS, context), true);
 assert.equal(admin.can(Permission.REQUEST_GAME_LOCK, context), false);
+assert.equal(admin.can(Permission.EDIT_BOXSCORE, context), true);
 
 const coach = new PermissionService({
   id: "coach-1",
@@ -35,6 +37,7 @@ const coach = new PermissionService({
 assert.equal(coach.can(Permission.REQUEST_GAME_LOCK, context), true);
 assert.equal(coach.can(Permission.LOCK_GAME, context), false);
 assert.equal(coach.can(Permission.REOPEN_GAME, context), false);
+assert.equal(coach.can(Permission.EDIT_BOXSCORE, context), true);
 
 const analyst = new PermissionService({
   id: "analyst-1",
@@ -45,6 +48,7 @@ const analyst = new PermissionService({
 });
 assert.equal(analyst.can(Permission.REQUEST_GAME_LOCK, context), true);
 assert.equal(analyst.can(Permission.LOCK_GAME, context), false);
+assert.equal(analyst.can(Permission.EDIT_BOXSCORE, context), true);
 
 const guest = new PermissionService({
   id: "guest-1",
@@ -56,6 +60,7 @@ const guest = new PermissionService({
 assert.equal(guest.can(Permission.VIEW_GAMES, context), true);
 assert.equal(guest.can(Permission.REQUEST_GAME_LOCK, context), false);
 assert.equal(guest.can(Permission.LOCK_GAME, context), false);
+assert.equal(guest.can(Permission.EDIT_BOXSCORE, context), false);
 
 assert.match(service, /iq_v5_request_game_lock/);
 assert.match(service, /iq_v5_set_game_edit_state/);
@@ -64,5 +69,9 @@ assert.match(dataStore, /Partido cerrado: reabre el partido antes de modificar d
 assert.match(view, /Solicitar cierre/i);
 assert.match(view, /Reabrir/i);
 assert.match(view, /Peticiones de cierre/i);
+assert.match(boxScoreView, /Permission\.EDIT_BOXSCORE/);
+assert.match(boxScoreView, /GameLockService\.isLocked/);
+assert.match(boxScoreView, /_isTeamSeasonFrozen/);
+assert.match(boxScoreView, /this\._canEdit\(currentGame\)/);
 
 console.log("GAME_LOCKING_UI_RBAC_OK");

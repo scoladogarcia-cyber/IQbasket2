@@ -126,8 +126,39 @@ const playerViewSource=readFileSync(
   "utf8"
 );
 assert.match(playerViewSource,/WellnessSupportPanel/);
-assert.match(playerViewSource,/tabs\.push\(\{ id: "wellness", label: "🌱 Apoyo" \}\)/);
+assert.match(playerViewSource,/tabs\.push\(\{ id: "wellness", label: "🥤 Nutrición \+ recuperación" \}\)/);
 assert.match(playerViewSource,/this\.activeTab === "wellness"/);
 assert.match(playerViewSource,/this\.wellnessPanel\.bind/);
+
+const wellnessPanelSource=readFileSync(
+  new URL("../views/player360/WellnessSupportPanel.js",import.meta.url),
+  "utf8"
+);
+assert.match(wellnessPanelSource,/this\.activeModule = "recovery"/);
+assert.match(wellnessPanelSource,/_visibleModules\(\)/);
+assert.match(wellnessPanelSource,/this\.allowedModules/);
+
+const nutritionViewSource=readFileSync(
+  new URL("../views/NutritionView.js",import.meta.url),
+  "utf8"
+);
+assert.match(nutritionViewSource,/modules: \["nutrition"\]/);
+assert.match(nutritionViewSource,/this\.panel\.activeModule = "nutrition"/);
+assert.match(nutritionViewSource,/Permission\.VIEW_NUTRITION/);
+assert.match(nutritionViewSource,/WellnessSupportPanel/);
+assert.match(nutritionViewSource,/#\/nutrition\//);
+
+for (const routerFile of ["../index.js","../app.js"]) {
+  const routerSource=readFileSync(new URL(routerFile,import.meta.url),"utf8");
+  assert.match(routerSource,/NutritionView/);
+  assert.match(routerSource,/case "nutrition"/);
+}
+
+const layoutSource=readFileSync(
+  new URL("../views/LayoutView.js",import.meta.url),
+  "utf8"
+);
+assert.match(layoutSource,/key: "nutrition"/);
+assert.match(layoutSource,/Permission\.VIEW_NUTRITION/);
 
 console.log("PLAYER360_PHASE4E2_SERVICE_ROUTE_OK");

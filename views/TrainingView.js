@@ -102,6 +102,8 @@ export class TrainingView {
     this.teamId = null;
     this.teamSeasonId = null;
     this.containerId = "dashboard-content-area";
+    this.editingTrainingId = null;
+    this.editingExternalId = null;
   }
 
   t(key, fallback = "") {
@@ -556,6 +558,15 @@ export class TrainingView {
                 >
                   Guardar
                 </button>
+                <button
+                  type="button"
+                  class="p360-danger-link p360-remove-participant"
+                  data-session-id="${escapeHtml(session.id)}"
+                  data-player-id="${escapeHtml(participant.player_id)}"
+                  aria-label="Quitar jugador de esta sesión"
+                >
+                  Quitar
+                </button>
                 <div class="p360-load-value">
                   Carga: <strong>${displayNumber(participant.internal_load, 1)}</strong>
                 </div>
@@ -584,6 +595,210 @@ export class TrainingView {
           ` : ""}
         </div>
       </details>
+    `;
+  }
+
+  _renderEditableBlockRow(block = {}, index = 1) {
+    return `
+      <div
+        class="p360-edit-block-row"
+        data-block-id="${escapeHtml(block.id || "")}"
+        data-block-order="${escapeHtml(block.block_order || index)}"
+      >
+        <label>
+          <span>Bloque</span>
+          <input type="text" class="p360-edit-block-title" maxlength="140" value="${escapeHtml(block.title || "")}" placeholder="Nombre del bloque" />
+        </label>
+        <label>
+          <span>Código / tipo</span>
+          <input type="text" class="p360-edit-block-code" maxlength="80" value="${escapeHtml(block.activity_code || "")}" placeholder="Ej. SHOOTING" />
+        </label>
+        <label>
+          <span>Minutos</span>
+          <input type="number" class="p360-edit-block-duration" min="1" max="300" inputmode="numeric" value="${escapeHtml(block.duration_minutes ?? "")}" />
+        </label>
+        <label>
+          <span>Intensidad</span>
+          <input type="number" class="p360-edit-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(block.intensity ?? "")}" />
+        </label>
+        <label class="p360-edit-block-objective">
+          <span>Objetivo</span>
+          <input type="text" class="p360-edit-block-objective-input" maxlength="500" value="${escapeHtml(block.objective || "")}" />
+        </label>
+        <div class="p360-edit-block-actions">
+          <button type="button" class="p360-secondary-btn p360-save-edit-block">Guardar bloque</button>
+          <button type="button" class="p360-danger-link p360-delete-edit-block">
+            ${block.id ? "Eliminar" : "Descartar"}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Inline correction form for an existing club training session.
+   * Blocks and attendance keep their own dedicated controls to avoid accidental
+   * destructive rewrites while correcting session metadata.
+   */
+  _renderTrainingEditForm(session = {}) {
+    if (!this._can(Permission.EDIT_TRAINING)) return "";
+
+    const bounds = this._dateInputBounds();
+    const startTime = String(session.start_time || "").slice(0, 5);
+    const endTime = String(session.end_time || "").slice(0, 5);
+
+    return `
+      <form class="p360-form p360-inline-editor p360-training-edit-form" data-session-id="${escapeHtml(session.id)}">
+        <div class="p360-info-note">
+          Corrige los datos generales y los bloques sin recrear la sesión. La asistencia se mantiene separada para proteger el histórico individual.
+        </div>
+        <div class="p360-form-grid">
+          <label>
+            <span>Fecha</span>
+            <input
+              type="date"
+              class="p360-edit-training-date"
+              value="${escapeHtml(session.session_date || "")}"
+              ${bounds.min ? `min="${escapeHtml(bounds.min)}"` : ""}
+              ${bounds.max ? `max="${escapeHtml(bounds.max)}"` : ""}
+              required
+            />
+          </label>
+          <label class="p360-span-2">
+            <span>Nombre de la sesión</span>
+            <input type="text" class="p360-edit-training-title" maxlength="140" value="${escapeHtml(session.title || "")}" required />
+          </label>
+          <label>
+            <span>Inicio</span>
+            <input type="time" class="p360-edit-training-start" value="${escapeHtml(startTime)}" required />
+          </label>
+          <label>
+            <span>Fin</span>
+            <input type="time" class="p360-edit-training-end" value="${escapeHtml(endTime)}" required />
+          </label>
+          <label>
+            <span>Duración calculada (min)</span>
+            <input type="number" class="p360-edit-training-duration" value="${escapeHtml(this._sessionDuration(session) || "")}" readonly aria-readonly="true" />
+          </label>
+          <label>
+            <span>Intensidad 0-10</span>
+            <input type="number" class="p360-edit-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(session.intensity ?? "")}" />
+          </label>
+          <label class="p360-span-2">
+            <span>Objetivo principal</span>
+            <textarea class="p360-edit-training-objective" rows="2" maxlength="500">${escapeHtml(session.objective || "")}</textarea>
+          </label>
+        </div>
+
+        <div class="p360-subsection">
+          <div class="p360-subsection-head">
+            <div>
+              <strong>Bloques de trabajo</strong>
+              <small>Guarda cada bloque de forma independiente para no sobrescribir el resto por error.</small>
+            </div>
+            <button
+              type="button"
+              class="p360-secondary-btn p360-add-edit-block"
+              data-session-id="${escapeHtml(session.id)}"
+            >
+              ＋ Añadir bloque
+            </button>
+          </div>
+          <div class="p360-edit-block-list">
+            ${(session.blocks || []).length
+              ? session.blocks.map((block, index) => this._renderEditableBlockRow(block, index + 1)).join("")
+              : this._renderEditableBlockRow({}, 1)}
+          </div>
+        </div>
+
+        <div class="p360-form-actions">
+          <button type="button" class="p360-secondary-btn p360-cancel-training-edit">Cancelar</button>
+          <button type="submit" class="p360-primary-btn">Guardar corrección</button>
+        </div>
+      </form>
+    `;
+  }
+
+  /**
+   * Inline correction form for an external-development / technification record.
+   */
+  _renderExternalEditForm(session = {}) {
+    if (!this._can(Permission.EDIT_EXTERNAL_DEVELOPMENT)) return "";
+
+    const bounds = this._dateInputBounds();
+    const date = String(session.activity_date || "").slice(0, 10);
+
+    return `
+      <form class="p360-form p360-inline-editor p360-external-edit-form" data-session-id="${escapeHtml(session.id)}">
+        <div class="p360-info-note">
+          Corrige la tecnificación sin perder su procedencia ni el histórico de la temporada.
+        </div>
+        <div class="p360-form-grid">
+          <label>
+            <span>Fecha</span>
+            <input
+              type="date"
+              class="p360-edit-external-date"
+              value="${escapeHtml(date)}"
+              ${bounds.min ? `min="${escapeHtml(bounds.min)}"` : ""}
+              ${bounds.max ? `max="${escapeHtml(bounds.max)}"` : ""}
+              required
+            />
+          </label>
+          <label>
+            <span>Jugador</span>
+            <select class="p360-edit-external-player" required>
+              ${this._renderExternalPlayerOptions(date, session.player_id)}
+            </select>
+          </label>
+          <label class="p360-span-2">
+            <span>Actividad</span>
+            <input type="text" class="p360-edit-external-title" maxlength="140" value="${escapeHtml(session.title || "")}" required />
+          </label>
+          <label>
+            <span>Código / tipo</span>
+            <input type="text" class="p360-edit-external-code" maxlength="80" value="${escapeHtml(session.activity_code || "")}" />
+          </label>
+          <label>
+            <span>Proveedor / tecnificador</span>
+            <input type="text" class="p360-edit-external-provider" maxlength="140" value="${escapeHtml(session.provider_name || "")}" />
+          </label>
+          <label>
+            <span>Duración (min)</span>
+            <input type="number" class="p360-edit-external-duration" min="1" max="600" inputmode="numeric" value="${escapeHtml(session.duration_minutes ?? "")}" />
+          </label>
+          <label>
+            <span>Intensidad 0-10</span>
+            <input type="number" class="p360-edit-external-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(session.intensity ?? "")}" />
+          </label>
+          <label>
+            <span>RPE 0-10</span>
+            <input type="number" class="p360-edit-external-rpe" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(session.rpe ?? "")}" />
+          </label>
+          <label>
+            <span>Tipo de proveedor</span>
+            <select class="p360-edit-external-provider-type">
+              ${Object.entries(EXTERNAL_PROVIDER_LABELS).map(([value, label]) => `
+                <option value="${escapeHtml(value)}" ${String(session.provider_type || EXTERNAL_PROVIDER_TYPE.EXTERNAL_COACH) === String(value) ? "selected" : ""}>
+                  ${escapeHtml(label)}
+                </option>
+              `).join("")}
+            </select>
+          </label>
+          <label class="p360-span-2">
+            <span>Objetivo</span>
+            <textarea class="p360-edit-external-objective" rows="2" maxlength="500">${escapeHtml(session.objective || "")}</textarea>
+          </label>
+          <label class="p360-span-2">
+            <span>Notas</span>
+            <textarea class="p360-edit-external-notes" rows="2" maxlength="500">${escapeHtml(session.notes || "")}</textarea>
+          </label>
+        </div>
+        <div class="p360-form-actions">
+          <button type="button" class="p360-secondary-btn p360-cancel-external-edit">Cancelar</button>
+          <button type="submit" class="p360-primary-btn">Guardar corrección</button>
+        </div>
+      </form>
     `;
   }
 
@@ -641,15 +856,30 @@ export class TrainingView {
 
         ${this._renderAttendanceEditor(session, directory)}
 
-        ${this._can(Permission.DELETE_TRAINING) ? `
+        ${this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
+          ? this._renderTrainingEditForm(session)
+          : ""}
+
+        ${this._can(Permission.EDIT_TRAINING) || this._can(Permission.DELETE_TRAINING) ? `
           <div class="p360-card-actions">
-            <button
-              type="button"
-              class="p360-danger-link p360-archive-session"
-              data-session-id="${escapeHtml(session.id)}"
-            >
-              Archivar sesión
-            </button>
+            ${this._can(Permission.EDIT_TRAINING) ? `
+              <button
+                type="button"
+                class="p360-secondary-link p360-edit-session"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                ✏️ Editar sesión
+              </button>
+            ` : ""}
+            ${this._can(Permission.DELETE_TRAINING) ? `
+              <button
+                type="button"
+                class="p360-danger-link p360-archive-session"
+                data-session-id="${escapeHtml(session.id)}"
+              >
+                Archivar sesión
+              </button>
+            ` : ""}
           </div>
         ` : ""}
       </article>
@@ -857,6 +1087,22 @@ export class TrainingView {
 
                     ${session.objective ? `<p class="p360-card-text"><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>` : ""}
                     ${session.notes ? `<p class="p360-card-text"><strong>Nota:</strong> ${escapeHtml(session.notes)}</p>` : ""}
+
+                    ${this.editingExternalId && String(this.editingExternalId) === String(session.id)
+                      ? this._renderExternalEditForm(session)
+                      : ""}
+
+                    ${this._can(Permission.EDIT_EXTERNAL_DEVELOPMENT) ? `
+                      <div class="p360-card-actions">
+                        <button
+                          type="button"
+                          class="p360-secondary-link p360-edit-external"
+                          data-session-id="${escapeHtml(session.id)}"
+                        >
+                          ✏️ Editar tecnificación
+                        </button>
+                      </div>
+                    ` : ""}
                   </article>
                 `;
               }).join("")
@@ -1145,7 +1391,7 @@ export class TrainingView {
         }
         .p360-attendance-row {
           display: grid;
-          grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto;
+          grid-template-columns: minmax(150px,1.5fr) 1fr .6fr .6fr 1.3fr auto auto auto;
           gap: 7px;
           align-items: center;
           padding: 8px;
@@ -1157,7 +1403,52 @@ export class TrainingView {
         .p360-load-value { font-size: 11px; color: #475569; white-space: nowrap; }
         .p360-add-participant-row { display: flex; gap: 8px; }
         .p360-add-participant-row select { flex: 1; }
-        .p360-card-actions { border-top: 1px solid #f1f5f9; padding-top: 8px; }
+        .p360-card-actions {
+          border-top: 1px solid #f1f5f9;
+          padding-top: 8px;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .p360-secondary-link {
+          border: 0;
+          padding: 6px 0;
+          background: transparent;
+          color: #1d4ed8;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+        .p360-inline-editor {
+          border: 1px solid #bfdbfe;
+          border-radius: 12px;
+          padding: 12px;
+          background: #f8fbff;
+        }
+        .p360-edit-block-list { display: grid; gap: 8px; }
+        .p360-edit-block-row {
+          display: grid;
+          grid-template-columns: minmax(150px,1.2fr) minmax(120px,.8fr) 90px 90px minmax(150px,1.2fr) auto;
+          gap: 8px;
+          align-items: end;
+          border: 1px solid #dbeafe;
+          border-radius: 10px;
+          padding: 10px;
+          background: #fff;
+        }
+        .p360-edit-block-row label { display: grid; gap: 5px; font-size: 11px; font-weight: 800; color: #475569; }
+        .p360-edit-block-row input {
+          width: 100%;
+          min-height: 40px;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          padding: 8px 9px;
+          color: #0f172a;
+          background: #fff;
+        }
+        .p360-edit-block-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .p360-card-text { margin: 0; color: #475569; font-size: 12px; line-height: 1.5; }
         .p360-info-note {
           border-left: 3px solid #0ea5e9;
@@ -1199,7 +1490,7 @@ export class TrainingView {
           .p360-attendance-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-          .p360-attendance-player, .p360-att-notes, .p360-save-attendance, .p360-load-value {
+          .p360-attendance-player, .p360-att-notes, .p360-save-attendance, .p360-remove-participant, .p360-load-value {
             grid-column: 1 / -1;
           }
         }
@@ -1217,6 +1508,10 @@ export class TrainingView {
           .p360-span-2 { grid-column: auto; }
           .p360-block-row { grid-template-columns: 1fr; padding-top: 46px; }
           .p360-block-objective { grid-column: auto; }
+          .p360-edit-block-row { grid-template-columns: 1fr; }
+          .p360-edit-block-actions { display: grid; grid-template-columns: 1fr; }
+          .p360-edit-block-actions .p360-secondary-btn,
+          .p360-edit-block-actions .p360-danger-link { width: 100%; }
           .p360-player-check-grid { grid-template-columns: 1fr; max-height: 240px; }
           .p360-subsection-head { display: grid; }
           .p360-subsection-head .p360-secondary-btn { width: 100%; }
@@ -1367,6 +1662,130 @@ export class TrainingView {
         return;
       }
 
+      const editSession = event.target.closest(".p360-edit-session");
+      if (editSession) {
+        this.editingTrainingId = editSession.dataset.sessionId || null;
+        this.editingExternalId = null;
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const cancelTrainingEdit = event.target.closest(".p360-cancel-training-edit");
+      if (cancelTrainingEdit) {
+        this.editingTrainingId = null;
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const editExternal = event.target.closest(".p360-edit-external");
+      if (editExternal) {
+        this.editingExternalId = editExternal.dataset.sessionId || null;
+        this.editingTrainingId = null;
+        this.activeTab = "external";
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const cancelExternalEdit = event.target.closest(".p360-cancel-external-edit");
+      if (cancelExternalEdit) {
+        this.editingExternalId = null;
+        this.activeTab = "external";
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const addEditBlock = event.target.closest(".p360-add-edit-block");
+      if (addEditBlock) {
+        const list = addEditBlock.closest(".p360-training-edit-form")?.querySelector(".p360-edit-block-list");
+        if (!list) return;
+        const nextOrder = list.querySelectorAll(".p360-edit-block-row").length + 1;
+        list.insertAdjacentHTML("beforeend", this._renderEditableBlockRow({}, nextOrder));
+        return;
+      }
+
+      const saveEditBlock = event.target.closest(".p360-save-edit-block");
+      if (saveEditBlock) {
+        const row = saveEditBlock.closest(".p360-edit-block-row");
+        const form = saveEditBlock.closest(".p360-training-edit-form");
+        if (!row || !form) return;
+
+        const title = row.querySelector(".p360-edit-block-title")?.value.trim();
+        if (!title) {
+          alert("⚠️ Indica un nombre para el bloque.");
+          return;
+        }
+
+        saveEditBlock.disabled = true;
+        try {
+          await this.service.saveBlock({
+            trainingSessionId: form.dataset.sessionId,
+            blockId: row.dataset.blockId || null,
+            blockOrder: Number(row.dataset.blockOrder) || 1,
+            title,
+            activityCode: row.querySelector(".p360-edit-block-code")?.value.trim() || null,
+            objective: row.querySelector(".p360-edit-block-objective-input")?.value.trim() || null,
+            durationMinutes: numberOrNull(row.querySelector(".p360-edit-block-duration")?.value),
+            intensity: numberOrNull(row.querySelector(".p360-edit-block-intensity")?.value)
+          });
+          this.editingTrainingId = form.dataset.sessionId;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error guardando bloque:", error);
+          alert(`❌ ${error.message || error}`);
+          saveEditBlock.disabled = false;
+        }
+        return;
+      }
+
+      const deleteEditBlock = event.target.closest(".p360-delete-edit-block");
+      if (deleteEditBlock) {
+        const row = deleteEditBlock.closest(".p360-edit-block-row");
+        const form = deleteEditBlock.closest(".p360-training-edit-form");
+        if (!row || !form) return;
+
+        const blockId = row.dataset.blockId || null;
+        if (!blockId) {
+          row.remove();
+          return;
+        }
+        if (!confirm("¿Eliminar este bloque del entrenamiento?")) return;
+
+        deleteEditBlock.disabled = true;
+        try {
+          await this.service.deleteBlock({
+            trainingSessionId: form.dataset.sessionId,
+            blockId
+          });
+          this.editingTrainingId = form.dataset.sessionId;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error eliminando bloque:", error);
+          alert(`❌ ${error.message || error}`);
+          deleteEditBlock.disabled = false;
+        }
+        return;
+      }
+
+      const removeParticipant = event.target.closest(".p360-remove-participant");
+      if (removeParticipant) {
+        if (!confirm("¿Quitar a este jugador de la sesión? Úsalo solo para corregir una inclusión errónea.")) return;
+
+        removeParticipant.disabled = true;
+        try {
+          await this.service.removeParticipant({
+            trainingSessionId: removeParticipant.dataset.sessionId,
+            teamSeasonId: this.teamSeasonId,
+            playerId: removeParticipant.dataset.playerId
+          });
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error quitando participante:", error);
+          alert(`❌ ${error.message || error}`);
+          removeParticipant.disabled = false;
+        }
+        return;
+      }
+
       const saveAttendance = event.target.closest(".p360-save-attendance");
       if (saveAttendance) {
         const row = saveAttendance.closest(".p360-attendance-row");
@@ -1469,6 +1888,107 @@ export class TrainingView {
 
     container.addEventListener("click", this._delegatedClickHandler);
     this._delegatedClickContainer = container;
+
+    const trainingEditForm = container.querySelector(".p360-training-edit-form");
+    if (trainingEditForm) {
+      const editStart = trainingEditForm.querySelector(".p360-edit-training-start");
+      const editEnd = trainingEditForm.querySelector(".p360-edit-training-end");
+      const editDuration = trainingEditForm.querySelector(".p360-edit-training-duration");
+      const syncEditDuration = () => {
+        const duration = minutesBetweenTimes(editStart?.value, editEnd?.value);
+        if (editDuration) editDuration.value = duration === null ? "" : String(duration);
+        return duration;
+      };
+      editStart?.addEventListener("input", syncEditDuration);
+      editEnd?.addEventListener("input", syncEditDuration);
+
+      trainingEditForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const submit = form.querySelector('button[type="submit"]');
+        const date = form.querySelector(".p360-edit-training-date")?.value;
+        const title = form.querySelector(".p360-edit-training-title")?.value.trim();
+        const durationMinutes = syncEditDuration();
+
+        if (!date || !title || durationMinutes === null) {
+          alert("⚠️ Indica fecha, nombre y un horario válido.");
+          return;
+        }
+
+        submit.disabled = true;
+        try {
+          await this.service.updateSession({
+            trainingSessionId: form.dataset.sessionId,
+            teamSeasonId: this.teamSeasonId,
+            sessionDate: date,
+            title,
+            objective: form.querySelector(".p360-edit-training-objective")?.value.trim() || null,
+            durationMinutes,
+            intensity: numberOrNull(form.querySelector(".p360-edit-training-intensity")?.value),
+            startTime: editStart?.value || null,
+            endTime: editEnd?.value || null
+          });
+          this.editingTrainingId = null;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error corrigiendo entrenamiento:", error);
+          alert(`❌ ${error.message || error}`);
+          submit.disabled = false;
+        }
+      });
+    }
+
+    const externalEditForm = container.querySelector(".p360-external-edit-form");
+    if (externalEditForm) {
+      const editExternalDate = externalEditForm.querySelector(".p360-edit-external-date");
+      editExternalDate?.addEventListener("change", () => {
+        const select = externalEditForm.querySelector(".p360-edit-external-player");
+        if (select) {
+          const selected = select.value;
+          select.innerHTML = this._renderExternalPlayerOptions(editExternalDate.value, selected);
+        }
+      });
+
+      externalEditForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const submit = form.querySelector('button[type="submit"]');
+        const date = form.querySelector(".p360-edit-external-date")?.value;
+        const playerId = form.querySelector(".p360-edit-external-player")?.value;
+        const title = form.querySelector(".p360-edit-external-title")?.value.trim();
+
+        if (!date || !playerId || !title) {
+          alert("⚠️ Indica fecha, jugador y actividad.");
+          return;
+        }
+
+        submit.disabled = true;
+        try {
+          await this.service.updateExternalDevelopment({
+            externalSessionId: form.dataset.sessionId,
+            teamSeasonId: this.teamSeasonId,
+            playerId,
+            activityDate: date,
+            title,
+            activityCode: form.querySelector(".p360-edit-external-code")?.value.trim() || null,
+            providerType: form.querySelector(".p360-edit-external-provider-type")?.value || null,
+            providerName: form.querySelector(".p360-edit-external-provider")?.value.trim() || null,
+            objective: form.querySelector(".p360-edit-external-objective")?.value.trim() || null,
+            durationMinutes: numberOrNull(form.querySelector(".p360-edit-external-duration")?.value),
+            intensity: numberOrNull(form.querySelector(".p360-edit-external-intensity")?.value),
+            rpe: numberOrNull(form.querySelector(".p360-edit-external-rpe")?.value),
+            notes: form.querySelector(".p360-edit-external-notes")?.value.trim() || null
+          });
+          this.editingExternalId = null;
+          this.activeTab = "external";
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error corrigiendo tecnificación:", error);
+          alert(`❌ ${error.message || error}`);
+          submit.disabled = false;
+        }
+      });
+    }
 
     container.querySelector("#p360-training-form")?.addEventListener("submit", async event => {
       event.preventDefault();
