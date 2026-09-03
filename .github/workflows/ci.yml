@@ -31,5 +31,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Player 360 Phase 4A foundation smoke
+        run: node tests/player360-foundation-smoke.mjs
+
       - name: Build
         run: npm run build
