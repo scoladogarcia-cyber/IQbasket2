@@ -11,6 +11,8 @@ const roles = [
   { role: "ADMIN", email: "admin@example.test", openAction: "freeze", frozenAction: "reopen" },
   { role: "ENTRENADOR", email: "coach@example.test", openAction: "request", frozenAction: null },
   { role: "ANALISTA", email: "analyst@example.test", openAction: "request", frozenAction: null },
+  { role: "COORDINADOR", authRole: "INVITADO", contextRole: "COORDINADOR", email: "coord@example.test", openAction: null, frozenAction: null },
+  { role: "DIRECTOR_DEPORTIVO", authRole: "INVITADO", contextRole: "DIRECTOR_DEPORTIVO", email: "director@example.test", openAction: null, frozenAction: null },
   { role: "INVITADO", email: "test@test.com", openAction: null, frozenAction: null }
 ];
 
@@ -23,7 +25,7 @@ async function renderScenario(page, spec, frozen, pending = false) {
     const auth = new PermissionService({
       id: "browser-" + spec.role,
       email: spec.email,
-      role: spec.role,
+      role: spec.authRole || spec.role,
       club_id: "club-a",
       assigned_team_ids: [TEAM_ID],
       allowed_team_ids: [TEAM_ID],
@@ -33,7 +35,7 @@ async function renderScenario(page, spec, frozen, pending = false) {
         teamSeasonId: TEAM_SEASON_ID,
         teamId: TEAM_ID,
         globalSeasonId: SEASON_ID,
-        role: spec.role,
+        role: spec.contextRole || spec.role,
         status: "ACTIVE"
       }]
     });
@@ -81,7 +83,7 @@ async function renderScenario(page, spec, frozen, pending = false) {
         id: "pending-1",
         team_season_id: TEAM_SEASON_ID,
         status: "PENDING",
-        requested_by_role: spec.role
+        requested_by_role: spec.contextRole || spec.role
       }] : [],
       requestFreeze: async (teamSeasonId, reason) => {
         window.__seasonFreezeCalls.push({ action: "request", teamSeasonId, reason });
@@ -120,7 +122,6 @@ async function renderScenario(page, spec, frozen, pending = false) {
     container.innerHTML = view.renderMarkup({ activeTeamId: TEAM_ID, canManage });
 
     window.confirm = () => true;
-    window.prompt = (_message, fallback = "") => fallback || "Motivo test";
     view.bindEvents(container, { onChanged: async () => {} });
 
     const actions = {
@@ -150,8 +151,26 @@ async function clickExpectedAction(page, action) {
     request: '[data-action="request-freeze-scope-data"]'
   }[action];
   if (!selector) return [];
+
+  const reasonInput = page.locator(".season-freeze-reason").first();
+  if (await reasonInput.count()) {
+    await reasonInput.fill("Motivo inline test");
+  }
+
+  const dialogs = [];
+  const handler = async dialog => {
+    dialogs.push(dialog.type());
+    await dialog.accept();
+  };
+  page.on("dialog", handler);
   await page.click(selector);
   await page.waitForFunction(() => window.__seasonFreezeCalls.length > 0);
+  page.off("dialog", handler);
+
+  if (dialogs.includes("prompt")) {
+    throw new Error("El lifecycle V6 abrió prompt() en navegador.");
+  }
+
   return page.evaluate(() => window.__seasonFreezeCalls);
 }
 
@@ -183,8 +202,8 @@ async function inspect(browser, spec, viewportName, viewport) {
 
   if (spec.openAction) {
     const calls = await clickExpectedAction(page, spec.openAction);
-    if (calls[0]?.action !== spec.openAction) {
-      throw new Error("[" + viewportName + "][" + spec.role + "] handler abierto incorrecto: " + JSON.stringify(calls));
+    if (calls[0]?.action !== spec.openAction || calls[0]?.reason !== "Motivo inline test") {
+      throw new Error("[" + viewportName + "][" + spec.role + "] handler abierto/nota incorrectos: " + JSON.stringify(calls));
     }
   }
 
@@ -208,8 +227,8 @@ async function inspect(browser, spec, viewportName, viewport) {
 
   if (spec.frozenAction) {
     const calls = await clickExpectedAction(page, spec.frozenAction);
-    if (calls[0]?.action !== spec.frozenAction) {
-      throw new Error("[" + viewportName + "][" + spec.role + "] handler cerrado incorrecto: " + JSON.stringify(calls));
+    if (calls[0]?.action !== spec.frozenAction || calls[0]?.reason !== "Motivo inline test") {
+      throw new Error("[" + viewportName + "][" + spec.role + "] handler cerrado/nota incorrectos: " + JSON.stringify(calls));
     }
   }
 

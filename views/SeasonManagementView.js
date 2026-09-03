@@ -285,6 +285,17 @@ export class SeasonManagementView {
                         : 'El cierre congela partidos y plantilla sin ocultar estadísticas, informes ni histórico.'}
                     </div>
                     ${freezeReady ? `
+                      ${(canFreeze || canReopen || canRequestFreeze) ? `
+                        <label style="display:grid;gap:4px;margin-top:9px;font-size:10px;font-weight:800;color:#475569;">
+                          Motivo / nota de auditoría
+                          <input type="text"
+                            class="season-freeze-reason"
+                            data-team-season-id="${scope.id}"
+                            maxlength="240"
+                            placeholder="${frozen ? 'Ej.: Corrección autorizada de datos' : 'Ej.: Temporada finalizada'}"
+                            style="width:100%;min-height:44px;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;font:inherit;">
+                        </label>
+                      ` : ''}
                       <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap;">
                         ${canFreeze ? `
                           <button type="button"
@@ -638,17 +649,19 @@ export class SeasonManagementView {
       });
     });
 
+    const readFreezeReason = (teamSeasonId) => String(
+      container.querySelector(
+        `.season-freeze-reason[data-team-season-id="${teamSeasonId}"]`
+      )?.value || ""
+    ).trim() || null;
+
     container.querySelectorAll('[data-action="request-freeze-scope-data"]').forEach(button => {
       button.addEventListener("click", async () => {
         const teamSeasonId = button.dataset.teamSeasonId;
-        const reason = prompt(
-          "Motivo de la solicitud de cierre (opcional):",
-          "Temporada finalizada · solicitar congelación de datos"
-        );
-        if (reason === null) return;
+        const reason = readFreezeReason(teamSeasonId);
 
         try {
-          await this.freezeService.requestFreeze(teamSeasonId, reason.trim() || null);
+          await this.freezeService.requestFreeze(teamSeasonId, reason);
           await refresh();
         } catch (error) {
           fail(error);
@@ -663,14 +676,12 @@ export class SeasonManagementView {
           "¿Cerrar esta temporada? Se bloquearán sus partidos abiertos y la plantilla quedará en modo histórico de solo lectura."
         )) return;
 
-        const reason = prompt(
-          "Motivo del cierre (opcional):",
-          "Cierre de temporada"
-        );
-        if (reason === null) return;
-
         try {
-          await this.freezeService.setFrozen(teamSeasonId, true, reason.trim() || null);
+          await this.freezeService.setFrozen(
+            teamSeasonId,
+            true,
+            readFreezeReason(teamSeasonId) || "Cierre de temporada"
+          );
           await refresh();
         } catch (error) {
           fail(error);
@@ -685,14 +696,12 @@ export class SeasonManagementView {
           "¿Reabrir esta temporada para corregir datos? Sólo se reabrirán los partidos que fueron bloqueados por su cierre de temporada."
         )) return;
 
-        const reason = prompt(
-          "Motivo de la reapertura (recomendado para auditoría):",
-          "Corrección autorizada"
-        );
-        if (reason === null) return;
-
         try {
-          await this.freezeService.setFrozen(teamSeasonId, false, reason.trim() || null);
+          await this.freezeService.setFrozen(
+            teamSeasonId,
+            false,
+            readFreezeReason(teamSeasonId) || "Corrección autorizada"
+          );
           await refresh();
         } catch (error) {
           fail(error);

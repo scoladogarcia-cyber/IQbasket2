@@ -8,10 +8,10 @@ const TEAM_SEASON_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SEASON_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const context = { teamId: TEAM_ID, teamSeasonId: TEAM_SEASON_ID, seasonId: SEASON_ID };
 
-function authFor(role, email) {
+function authFor(role, email, contextRole = role) {
   return new PermissionService({
-    id: "user-" + role,
-    email: email || String(role).toLowerCase() + "@example.test",
+    id: "user-" + role + "-" + contextRole,
+    email: email || String(contextRole).toLowerCase() + "@example.test",
     role,
     club_id: "club-a",
     assigned_team_ids: [TEAM_ID],
@@ -21,7 +21,7 @@ function authFor(role, email) {
       teamSeasonId: TEAM_SEASON_ID,
       teamId: TEAM_ID,
       globalSeasonId: SEASON_ID,
-      role,
+      role: contextRole,
       status: "ACTIVE"
     }]
   });
@@ -32,6 +32,8 @@ const admin = authFor(UserRole.ADMIN);
 const coach = authFor(UserRole.ENTRENADOR);
 const analyst = authFor(UserRole.ANALISTA);
 const guest = authFor(UserRole.INVITADO);
+const coordinator = authFor(UserRole.INVITADO, "coord@example.test", "COORDINADOR");
+const director = authFor(UserRole.INVITADO, "director@example.test", "DIRECTOR_DEPORTIVO");
 
 for (const auth of [superadmin, admin]) {
   assert.equal(auth.canPreview(Permission.FREEZE_TEAM_SEASON, context), true);
@@ -77,6 +79,19 @@ assert.equal(adminFreeze.canReopen(frozenScope), true);
 assert.equal(coachFreeze.canReopen(frozenScope), false);
 assert.equal(analystFreeze.canRequestFreeze(frozenScope), false);
 assert.equal(guestFreeze.canReopen(frozenScope), false);
+
+const coordinatorFreeze = new SeasonFreezeService(null, coordinator);
+const directorFreeze = new SeasonFreezeService(null, director);
+
+// PermissionService mapea estos roles contextuales a ADMIN funcional para otras
+// capacidades, pero el lifecycle V6 exige ADMIN literal.
+assert.equal(coordinator.canPreview(Permission.FREEZE_TEAM_SEASON, context), true);
+assert.equal(director.canPreview(Permission.FREEZE_TEAM_SEASON, context), true);
+assert.equal(coordinatorFreeze.canFreeze(openScope), false);
+assert.equal(coordinatorFreeze.canReopen(frozenScope), false);
+assert.equal(coordinatorFreeze.canReviewRequests(openScope), false);
+assert.equal(directorFreeze.canFreeze(openScope), false);
+assert.equal(directorFreeze.canReviewRequests(openScope), false);
 
 const rpcCalls = [];
 const fakeSupabase = {
