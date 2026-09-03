@@ -77,6 +77,21 @@ export class GameBoxScoreView {
     return Boolean(this.canEditCurrentGame);
   }
 
+  _readOnlyMessage(game = {}) {
+    if (String(game.edit_state || game.editState || "OPEN").toUpperCase() === "LOCKED") {
+      return "🔒 Partido cerrado · sólo lectura";
+    }
+
+    const seasonContext = DataStore.getActiveSeasonContext?.(
+      game.team_id || game.teamId || DataStore.getActiveTeamId?.()
+    );
+    if (String(seasonContext?.data_status || seasonContext?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN") {
+      return "🔒 Temporada cerrada · sólo lectura";
+    }
+
+    return this.t("read_only", "Modo solo lectura");
+  }
+
   _playerLabel(playerId) {
     const player = this.players.find(item => String(item.id) === String(playerId));
     if (!player) return String(playerId || "Jugador");
@@ -484,7 +499,7 @@ export class GameBoxScoreView {
             <button id="btn-save-boxscore" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;">
               💾 ${this.t("save_changes", "Guardar Cambios")}
             </button>
-          ` : `<span style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px;">${this.t("read_only", "Modo Solo Lectura")}</span>`}
+          ` : `<span class="boxscore-readonly-badge" style="background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 800; padding: 8px 12px; min-height:44px; display:inline-flex; align-items:center; border-radius: 8px;">${this._readOnlyMessage(currentGame)}</span>`}
         </div>
 
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
