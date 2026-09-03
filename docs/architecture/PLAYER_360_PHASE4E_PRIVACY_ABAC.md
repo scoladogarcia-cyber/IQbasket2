@@ -40,8 +40,9 @@ datos wellness reales ni habilita Nutrition, Recovery o Neuro-Cognitive.
 ## Principios
 
 - RBAC sigue siendo la primera barrera, pero no basta para datos sensibles.
-- SUPERADMIN administra la plataforma, pero no obtiene por ello lectura
-  automática de `WELLNESS_RESTRICTED`.
+- SUPERADMIN dispone de una excepción operativa mínima para Nutrition y
+  Recovery: lectura, alta manual y modificación dentro del jugador/equipo-
+  temporada. No es un bypass general de `WELLNESS_RESTRICTED`.
 - El acceso sensible se evalúa por recurso y contexto.
 - La autorización de tratamiento registra atributos de base jurídica/condición
   especial sin asumir que el consentimiento sea la única base posible.
@@ -110,7 +111,27 @@ El helper backend `iq_v4e_can_access_sensitive_resource(...)` debe comprobar:
 7. opt-in específico si la acción es `AI_PROCESS`;
 8. grant explícito si la acción es `EXPORT`.
 
-No existe bypass de lectura por SUPERADMIN.
+### Excepción operativa SUPERADMIN
+
+La política de producto incorpora una excepción limitada para el SUPERADMIN
+global cuando se cumplen **todas** estas condiciones:
+
+- el jugador pertenece al `team_season` solicitado;
+- módulo `nutrition` o `recovery`;
+- acción `READ`, `CREATE` o `UPDATE`;
+- finalidad `SPORT_PERFORMANCE` u `OPERATIONS`.
+
+Esta excepción permite operar el módulo sin crear previamente un grant ABAC
+manual para el propietario de plataforma. Permanecen en la ruta ABAC estricta:
+
+- `EXPORT`;
+- `AI_PROCESS`;
+- `DELETE` físico;
+- `neuro_cognitive`;
+- cualquier usuario distinto de SUPERADMIN.
+
+El cambio se implementa como hotfix aditivo y reversible, sin reescribir la
+migración histórica 4E.1.
 
 ## Permisos de administración
 
