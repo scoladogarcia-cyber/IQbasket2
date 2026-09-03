@@ -59,6 +59,20 @@ export class EasyStatsEntryView {
 
     const allGames = DataStore.getGames() || [];
     this.game = (this.gameId ? allGames.find(g => String(g.id) === String(this.gameId)) : null) || allGames[0] || {};
+
+    if (String(this.game.edit_state || this.game.editState || "OPEN").toUpperCase() === "LOCKED") {
+      container.innerHTML = `
+        <div style="padding:24px;background:#ffffff;border:1px solid #fecaca;border-radius:12px;color:#991b1b;">
+          <h3 style="margin-top:0;">🔒 Partido cerrado</h3>
+          <p style="margin-bottom:12px;">Este partido está bloqueado y no admite cambios. El BoxScore y los informes continúan disponibles en modo consulta.</p>
+          <button type="button" id="btn-back-locked-game" style="min-height:44px;border:0;border-radius:8px;padding:9px 14px;background:#0f172a;color:#ffffff;font-weight:800;cursor:pointer;">Volver a Partidos</button>
+        </div>`;
+      container.querySelector("#btn-back-locked-game")?.addEventListener("click", () => {
+        window.location.hash = "#/games";
+      });
+      return;
+    }
+
     this.players = DataStore.getPlayersEligibleOnDate?.(
       this.game.team_id || DataStore.getActiveTeamId(),
       this.game.date
