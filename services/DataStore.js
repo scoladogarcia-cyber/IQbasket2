@@ -8,6 +8,7 @@ import { supabase } from "../config/database.config.js";
 import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
+import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
 
 class DataStoreService {
   constructor() {
@@ -150,6 +151,13 @@ class DataStoreService {
 
   _normalizeStaffAssignment(a) {
     if (!a) return a;
+    const staffName = a.staff_name
+      || a.staffName
+      || a.external_name
+      || a.externalName
+      || a.user_name
+      || a.userName
+      || "";
     return {
       ...a,
       id: String(a.id),
@@ -157,12 +165,19 @@ class DataStoreService {
       clubId: a.club_id || a.clubId || null,
       team_id: a.team_id || a.teamId || null,
       teamId: a.team_id || a.teamId || null,
+      team_season_id: a.team_season_id || a.teamSeasonId || null,
+      teamSeasonId: a.team_season_id || a.teamSeasonId || null,
       season_name: a.season_name || a.seasonName || "",
       seasonName: a.season_name || a.seasonName || "",
       staff_role: a.staff_role || a.staffRole || "",
       staffRole: a.staff_role || a.staffRole || "",
-      staff_name: a.staff_name || a.staffName || "",
-      staffName: a.staff_name || a.staffName || ""
+      staff_name: staffName,
+      staffName,
+      external_name: a.external_name || a.externalName || null,
+      externalName: a.external_name || a.externalName || null,
+      user_id: a.user_id || a.userId || null,
+      userId: a.user_id || a.userId || null,
+      status: String(a.status || "ACTIVE").toUpperCase()
     };
   }
 
@@ -357,6 +372,93 @@ class DataStoreService {
     return activeContext;
   }
 
+  async _loadCanonicalStaffAssignments(activeContext = null) {
+    const globalSeasonId = activeContext?.global_season_id
+      || activeContext?.globalSeasonId
+      || activeContext?.season_id
+      || activeContext?.seasonId
+      || null;
+
+    if (!supabase || !globalSeasonId) {
+      return;
+    }
+
+    try {
+      const { data: teamSeasonRows, error: teamSeasonError } = await supabase
+        .from("team_seasons")
+        .select("id,team_id,season_id,status")
+        .eq("season_id", globalSeasonId);
+
+      if (teamSeasonError) throw teamSeasonError;
+
+      const teamSeasons = teamSeasonRows || [];
+      const teamSeasonIds = teamSeasons.map(row => row.id).filter(Boolean);
+      if (teamSeasonIds.length === 0) {
+        this.staffAssignments = [];
+        return;
+      }
+
+      const { data: assignmentRows, error: assignmentError } = await supabase
+        .from("team_season_staff_assignments")
+        .select("id,team_season_id,staff_role,user_id,external_name,status,created_at,updated_at")
+        .in("team_season_id", teamSeasonIds);
+
+      if (assignmentError) throw assignmentError;
+
+      const rows = assignmentRows || [];
+      const userIds = [...new Set(
+        rows.map(row => row.user_id).filter(Boolean).map(String)
+      )];
+      const usersById = new Map();
+
+      if (userIds.length > 0) {
+        const { data: userRows, error: userError } = await supabase
+          .from("user_profiles")
+          .select("id,first_name,last_name,email")
+          .in("id", userIds);
+
+        if (userError) throw userError;
+
+        (userRows || []).forEach(user => {
+          const fullName = [user.first_name, user.last_name]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+          usersById.set(
+            String(user.id),
+            fullName || user.email || "Staff"
+          );
+        });
+      }
+
+      const teamSeasonById = new Map(
+        teamSeasons.map(row => [String(row.id), row])
+      );
+      const seasonName = this._formatSeasonDisplayName(
+        activeContext?.name || activeContext?.code || ""
+      );
+
+      this.staffAssignments = rows.map(row => {
+        const teamSeason = teamSeasonById.get(String(row.team_season_id));
+        const registeredName = row.user_id
+          ? usersById.get(String(row.user_id))
+          : "";
+
+        return this._normalizeStaffAssignment({
+          ...row,
+          team_id: teamSeason?.team_id || null,
+          season_name: seasonName,
+          staff_name: row.external_name || registeredName || ""
+        });
+      });
+    } catch (error) {
+      console.warn(
+        "[DataStore] No se pudo hidratar staff v3 por temporada:",
+        error?.message || error
+      );
+    }
+  }
+
   _resolveSeasonContext(seasonRef = null, teamId = null) {
     const contexts = this.getSeasons(teamId);
     if (contexts.length === 0) return null;
@@ -491,10 +593,12 @@ class DataStoreService {
           this.legacySeasons = [];
           this.rosterMemberships = [];
           this.rosterStints = [];
+          this.staffAssignments = [];
         } else {
           // v3-first: temporada global + team_season. Si falla, _loadSeasonContexts
           // conserva automáticamente el comportamiento legacy.
-          await this._loadSeasonContexts(scopeTeamId);
+          const activeSeasonContext = await this._loadSeasonContexts(scopeTeamId);
+          await this._loadCanonicalStaffAssignments(activeSeasonContext);
 
           let playersQuery = supabase.from("players").select("*");
 
@@ -850,29 +954,16 @@ class DataStoreService {
 
   getTeamCoach(teamId = null, seasonName = null) {
     const targetTeamId = teamId || this.getActiveTeamId();
-    const targetSeasonName = String(seasonName || this.getActiveSeason() || "").trim().toLowerCase();
+    const targetSeasonName = seasonName || this.getActiveSeason() || "";
 
-    // Fuente real auditada: seasons.coach_name permite entrenador por temporada.
-    const season = (this.seasons || []).find(s => {
-      const sameTeam = String(s.team_id || s.teamId || "") === String(targetTeamId || "");
-      const name = String(s.name || "").trim().toLowerCase();
-      return sameTeam && (!targetSeasonName || name === targetSeasonName);
-    });
-
-    if (season?.coach_name || season?.coachName) {
-      return season.coach_name || season.coachName;
-    }
-
-    // Compatibilidad temporal con asignaciones experimentales en caché.
-    const assignment = this.getStaffAssignments({
+    return resolveHeadCoachName({
       teamId: targetTeamId,
-      seasonName: seasonName || this.getActiveSeason(),
-      role: "HEAD_COACH"
-    })[0];
-    if (assignment) return assignment.staff_name || assignment.staffName || "Por definir";
-
-    const team = this.getTeamById(targetTeamId);
-    return team?.coach_name || team?.coachName || team?.coach || "Por definir";
+      seasonName: targetSeasonName,
+      staffAssignments: this.staffAssignments || [],
+      seasons: this.seasons || [],
+      team: this.getTeamById(targetTeamId),
+      fallback: "Por definir"
+    });
   }
 
   getClubCoordinator(clubId, seasonName = null) {
