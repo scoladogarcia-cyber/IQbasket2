@@ -63,6 +63,10 @@
   color: var(--color-primary, #f97316);
 }
 
+.mobile-header .mobile-brand .brand-title {
+  color: inherit !important;
+}
+
 /* =========================================================================
    3. SIDEBAR LATERAL (DESKTOP & TABLET LANDSCAPE)
    ========================================================================= */
@@ -209,6 +213,10 @@
 .mobile-nav-item.active {
   color: var(--color-primary, #f97316) !important;
   font-weight: var(--font-weight-bold, 800);
+}
+
+.mobile-bottom-bar .mobile-nav-item .mobile-label {
+  color: inherit !important;
 }
 
 .mobile-svg {

@@ -4,7 +4,8 @@
  * IMPORTANT:
  * - This is a frontend/domain preview of access policy, never the authoritative
  *   security boundary. Backend RLS/RPC must evaluate equivalent attributes.
- * - SUPERADMIN does not bypass WELLNESS_RESTRICTED rules.
+ * - SUPERADMIN has only a narrow operational override for Nutrition/Recovery;
+ *   export, AI and Neuro-Cognitive remain on the strict ABAC path.
  * - Consent is not assumed to be the only lawful basis. The evaluator requires
  *   an auditable processing authorization with legal-basis attributes.
  */
@@ -119,6 +120,7 @@ export class PrivacyAccessEvaluator {
     authenticated = false,
     basePermission = false,
     scopeAllowed = false,
+    globalSuperadmin = false,
     actorUserId = null,
     playerId = null,
     teamSeasonId = null,
@@ -179,6 +181,20 @@ export class PrivacyAccessEvaluator {
     }
     if (!PLAYER360_PRIVACY_CONFIG.allowedRestrictedPurposes.includes(normalizedPurpose)) {
       return decision(false, PLAYER360_ABAC_REASON.DENY_UNSUPPORTED_PURPOSE);
+    }
+
+    const superadminOverride = PLAYER360_PRIVACY_CONFIG.superadminOperationalOverride;
+    const hasOperationalSuperadminOverride = Boolean(globalSuperadmin)
+      && superadminOverride.modules.includes(normalizedModule)
+      && superadminOverride.actions.includes(normalizedAction)
+      && superadminOverride.purposes.includes(normalizedPurpose);
+
+    if (hasOperationalSuperadminOverride) {
+      return decision(
+        true,
+        PLAYER360_ABAC_REASON.ALLOW_RESTRICTED_SUPERADMIN_OPERATIONS,
+        { audit: true }
+      );
     }
 
     const context = {

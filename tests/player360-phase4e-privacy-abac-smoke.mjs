@@ -113,16 +113,47 @@ assert.equal(staffAllowed.allowed, true);
 assert.equal(staffAllowed.reason, "ALLOW_RESTRICTED_EXPLICIT_GRANT");
 assert.equal(staffAllowed.obligations.audit, true);
 
-const superadminWithoutGrant = PrivacyAccessEvaluator.evaluate({
+const superadminOperationalRead = PrivacyAccessEvaluator.evaluate({
   ...BASE,
   actorUserId: "superadmin-1",
-  processingAuthorization: authorization,
+  globalSuperadmin: true,
+  processingAuthorization: null,
   accessGrant: null,
-  // The evaluator does not receive or honor a SUPERADMIN bypass flag.
   subjectRelation: PLAYER360_SUBJECT_RELATION.STAFF
 });
-assert.equal(superadminWithoutGrant.allowed, false);
-assert.equal(superadminWithoutGrant.reason, "DENY_EXPLICIT_GRANT");
+assert.equal(superadminOperationalRead.allowed, true);
+assert.equal(
+  superadminOperationalRead.reason,
+  "ALLOW_RESTRICTED_SUPERADMIN_OPERATIONS"
+);
+assert.equal(superadminOperationalRead.obligations.audit, true);
+
+const superadminExportWithoutGrant = PrivacyAccessEvaluator.evaluate({
+  ...BASE,
+  actorUserId: "superadmin-1",
+  globalSuperadmin: true,
+  action: PLAYER360_PRIVACY_ACTION.EXPORT,
+  processingAuthorization: authorization,
+  accessGrant: null,
+  subjectRelation: PLAYER360_SUBJECT_RELATION.STAFF
+});
+assert.equal(superadminExportWithoutGrant.allowed, false);
+assert.equal(superadminExportWithoutGrant.reason, "DENY_EXPORT_NOT_AUTHORIZED");
+
+const superadminNeuroWithoutAuthorization = PrivacyAccessEvaluator.evaluate({
+  ...BASE,
+  actorUserId: "superadmin-1",
+  globalSuperadmin: true,
+  module: "neuro_cognitive",
+  processingAuthorization: null,
+  accessGrant: null,
+  subjectRelation: PLAYER360_SUBJECT_RELATION.STAFF
+});
+assert.equal(superadminNeuroWithoutAuthorization.allowed, false);
+assert.equal(
+  superadminNeuroWithoutAuthorization.reason,
+  "DENY_PROCESSING_AUTHORIZATION"
+);
 
 const selfRead = PrivacyAccessEvaluator.evaluate({
   ...BASE,

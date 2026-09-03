@@ -1,0 +1,146 @@
+name: SUPERADMIN Wellness Hotfix Controlled Apply
+
+on:
+  push:
+    branches:
+      - fix/mobile-contrast-superadmin-wellness-v1
+    paths:
+      - ".github/superadmin-wellness-hotfix-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + apply + verify + rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static policy guard
+        run: node tests/superadmin-wellness-hotfix-sql.mjs
+
+      - name: Capture privacy/wellness baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries)::text || '|' ||
+              (select count(*) from public.player360_wellness_observations)::text;
+          " | tr -d '[:space:]')
+          echo "SUPERADMIN_WELLNESS_HOTFIX_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv             --file=supabase/ready/20260903_preflight_hotfix_v4e_superadmin_wellness_access.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^SUPERADMIN_WELLNESS_HOTFIX_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Apply scoped access hotfix
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1             --file=supabase/ready/20260903_hotfix_v4e_superadmin_wellness_access.sql
+
+      - name: Verify installed policy
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv             --file=supabase/ready/20260903_verify_hotfix_v4e_superadmin_wellness_access.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^SUPERADMIN_WELLNESS_HOTFIX_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Run installed functional smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv             --file=supabase/drafts/20260903_smoke_hotfix_v4e_superadmin_wellness_access_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^SUPERADMIN_WELLNESS_HOTFIX_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Verify final baseline
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries)::text || '|' ||
+              (select count(*) from public.player360_wellness_observations)::text;
+          " | tr -d '[:space:]')
+          echo "SUPERADMIN_WELLNESS_HOTFIX_POST_APPLY_BASELINE=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"
+
+      - name: Emergency rollback if post-apply validation fails
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1             --file=supabase/ready/20260903_rollback_hotfix_v4e_superadmin_wellness_access.sql
+
+      - name: Verify emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select position(
+              'SUPERADMIN_OPERATIONAL_WELLNESS_OVERRIDE_V1' in pg_get_functiondef(
+                'public.iq_v4e_can_access_sensitive_resource(uuid,uuid,text,text,text)'::regprocedure
+              )
+            )=0;
+          " | tr -d '[:space:]')
+          test "$MARKER" = "t"
+
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries)::text || '|' ||
+              (select count(*) from public.player360_wellness_observations)::text;
+          " | tr -d '[:space:]')
+          echo "SUPERADMIN_WELLNESS_HOTFIX_AFTER_ROLLBACK=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"

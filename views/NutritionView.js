@@ -122,7 +122,7 @@ export class NutritionView {
           align-items:flex-start;
           gap:16px;
         }
-        .nutrition-hero h1{margin:0 0 6px;font-size:clamp(22px,4vw,30px)}
+        .nutrition-hero h1{margin:0 0 6px;font-size:clamp(22px,4vw,30px);color:#fff!important}
         .nutrition-hero p{margin:0;color:#d1fae5;line-height:1.5;max-width:760px}
         .nutrition-context{
           border:1px solid rgba(255,255,255,.28);
@@ -131,6 +131,7 @@ export class NutritionView {
           font-size:11px;
           font-weight:900;
           white-space:nowrap;
+          color:#fff!important;
         }
         .nutrition-selector{
           background:#fff;
