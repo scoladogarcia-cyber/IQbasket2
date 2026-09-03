@@ -16,6 +16,8 @@ import { TrainingService } from "../services/player360/TrainingService.js";
 import { LongitudinalAnalyticsService } from "../services/player360/LongitudinalAnalyticsService.js";
 import { LongitudinalAnalyticsOrchestrator } from "../services/player360/LongitudinalAnalyticsOrchestrator.js";
 import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPanel.js";
+import { WellnessService } from "../services/player360/WellnessService.js";
+import { WellnessSupportPanel } from "./player360/WellnessSupportPanel.js";
 import { ObjectiveGapCalculator } from "../domain/player360/ObjectiveGapCalculator.js";
 import { Permission } from "../security/PermissionService.js";
 import {
@@ -94,6 +96,11 @@ export class Player360View {
     this.analyticsPanel = new LongitudinalAnalyticsPanel({
       analyticsService: this.analyticsService,
       orchestrator: this.analyticsOrchestrator,
+      can: permission => this._can(permission)
+    });
+    this.wellnessService = new WellnessService(this.supabase);
+    this.wellnessPanel = new WellnessSupportPanel({
+      service: this.wellnessService,
       can: permission => this._can(permission)
     });
 
@@ -180,6 +187,12 @@ export class Player360View {
         this.evaluations = [];
         this.objectiveProfile = null;
         this.gaps = [];
+        await this.wellnessPanel.load({
+          teamId: this.teamId,
+          teamSeasonId: this.teamSeasonId,
+          playerId: this.playerId,
+          dateBounds: this._dateBounds()
+        });
         return;
       }
 
@@ -213,13 +226,21 @@ export class Player360View {
         ? await this.service.getObjectiveGap(objectiveProfile.id)
         : [];
 
-      await this.analyticsPanel.load({
-        teamId: this.teamId,
-        teamSeasonId: this.teamSeasonId,
-        playerId: this.playerId,
-        dateBounds: this._dateBounds(),
-        evaluationMetrics: this.metrics
-      });
+      await Promise.all([
+        this.analyticsPanel.load({
+          teamId: this.teamId,
+          teamSeasonId: this.teamSeasonId,
+          playerId: this.playerId,
+          dateBounds: this._dateBounds(),
+          evaluationMetrics: this.metrics
+        }),
+        this.wellnessPanel.load({
+          teamId: this.teamId,
+          teamSeasonId: this.teamSeasonId,
+          playerId: this.playerId,
+          dateBounds: this._dateBounds()
+        })
+      ]);
     } catch (error) {
       console.error("[Player360View] Error cargando Phase 4C:", error);
       this.lastError = error;
@@ -558,6 +579,9 @@ export class Player360View {
     }
     if (this.analyticsPanel.isAvailable()) {
       tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
+    }
+    if (this.wellnessPanel.isAvailable()) {
+      tabs.push({ id: "wellness", label: "🌱 Apoyo" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1052,6 +1076,7 @@ export class Player360View {
   _renderBody() {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
     if (this.activeTab === "analytics") return this.analyticsPanel.render();
+    if (this.activeTab === "wellness") return this.wellnessPanel.render();
     return this._renderEvaluationPanel();
   }
 
@@ -1059,7 +1084,7 @@ export class Player360View {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
         const requested = button.dataset.p360cTab;
-        this.activeTab = ["evaluation", "objective", "analytics"].includes(requested)
+        this.activeTab = ["evaluation", "objective", "analytics", "wellness"].includes(requested)
           ? requested
           : "evaluation";
         this._renderLoaded(container);
@@ -1246,8 +1271,8 @@ export class Player360View {
           <div>
             <h1>Player 360 · ${escapeHtml(playerName(this.player))}</h1>
             <p>
-              Evaluación humana, perfil objetivo y evolución longitudinal. Los datos objetivos
-              permanecen separados de la interpretación IA, que nunca modifica la evidencia de origen.
+              Evaluación humana, perfil objetivo, evolución longitudinal y apoyo de hábitos.
+              Los check-ins de Nutrition/Recovery se mantienen separados de estadísticas e IA.
             </p>
           </div>
           <span class="p360c-context">${escapeHtml(teamName)} · ${escapeHtml(seasonName)}</span>
@@ -1276,6 +1301,12 @@ export class Player360View {
     void this.analyticsPanel.bind(container, {
       onChanged: async () => {
         this.activeTab = "analytics";
+        this._renderLoaded(container);
+      }
+    });
+    void this.wellnessPanel.bind(container, {
+      onChanged: async () => {
+        this.activeTab = "wellness";
         this._renderLoaded(container);
       }
     });
