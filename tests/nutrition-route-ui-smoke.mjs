@@ -294,7 +294,9 @@ async function runViewport(browser, viewportName, viewport) {
   const guest = await page.evaluate(() => ({
     nav: window.__guestNutritionNav,
     title: document.querySelector(".nutrition-hero h1")?.textContent || "",
-    lockedText: document.querySelector(".p360w-locked")?.textContent || "",
+    lockedText: String(document.querySelector(".p360w-locked")?.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim(),
     hasNew: Boolean(document.querySelector("#p360w-new")),
     history: document.querySelectorAll(".p360w-history-card").length,
     entryReads: window.__guestNutritionReads,
