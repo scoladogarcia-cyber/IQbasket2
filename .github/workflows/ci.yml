@@ -61,6 +61,9 @@ jobs:
       - name: Player 360 Phase 4D real-data orchestration
         run: node tests/player360-phase4d-orchestrator-smoke.mjs
 
+      - name: Player 360 Phase 4E privacy ABAC
+        run: node tests/player360-phase4e-privacy-abac-smoke.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
