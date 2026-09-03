@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { PermissionService, Permission, UserRole } from "../security/PermissionService.js";
 import { SeasonFreezeService } from "../services/seasons/SeasonFreezeService.js";
-import { ApprovalCenterService, RequestType } from "../services/ApprovalCenterService.js";
 
 const TEAM_ID = "11111111-1111-4111-8111-111111111111";
 const TEAM_SEASON_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -108,51 +107,9 @@ assert.deepEqual(
   ]
 );
 
-const dataStore = {
-  getActiveTeamId: () => TEAM_ID,
-  getActiveTeamSeasonId: () => TEAM_SEASON_ID,
-  getActiveSeasonContext: () => ({
-    ...openScope,
-    team_season_id: TEAM_SEASON_ID,
-    teamId: TEAM_ID,
-    global_season_id: SEASON_ID,
-    name: "2025/2026"
-  }),
-  getGamesForActiveSeason: () => [],
-  getGames: () => [],
-  getTeamById: () => ({ id: TEAM_ID, name: "Equipo Demo" }),
-  getTeams: () => [{ id: TEAM_ID, name: "Equipo Demo" }]
-};
-
-const center = new ApprovalCenterService(null, admin, dataStore);
-center.teamAccessService.listRequests = async () => [];
-center.gameLockService.listRequests = async () => [];
-center.transferRequestService.listRequests = async () => [];
-center.seasonFreezeService = {
-  listRequests: async () => [{
-    id: "freeze-1",
-    team_season_id: TEAM_SEASON_ID,
-    requested_by_role: "ENTRENADOR",
-    request_reason: "Temporada finalizada",
-    status: "PENDING",
-    created_at: "2026-06-30T20:00:00Z"
-  }],
-  canReviewRequests: () => true,
-  resolveRequest: async (...args) => {
-    rpcCalls.push({ name: "approval-center-freeze", args });
-    return { ok: true };
-  }
-};
-
-const inbox = await center.load();
-const freezeItem = inbox.items.find(item => item.type === RequestType.TEAM_SEASON_FREEZE);
-assert.ok(freezeItem);
-assert.equal(freezeItem.canApprove, true);
-assert.equal(freezeItem.teamSeasonId, TEAM_SEASON_ID);
-assert.match(freezeItem.detail, /Temporada finalizada/i);
-
-await center.approve(freezeItem, "Aprobada");
-assert.ok(rpcCalls.some(call => call.name === "approval-center-freeze"));
+// ApprovalCenterService importa la configuración de navegador de Supabase.
+// Su integración se valida de forma estática en team-season-freeze-ui-contract.mjs
+// y end-to-end en el gate Playwright, evitando cargar URLs https con Node ESM.
 
 const permissionsSource = fs.readFileSync(
   new URL("../security/permissions.js", import.meta.url),
