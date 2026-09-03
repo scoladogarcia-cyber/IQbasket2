@@ -88,6 +88,9 @@ jobs:
       - name: Game locking UI + RBAC
         run: node tests/game-locking-ui-rbac.mjs
 
+      - name: Approval center foundation
+        run: node tests/approval-center-foundation.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
