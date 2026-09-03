@@ -12,6 +12,10 @@
 
 import { DataStore } from "../services/DataStore.js";
 import { EvaluationService } from "../services/player360/EvaluationService.js";
+import { TrainingService } from "../services/player360/TrainingService.js";
+import { LongitudinalAnalyticsService } from "../services/player360/LongitudinalAnalyticsService.js";
+import { LongitudinalAnalyticsOrchestrator } from "../services/player360/LongitudinalAnalyticsOrchestrator.js";
+import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPanel.js";
 import { ObjectiveGapCalculator } from "../domain/player360/ObjectiveGapCalculator.js";
 import { Permission } from "../security/PermissionService.js";
 import {
@@ -79,6 +83,19 @@ export class Player360View {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
     this.service = new EvaluationService(this.supabase);
+    this.trainingService = new TrainingService(this.supabase);
+    this.analyticsService = new LongitudinalAnalyticsService(this.supabase);
+    this.analyticsOrchestrator = new LongitudinalAnalyticsOrchestrator({
+      dataStore: DataStore,
+      trainingService: this.trainingService,
+      evaluationService: this.service,
+      analyticsService: this.analyticsService
+    });
+    this.analyticsPanel = new LongitudinalAnalyticsPanel({
+      analyticsService: this.analyticsService,
+      orchestrator: this.analyticsOrchestrator,
+      can: permission => this._can(permission)
+    });
 
     this.containerId = "dashboard-content-area";
     this.teamId = null;
@@ -195,6 +212,14 @@ export class Player360View {
       this.gaps = objectiveProfile?.id
         ? await this.service.getObjectiveGap(objectiveProfile.id)
         : [];
+
+      await this.analyticsPanel.load({
+        teamId: this.teamId,
+        teamSeasonId: this.teamSeasonId,
+        playerId: this.playerId,
+        dateBounds: this._dateBounds(),
+        evaluationMetrics: this.metrics
+      });
     } catch (error) {
       console.error("[Player360View] Error cargando Phase 4C:", error);
       this.lastError = error;
@@ -530,6 +555,9 @@ export class Player360View {
     }
     if (this._can(Permission.VIEW_OBJECTIVE_PROFILE)) {
       tabs.push({ id: "objective", label: "🎯 Perfil objetivo" });
+    }
+    if (this.analyticsPanel.isAvailable()) {
+      tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1023,14 +1051,16 @@ export class Player360View {
 
   _renderBody() {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
+    if (this.activeTab === "analytics") return this.analyticsPanel.render();
     return this._renderEvaluationPanel();
   }
 
   _bindTabs(container) {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
-        this.activeTab = button.dataset.p360cTab === "objective"
-          ? "objective"
+        const requested = button.dataset.p360cTab;
+        this.activeTab = ["evaluation", "objective", "analytics"].includes(requested)
+          ? requested
           : "evaluation";
         this._renderLoaded(container);
       });
@@ -1216,8 +1246,8 @@ export class Player360View {
           <div>
             <h1>Player 360 · ${escapeHtml(playerName(this.player))}</h1>
             <p>
-              Evaluación humana estructurada y perfil objetivo. Los datos objetivos
-              de partidos y entrenamientos permanecen separados y la IA no modifica esta evidencia.
+              Evaluación humana, perfil objetivo y evolución longitudinal. Los datos objetivos
+              permanecen separados de la interpretación IA, que nunca modifica la evidencia de origen.
             </p>
           </div>
           <span class="p360c-context">${escapeHtml(teamName)} · ${escapeHtml(seasonName)}</span>
@@ -1243,6 +1273,12 @@ export class Player360View {
     this._bindTabs(container);
     this._bindEvaluationEvents(container);
     this._bindObjectiveEvents(container);
+    void this.analyticsPanel.bind(container, {
+      onChanged: async () => {
+        this.activeTab = "analytics";
+        this._renderLoaded(container);
+      }
+    });
   }
 
   async render(containerId = "dashboard-content-area", playerId = null, teamId = null) {

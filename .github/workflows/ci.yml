@@ -58,6 +58,9 @@ jobs:
       - name: Player 360 Phase 4D service boundary
         run: node tests/player360-phase4d-service-smoke.mjs
 
+      - name: Player 360 Phase 4D real-data orchestration
+        run: node tests/player360-phase4d-orchestrator-smoke.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
