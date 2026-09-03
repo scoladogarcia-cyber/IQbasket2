@@ -34,5 +34,8 @@ jobs:
       - name: Player 360 Phase 4A foundation smoke
         run: node tests/player360-foundation-smoke.mjs
 
+      - name: Player 360 Phase 4B training service smoke
+        run: node tests/player360-phase4b-service-smoke.mjs
+
       - name: Build
         run: npm run build
