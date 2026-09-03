@@ -118,6 +118,9 @@ jobs:
       - name: Core UX BoxScore SQL
         run: node tests/core-ux-boxscore-sql.mjs
 
+      - name: Core UX BoxScore service
+        run: node tests/core-ux-boxscore-service.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
