@@ -1,0 +1,199 @@
+name: Player 360 Phase 4E Controlled Apply
+
+on:
+  push:
+    branches:
+      - feature/player360-privacy-abac-v1
+    paths:
+      - ".github/player360-phase4e-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Apply + verify + rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Phase 4E SQL structure guard
+        run: node tests/player360-phase4e-sql-structure.mjs
+
+      - name: Capture existing baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots)::text || '|' ||
+              (select count(*) from public.player_ai_insights)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm Phase 4E preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v4_phase4e_privacy_abac_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Apply Phase 4E
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260903_apply_v4_phase4e_privacy_abac.sql
+
+      - name: Verify Phase 4E
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4e_summary_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E_POST_APPLY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Run installed Phase 4E functional smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260903_smoke_v4_phase4e_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Verify post-smoke and unchanged baseline
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4e_summary_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E_POST_APPLY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+          OLD=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots)::text || '|' ||
+              (select count(*) from public.player_ai_insights)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E_POST_APPLY_BASELINE=$OLD"
+          test "$OLD" = "${{ steps.baseline.outputs.value }}"
+
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_subject_relationships)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_requests)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E_POST_SMOKE_ROWS=$NEW"
+          test "$NEW" = "0|0|0|0|0"
+
+      - name: Emergency rollback if post-apply validation fails
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (to_regclass('public.player360_processing_authorizations') is not null)::int;
+          " | tr -d '[:space:]')
+
+          if [ "$INSTALLED" = "1" ]; then
+            echo "Phase 4E validation failed after apply; rolling back only Phase 4E objects."
+            psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+              --file=supabase/ready/20260903_rollback_v4_phase4e_privacy_abac.sql
+          else
+            echo "Phase 4E objects are already absent."
+          fi
+
+      - name: Verify Phase 4E emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v4_phase4e_postrollback_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER360_PHASE4E_POST_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Verify baseline after emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OLD=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.roster_memberships)::text || '|' ||
+              (select count(*) from public.roster_membership_stints)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots)::text || '|' ||
+              (select count(*) from public.player_ai_insights)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4E_AFTER_EMERGENCY_ROLLBACK=$OLD"
+          test "$OLD" = "${{ steps.baseline.outputs.value }}"
