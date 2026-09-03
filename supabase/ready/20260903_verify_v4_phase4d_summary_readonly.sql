@@ -73,6 +73,26 @@ select
     'public.iq_v4_has_player360_action_role(uuid,text[],text[],text[])',
     'EXECUTE'
   ) as generic_action_helper_private,
+  not has_function_privilege(
+    'anon',
+    'public.iq_v4_has_player360_action_role(uuid,text[],text[],text[])',
+    'EXECUTE'
+  ) as generic_action_helper_anon_blocked,
+  not has_function_privilege(
+    'anon',
+    'public.iq_v4_save_longitudinal_snapshot(uuid,uuid,date,date,text,text,text,text,jsonb,jsonb,integer)',
+    'EXECUTE'
+  ) as anon_save_snapshot_blocked,
+  not has_function_privilege(
+    'anon',
+    'public.iq_v4_save_ai_insight(uuid,text,text,text,text,text,jsonb)',
+    'EXECUTE'
+  ) as anon_save_ai_blocked,
+  not has_function_privilege(
+    'anon',
+    'public.iq_v4_review_ai_insight(uuid,text,text)',
+    'EXECUTE'
+  ) as anon_review_ai_blocked,
   has_function_privilege(
     'authenticated',
     'public.iq_v4_can_view_longitudinal_analytics(uuid)',
@@ -127,6 +147,26 @@ select
     and not has_function_privilege(
       'authenticated',
       'public.iq_v4_has_player360_action_role(uuid,text[],text[],text[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.iq_v4_has_player360_action_role(uuid,text[],text[],text[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.iq_v4_save_longitudinal_snapshot(uuid,uuid,date,date,text,text,text,text,jsonb,jsonb,integer)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.iq_v4_save_ai_insight(uuid,text,text,text,text,text,jsonb)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.iq_v4_review_ai_insight(uuid,text,text)',
       'EXECUTE'
     )
     and has_function_privilege(
