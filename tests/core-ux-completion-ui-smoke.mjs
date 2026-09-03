@@ -119,13 +119,13 @@ async function trainingScenario(page,label) {
 
   await page.click(".p360-edit-session");
   await page.waitForSelector('#p360-training-form[data-editing-session-id="session-1"]');
-  const prefill=await page.evaluate(()=>({
+  const prefill=await page.evaluate((playerId)=>({
     title:document.querySelector("#p360-training-title")?.value,
     start:document.querySelector("#p360-training-start-time")?.value,
     end:document.querySelector("#p360-training-end-time")?.value,
-    p1Checked:document.querySelector(`input[name="p360-training-player"][value="${P1}"]`)?.checked,
+    p1Checked:document.querySelector(`input[name="p360-training-player"][value="${playerId}"]`)?.checked,
     duration:document.querySelector("#p360-training-duration")?.value
-  }));
+  }),P1);
   assertCondition(prefill.title==="Entreno original",label,"El entreno no precarga título");
   assertCondition(prefill.start==="18:00" && prefill.end==="19:00",label,"No precarga horario");
   assertCondition(prefill.p1Checked===true,label,"No precarga jugador existente");
