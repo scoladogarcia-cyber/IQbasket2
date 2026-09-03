@@ -1,0 +1,15 @@
+IQBasket V5 game locking controlled apply
+
+Authorized branch: feature/game-locking-v1
+Preflight: PASS (run 33768835739)
+Transactional rehearsal: PASS (run 33769137158)
+Baseline preserved after rehearsal:
+- games: 14
+- player_game_stats: 144
+- team_game_stats: 12
+- game_events: 36
+- game_period_scores: 56
+- lineup_game_stats: 0
+- play_by_play_events: 0
+
+This marker intentionally triggers .github/workflows/game-locking-apply.yml.
