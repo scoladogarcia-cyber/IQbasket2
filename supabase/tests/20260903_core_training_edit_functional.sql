@@ -39,7 +39,7 @@ begin
   if v.id is null then raise exception 'CORE_TRAINING_TEST_SESSION_MISSING'; end if;
 
   select coalesce(
-    jsonb_agg(jsonb_build_object('player_id',tp.player_id) order by tp.player_id::text),
+    jsonb_agg(to_jsonb(tp.player_id::text) order by tp.player_id::text),
     '[]'::jsonb
   )
   into v_participants
