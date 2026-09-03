@@ -2,9 +2,13 @@
 
 ## Objetivo
 
-Habilitar los primeros módulos `WELLNESS_RESTRICTED` sobre el sustrato ABAC
-4E.1 ya instalado, sin convertir IQBasket en una aplicación clínica y sin
+Habilitar los primeros módulos de apoyo Nutrition + Recovery sobre el sustrato
+ABAC 4E.1 ya instalado, sin convertir IQBasket en una aplicación clínica y sin
 mezclar hábitos/bienestar con estadísticas deportivas objetivas.
+
+Aunque el catálogo inicial evita datos clínicos, corporales invasivos y texto
+libre, estos check-ins se protegen técnicamente como `WELLNESS_RESTRICTED` por
+prudencia y para mantener una frontera segura de cara a futuras integraciones.
 
 ## Criterios de producto
 
@@ -26,6 +30,53 @@ mezclar hábitos/bienestar con estadísticas deportivas objetivas.
    de autorización.
 9. **No causalidad**: los datos wellness podrán correlacionarse más adelante,
    pero nunca etiquetarse automáticamente como causa de rendimiento.
+
+## Estado de despliegue · 2026-09-03
+
+Phase 4E.2 está **instalada en Supabase** y la UI está implementada en la rama
+`feature/player360-nutrition-recovery-v1`.
+
+Validación:
+
+- catálogo/validadores/recomendaciones deterministas: PASS;
+- SQL structure/minimización: PASS;
+- preflight read-only: PASS;
+- rehearsal rollback-only: PASS;
+- baseline antes/después del rehearsal: `17|23|22|1|1|0|0|0`;
+- primer Controlled Apply: schema aplicado, verificador falló por un error
+  `boolean = integer`; rollback de emergencia automático: PASS;
+- baseline tras rollback: `17|23|22|1|1|0|0|0`;
+- segundo Controlled Apply tras corregir solo el verificador: PASS;
+- post-apply verifier: PASS;
+- installed smoke + rollback de filas sintéticas: PASS;
+- baseline post-apply: `17|23|22|1|1|0|0|0`;
+- filas instaladas tras smoke: catálogo `9`, entries `0`, observaciones `0`;
+- browser smoke desktop 1440×900: PASS;
+- browser smoke iPhone 390×844: PASS;
+- overflow horizontal: 0;
+- importaciones externas: 0;
+- llamadas IA: 0;
+- Cancelar creación: 0 escrituras;
+- Cancelar edición: 0 escrituras adicionales.
+
+La importación de apps/wearables queda para una fase posterior y deberá entrar
+como una fuente nueva explícita; el origen manual actual no puede suplantarla.
+
+## Recomendaciones
+
+El valor inmediato del módulo es ayudar a decidir el siguiente paso, no acumular
+datos. `WellnessRecommendationEngine` genera apoyos deterministas y explicables
+a partir del último check-in.
+
+Las reglas:
+
+- están centralizadas en configuración;
+- no son diagnósticos;
+- no hacen afirmaciones causales;
+- no llaman a un modelo IA;
+- no modifican el dato original;
+- pueden evolucionar a personalización longitudinal cuando exista evidencia
+  suficiente y una frontera de acceso específica.
 
 ## Arquitectura
 
@@ -57,7 +108,7 @@ Contenedor auditable:
 - jugador;
 - equipo-temporada;
 - módulo;
-- fecha/hora;
+- fecha del check-in;
 - finalidad;
 - fuente;
 - usuario que lo registra;
@@ -125,13 +176,16 @@ No se habilitará acceso para VISOR o INVITADO.
 
 ## Secuencia
 
-1. catálogo y validadores puros;
-2. tests de minimización/tipos;
-3. diseño SQL + RLS usando 4E.1;
-4. preflight;
-5. rehearsal rollback-only;
-6. controlled apply;
-7. servicio mediante RPC;
-8. UI responsive;
-9. browser smoke desktop/móvil;
-10. integración en Player 360 longitudinal sin IA sensible.
+Los pasos 1–9 están completados. El paso 10 se pospone deliberadamente: no se
+incorporarán observaciones wellness al snapshot longitudinal genérico mientras
+su lectura no sea ABAC-aware. Hacerlo ahora podría convertir datos protegidos en
+evidencia visible mediante permisos de analítica 4D.
+
+Siguiente evolución segura:
+
+1. gestión de autorizaciones/grants desde la app;
+2. uso manual real de Nutrition/Recovery;
+3. tendencias wellness dentro de una vista protegida;
+4. integración con apps externas mediante adaptadores de fuente;
+5. solo después, estudiar analítica combinada sin romper la separación de
+   sensibilidad.
