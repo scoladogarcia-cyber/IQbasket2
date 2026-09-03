@@ -436,6 +436,7 @@ export const ROUTE_PERMISSIONS = Object.freeze({
   approvals: Permission.VIEW_APPROVAL_CENTER,
   requests: Permission.VIEW_APPROVAL_CENTER,
   solicitudes: Permission.VIEW_APPROVAL_CENTER,
+  bandeja: Permission.VIEW_APPROVAL_CENTER,
   team: Permission.VIEW_TEAM,
   equipo: Permission.VIEW_TEAM,
   players: Permission.VIEW_ROSTER,
