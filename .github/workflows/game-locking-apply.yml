@@ -1,0 +1,75 @@
+name: Apply Game Locking V5
+
+on:
+  push:
+    branches:
+      - feature/game-locking-v1
+    paths:
+      - "supabase/ready/APPLY_GAME_LOCKING_V5"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Controlled game locking apply
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Read-only preflight and baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v5_game_locking_readonly.sql)
+          echo "$OUT"
+          CHECK=$(printf '%s\n' "$OUT" | grep '^GAME_LOCK_PREFLIGHT,' | tail -n 1)
+          test -n "$CHECK"
+          FINAL=${CHECK##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+          BASELINE=$(printf '%s\n' "$OUT" | grep '^GAME_LOCK_BASELINE,' | tail -n 1)
+          test -n "$BASELINE"
+          echo "GAME_LOCK_BASELINE_BEFORE=$BASELINE" >> "$GITHUB_ENV"
+
+      - name: Apply additive migration
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260903_apply_v5_game_locking.sql
+
+      - name: Verify installed guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_verify_v5_game_locking_readonly.sql)
+          echo "$OUT"
+          VERIFY=$(printf '%s\n' "$OUT" | grep '^GAME_LOCK_VERIFY,' | tail -n 1)
+          test -n "$VERIFY"
+          FINAL=${VERIFY##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Confirm sporting data counts unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260903_preflight_v5_game_locking_readonly.sql \
+            | grep '^GAME_LOCK_BASELINE,' | tail -n 1)
+          test -n "$AFTER"
+          echo "Before: $GAME_LOCK_BASELINE_BEFORE"
+          echo "After:  $AFTER"
+          test "$GAME_LOCK_BASELINE_BEFORE" = "$AFTER"
