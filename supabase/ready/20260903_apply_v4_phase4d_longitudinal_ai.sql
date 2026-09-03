@@ -183,12 +183,12 @@ as $iq4d$
   );
 $iq4d$;
 
-revoke all on function public.iq_v4_has_player360_action_role(uuid,text[],text[],text[]) from public;
-revoke all on function public.iq_v4_can_view_longitudinal_analytics(uuid) from public;
-revoke all on function public.iq_v4_can_generate_longitudinal_analytics(uuid) from public;
-revoke all on function public.iq_v4_can_view_ai_insights(uuid) from public;
-revoke all on function public.iq_v4_can_generate_ai_insights(uuid) from public;
-revoke all on function public.iq_v4_can_review_ai_insights(uuid) from public;
+revoke all on function public.iq_v4_has_player360_action_role(uuid,text[],text[],text[]) from public, anon, authenticated;
+revoke all on function public.iq_v4_can_view_longitudinal_analytics(uuid) from public, anon, authenticated;
+revoke all on function public.iq_v4_can_generate_longitudinal_analytics(uuid) from public, anon, authenticated;
+revoke all on function public.iq_v4_can_view_ai_insights(uuid) from public, anon, authenticated;
+revoke all on function public.iq_v4_can_generate_ai_insights(uuid) from public, anon, authenticated;
+revoke all on function public.iq_v4_can_review_ai_insights(uuid) from public, anon, authenticated;
 
 grant execute on function public.iq_v4_can_view_longitudinal_analytics(uuid) to authenticated;
 grant execute on function public.iq_v4_can_generate_longitudinal_analytics(uuid) to authenticated;
@@ -526,12 +526,12 @@ $$;
 
 revoke all on function public.iq_v4_save_longitudinal_snapshot(
   uuid,uuid,date,date,text,text,text,text,jsonb,jsonb,integer
-) from public;
+) from public, anon, authenticated;
 revoke all on function public.iq_v4_save_ai_insight(
   uuid,text,text,text,text,text,jsonb
-) from public;
-revoke all on function public.iq_v4_review_ai_insight(uuid,text,text) from public;
-revoke all on function public.iq_v4_longitudinal_capabilities() from public;
+) from public, anon, authenticated;
+revoke all on function public.iq_v4_review_ai_insight(uuid,text,text) from public, anon, authenticated;
+revoke all on function public.iq_v4_longitudinal_capabilities() from public, anon, authenticated;
 
 grant execute on function public.iq_v4_save_longitudinal_snapshot(
   uuid,uuid,date,date,text,text,text,text,jsonb,jsonb,integer
