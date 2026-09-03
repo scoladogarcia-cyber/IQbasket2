@@ -1,0 +1,94 @@
+name: Core User Flows UI
+
+on:
+  push:
+    branches:
+      - qa/core-user-flows-v1
+    paths:
+      - "views/TrainingView.js"
+      - "views/GameBoxScoreView.js"
+      - "views/NutritionView.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/LayoutView.js"
+      - "security/permissions.js"
+      - "services/player360/TrainingService.js"
+      - "tests/player360-phase4b-ui-smoke.mjs"
+      - "tests/boxscore-edit-ui-smoke.mjs"
+      - "tests/nutrition-route-ui-smoke.mjs"
+      - "tests/browser-test-support.mjs"
+      - ".github/workflows/core-user-flows-ui.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TrainingView.js"
+      - "views/GameBoxScoreView.js"
+      - "views/NutritionView.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/LayoutView.js"
+      - "security/permissions.js"
+      - "services/player360/TrainingService.js"
+      - "tests/player360-phase4b-ui-smoke.mjs"
+      - "tests/boxscore-edit-ui-smoke.mjs"
+      - "tests/nutrition-route-ui-smoke.mjs"
+      - "tests/browser-test-support.mjs"
+      - ".github/workflows/core-user-flows-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-acceptance:
+    name: Training, Nutrition and BoxScore desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/core-user-flows-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/core-user-flows-vite.log
+          exit 1
+
+      - name: Training correction browser smoke
+        env:
+          PLAYER360_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/player360-phase4b-ui-smoke.mjs
+
+      - name: Nutrition route browser smoke
+        env:
+          CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/nutrition-route-ui-smoke.mjs
+
+      - name: BoxScore edit browser smoke
+        env:
+          CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/boxscore-edit-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/core-user-flows-vite.log || true
