@@ -100,6 +100,9 @@ jobs:
       - name: Dual transfer UI integration
         run: node tests/dual-transfer-ui-integration.mjs
 
+      - name: Team-season freeze SQL
+        run: node tests/team-season-freeze-sql.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
