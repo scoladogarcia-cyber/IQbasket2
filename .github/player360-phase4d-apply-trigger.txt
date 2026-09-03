@@ -1,0 +1,13 @@
+IQBasket Player 360 Phase 4D controlled apply
+
+Authorized continuation of the safe Player360 release workflow.
+Preconditions verified before trigger:
+- main sync complete;
+- Phase 4B UI green;
+- Phase 4C UI green;
+- Phase 4D preflight green;
+- Phase 4D rehearsal with forced rollback green;
+- full CI and build green;
+- granular longitudinal/AI permissions enforced and regression-tested.
+
+This file exists only to trigger .github/workflows/player360-phase4d-controlled-apply.yml.
