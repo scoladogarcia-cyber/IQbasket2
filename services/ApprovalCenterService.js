@@ -60,9 +60,11 @@ export class ApprovalCenterService {
       status,
       createdAt: request.created_at || request.requested_at || null,
       resolvedAt: request.reviewed_at || request.resolved_at || null,
-      title: request.userName || request.userEmail || "Solicitud de acceso",
-      subtitle: `Acceso a ${request.teamName || "equipo"} como ${request.requestedRole || request.requested_role || "VISOR"}`,
+      title: request.userName || request.userEmail || "",
+      subtitle: "",
       detail: request.notes || "",
+      teamName: request.teamName || "",
+      requestedRole: request.requestedRole || request.requested_role || "VISOR",
       teamId,
       teamSeasonId: request.team_season_id || request.teamSeasonId || null,
       actor: request.userEmail || request.userName || "",
@@ -79,7 +81,7 @@ export class ApprovalCenterService {
     const teamSeasonId = game.team_season_id || game.teamSeasonId || null;
     const canReview = status === "PENDING" && this.gameLockService.canReviewRequests(game);
 
-    const opponent = game.opponent || game.opponentName || "Rival";
+    const opponent = game.opponent || game.opponentName || "";
     const date = game.date || "";
 
     return {
@@ -88,9 +90,12 @@ export class ApprovalCenterService {
       status,
       createdAt: request.created_at || null,
       resolvedAt: request.resolved_at || null,
-      title: `Cerrar partido vs ${opponent}`,
-      subtitle: [date, request.requested_by_role || ""].filter(Boolean).join(" · "),
+      title: opponent,
+      subtitle: "",
       detail: request.request_reason || request.resolution_note || "",
+      opponent,
+      gameDate: date,
+      requestedRole: request.requested_by_role || "",
       teamId,
       teamSeasonId,
       gameId: request.game_id || request.gameId || null,
