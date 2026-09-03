@@ -76,17 +76,20 @@ async function installFixture(page, viewportName) {
       ]
     });
 
-    // Validate navigation in the real LayoutView before rendering the module.
-    document.getElementById("app").innerHTML = LayoutView.wrap(
+    // Validate navigation with the real LayoutView markup, but keep it
+    // detached from the bootstrapped SPA. The component smoke below gets its
+    // own host so the app router cannot replace the test DOM on mobile.
+    const coachNavScratch = document.createElement("div");
+    coachNavScratch.innerHTML = LayoutView.wrap(
       '<div id="dashboard-content-area"></div>',
       "training",
       "ENTRENADOR"
     );
 
-    const trainingNav = document.querySelector(
+    const trainingNav = coachNavScratch.querySelector(
       '.nav-link[data-route-key="training"]'
     );
-    const trainingDrawer = document.querySelector(
+    const trainingDrawer = coachNavScratch.querySelector(
       '.drawer-item[data-route-key="training"]'
     );
 
@@ -118,6 +121,11 @@ async function installFixture(page, viewportName) {
       drawerLocked: playerTrainingDrawer?.classList.contains("disabled-link") || false,
       drawerHref: playerTrainingDrawer?.getAttribute("href") || ""
     };
+
+    // Isolated real TrainingView host. Existing SPA listeners may remain on
+    // window, but they have no #app node to overwrite and therefore cannot
+    // race with the component under test.
+    document.body.innerHTML = '<main id="p360-test-host" style="min-height:100vh;width:100%;"></main>';
 
     window.__p360 = {
       viewportName,
@@ -296,7 +304,7 @@ async function installFixture(page, viewportName) {
       return "external-created";
     };
 
-    await view.render("dashboard-content-area", TEAM_ID);
+    await view.render("p360-test-host", TEAM_ID);
   }, { TEAM_ID, TEAM_SEASON_ID, viewportName });
 }
 
@@ -476,7 +484,7 @@ async function runViewport(browser, name, viewport) {
       activeTab: window.__p360View?.activeTab || "",
       capabilityReady: Boolean(window.__p360View?.capabilities?.ready),
       contentPreview: String(
-        document.querySelector("#dashboard-content-area")?.textContent || ""
+        document.querySelector("#p360-test-host")?.textContent || ""
       ).replace(/\s+/g, " ").trim().slice(0, 600)
     };
   });
@@ -499,7 +507,7 @@ async function runViewport(browser, name, viewport) {
   // locator timeout.
   await page.waitForTimeout(250);
   const postAttendanceState = await page.evaluate(() => {
-    const content = document.querySelector("#dashboard-content-area");
+    const content = document.querySelector("#p360-test-host");
     return {
       hash: window.location.hash,
       title: document.querySelector(".p360-hero h1")?.textContent || "",
