@@ -62,9 +62,12 @@ function sortEntries(rows) {
 }
 
 export class WellnessSupportPanel {
-  constructor({ service, can } = {}) {
+  constructor({ service, can, modules = null } = {}) {
     this.service = service;
     this.can = typeof can === "function" ? can : () => false;
+    this.allowedModules = Array.isArray(modules)
+      ? new Set(modules.map(module => String(module).toLowerCase()))
+      : null;
     this.context = null;
     this.backendAvailable = false;
     this.lastError = null;
@@ -83,6 +86,13 @@ export class WellnessSupportPanel {
 
   _baseCanEdit(module) {
     return Boolean(this.can(MODULES[module]?.editPermission));
+  }
+
+  _visibleModules() {
+    return Object.keys(MODULES).filter(module =>
+      (!this.allowedModules || this.allowedModules.has(module))
+      && this._baseCanView(module)
+    );
   }
 
   _dateBounds() {
@@ -104,7 +114,7 @@ export class WellnessSupportPanel {
 
     if (!this.service?.supabase) return;
 
-    const modules = Object.keys(MODULES).filter(module => this._baseCanView(module));
+    const modules = this._visibleModules();
     if (!modules.length) return;
 
     try {
@@ -154,7 +164,7 @@ export class WellnessSupportPanel {
   isAvailable() {
     return Boolean(
       this.backendAvailable
-      && Object.keys(MODULES).some(module => this._baseCanView(module))
+      && this._visibleModules().length > 0
     );
   }
 
@@ -434,7 +444,7 @@ export class WellnessSupportPanel {
   render() {
     if (!this.isAvailable()) return "";
 
-    const modules=Object.keys(MODULES).filter(module => this._baseCanView(module));
+    const modules=this._visibleModules();
     const module=this.activeModule;
     const moduleData=this.data[module] || { access:null,metrics:[],entries:[] };
     const access=moduleData.access || {};
