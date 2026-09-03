@@ -204,8 +204,8 @@ begin
       coalesce(nullif(v_stat->>'turnovers','')::integer,0),
       coalesce(nullif(v_stat->>'fouls_committed','')::integer,0),
       coalesce(nullif(v_stat->>'fouls_drawn','')::integer,0),
-      coalesce(nullif(v_stat->>'plus_minus','')::numeric,0),
-      coalesce(nullif(v_stat->>'evaluation','')::numeric,0),
+      coalesce(nullif(v_stat->>'plus_minus','')::integer,0),
+      coalesce(nullif(v_stat->>'evaluation','')::integer,0),
       (v_fg2m*2)+(v_fg3m*3)+v_ftm
     )
     on conflict (game_id,player_id)
@@ -239,10 +239,7 @@ begin
   end if;
 
   update public.games
-  set starter_ids=coalesce(
-    (select array_agg(value::uuid) from jsonb_array_elements_text(coalesce(p_starter_ids,'[]'::jsonb))),
-    '{}'::uuid[]
-  )
+  set starter_ids=coalesce(p_starter_ids,'[]'::jsonb)
   where id=p_game_id;
 
   insert into public.game_boxscore_corrections(
