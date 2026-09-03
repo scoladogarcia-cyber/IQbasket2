@@ -148,7 +148,12 @@ const INVITED_SPORTING_READ = [
   Permission.VIEW_OBJECTIVE_PROFILE,
   Permission.VIEW_DATA_COVERAGE,
   Permission.VIEW_LONGITUDINAL_ANALYTICS,
-  Permission.VIEW_AI_INSIGHTS
+  Permission.VIEW_AI_INSIGHTS,
+  // Module-shell visibility only. Personal wellness rows remain guarded by
+  // backend ABAC and are never granted by RBAC alone.
+  Permission.VIEW_RECOVERY,
+  Permission.VIEW_NUTRITION,
+  Permission.VIEW_WELLNESS_RECOMMENDATIONS
 ];
 
 export const ROLE_PERMISSIONS = Object.freeze({

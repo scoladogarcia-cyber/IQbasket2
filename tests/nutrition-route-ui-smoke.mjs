@@ -73,6 +73,17 @@ async function installFixture(page) {
       ]
     });
 
+    const guestAuth = new PermissionService();
+    guestAuth.setCurrentUser({
+      id: "guest-user",
+      email: "test@test.com",
+      role: "INVITADO",
+      global_role: "INVITADO",
+      assigned_team_ids: [TEAM_ID],
+      allowed_team_season_ids: [TEAM_SEASON_ID],
+      contextualMemberships: []
+    });
+
     const navScratch = document.createElement("div");
     navScratch.innerHTML = LayoutView.wrap(
       '<div id="dashboard-content-area"></div>',
@@ -90,10 +101,28 @@ async function installFixture(page) {
       mobileLocked: mobileNav?.classList.contains("disabled-link") || false
     };
 
+    const guestNavScratch = document.createElement("div");
+    guestNavScratch.innerHTML = LayoutView.wrap(
+      '<div id="dashboard-content-area"></div>',
+      "nutrition",
+      "INVITADO"
+    );
+    const guestDesktopNav = guestNavScratch.querySelector('.nav-link[data-route-key="nutrition"]');
+    const guestMobileNav = guestNavScratch.querySelector('.drawer-item[data-route-key="nutrition"]');
+    window.__guestNutritionNav = {
+      desktopExists: Boolean(guestDesktopNav),
+      desktopHref: guestDesktopNav?.getAttribute("href") || "",
+      desktopLocked: guestDesktopNav?.classList.contains("disabled-link") || false,
+      mobileExists: Boolean(guestMobileNav),
+      mobileHref: guestMobileNav?.getAttribute("href") || "",
+      mobileLocked: guestMobileNav?.classList.contains("disabled-link") || false
+    };
+
     document.body.innerHTML = '<main id="nutrition-test-root" style="min-height:100vh;width:100%;"></main>';
 
     const store = [];
     window.__nutritionCalls = [];
+    window.__guestNutritionReads = 0;
 
     const view = new NutritionView(null, auth);
     view.service.supabase = {};
@@ -150,6 +179,49 @@ async function installFixture(page) {
     view.service.archiveEntry = async () => true;
 
     window.__nutritionView = view;
+
+    window.__renderGuestNutrition = async () => {
+      const guestView = new NutritionView(null, guestAuth);
+      guestView.service.supabase = {};
+      guestView.service.resolveAccessContext = async ({ module }) => ({
+        ready: true,
+        module,
+        purpose: null,
+        can_read: false,
+        can_create: false,
+        can_update: false,
+        can_archive: false,
+        manual_input_enabled: true,
+        external_import_enabled: false,
+        recommendations_enabled: true,
+        ai_processing_enabled: false
+      });
+      guestView.service.listMetrics = async ({ module }) => module === "nutrition" ? [
+        {
+          id: "metric-hydration",
+          module: "nutrition",
+          code: "HYDRATION_ADHERENCE",
+          name: "Hidratación percibida",
+          description: "Cumplimiento percibido de la pauta personal.",
+          value_type: "SCALE",
+          unit: "SCALE_1_5",
+          min_value: 1,
+          max_value: 5,
+          step: 1,
+          options: []
+        }
+      ] : [];
+      guestView.service.listEntries = async () => {
+        window.__guestNutritionReads += 1;
+        return structuredClone(store);
+      };
+      guestView.service.saveManualEntry = async () => {
+        throw new Error("INVITADO_NO_DEBE_GUARDAR_WELLNESS");
+      };
+      window.__guestNutritionView = guestView;
+      await guestView.render("nutrition-test-root", players[0].id, TEAM_ID);
+    };
+
     await view.render("nutrition-test-root", players[0].id, TEAM_ID);
   }, { TEAM_ID, TEAM_SEASON_ID });
 }
@@ -216,13 +288,41 @@ async function runViewport(browser, viewportName, viewport) {
   assertCondition(saved.activeModule === "nutrition", viewportName, "Nutrición pierde foco tras guardar");
   assertCondition(!saved.overflow, viewportName, "Nutrición desborda tras interacción");
 
+  // INVITADO can discover the module, but ABAC denial must keep all personal
+  // wellness rows and mutation affordances unavailable.
+  await page.evaluate(() => window.__renderGuestNutrition());
+  const guest = await page.evaluate(() => ({
+    nav: window.__guestNutritionNav,
+    title: document.querySelector(".nutrition-hero h1")?.textContent || "",
+    lockedText: String(document.querySelector(".p360w-locked")?.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim(),
+    hasNew: Boolean(document.querySelector("#p360w-new")),
+    history: document.querySelectorAll(".p360w-history-card").length,
+    entryReads: window.__guestNutritionReads,
+    totalSaveCalls: window.__nutritionCalls.length,
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1
+  }));
+
+  assertCondition(guest.nav.desktopExists && guest.nav.mobileExists, viewportName, "INVITADO no descubre Nutrición");
+  assertCondition(guest.nav.desktopHref === "#/nutrition", viewportName, "INVITADO desktop no navega a Nutrición");
+  assertCondition(guest.nav.mobileHref === "#/nutrition", viewportName, "INVITADO móvil no navega a Nutrición");
+  assertCondition(!guest.nav.desktopLocked && !guest.nav.mobileLocked, viewportName, "INVITADO ve Nutrición bloqueada en navegación");
+  assertCondition(guest.title.includes("Nutrición"), viewportName, "INVITADO no abre el shell de Nutrición");
+  assertCondition(guest.lockedText.includes("autorización ABAC"), viewportName, "Falta explicación de privacidad para INVITADO");
+  assertCondition(!guest.hasNew, viewportName, "INVITADO expone alta de check-in");
+  assertCondition(guest.history === 0, viewportName, "INVITADO expone historial wellness");
+  assertCondition(guest.entryReads === 0, viewportName, "INVITADO intentó leer filas wellness sin ABAC");
+  assertCondition(guest.totalSaveCalls === 1, viewportName, "INVITADO provocó una escritura wellness");
+  assertCondition(!guest.overflow, viewportName, "Shell Nutrición de INVITADO desborda");
+
   const relevantConsoleErrors = consoleErrors.filter(message =>
     !/favicon|Failed to load resource.*404/i.test(message)
   );
   assertCondition(pageErrors.length === 0, viewportName, "pageerror: " + pageErrors.join(" | "));
   assertCondition(relevantConsoleErrors.length === 0, viewportName, "console error: " + relevantConsoleErrors.join(" | "));
 
-  console.log(JSON.stringify({ viewport: viewportName, initial, saved, result: "PASS" }));
+  console.log(JSON.stringify({ viewport: viewportName, initial, saved, guest, result: "PASS" }));
   await page.close();
 }
 

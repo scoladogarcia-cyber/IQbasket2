@@ -26,9 +26,14 @@ prudencia y para mantener una frontera segura de cara a futuras integraciones.
 6. **Tutor**: GUARDIAN usa `FAMILY_SUPPORT` y relación verificada.
 7. **Staff**: necesita rol compatible + grant explícito + finalidad
    `SPORT_PERFORMANCE` u `OPERATIONS`.
-8. **IA sensible desactivada en esta fase** aunque 4E.1 ya soporte el atributo
+8. **Visibilidad demo/read-only**: `INVITADO` puede descubrir Nutrition/Recovery y
+   abrir su shell de producto, pero RBAC no le concede edición y el backend ABAC
+   sigue siendo obligatorio para leer cualquier fila wellness personal. Sin una
+   autorización contextual válida, la UI muestra únicamente el estado bloqueado
+   y no ejecuta consultas de entradas.
+9. **IA sensible desactivada en esta fase** aunque 4E.1 ya soporte el atributo
    de autorización.
-9. **No causalidad**: los datos wellness podrán correlacionarse más adelante,
+10. **No causalidad**: los datos wellness podrán correlacionarse más adelante,
    pero nunca etiquetarse automáticamente como causa de rendimiento.
 
 ## Estado de despliegue · 2026-09-03

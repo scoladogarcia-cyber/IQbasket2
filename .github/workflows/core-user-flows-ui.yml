@@ -5,6 +5,7 @@ on:
     branches:
       - qa/core-user-flows-v1
       - fix/mobile-nutrition-navigation-v1
+      - fix/invited-wellness-shell-v1
     paths:
       - "views/TrainingView.js"
       - "views/GameBoxScoreView.js"

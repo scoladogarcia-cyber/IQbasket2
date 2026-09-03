@@ -170,8 +170,7 @@ for (const role of [
 
 for (const role of [
   UserRole.ANALISTA,
-  UserRole.VISOR,
-  UserRole.INVITADO
+  UserRole.VISOR
 ]) {
   assert.equal(has(role, Permission.VIEW_RECOVERY), false);
   assert.equal(has(role, Permission.EDIT_RECOVERY), false);
@@ -179,6 +178,14 @@ for (const role of [
   assert.equal(has(role, Permission.EDIT_NUTRITION), false);
   assert.equal(has(role, Permission.VIEW_WELLNESS_RECOMMENDATIONS), false);
 }
+
+// INVITADO can see the module shell, but RBAC never grants wellness mutation.
+// Backend ABAC remains authoritative for whether any personal row is readable.
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_RECOVERY), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_NUTRITION), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_WELLNESS_RECOMMENDATIONS), true);
 
 // Neuro remains closed in 4E.2; only SUPERADMIN has the dormant platform
 // capability and no Neuro data model/UI is enabled.
@@ -249,7 +256,10 @@ for (const permission of [
   Permission.VIEW_OBJECTIVE_PROFILE,
   Permission.VIEW_DATA_COVERAGE,
   Permission.VIEW_LONGITUDINAL_ANALYTICS,
-  Permission.VIEW_AI_INSIGHTS
+  Permission.VIEW_AI_INSIGHTS,
+  Permission.VIEW_RECOVERY,
+  Permission.VIEW_NUTRITION,
+  Permission.VIEW_WELLNESS_RECOMMENDATIONS
 ]) {
   assert.equal(has(UserRole.INVITADO, permission), true, `INVITADO debe poder consultar ${permission}`);
 }
@@ -276,8 +286,10 @@ for (const permission of [
   assert.equal(has(UserRole.INVITADO, permission), false, `INVITADO no debe modificar mediante ${permission}`);
 }
 assert.equal(has(UserRole.INVITADO, Permission.VIEW_PRIVATE_PLAYER_EVALUATION), false);
-assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), false);
-assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_RECOVERY), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), true);
+assert.equal(has(UserRole.INVITADO, Permission.EDIT_NUTRITION), false);
 
 // Phase 4E: privacy administration is granular and does not enable wellness data.
 for (const permission of [
