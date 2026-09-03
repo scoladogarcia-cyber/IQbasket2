@@ -1,20 +1,36 @@
 -- =============================================================================
 -- IQBasket V5 · Game locking preflight (READ ONLY)
--- Verifies the REAL installed RBAC v2 and game data surface before any mutation.
+-- Verifies the installed schema required by the self-contained lock RBAC.
 -- =============================================================================
 
 with checks as (
   select
     to_regclass('public.games') is not null as games_table_ok,
+    to_regclass('public.teams') is not null as teams_table_ok,
+    to_regclass('public.user_profiles') is not null as profiles_table_ok,
     to_regclass('public.player_game_stats') is not null as player_stats_table_ok,
     to_regclass('public.team_game_stats') is not null as team_stats_table_ok,
     to_regclass('public.game_events') is not null as game_events_table_ok,
     to_regclass('public.game_period_scores') is not null as period_scores_table_ok,
     to_regclass('public.lineup_game_stats') is not null as lineup_stats_table_ok,
     to_regclass('public.play_by_play_events') is not null as play_by_play_table_ok,
-    to_regprocedure('public.iq_current_role()') is not null as current_role_helper_ok,
-    to_regprocedure('public.iq_can_access_team(uuid)') is not null as team_access_helper_ok,
-    to_regprocedure('public.iq_can_manage_game(uuid)') is not null as game_manage_helper_ok,
+    not exists (
+      select 1
+      from (values
+        ('email'),('role'),('team_id'),('allowed_team_ids'),('club_id')
+      ) as required_columns(column_name)
+      where not exists (
+        select 1
+        from information_schema.columns c
+        where c.table_schema='public'
+          and c.table_name='user_profiles'
+          and c.column_name=required_columns.column_name
+      )
+    ) as profile_scope_columns_ok,
+    exists (
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='teams' and column_name='club_id'
+    ) as team_club_column_ok,
     exists (
       select 1 from information_schema.columns
       where table_schema='public' and table_name='games' and column_name='team_id'
@@ -45,29 +61,31 @@ with checks as (
 select
   'GAME_LOCK_PREFLIGHT' as section,
   games_table_ok,
+  teams_table_ok,
+  profiles_table_ok,
   player_stats_table_ok,
   team_stats_table_ok,
   game_events_table_ok,
   period_scores_table_ok,
   lineup_stats_table_ok,
   play_by_play_table_ok,
-  current_role_helper_ok,
-  team_access_helper_ok,
-  game_manage_helper_ok,
+  profile_scope_columns_ok,
+  team_club_column_ok,
   game_team_ok,
   game_team_season_ok,
   child_game_id_columns_ok,
   (
     games_table_ok
+    and teams_table_ok
+    and profiles_table_ok
     and player_stats_table_ok
     and team_stats_table_ok
     and game_events_table_ok
     and period_scores_table_ok
     and lineup_stats_table_ok
     and play_by_play_table_ok
-    and current_role_helper_ok
-    and team_access_helper_ok
-    and game_manage_helper_ok
+    and profile_scope_columns_ok
+    and team_club_column_ok
     and game_team_ok
     and game_team_season_ok
     and child_game_id_columns_ok
