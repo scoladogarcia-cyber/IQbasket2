@@ -112,6 +112,9 @@ jobs:
       - name: SaaS P0 anonymous mutation hardening
         run: node tests/saas-p0-anon-hardening-sql.mjs
 
+      - name: Core UX training edit SQL
+        run: node tests/core-ux-training-edit-sql.mjs
+
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
