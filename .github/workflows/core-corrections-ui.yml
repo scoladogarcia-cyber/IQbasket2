@@ -1,0 +1,67 @@
+name: Core Corrections UI
+
+on:
+  push:
+    branches:
+      - feature/core-corrections-v1
+    paths:
+      - "views/TrainingView.js"
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/GameBoxScoreView.js"
+      - "services/player360/TrainingService.js"
+      - "services/games/BoxScoreCorrectionService.js"
+      - "security/permissions.js"
+      - "tests/core-corrections-ui-smoke.mjs"
+      - ".github/workflows/core-corrections-ui.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TrainingView.js"
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/GameBoxScoreView.js"
+      - "services/player360/TrainingService.js"
+      - "services/games/BoxScoreCorrectionService.js"
+      - "security/permissions.js"
+      - "tests/core-corrections-ui-smoke.mjs"
+      - ".github/workflows/core-corrections-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Training Nutrition Boxscore desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install app
+        run: npm ci
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/core-corrections-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/core-corrections-vite.log
+          exit 1
+      - name: Run core corrections browser smoke
+        env:
+          CORE_CORRECTIONS_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/core-corrections-ui-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/core-corrections-vite.log || true
