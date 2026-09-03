@@ -4,7 +4,7 @@
  * team_seasons, partidos, plantilla ni auditoría.
  */
 
-import { Permission } from "../../security/PermissionService.js";
+import { Permission, UserRole } from "../../security/PermissionService.js";
 
 function scopeContext(scope = {}) {
   return {
@@ -42,13 +42,38 @@ export class SeasonFreezeService {
     };
   }
 
+  _teamSeasonId(scope = {}) {
+    return scope.id || scope.team_season_id || scope.teamSeasonId || null;
+  }
+
+  _hasExactFreezeAuthority(scope = {}) {
+    const authenticatedRole = this.auth?.getAuthenticatedRole?.();
+    if (authenticatedRole === UserRole.SUPERADMIN) return true;
+
+    const teamSeasonId = this._teamSeasonId(scope);
+    const contextRoles = teamSeasonId && this.auth?.getContextRoles
+      ? this.auth.getContextRoles(teamSeasonId)
+      : [];
+
+    // V6 intentionally distinguishes ADMIN from COORDINADOR / DIRECTOR_DEPORTIVO.
+    if ((contextRoles || []).map(role => String(role).toUpperCase()).includes("ADMIN")) {
+      return true;
+    }
+
+    // Transitional legacy/global ADMIN is accepted only when normal scoped RBAC
+    // also grants the lifecycle permission. Supabase remains the final authority.
+    return authenticatedRole === UserRole.ADMIN;
+  }
+
   canFreeze(scope = {}) {
     return !SeasonFreezeService.isFrozen(scope)
+      && this._hasExactFreezeAuthority(scope)
       && Boolean(this.auth?.canPreview?.(Permission.FREEZE_TEAM_SEASON, scopeContext(scope)));
   }
 
   canReopen(scope = {}) {
     return SeasonFreezeService.isFrozen(scope)
+      && this._hasExactFreezeAuthority(scope)
       && Boolean(this.auth?.canPreview?.(Permission.REOPEN_TEAM_SEASON, scopeContext(scope)));
   }
 
@@ -61,10 +86,11 @@ export class SeasonFreezeService {
   }
 
   canReviewRequests(scope = {}) {
-    return Boolean(this.auth?.canPreview?.(
-      Permission.REVIEW_TEAM_SEASON_FREEZE_REQUESTS,
-      scopeContext(scope)
-    ));
+    return this._hasExactFreezeAuthority(scope)
+      && Boolean(this.auth?.canPreview?.(
+        Permission.REVIEW_TEAM_SEASON_FREEZE_REQUESTS,
+        scopeContext(scope)
+      ));
   }
 
   async listRequests(teamSeasonIds = [], { status = null } = {}) {
