@@ -43,6 +43,7 @@ export const PLAYER360_ABAC_REASON = Object.freeze({
   ALLOW_RESTRICTED_SELF: "ALLOW_RESTRICTED_SELF",
   ALLOW_RESTRICTED_GUARDIAN: "ALLOW_RESTRICTED_GUARDIAN",
   ALLOW_RESTRICTED_EXPLICIT_GRANT: "ALLOW_RESTRICTED_EXPLICIT_GRANT",
+  ALLOW_RESTRICTED_SUPERADMIN_OPERATIONS: "ALLOW_RESTRICTED_SUPERADMIN_OPERATIONS",
   DENY_NOT_AUTHENTICATED: "DENY_NOT_AUTHENTICATED",
   DENY_BASE_PERMISSION: "DENY_BASE_PERMISSION",
   DENY_SCOPE: "DENY_SCOPE",
@@ -70,6 +71,27 @@ export const PLAYER360_PRIVACY_CONFIG = Object.freeze({
     PLAYER360_PRIVACY_PURPOSE.FAMILY_SUPPORT,
     PLAYER360_PRIVACY_PURPOSE.OPERATIONS
   ]),
+
+  /**
+   * Platform-owner operational exception.
+   *
+   * It is intentionally limited to manual operational access in Nutrition and
+   * Recovery. Export, AI processing and Neuro-Cognitive remain on the strict
+   * authorization/grant path even for SUPERADMIN.
+   */
+  superadminOperationalOverride: Object.freeze({
+    modules: Object.freeze(["nutrition", "recovery"]),
+    actions: Object.freeze([
+      PLAYER360_PRIVACY_ACTION.READ,
+      PLAYER360_PRIVACY_ACTION.CREATE,
+      PLAYER360_PRIVACY_ACTION.UPDATE,
+      PLAYER360_PRIVACY_ACTION.DELETE
+    ]),
+    purposes: Object.freeze([
+      PLAYER360_PRIVACY_PURPOSE.SPORT_PERFORMANCE,
+      PLAYER360_PRIVACY_PURPOSE.OPERATIONS
+    ])
+  }),
 
   /**
    * Research is intentionally excluded from the default runtime policy.
