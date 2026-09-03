@@ -34,5 +34,8 @@ jobs:
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
+      - name: Session switch regression
+        run: node tests/session-switch-regression.mjs
+
       - name: Build
         run: npm run build
