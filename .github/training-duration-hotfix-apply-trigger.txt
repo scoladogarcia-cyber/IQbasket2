@@ -1,0 +1,5 @@
+Training duration/attendance hotfix controlled apply trigger
+Date: 2026-09-03
+Reason: CI PASS + Training UI PASS + 4D UI PASS + 4E.2 UI PASS + read-only preflight PASS + rollback rehearsal PASS.
+Scope: replace only iq_v4_create_training_session behavior; no schema/table changes.
+Baseline rehearsal: training_sessions|training_blocks|training_participants|external_development|players|roster_stints = 1|0|5|1|17|22.
