@@ -71,35 +71,6 @@ as $$
     );
 $$;
 
--- Restore V5 role resolution.
-create or replace function public.iq_v5_role_for_game(target_game_id uuid)
-returns text
-language plpgsql
-stable
-security definer
-set search_path=''
-as $$
-declare
-  v_role text;
-begin
-  if public.iq_v5_current_role()='SUPERADMIN' then return 'SUPERADMIN'; end if;
-
-  select upper(m.function_role)
-  into v_role
-  from public.games g
-  join public.team_season_memberships m on m.team_season_id=g.team_season_id
-  where g.id=target_game_id
-    and m.user_id=auth.uid()
-    and upper(coalesce(m.status,'ACTIVE'))='ACTIVE'
-    and upper(coalesce(m.function_role,'')) in ('ADMIN','ENTRENADOR','ANALISTA')
-  order by case upper(m.function_role)
-    when 'ADMIN' then 1 when 'ENTRENADOR' then 2 when 'ANALISTA' then 3 else 10 end
-  limit 1;
-
-  return coalesce(v_role,public.iq_v5_current_role());
-end;
-$$;
-
 drop policy if exists iq_v6_team_season_freeze_requests_read
   on public.team_season_freeze_requests;
 drop policy if exists iq_v6_team_season_freeze_history_read
