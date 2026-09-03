@@ -111,9 +111,15 @@ begin
   where lower(up.email) = v_email
   limit 1;
 
+  -- Invariante global: SUPERADMIN nunca se hereda de datos de perfil.
+  -- Solo la identidad maestra declarada arriba puede obtenerlo.
+  if coalesce(v_role, 'INVITADO') = 'SUPERADMIN' then
+    return 'INVITADO';
+  end if;
+
   return coalesce(v_role, 'INVITADO');
 end;
-$$;
+$;
 
 create or replace function public.iq_v5_can_access_team(target_team_id uuid)
 returns boolean
@@ -228,6 +234,8 @@ begin
   where g.id = target_game_id
     and m.user_id = auth.uid()
     and upper(coalesce(m.status, 'ACTIVE')) = 'ACTIVE'
+    -- SUPERADMIN no es un rol delegable por membresía.
+    and upper(coalesce(m.function_role, '')) in ('ADMIN','ENTRENADOR','ANALISTA')
   order by case upper(m.function_role)
     when 'ADMIN' then 1
     when 'ENTRENADOR' then 2
