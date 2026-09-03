@@ -230,6 +230,55 @@ for (const role of [UserRole.ANALISTA, UserRole.PREPARADOR_FISICO]) {
 assert.equal(has(UserRole.VISOR, Permission.VIEW_LONGITUDINAL_ANALYTICS), false);
 assert.equal(has(UserRole.VISOR, Permission.VIEW_AI_INSIGHTS), false);
 
+// INVITADO is a sporting read-only role: broad visibility without write grants.
+for (const permission of [
+  Permission.VIEW_TEAM,
+  Permission.VIEW_ROSTER,
+  Permission.VIEW_PLAYER_PROFILE,
+  Permission.VIEW_PLAYER_STATS,
+  Permission.VIEW_GAMES,
+  Permission.VIEW_BOXSCORE,
+  Permission.VIEW_LINEUPS,
+  Permission.VIEW_ADVANCED_TEAM_STATS,
+  Permission.VIEW_ADVANCED_PLAYER_STATS,
+  Permission.VIEW_PLAYER_COMPARISON,
+  Permission.VIEW_TRAINING,
+  Permission.VIEW_EXTERNAL_DEVELOPMENT,
+  Permission.VIEW_PLAYER_360,
+  Permission.VIEW_PLAYER_EVALUATION,
+  Permission.VIEW_OBJECTIVE_PROFILE,
+  Permission.VIEW_DATA_COVERAGE,
+  Permission.VIEW_LONGITUDINAL_ANALYTICS,
+  Permission.VIEW_AI_INSIGHTS
+]) {
+  assert.equal(has(UserRole.INVITADO, permission), true, `INVITADO debe poder consultar ${permission}`);
+}
+for (const permission of [
+  Permission.CREATE_GAME,
+  Permission.EDIT_GAME,
+  Permission.DELETE_GAME,
+  Permission.RECORD_LIVE_GAME,
+  Permission.CREATE_TRAINING,
+  Permission.EDIT_TRAINING,
+  Permission.DELETE_TRAINING,
+  Permission.CREATE_EXTERNAL_DEVELOPMENT,
+  Permission.EDIT_EXTERNAL_DEVELOPMENT,
+  Permission.CREATE_PLAYER_EVALUATION,
+  Permission.EDIT_PLAYER_EVALUATION,
+  Permission.ARCHIVE_PLAYER_EVALUATION,
+  Permission.CREATE_OBJECTIVE_PROFILE,
+  Permission.EDIT_OBJECTIVE_PROFILE,
+  Permission.ARCHIVE_OBJECTIVE_PROFILE,
+  Permission.GENERATE_LONGITUDINAL_ANALYTICS,
+  Permission.GENERATE_AI_INSIGHTS,
+  Permission.REVIEW_AI_INSIGHTS
+]) {
+  assert.equal(has(UserRole.INVITADO, permission), false, `INVITADO no debe modificar mediante ${permission}`);
+}
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_PRIVATE_PLAYER_EVALUATION), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_RECOVERY), false);
+assert.equal(has(UserRole.INVITADO, Permission.VIEW_NUTRITION), false);
+
 // Phase 4E: privacy administration is granular and does not enable wellness data.
 for (const permission of [
   Permission.VIEW_PRIVACY_AUTHORIZATIONS,
