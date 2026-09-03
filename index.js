@@ -41,6 +41,7 @@ import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
 import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
 import { TrainingView } from "./views/TrainingView.js";
+import { NutritionView } from "./views/NutritionView.js";
 import { Player360View } from "./views/Player360View.js";
 
 export class IQBasketApp {
@@ -83,6 +84,7 @@ export class IQBasketApp {
       reports: new ReportsView(this.authController),
       familyadvisor: new FamilyAdvisorView(this.authController),
       training: new TrainingView(supabase, this.authController),
+      nutrition: new NutritionView(supabase, this.authController),
       player360: new Player360View(supabase, this.authController),
       settings: new TranslationsView(this.authController),
       ask: new AskAIView(this.authController),
@@ -594,7 +596,9 @@ export class IQBasketApp {
     
     // Guarda centralizada por permiso. En modo simulación usa el rol de previsualización.
     const requiredPermission = ROUTE_PERMISSIONS[targetRoute];
-    const routePlayerId = ["player360", "player-360", "desarrollo-jugador"].includes(targetRoute)
+    const routePlayerId = [
+      "player360", "player-360", "desarrollo-jugador", "nutrition", "nutricion"
+    ].includes(targetRoute)
       ? parts[1] || null
       : null;
     const routeContext = {
@@ -765,6 +769,13 @@ export class IQBasketApp {
       case "desarrollo":
         if (this.views.training) {
           await this.views.training.render(contentArea, this.teamId);
+        }
+        break;
+
+      case "nutrition":
+      case "nutricion":
+        if (this.views.nutrition) {
+          await this.views.nutrition.render(contentArea, this.routeParams.id, this.teamId);
         }
         break;
 
