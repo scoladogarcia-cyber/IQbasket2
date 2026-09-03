@@ -21,6 +21,10 @@ const rehearsal = readFileSync(
   new URL("../supabase/drafts/20260903_rehearse_v4_phase4e_privacy_abac_rollback.sql", import.meta.url),
   "utf8"
 );
+const installedSmoke = readFileSync(
+  new URL("../supabase/drafts/20260903_smoke_v4_phase4e_installed_rollback.sql", import.meta.url),
+  "utf8"
+);
 
 const applyCommit = apply.lastIndexOf("\ncommit;\n");
 const rehearsalSmoke = rehearsal.indexOf(
@@ -139,5 +143,31 @@ assert.match(verify, /processing_helper_private/i);
 assert.match(verify, /anon_abac_blocked/i);
 assert.match(verify, /phase4e_ok/i);
 assert.match(preflight, /phase4e_preflight_ok/i);
+
+assert.equal(
+  (installedSmoke.match(/^\s*begin;\s*$/gmi) || []).length,
+  1,
+  "El smoke instalado debe abrir exactamente una transacción."
+);
+assert.equal(
+  (installedSmoke.match(/^\s*commit;\s*$/gmi) || []).length,
+  0,
+  "El smoke instalado nunca puede hacer COMMIT."
+);
+assert.equal(
+  (installedSmoke.match(/^\s*rollback;\s*$/gmi) || []).length,
+  1,
+  "El smoke instalado debe terminar en ROLLBACK."
+);
+for (const invariant of [
+  "PLAYER360_PHASE4E_INSTALLED_SUPERADMIN_BYPASS",
+  "PLAYER360_PHASE4E_INSTALLED_SELF_GRANT_NOT_BLOCKED",
+  "PLAYER360_PHASE4E_INSTALLED_REQUEST_MISMATCH_NOT_BLOCKED",
+  "PLAYER360_PHASE4E_INSTALLED_AI_WITHOUT_OPTIN_ALLOWED",
+  "PLAYER360_PHASE4E_INSTALLED_REVOKED_GRANT_STILL_ACTIVE",
+  "PLAYER360_PHASE4E_INSTALLED_REVOKED_AUTH_STILL_ACTIVE"
+]) {
+  assert.match(installedSmoke, new RegExp(invariant));
+}
 
 console.log("PLAYER360_PHASE4E_SQL_STRUCTURE_OK");
