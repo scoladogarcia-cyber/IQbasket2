@@ -39,6 +39,7 @@ import { TranslationsView } from "./views/TranslationsView.js";
 import { AskAIView } from "./views/AskAIView.js";
 import { ProfileView } from "./views/ProfileView.js";
 import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
+import { TrainingView } from "./views/TrainingView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -78,6 +79,7 @@ export class IQBasketApp {
       comparator: new ComparatorView(this.authController),
       reports: new ReportsView(this.authController),
       familyadvisor: new FamilyAdvisorView(this.authController),
+      training: new TrainingView(supabase, this.authController),
       settings: new TranslationsView(this.authController),
       ask: new AskAIView(this.authController),
       profile: new ProfileView(this.authController),
@@ -707,6 +709,16 @@ export class IQBasketApp {
       case "quintetos":
         if (this.views.lineups) await this.views.lineups.render(contentArea);
         break;
+
+      case "training":
+      case "entrenamientos":
+      case "development":
+      case "desarrollo":
+        if (this.views.training) {
+          await this.views.training.render(contentArea, this.teamId);
+        }
+        break;
+
 
       case "comparator":
       case "comparador":
