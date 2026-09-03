@@ -63,10 +63,18 @@ export class ApprovalCenterView {
     if (type === RequestType.GAME_LOCK) {
       return { label: this.t("approvals.type_game_lock", "Cierre de partido"), icon: "🔒", bg: "#fff7ed", fg: "#9a3412" };
     }
+    if (type === RequestType.TRANSFER) {
+      return { label: this.t("approvals.type_transfer", "Traspaso"), icon: "🔄", bg: "#f5f3ff", fg: "#6d28d9" };
+    }
     return { label: this.t("approvals.type_team_access", "Acceso a equipo"), icon: "👥", bg: "#eff6ff", fg: "#1d4ed8" };
   }
 
   _itemTitle(item) {
+    if (item.type === RequestType.TRANSFER) {
+      return this.t("approvals.transfer_title", "Traspaso · {player}", {
+        player: item.playerName || item.title || "Jugador"
+      });
+    }
     if (item.type === RequestType.GAME_LOCK) {
       return this.t("approvals.game_title", "Cerrar partido vs {opponent}", {
         opponent: item.opponent || item.title || "Rival"
@@ -76,6 +84,12 @@ export class ApprovalCenterView {
   }
 
   _itemSubtitle(item) {
+    if (item.type === RequestType.TRANSFER) {
+      return this.t("approvals.transfer_route", "{origin} → {destination}", {
+        origin: item.originTeamName || "Equipo origen",
+        destination: item.targetTeamName || "Equipo destino"
+      });
+    }
     if (item.type === RequestType.GAME_LOCK) {
       return [item.gameDate || "", item.requestedRole || ""].filter(Boolean).join(" · ");
     }
@@ -83,6 +97,25 @@ export class ApprovalCenterView {
       team: item.teamName || "equipo",
       role: item.requestedRole || "VISOR"
     });
+  }
+
+  _shiftIsoDate(value, days = 0) {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return "";
+    const [year, month, day] = String(value).split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    date.setUTCDate(date.getUTCDate() + Number(days || 0));
+    return date.toISOString().slice(0, 10);
+  }
+
+  _transferReviewMeta(decision = "PENDING") {
+    const normalized = String(decision || "PENDING").toUpperCase();
+    if (normalized === "APPROVED") {
+      return { icon: "✓", label: this.t("approvals.transfer_approved", "Aprobado"), bg: "#dcfce7", fg: "#166534" };
+    }
+    if (normalized === "REJECTED") {
+      return { icon: "×", label: this.t("approvals.transfer_rejected", "Rechazado"), bg: "#fee2e2", fg: "#991b1b" };
+    }
+    return { icon: "⏳", label: this.t("approvals.transfer_pending", "Pendiente"), bg: "#fef3c7", fg: "#92400e" };
   }
 
   _formatDate(value) {
@@ -236,6 +269,117 @@ export class ApprovalCenterView {
     `;
   }
 
+  _renderTransferSide(item, side) {
+    const isSource = side === "SOURCE";
+    const decision = isSource ? item.sourceDecision : item.destinationDecision;
+    const approvedDate = isSource ? item.sourceDate : item.destinationDate;
+    const canReview = isSource ? item.canSourceReview : item.canDestinationReview;
+    const meta = this._transferReviewMeta(decision);
+    const label = isSource
+      ? this.t("approvals.transfer_source", "Origen")
+      : this.t("approvals.transfer_destination", "Destino");
+    const dateLabel = isSource
+      ? this.t("approvals.transfer_last_day_source", "Último día en origen")
+      : this.t("approvals.transfer_first_day_destination", "Primer día en destino");
+    const defaultDate = approvedDate
+      || (isSource
+        ? this._shiftIsoDate(item.destinationDate || item.requestedFirstDateTo, -1)
+        : item.requestedFirstDateTo)
+      || "";
+
+    return `
+      <div style="padding:12px;border:1px solid #e2e8f0;border-radius:11px;background:#f8fafc;min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <strong style="font-size:12px;color:#0f172a;">${label}</strong>
+          <span style="padding:3px 8px;border-radius:999px;background:${meta.bg};color:${meta.fg};font-size:10px;font-weight:900;">${meta.icon} ${meta.label}</span>
+        </div>
+        ${approvedDate ? `<div style="margin-top:7px;font-size:11px;color:#475569;">${dateLabel}: <strong>${this._escape(approvedDate)}</strong></div>` : ""}
+        ${canReview ? `
+          <div style="margin-top:10px;display:grid;gap:8px;">
+            <label style="display:grid;gap:4px;font-size:11px;color:#475569;font-weight:700;">
+              ${dateLabel}
+              <input type="date"
+                     class="transfer-review-date"
+                     data-side="${side}"
+                     value="${this._escape(defaultDate)}"
+                     style="width:100%;min-height:44px;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#ffffff;color:#0f172a;font:inherit;">
+            </label>
+            <label style="display:grid;gap:4px;font-size:11px;color:#475569;font-weight:700;">
+              ${this.t("approvals.transfer_reason_optional", "Motivo / nota (opcional)")}
+              <input type="text"
+                     class="transfer-review-reason"
+                     data-side="${side}"
+                     maxlength="240"
+                     placeholder="${this._escape(this.t("approvals.transfer_reason_placeholder", "Añade contexto si es necesario"))}"
+                     style="width:100%;min-height:44px;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#ffffff;color:#0f172a;font:inherit;">
+            </label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button"
+                      class="btn-transfer-review"
+                      data-request-id="${this._escape(item.id)}"
+                      data-side="${side}"
+                      data-decision="APPROVED"
+                      style="min-height:44px;flex:1 1 130px;padding:8px 12px;border:0;border-radius:8px;background:#166534;color:#ffffff;font-size:12px;font-weight:900;cursor:pointer;">
+                ✓ ${this.t("approvals.transfer_approve_side", "Aprobar")}
+              </button>
+              <button type="button"
+                      class="btn-transfer-review"
+                      data-request-id="${this._escape(item.id)}"
+                      data-side="${side}"
+                      data-decision="REJECTED"
+                      style="min-height:44px;flex:1 1 130px;padding:8px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">
+                ${this.t("approvals.reject", "Rechazar")}
+              </button>
+            </div>
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  _renderTransferItem(item, status, type, created, detail) {
+    const finalReady = item.readyForFinalization && item.status === "PENDING";
+    return `
+      <article class="approval-card transfer-approval-card" data-request-id="${this._escape(item.id)}"
+               style="background:#ffffff;border:1px solid #ddd6fe;border-radius:14px;padding:15px;box-shadow:0 1px 3px rgba(15,23,42,.04);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1 1 300px;">
+            <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px;">
+              <span style="padding:3px 8px;border-radius:999px;background:${type.bg};color:${type.fg};font-size:11px;font-weight:900;">${type.icon} ${type.label}</span>
+              <span style="padding:3px 8px;border-radius:999px;background:${status.bg};color:${status.fg};border:1px solid ${status.border};font-size:11px;font-weight:900;">${status.icon} ${status.label}</span>
+              ${finalReady ? `<span style="padding:3px 8px;border-radius:999px;background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:900;">${this.t("approvals.transfer_ready", "Lista para finalizar")}</span>` : ""}
+            </div>
+            <h2 style="margin:0;color:#0f172a;font-size:15px;font-weight:900;overflow-wrap:anywhere;">${this._escape(this._itemTitle(item))}</h2>
+            <div style="margin-top:4px;color:#475569;font-size:12px;line-height:1.45;overflow-wrap:anywhere;">${this._escape(this._itemSubtitle(item))}</div>
+            ${item.requestedFirstDateTo ? `<div style="margin-top:7px;color:#64748b;font-size:11px;">${this.t("approvals.transfer_requested_start", "Alta solicitada")}: <strong>${this._escape(item.requestedFirstDateTo)}</strong></div>` : ""}
+            ${detail ? `<div style="margin-top:7px;padding:8px 10px;border-radius:8px;background:#fff1f2;color:#9f1239;font-size:12px;line-height:1.45;overflow-wrap:anywhere;">${detail}</div>` : ""}
+            ${created ? `<div style="margin-top:7px;color:#94a3b8;font-size:11px;">${created}</div>` : ""}
+          </div>
+          <a href="#/settings" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;text-decoration:none;font-size:12px;font-weight:800;">${this.t("approvals.view_context", "Ver contexto")}</a>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:12px;">
+          ${this._renderTransferSide(item, "SOURCE")}
+          ${this._renderTransferSide(item, "DESTINATION")}
+        </div>
+
+        ${item.canFinalize ? `
+          <div style="margin-top:12px;padding:12px;border-radius:11px;background:#f5f3ff;border:1px solid #c4b5fd;">
+            <div style="font-size:11px;color:#5b21b6;line-height:1.45;margin-bottom:8px;">
+              ${this.t("approvals.transfer_finalize_help", "Origen y destino están aprobados. La finalización aplicará el cambio temporal de plantilla con las fechas acordadas.")}
+            </div>
+            <button type="button"
+                    class="btn-transfer-finalize"
+                    data-request-id="${this._escape(item.id)}"
+                    style="width:100%;min-height:46px;padding:9px 14px;border:0;border-radius:9px;background:#6d28d9;color:#ffffff;font-size:12px;font-weight:900;cursor:pointer;">
+              ⚡ ${this.t("approvals.transfer_finalize", "Finalizar traspaso")}
+            </button>
+          </div>
+        ` : ""}
+      </article>
+    `;
+  }
+
   _renderItem(item) {
     const status = this._statusMeta(item.status);
     const type = this._typeMeta(item.type);
@@ -246,6 +390,10 @@ export class ApprovalCenterView {
     const targetLink = item.type === RequestType.GAME_LOCK
       ? `#/games`
       : `#/settings`;
+
+    if (item.type === RequestType.TRANSFER) {
+      return this._renderTransferItem(item, status, type, created, detail);
+    }
 
     return `
       <article class="approval-card" data-request-id="${this._escape(item.id)}"
@@ -296,6 +444,50 @@ export class ApprovalCenterView {
       button.addEventListener("click", () => {
         this.filter = button.dataset.filter || "PENDING";
         this._renderState();
+      });
+    });
+
+    this.container?.querySelectorAll(".btn-transfer-review").forEach(button => {
+      button.addEventListener("click", async event => {
+        const requestId = event.currentTarget.dataset.requestId;
+        const side = String(event.currentTarget.dataset.side || "").toUpperCase();
+        const decision = String(event.currentTarget.dataset.decision || "").toUpperCase();
+        const item = this._findItem(requestId);
+        if (!item || item.type !== RequestType.TRANSFER) return;
+
+        const card = event.currentTarget.closest(".transfer-approval-card");
+        const dateInput = card?.querySelector(`.transfer-review-date[data-side="${side}"]`);
+        const reasonInput = card?.querySelector(`.transfer-review-reason[data-side="${side}"]`);
+        const effectiveDate = decision === "APPROVED" ? String(dateInput?.value || "") : null;
+        const reason = String(reasonInput?.value || "").trim() || null;
+
+        if (decision === "APPROVED" && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate || "")) {
+          alert(this.t("approvals.transfer_date_required", "Selecciona una fecha válida antes de aprobar."));
+          dateInput?.focus();
+          return;
+        }
+
+        await this._runAction(event.currentTarget, () =>
+          this.service.reviewTransfer(item, side, decision, effectiveDate, reason)
+        );
+      });
+    });
+
+    this.container?.querySelectorAll(".btn-transfer-finalize").forEach(button => {
+      button.addEventListener("click", async event => {
+        const item = this._findItem(event.currentTarget.dataset.requestId);
+        if (!item || item.type !== RequestType.TRANSFER) return;
+
+        if (!confirm(this.t(
+          "approvals.transfer_finalize_confirm",
+          "¿Finalizar el traspaso con las fechas aprobadas por origen y destino? Esta acción actualizará la elegibilidad histórica del jugador."
+        ))) return;
+
+        await this._runAction(event.currentTarget, async () => {
+          await this.service.finalizeTransfer(item);
+          DataStore.isLoaded = false;
+          await DataStore.init(DataStore.getActiveTeamId?.() || null, true);
+        });
       });
     });
 
