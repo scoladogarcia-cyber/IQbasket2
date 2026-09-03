@@ -598,6 +598,43 @@ export class TrainingView {
     `;
   }
 
+  _renderEditableBlockRow(block = {}, index = 1) {
+    return `
+      <div
+        class="p360-edit-block-row"
+        data-block-id="${escapeHtml(block.id || "")}"
+        data-block-order="${escapeHtml(block.block_order || index)}"
+      >
+        <label>
+          <span>Bloque</span>
+          <input type="text" class="p360-edit-block-title" maxlength="140" value="${escapeHtml(block.title || "")}" placeholder="Nombre del bloque" />
+        </label>
+        <label>
+          <span>Código / tipo</span>
+          <input type="text" class="p360-edit-block-code" maxlength="80" value="${escapeHtml(block.activity_code || "")}" placeholder="Ej. SHOOTING" />
+        </label>
+        <label>
+          <span>Minutos</span>
+          <input type="number" class="p360-edit-block-duration" min="1" max="300" inputmode="numeric" value="${escapeHtml(block.duration_minutes ?? "")}" />
+        </label>
+        <label>
+          <span>Intensidad</span>
+          <input type="number" class="p360-edit-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(block.intensity ?? "")}" />
+        </label>
+        <label class="p360-edit-block-objective">
+          <span>Objetivo</span>
+          <input type="text" class="p360-edit-block-objective-input" maxlength="500" value="${escapeHtml(block.objective || "")}" />
+        </label>
+        <div class="p360-edit-block-actions">
+          <button type="button" class="p360-secondary-btn p360-save-edit-block">Guardar bloque</button>
+          <button type="button" class="p360-danger-link p360-delete-edit-block">
+            ${block.id ? "Eliminar" : "Descartar"}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   /**
    * Inline correction form for an existing club training session.
    * Blocks and attendance keep their own dedicated controls to avoid accidental
@@ -613,7 +650,7 @@ export class TrainingView {
     return `
       <form class="p360-form p360-inline-editor p360-training-edit-form" data-session-id="${escapeHtml(session.id)}">
         <div class="p360-info-note">
-          Corrige los datos generales de la sesión. Los bloques y la asistencia se mantienen y se gestionan desde sus controles específicos.
+          Corrige los datos generales y los bloques sin recrear la sesión. La asistencia se mantiene separada para proteger el histórico individual.
         </div>
         <div class="p360-form-grid">
           <label>
@@ -652,6 +689,28 @@ export class TrainingView {
             <textarea class="p360-edit-training-objective" rows="2" maxlength="500">${escapeHtml(session.objective || "")}</textarea>
           </label>
         </div>
+
+        <div class="p360-subsection">
+          <div class="p360-subsection-head">
+            <div>
+              <strong>Bloques de trabajo</strong>
+              <small>Guarda cada bloque de forma independiente para no sobrescribir el resto por error.</small>
+            </div>
+            <button
+              type="button"
+              class="p360-secondary-btn p360-add-edit-block"
+              data-session-id="${escapeHtml(session.id)}"
+            >
+              ＋ Añadir bloque
+            </button>
+          </div>
+          <div class="p360-edit-block-list">
+            ${(session.blocks || []).length
+              ? session.blocks.map((block, index) => this._renderEditableBlockRow(block, index + 1)).join("")
+              : this._renderEditableBlockRow({}, 1)}
+          </div>
+        </div>
+
         <div class="p360-form-actions">
           <button type="button" class="p360-secondary-btn p360-cancel-training-edit">Cancelar</button>
           <button type="submit" class="p360-primary-btn">Guardar corrección</button>
@@ -1368,6 +1427,28 @@ export class TrainingView {
           padding: 12px;
           background: #f8fbff;
         }
+        .p360-edit-block-list { display: grid; gap: 8px; }
+        .p360-edit-block-row {
+          display: grid;
+          grid-template-columns: minmax(150px,1.2fr) minmax(120px,.8fr) 90px 90px minmax(150px,1.2fr) auto;
+          gap: 8px;
+          align-items: end;
+          border: 1px solid #dbeafe;
+          border-radius: 10px;
+          padding: 10px;
+          background: #fff;
+        }
+        .p360-edit-block-row label { display: grid; gap: 5px; font-size: 11px; font-weight: 800; color: #475569; }
+        .p360-edit-block-row input {
+          width: 100%;
+          min-height: 40px;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          padding: 8px 9px;
+          color: #0f172a;
+          background: #fff;
+        }
+        .p360-edit-block-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .p360-card-text { margin: 0; color: #475569; font-size: 12px; line-height: 1.5; }
         .p360-info-note {
           border-left: 3px solid #0ea5e9;
@@ -1427,6 +1508,10 @@ export class TrainingView {
           .p360-span-2 { grid-column: auto; }
           .p360-block-row { grid-template-columns: 1fr; padding-top: 46px; }
           .p360-block-objective { grid-column: auto; }
+          .p360-edit-block-row { grid-template-columns: 1fr; }
+          .p360-edit-block-actions { display: grid; grid-template-columns: 1fr; }
+          .p360-edit-block-actions .p360-secondary-btn,
+          .p360-edit-block-actions .p360-danger-link { width: 100%; }
           .p360-player-check-grid { grid-template-columns: 1fr; max-height: 240px; }
           .p360-subsection-head { display: grid; }
           .p360-subsection-head .p360-secondary-btn { width: 100%; }
@@ -1606,6 +1691,78 @@ export class TrainingView {
         this.editingExternalId = null;
         this.activeTab = "external";
         await this.render(this.containerId, this.teamId);
+        return;
+      }
+
+      const addEditBlock = event.target.closest(".p360-add-edit-block");
+      if (addEditBlock) {
+        const list = addEditBlock.closest(".p360-training-edit-form")?.querySelector(".p360-edit-block-list");
+        if (!list) return;
+        const nextOrder = list.querySelectorAll(".p360-edit-block-row").length + 1;
+        list.insertAdjacentHTML("beforeend", this._renderEditableBlockRow({}, nextOrder));
+        return;
+      }
+
+      const saveEditBlock = event.target.closest(".p360-save-edit-block");
+      if (saveEditBlock) {
+        const row = saveEditBlock.closest(".p360-edit-block-row");
+        const form = saveEditBlock.closest(".p360-training-edit-form");
+        if (!row || !form) return;
+
+        const title = row.querySelector(".p360-edit-block-title")?.value.trim();
+        if (!title) {
+          alert("⚠️ Indica un nombre para el bloque.");
+          return;
+        }
+
+        saveEditBlock.disabled = true;
+        try {
+          await this.service.saveBlock({
+            trainingSessionId: form.dataset.sessionId,
+            blockId: row.dataset.blockId || null,
+            blockOrder: Number(row.dataset.blockOrder) || 1,
+            title,
+            activityCode: row.querySelector(".p360-edit-block-code")?.value.trim() || null,
+            objective: row.querySelector(".p360-edit-block-objective-input")?.value.trim() || null,
+            durationMinutes: numberOrNull(row.querySelector(".p360-edit-block-duration")?.value),
+            intensity: numberOrNull(row.querySelector(".p360-edit-block-intensity")?.value)
+          });
+          this.editingTrainingId = form.dataset.sessionId;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error guardando bloque:", error);
+          alert(`❌ ${error.message || error}`);
+          saveEditBlock.disabled = false;
+        }
+        return;
+      }
+
+      const deleteEditBlock = event.target.closest(".p360-delete-edit-block");
+      if (deleteEditBlock) {
+        const row = deleteEditBlock.closest(".p360-edit-block-row");
+        const form = deleteEditBlock.closest(".p360-training-edit-form");
+        if (!row || !form) return;
+
+        const blockId = row.dataset.blockId || null;
+        if (!blockId) {
+          row.remove();
+          return;
+        }
+        if (!confirm("¿Eliminar este bloque del entrenamiento?")) return;
+
+        deleteEditBlock.disabled = true;
+        try {
+          await this.service.deleteBlock({
+            trainingSessionId: form.dataset.sessionId,
+            blockId
+          });
+          this.editingTrainingId = form.dataset.sessionId;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          console.error("[TrainingView] Error eliminando bloque:", error);
+          alert(`❌ ${error.message || error}`);
+          deleteEditBlock.disabled = false;
+        }
         return;
       }
 
