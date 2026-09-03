@@ -102,6 +102,8 @@ export class TrainingView {
     this.teamId = null;
     this.teamSeasonId = null;
     this.containerId = "dashboard-content-area";
+    this.editingSessionId = null;
+    this.editingExternalId = null;
   }
 
   t(key, fallback = "") {
@@ -128,6 +130,28 @@ export class TrainingView {
       return Boolean(this.auth.can(permission, this._context()));
     }
     return false;
+  }
+
+  _canEditTrainingRecord() {
+    return Boolean(this.capabilities?.training_edit)
+      && this._can(Permission.EDIT_TRAINING);
+  }
+
+  _canEditExternalRecord() {
+    return Boolean(this.capabilities?.external_development_edit)
+      && this._can(Permission.EDIT_EXTERNAL_DEVELOPMENT);
+  }
+
+  _editingSession() {
+    return this.sessions.find(
+      session => String(session.id) === String(this.editingSessionId)
+    ) || null;
+  }
+
+  _editingExternalSession() {
+    return this.externalSessions.find(
+      session => String(session.id) === String(this.editingExternalId)
+    ) || null;
   }
 
   _seasonContext() {
@@ -283,36 +307,41 @@ export class TrainingView {
     `;
   }
 
-  _renderBlockRow(index = 1) {
+  _renderBlockRow(index = 1, block = {}) {
     return `
-      <div class="p360-block-row" data-block-index="${index}">
+      <div class="p360-block-row"
+           data-block-index="${index}"
+           data-block-id="${escapeHtml(block.id || "")}">
         <label>
           <span>${escapeHtml(this.t("player360.training.block_title", "Bloque"))}</span>
-          <input type="text" class="p360-block-title" placeholder="Ej. Tiro tras bote" />
+          <input type="text" class="p360-block-title" placeholder="Ej. Tiro tras bote" value="${escapeHtml(block.title || "")}" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.activity_code", "Código / tipo"))}</span>
-          <input type="text" class="p360-block-code" placeholder="Ej. SHOOTING" />
+          <input type="text" class="p360-block-code" placeholder="Ej. SHOOTING" value="${escapeHtml(block.activity_code || "")}" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.duration", "Minutos"))}</span>
-          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" />
+          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" value="${block.duration_minutes ?? ""}" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.intensity", "Intensidad 0-10"))}</span>
-          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${block.intensity ?? ""}" />
         </label>
         <label class="p360-block-objective">
           <span>${escapeHtml(this.t("player360.training.objective", "Objetivo"))}</span>
-          <input type="text" class="p360-block-objective-input" placeholder="Objetivo específico del bloque" />
+          <input type="text" class="p360-block-objective-input" placeholder="Objetivo específico del bloque" value="${escapeHtml(block.objective || "")}" />
         </label>
         <button type="button" class="p360-remove-block" aria-label="Eliminar bloque">×</button>
       </div>
     `;
   }
 
-  _renderParticipantChecklist(date) {
+  _renderParticipantChecklist(date, selectedIds = [], lockedIds = []) {
     const players = this._eligiblePlayers(date);
+    const selected = new Set((selectedIds || []).map(String));
+    const locked = new Set((lockedIds || []).map(String));
+
     if (!players.length) {
       return `
         <p class="p360-empty-inline">
@@ -334,13 +363,24 @@ export class TrainingView {
         </button>
       </div>
       <div class="p360-player-check-grid">
-        ${players.map(player => `
-          <label class="p360-player-check">
-            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" />
-            <span class="p360-player-number">#${escapeHtml(player.jersey ?? player.number ?? "—")}</span>
-            <span>${escapeHtml(playerName(player))}</span>
-          </label>
-        `).join("")}
+        ${players.map(player => {
+          const id=String(player.id);
+          const isLocked=locked.has(id);
+          return `
+            <label class="p360-player-check">
+              <input type="checkbox"
+                     name="p360-training-player"
+                     value="${escapeHtml(player.id)}"
+                     ${selected.has(id) ? "checked" : ""}
+                     ${isLocked ? "disabled data-confirmed-participant=\"true\"" : ""} />
+              <span class="p360-player-number">#${escapeHtml(player.jersey ?? player.number ?? "—")}</span>
+              <span>
+                ${escapeHtml(playerName(player))}
+                ${isLocked ? '<small style="display:block;color:#64748b;">Asistencia confirmada</small>' : ""}
+              </span>
+            </label>
+          `;
+        }).join("")}
       </div>
     `;
   }
