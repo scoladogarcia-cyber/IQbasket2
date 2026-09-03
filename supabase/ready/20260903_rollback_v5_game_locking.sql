@@ -60,6 +60,7 @@ $child_policies$;
 revoke execute on function public.iq_v5_current_email() from authenticated;
 revoke execute on function public.iq_v5_current_role() from authenticated;
 revoke execute on function public.iq_v5_can_access_team(uuid) from authenticated;
+revoke execute on function public.iq_v5_role_for_game(uuid) from authenticated;
 revoke execute on function public.iq_v5_can_manage_game_lock(uuid) from authenticated;
 revoke execute on function public.iq_v5_can_request_game_lock(uuid) from authenticated;
 revoke execute on function public.iq_v5_request_game_lock(uuid,text) from authenticated;
