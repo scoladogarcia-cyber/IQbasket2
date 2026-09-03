@@ -1395,7 +1395,7 @@ export class TrainingView {
 
     const trainingDate = container.querySelector("#p360-training-date");
     trainingDate?.addEventListener("change", () => {
-      this._refreshTrainingPlayerOptions(container, trainingDate.value);
+      this._refreshTrainingPlayerOptions(container,trainingDate.value);
     });
 
     const trainingStart = container.querySelector("#p360-training-start-time");
@@ -1403,272 +1403,334 @@ export class TrainingView {
     const trainingDuration = container.querySelector("#p360-training-duration");
     const syncTrainingDuration = () => {
       if (!trainingDuration) return null;
-      const duration = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
+      const duration = minutesBetweenTimes(trainingStart?.value,trainingEnd?.value);
       trainingDuration.value = duration === null ? "" : String(duration);
       return duration;
     };
-    trainingStart?.addEventListener("input", syncTrainingDuration);
-    trainingEnd?.addEventListener("input", syncTrainingDuration);
+    trainingStart?.addEventListener("input",syncTrainingDuration);
+    trainingEnd?.addEventListener("input",syncTrainingDuration);
 
-    let blockCounter = container.querySelectorAll(".p360-block-row").length;
+    let blockCounter=container.querySelectorAll(".p360-block-row").length;
 
-    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
-      const panel = container.querySelector("#p360-create-training-panel");
-      const form = container.querySelector("#p360-training-form");
+    container.querySelector("#p360-cancel-training")?.addEventListener("click",async () => {
+      if (this.editingSessionId) {
+        this.editingSessionId=null;
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
+
+      const panel=container.querySelector("#p360-create-training-panel");
+      const form=container.querySelector("#p360-training-form");
       if (!form) return;
-
       form.reset();
 
-      const blocks = container.querySelector("#p360-blocks-container");
-      if (blocks) blocks.innerHTML = this._renderBlockRow(1);
-      blockCounter = 1;
+      const blocks=container.querySelector("#p360-blocks-container");
+      if (blocks) blocks.innerHTML=this._renderBlockRow(1);
+      blockCounter=1;
 
-      const date = form.querySelector("#p360-training-date")?.value || this._defaultDate();
-      this._refreshTrainingPlayerOptions(container, date);
-
-      if (panel) panel.open = false;
+      const date=form.querySelector("#p360-training-date")?.value || this._defaultDate();
+      this._refreshTrainingPlayerOptions(container,date,[],[]);
+      if (panel) panel.open=false;
     });
 
-    container.querySelector("#p360-add-block")?.addEventListener("click", () => {
-      blockCounter += 1;
-      const target = container.querySelector("#p360-blocks-container");
-      if (target) target.insertAdjacentHTML("beforeend", this._renderBlockRow(blockCounter));
+    container.querySelector("#p360-add-block")?.addEventListener("click",() => {
+      blockCounter+=1;
+      const target=container.querySelector("#p360-blocks-container");
+      if (target) target.insertAdjacentHTML("beforeend",this._renderBlockRow(blockCounter));
     });
 
     if (this._delegatedClickContainer && this._delegatedClickHandler) {
-      this._delegatedClickContainer.removeEventListener(
-        "click",
-        this._delegatedClickHandler
-      );
+      this._delegatedClickContainer.removeEventListener("click",this._delegatedClickHandler);
     }
 
-    this._delegatedClickHandler = async event => {
-      const removeBlock = event.target.closest(".p360-remove-block");
+    this._delegatedClickHandler=async event => {
+      const editSession=event.target.closest(".p360-edit-session");
+      if (editSession) {
+        this.editingSessionId=editSession.dataset.sessionId;
+        this.editingExternalId=null;
+        this.activeTab="training";
+        await this.render(this.containerId,this.teamId);
+        document.querySelector("#p360-create-training-panel")?.scrollIntoView({block:"start",behavior:"smooth"});
+        return;
+      }
+
+      const editExternal=event.target.closest(".p360-edit-external");
+      if (editExternal) {
+        this.editingExternalId=editExternal.dataset.externalId;
+        this.editingSessionId=null;
+        this.activeTab="external";
+        await this.render(this.containerId,this.teamId);
+        document.querySelector("#p360-create-external-panel")?.scrollIntoView({block:"start",behavior:"smooth"});
+        return;
+      }
+
+      const removeBlock=event.target.closest(".p360-remove-block");
       if (removeBlock) {
-        const rows = container.querySelectorAll(".p360-block-row");
-        if (rows.length <= 1) {
-          rows[0]?.querySelectorAll("input").forEach(input => { input.value = ""; });
+        const rows=container.querySelectorAll(".p360-block-row");
+        if (rows.length<=1) {
+          const row=rows[0];
+          if (row) {
+            row.dataset.blockId="";
+            row.querySelectorAll("input").forEach(input => { input.value=""; });
+          }
         } else {
           removeBlock.closest(".p360-block-row")?.remove();
         }
         return;
       }
 
-      const saveAttendance = event.target.closest(".p360-save-attendance");
+      const saveAttendance=event.target.closest(".p360-save-attendance");
       if (saveAttendance) {
-        const row = saveAttendance.closest(".p360-attendance-row");
+        const row=saveAttendance.closest(".p360-attendance-row");
         if (!row) return;
-
-        saveAttendance.disabled = true;
+        saveAttendance.disabled=true;
         try {
           await this.service.setParticipant({
-            trainingSessionId: saveAttendance.dataset.sessionId,
-            playerId: saveAttendance.dataset.playerId,
-            attendanceStatus: row.querySelector(".p360-att-status")?.value || "PLANNED",
-            participatedMinutes: numberOrNull(row.querySelector(".p360-att-minutes")?.value),
-            rpe: numberOrNull(row.querySelector(".p360-att-rpe")?.value),
-            notes: row.querySelector(".p360-att-notes")?.value.trim() || null
+            trainingSessionId:saveAttendance.dataset.sessionId,
+            playerId:saveAttendance.dataset.playerId,
+            attendanceStatus:row.querySelector(".p360-att-status")?.value || "PLANNED",
+            participatedMinutes:numberOrNull(row.querySelector(".p360-att-minutes")?.value),
+            rpe:numberOrNull(row.querySelector(".p360-att-rpe")?.value),
+            notes:row.querySelector(".p360-att-notes")?.value.trim() || null
           });
-          await this.render(this.containerId, this.teamId);
-        } catch (error) {
-          console.error("[TrainingView] Error guardando asistencia:", error);
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          console.error("[TrainingView] Error guardando asistencia:",error);
           alert(`❌ ${error.message || error}`);
-          saveAttendance.disabled = false;
+          saveAttendance.disabled=false;
         }
         return;
       }
 
-      const confirmPlanned = event.target.closest(".p360-confirm-planned");
+      const confirmPlanned=event.target.closest(".p360-confirm-planned");
       if (confirmPlanned) {
-        const session = this.sessions.find(
-          item => String(item.id) === String(confirmPlanned.dataset.sessionId)
-        );
-        const planned = (session?.participants || []).filter(
-          participant => String(participant.attendance_status || "").toUpperCase() === "PLANNED"
+        const session=this.sessions.find(item => String(item.id)===String(confirmPlanned.dataset.sessionId));
+        const planned=(session?.participants || []).filter(
+          participant => String(participant.attendance_status || "").toUpperCase()==="PLANNED"
         );
         if (!session || !planned.length) return;
 
-        confirmPlanned.disabled = true;
+        confirmPlanned.disabled=true;
         try {
-          const duration = this._sessionDuration(session);
+          const duration=this._sessionDuration(session);
           for (const participant of planned) {
             await this.service.setParticipant({
-              trainingSessionId: session.id,
-              playerId: participant.player_id,
-              attendanceStatus: "PRESENT",
-              participatedMinutes: duration,
-              rpe: numberOrNull(participant.rpe),
-              notes: participant.notes || null
+              trainingSessionId:session.id,
+              playerId:participant.player_id,
+              attendanceStatus:"PRESENT",
+              participatedMinutes:duration,
+              rpe:numberOrNull(participant.rpe),
+              notes:participant.notes || null
             });
           }
-          await this.render(this.containerId, this.teamId);
-        } catch (error) {
-          console.error("[TrainingView] Error confirmando asistencia planificada:", error);
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          console.error("[TrainingView] Error confirmando asistencia planificada:",error);
           alert(`❌ ${error.message || error}`);
-          confirmPlanned.disabled = false;
+          confirmPlanned.disabled=false;
         }
         return;
       }
 
-      const addParticipant = event.target.closest(".p360-add-participant");
+      const addParticipant=event.target.closest(".p360-add-participant");
       if (addParticipant) {
-        const wrapper = addParticipant.closest(".p360-add-participant-row");
-        const playerId = wrapper?.querySelector(".p360-new-participant-player")?.value;
+        const wrapper=addParticipant.closest(".p360-add-participant-row");
+        const playerId=wrapper?.querySelector(".p360-new-participant-player")?.value;
         if (!playerId) return;
 
-        addParticipant.disabled = true;
+        addParticipant.disabled=true;
         try {
-          const session = this.sessions.find(
-            item => String(item.id) === String(addParticipant.dataset.sessionId)
+          const session=this.sessions.find(
+            item => String(item.id)===String(addParticipant.dataset.sessionId)
           );
-          const alreadyOccurred = String(session?.session_date || "") <= localIsoDate();
+          const alreadyOccurred=String(session?.session_date || "")<=localIsoDate();
           await this.service.setParticipant({
-            trainingSessionId: addParticipant.dataset.sessionId,
+            trainingSessionId:addParticipant.dataset.sessionId,
             playerId,
-            attendanceStatus: alreadyOccurred ? "PRESENT" : "PLANNED",
-            participatedMinutes: alreadyOccurred
-              ? this._sessionDuration(session)
-              : null
+            attendanceStatus:alreadyOccurred ? "PRESENT" : "PLANNED",
+            participatedMinutes:alreadyOccurred ? this._sessionDuration(session) : null
           });
-          await this.render(this.containerId, this.teamId);
-        } catch (error) {
-          console.error("[TrainingView] Error añadiendo participante:", error);
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          console.error("[TrainingView] Error añadiendo participante:",error);
           alert(`❌ ${error.message || error}`);
-          addParticipant.disabled = false;
+          addParticipant.disabled=false;
         }
         return;
       }
 
-      const archive = event.target.closest(".p360-archive-session");
+      const archive=event.target.closest(".p360-archive-session");
       if (archive) {
         if (!confirm("¿Archivar esta sesión? Se conservarán sus datos históricos.")) return;
-        archive.disabled = true;
+        archive.disabled=true;
         try {
           await this.service.archiveSession(archive.dataset.sessionId);
-          await this.render(this.containerId, this.teamId);
-        } catch (error) {
-          console.error("[TrainingView] Error archivando sesión:", error);
+          if (String(this.editingSessionId)===String(archive.dataset.sessionId)) {
+            this.editingSessionId=null;
+          }
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          console.error("[TrainingView] Error archivando sesión:",error);
           alert(`❌ ${error.message || error}`);
-          archive.disabled = false;
+          archive.disabled=false;
         }
       }
     };
 
-    container.addEventListener("click", this._delegatedClickHandler);
-    this._delegatedClickContainer = container;
+    container.addEventListener("click",this._delegatedClickHandler);
+    this._delegatedClickContainer=container;
 
-    container.querySelector("#p360-training-form")?.addEventListener("submit", async event => {
+    container.querySelector("#p360-training-form")?.addEventListener("submit",async event => {
       event.preventDefault();
-      const form = event.currentTarget;
-      const submit = form.querySelector('button[type="submit"]');
-      const date = form.querySelector("#p360-training-date")?.value;
-      const title = form.querySelector("#p360-training-title")?.value.trim();
+      const form=event.currentTarget;
+      const submit=form.querySelector('button[type="submit"]');
+      const editingId=form.dataset.editingSessionId || null;
+      const date=form.querySelector("#p360-training-date")?.value;
+      const title=form.querySelector("#p360-training-title")?.value.trim();
 
       if (!date || !title) {
         alert("⚠️ Indica fecha y nombre de la sesión.");
         return;
       }
 
-      const selectedPlayers = [...form.querySelectorAll('input[name="p360-training-player"]:checked')]
-        .map(input => input.value)
-        .filter(Boolean);
+      const selectedPlayers=[
+        ...form.querySelectorAll('input[name="p360-training-player"]:checked')
+      ].map(input => input.value).filter(Boolean);
 
-      const startTime = form.querySelector("#p360-training-start-time")?.value || "";
-      const endTime = form.querySelector("#p360-training-end-time")?.value || "";
-      const durationMinutes = minutesBetweenTimes(startTime, endTime);
+      const startTime=form.querySelector("#p360-training-start-time")?.value || "";
+      const endTime=form.querySelector("#p360-training-end-time")?.value || "";
+      const durationMinutes=minutesBetweenTimes(startTime,endTime);
 
-      if (durationMinutes === null) {
+      if (durationMinutes===null) {
         alert("⚠️ Indica una hora de inicio y fin válidas. La hora de fin debe ser posterior al inicio.");
         return;
       }
 
-      const alreadyOccurred = String(date) <= localIsoDate();
-      const participants = selectedPlayers.map(playerId => ({
-        player_id: playerId,
-        attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
-        participated_minutes: alreadyOccurred ? durationMinutes : null
-      }));
+      const payload={
+        sessionDate:date,
+        title,
+        objective:form.querySelector("#p360-training-objective")?.value.trim() || null,
+        durationMinutes,
+        intensity:numberOrNull(form.querySelector("#p360-training-intensity")?.value),
+        startTime,
+        endTime,
+        blocks:this._collectBlocks(form)
+      };
 
-      submit.disabled = true;
+      submit.disabled=true;
       try {
-        await this.service.createSession({
-          teamSeasonId: this.teamSeasonId,
-          sessionDate: date,
-          title,
-          objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
-          durationMinutes,
-          intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
-          startTime,
-          endTime,
-          blocks: this._collectBlocks(form),
-          participants
-        });
-        await this.render(this.containerId, this.teamId);
-      } catch (error) {
-        console.error("[TrainingView] Error creando entrenamiento:", error);
+        if (editingId) {
+          await this.service.updateSession({
+            trainingSessionId:editingId,
+            ...payload,
+            participants:selectedPlayers.map(playerId => ({player_id:playerId}))
+          });
+          this.editingSessionId=null;
+        } else {
+          const alreadyOccurred=String(date)<=localIsoDate();
+          await this.service.createSession({
+            teamSeasonId:this.teamSeasonId,
+            ...payload,
+            participants:selectedPlayers.map(playerId => ({
+              player_id:playerId,
+              attendance_status:alreadyOccurred ? "PRESENT" : "PLANNED",
+              participated_minutes:alreadyOccurred ? durationMinutes : null
+            }))
+          });
+        }
+        this.activeTab="training";
+        await this.render(this.containerId,this.teamId);
+      } catch(error) {
+        console.error("[TrainingView] Error guardando entrenamiento:",error);
         alert(`❌ ${error.message || error}`);
-        submit.disabled = false;
+        submit.disabled=false;
       }
     });
 
-    const externalDate = container.querySelector("#p360-external-date");
-    externalDate?.addEventListener("change", () => {
-      const select = container.querySelector("#p360-external-player");
-      if (select) select.innerHTML = this._renderExternalPlayerOptions(externalDate.value);
+    const externalDate=container.querySelector("#p360-external-date");
+    externalDate?.addEventListener("change",() => {
+      const select=container.querySelector("#p360-external-player");
+      if (!select) return;
+      const selected=select.value;
+      select.innerHTML=this._renderExternalPlayerOptions(externalDate.value,selected);
     });
 
-    container.querySelector("#p360-cancel-external")?.addEventListener("click", () => {
-      const panel = container.querySelector("#p360-create-external-panel");
-      const form = container.querySelector("#p360-external-form");
+    container.querySelector("#p360-cancel-external")?.addEventListener("click",async () => {
+      if (this.editingExternalId) {
+        this.editingExternalId=null;
+        this.activeTab="external";
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
+
+      const panel=container.querySelector("#p360-create-external-panel");
+      const form=container.querySelector("#p360-external-form");
       if (!form) return;
-
       form.reset();
-
-      const date = form.querySelector("#p360-external-date")?.value || this._defaultDate();
-      const select = form.querySelector("#p360-external-player");
-      if (select) select.innerHTML = this._renderExternalPlayerOptions(date);
-
-      if (panel) panel.open = false;
+      const date=form.querySelector("#p360-external-date")?.value || this._defaultDate();
+      const select=form.querySelector("#p360-external-player");
+      if (select) select.innerHTML=this._renderExternalPlayerOptions(date);
+      if (panel) panel.open=false;
     });
 
-    container.querySelector("#p360-external-form")?.addEventListener("submit", async event => {
+    container.querySelector("#p360-external-form")?.addEventListener("submit",async event => {
       event.preventDefault();
-      const form = event.currentTarget;
-      const submit = form.querySelector('button[type="submit"]');
-
-      const date = form.querySelector("#p360-external-date")?.value;
-      const playerId = form.querySelector("#p360-external-player")?.value;
-      const title = form.querySelector("#p360-external-title")?.value.trim();
+      const form=event.currentTarget;
+      const submit=form.querySelector('button[type="submit"]');
+      const editingId=form.dataset.editingExternalId || null;
+      const date=form.querySelector("#p360-external-date")?.value;
+      const playerId=form.querySelector("#p360-external-player")?.value;
+      const title=form.querySelector("#p360-external-title")?.value.trim();
 
       if (!date || !playerId || !title) {
         alert("⚠️ Indica fecha, jugador y actividad.");
         return;
       }
 
-      submit.disabled = true;
+      const existing=editingId
+        ? this.externalSessions.find(item => String(item.id)===String(editingId))
+        : null;
+      const payload={
+        playerId,
+        activityDate:date,
+        title,
+        activityCode:form.querySelector("#p360-external-code")?.value.trim() || null,
+        activityTypeId:existing?.activity_type_id || null,
+        providerType:form.querySelector("#p360-external-provider-type")?.value || null,
+        providerName:form.querySelector("#p360-external-provider")?.value.trim() || null,
+        objective:form.querySelector("#p360-external-objective")?.value.trim() || null,
+        durationMinutes:numberOrNull(form.querySelector("#p360-external-duration")?.value),
+        intensity:numberOrNull(form.querySelector("#p360-external-intensity")?.value),
+        rpe:numberOrNull(form.querySelector("#p360-external-rpe")?.value),
+        sourceType:existing?.source_type || PLAYER360_SOURCE_TYPE.EXTERNAL_COACH,
+        notes:form.querySelector("#p360-external-notes")?.value.trim() || null,
+        provenance:{
+          ...(existing?.provenance || {}),
+          [editingId ? "edited_from" : "entered_from"]:"IQBASKET_PLAYER360_UI"
+        },
+        metadata:existing?.metadata || {}
+      };
+
+      submit.disabled=true;
       try {
-        await this.service.createExternalDevelopment({
-          teamSeasonId: this.teamSeasonId,
-          playerId,
-          activityDate: date,
-          title,
-          activityCode: form.querySelector("#p360-external-code")?.value.trim() || null,
-          providerType: form.querySelector("#p360-external-provider-type")?.value || null,
-          providerName: form.querySelector("#p360-external-provider")?.value.trim() || null,
-          objective: form.querySelector("#p360-external-objective")?.value.trim() || null,
-          durationMinutes: numberOrNull(form.querySelector("#p360-external-duration")?.value),
-          intensity: numberOrNull(form.querySelector("#p360-external-intensity")?.value),
-          rpe: numberOrNull(form.querySelector("#p360-external-rpe")?.value),
-          sourceType: PLAYER360_SOURCE_TYPE.EXTERNAL_COACH,
-          notes: form.querySelector("#p360-external-notes")?.value.trim() || null,
-          provenance: { entered_from: "IQBASKET_PLAYER360_UI" }
-        });
-        this.activeTab = "external";
-        await this.render(this.containerId, this.teamId);
-      } catch (error) {
-        console.error("[TrainingView] Error creando desarrollo externo:", error);
+        if (editingId) {
+          await this.service.updateExternalDevelopment({
+            externalSessionId:editingId,
+            ...payload
+          });
+          this.editingExternalId=null;
+        } else {
+          await this.service.createExternalDevelopment({
+            teamSeasonId:this.teamSeasonId,
+            ...payload
+          });
+        }
+        this.activeTab="external";
+        await this.render(this.containerId,this.teamId);
+      } catch(error) {
+        console.error("[TrainingView] Error guardando desarrollo externo:",error);
         alert(`❌ ${error.message || error}`);
-        submit.disabled = false;
+        submit.disabled=false;
       }
     });
   }
