@@ -21,8 +21,8 @@ future_objects as (
     to_regclass('public.player360_wellness_observations') is not null as observations_exists,
     to_regprocedure('public.iq_v4e2_wellness_capabilities(uuid,uuid,text,text)') is not null as capabilities_exists,
     to_regprocedure('public.iq_v4e2_list_wellness_metric_catalog(uuid,text)') is not null as metric_list_exists,
-    to_regprocedure('public.iq_v4e2_list_wellness_entries(uuid,uuid,text,text,timestamptz,timestamptz,integer)') is not null as entry_list_exists,
-    to_regprocedure('public.iq_v4e2_save_manual_wellness_entry(uuid,uuid,uuid,text,timestamptz,text,jsonb)') is not null as save_exists,
+    to_regprocedure('public.iq_v4e2_list_wellness_entries(uuid,uuid,text,text,date,date,integer)') is not null as entry_list_exists,
+    to_regprocedure('public.iq_v4e2_save_manual_wellness_entry(uuid,uuid,uuid,text,date,text,jsonb)') is not null as save_exists,
     to_regprocedure('public.iq_v4e2_archive_wellness_entry(uuid,text)') is not null as archive_exists
 )
 select
