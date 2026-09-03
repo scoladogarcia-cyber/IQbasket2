@@ -457,6 +457,37 @@ async function runViewport(browser, name, viewport) {
   assertCondition(attendanceCall.participatedMinutes === 50, name, "Asistencia no envía minutos");
   assertCondition(attendanceCall.rpe === 7, name, "Asistencia no envía RPE");
 
+  // Give any unrelated app-level render a chance to surface. The snapshot makes
+  // a disappearing TrainingView diagnosable instead of hiding it behind a
+  // locator timeout.
+  await page.waitForTimeout(250);
+  const postAttendanceState = await page.evaluate(() => {
+    const content = document.querySelector("#dashboard-content-area");
+    return {
+      hash: window.location.hash,
+      title: document.querySelector(".p360-hero h1")?.textContent || "",
+      trainingViewExists: Boolean(document.querySelector(".p360-training-view")),
+      externalTabExists: Boolean(document.querySelector('[data-p360-tab="external"]')),
+      sessionCards: document.querySelectorAll(".p360-session-card").length,
+      textPreview: String(content?.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 500)
+    };
+  });
+  console.log(JSON.stringify({ viewport: name, postAttendanceState }));
+
+  assertCondition(
+    postAttendanceState.trainingViewExists,
+    name,
+    "TrainingView desaparece tras guardar asistencia: " + JSON.stringify(postAttendanceState)
+  );
+  assertCondition(
+    postAttendanceState.externalTabExists,
+    name,
+    "Desarrollo externo desaparece tras guardar asistencia: " + JSON.stringify(postAttendanceState)
+  );
+
   // External development.
   const externalTab = page.locator('[data-p360-tab="external"]');
   await externalTab.evaluate(el => {
