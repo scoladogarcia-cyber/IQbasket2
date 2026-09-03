@@ -427,6 +427,17 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
             ${actions && item.canReject ? `<button type="button" class="btn-approval-reject" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">${this.t("approvals.reject", "Rechazar")}</button>` : ""}
           </div>
         </div>
+        ${actions && [RequestType.GAME_LOCK, RequestType.TEAM_SEASON_FREEZE].includes(item.type) ? `
+          <label style="display:grid;gap:4px;margin-top:12px;font-size:11px;font-weight:800;color:#475569;">
+            ${this.t("approvals.resolution_note", "Nota de resolución (opcional)")}
+            <input type="text"
+                   class="approval-resolution-note"
+                   data-request-id="${this._escape(item.id)}"
+                   maxlength="240"
+                   placeholder="${this._escape(this.t("approvals.resolution_note_placeholder", "Añade contexto para la auditoría"))}"
+                   style="width:100%;min-height:44px;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#ffffff;color:#0f172a;font:inherit;">
+          </label>
+        ` : ""}
       </article>
     `;
   }
@@ -516,9 +527,16 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
             : this.t("approvals.approve_access_confirm", "¿Aprobar esta solicitud de acceso?");
         if (!confirm(confirmation)) return;
 
+        const note = String(
+          this.container?.querySelector(
+            `.approval-resolution-note[data-request-id="${item.id}"]`
+          )?.value || ""
+        ).trim() || null;
+
         await this._runAction(event.currentTarget, async () => {
-          await this.service.approve(item);
+          await this.service.approve(item, note);
           if ([RequestType.GAME_LOCK, RequestType.TEAM_SEASON_FREEZE].includes(item.type)) {
+            DataStore.isLoaded = false;
             await DataStore.init(DataStore.getActiveTeamId?.() || null, true);
           }
         });
@@ -529,14 +547,11 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
       button.addEventListener("click", async event => {
         const item = this._findItem(event.currentTarget.dataset.requestId);
         if (!item) return;
-        const requiresReasonPrompt = [
-          RequestType.GAME_LOCK,
-          RequestType.TEAM_SEASON_FREEZE
-        ].includes(item.type);
-        const note = requiresReasonPrompt
-          ? prompt(this.t("approvals.reject_reason", "Motivo del rechazo (opcional):"), "")
-          : null;
-        if (requiresReasonPrompt && note === null) return;
+        const note = String(
+          this.container?.querySelector(
+            `.approval-resolution-note[data-request-id="${item.id}"]`
+          )?.value || ""
+        ).trim() || null;
 
         await this._runAction(event.currentTarget, () => this.service.reject(item, note));
       });
