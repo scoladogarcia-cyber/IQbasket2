@@ -53,6 +53,11 @@ assert.match(
 assert.match(apply, /enable row level security/i);
 assert.match(apply, /revoke insert, update, delete/i);
 assert.match(apply, /iq_v4_transfer_reviews_select_authorized/i);
+assert.match(
+  apply,
+  /iq_v3_transfer_request_select_authorized[\s\S]*requested_by = auth\.uid\(\)/i,
+  "El solicitante debe poder leer su propia petición sin obtener permisos de mutación."
+);
 
 assert.doesNotMatch(rollback, /drop table/i, "Rollback no debe borrar auditoría de revisiones.");
 assert.doesNotMatch(rollback, /drop column/i, "Rollback no debe destruir metadatos añadidos.");
