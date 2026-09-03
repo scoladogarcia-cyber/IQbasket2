@@ -6,6 +6,7 @@ on:
       - qa/core-user-flows-v1
       - fix/mobile-nutrition-navigation-v1
       - fix/invited-wellness-shell-v1
+      - qa/invited-route-matrix-v1
     paths:
       - "views/TrainingView.js"
       - "views/GameBoxScoreView.js"
@@ -17,6 +18,7 @@ on:
       - "tests/player360-phase4b-ui-smoke.mjs"
       - "tests/boxscore-edit-ui-smoke.mjs"
       - "tests/nutrition-route-ui-smoke.mjs"
+      - "tests/invited-route-matrix-ui-smoke.mjs"
       - "tests/browser-test-support.mjs"
       - ".github/workflows/core-user-flows-ui.yml"
   pull_request:
@@ -90,6 +92,11 @@ jobs:
         env:
           CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
         run: node tests/boxscore-edit-ui-smoke.mjs
+
+      - name: Invited route matrix browser smoke
+        env:
+          CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/invited-route-matrix-ui-smoke.mjs
 
       - name: Print Vite log on failure
         if: failure()
