@@ -102,6 +102,8 @@ export class TrainingView {
     this.teamId = null;
     this.teamSeasonId = null;
     this.containerId = "dashboard-content-area";
+    this.editingSessionId = null;
+    this.editingExternalId = null;
   }
 
   t(key, fallback = "") {
@@ -283,36 +285,37 @@ export class TrainingView {
     `;
   }
 
-  _renderBlockRow(index = 1) {
+  _renderBlockRow(index = 1, block = {}) {
     return `
       <div class="p360-block-row" data-block-index="${index}">
         <label>
           <span>${escapeHtml(this.t("player360.training.block_title", "Bloque"))}</span>
-          <input type="text" class="p360-block-title" placeholder="Ej. Tiro tras bote" />
+          <input type="text" class="p360-block-title" value="${escapeHtml(block.title || "")}" placeholder="Ej. Tiro tras bote" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.activity_code", "Código / tipo"))}</span>
-          <input type="text" class="p360-block-code" placeholder="Ej. SHOOTING" />
+          <input type="text" class="p360-block-code" value="${escapeHtml(block.activity_code || "")}" placeholder="Ej. SHOOTING" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.duration", "Minutos"))}</span>
-          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" />
+          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" value="${escapeHtml(block.duration_minutes ?? "")}" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.intensity", "Intensidad 0-10"))}</span>
-          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(block.intensity ?? "")}" />
         </label>
         <label class="p360-block-objective">
           <span>${escapeHtml(this.t("player360.training.objective", "Objetivo"))}</span>
-          <input type="text" class="p360-block-objective-input" placeholder="Objetivo específico del bloque" />
+          <input type="text" class="p360-block-objective-input" value="${escapeHtml(block.objective || "")}" placeholder="Objetivo específico del bloque" />
         </label>
         <button type="button" class="p360-remove-block" aria-label="Eliminar bloque">×</button>
       </div>
     `;
   }
 
-  _renderParticipantChecklist(date) {
+  _renderParticipantChecklist(date, selectedIds = []) {
     const players = this._eligiblePlayers(date);
+    const selected = new Set((selectedIds || []).map(String));
     if (!players.length) {
       return `
         <p class="p360-empty-inline">
@@ -336,7 +339,7 @@ export class TrainingView {
       <div class="p360-player-check-grid">
         ${players.map(player => `
           <label class="p360-player-check">
-            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" />
+            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" ${selected.has(String(player.id)) ? "checked" : ""} />
             <span class="p360-player-number">#${escapeHtml(player.jersey ?? player.number ?? "—")}</span>
             <span>${escapeHtml(playerName(player))}</span>
           </label>
@@ -346,19 +349,29 @@ export class TrainingView {
   }
 
   _renderTrainingForm() {
-    if (!this._can(Permission.CREATE_TRAINING)) return "";
+    const editing = this.sessions.find(item => String(item.id) === String(this.editingSessionId)) || null;
+    const canCreate = this._can(Permission.CREATE_TRAINING);
+    const canEdit = this._can(Permission.EDIT_TRAINING) && Boolean(this.capabilities?.update_training);
+    if ((!editing && !canCreate) || (editing && !canEdit)) return "";
 
-    const date = this._defaultDate();
+    const date = editing?.session_date || this._defaultDate();
     const bounds = this._dateInputBounds();
+    const selectedIds = (editing?.participants || []).map(item => item.player_id).filter(Boolean);
+    const blocks = (editing?.blocks || []).length ? editing.blocks : [{}];
+    const startTime = String(editing?.start_time || "").slice(0, 5);
+    const endTime = String(editing?.end_time || "").slice(0, 5);
+    const duration = editing ? this._sessionDuration(editing) : "";
 
     return `
-      <details class="p360-create-panel" id="p360-create-training-panel">
+      <details class="p360-create-panel" id="p360-create-training-panel" ${editing ? "open" : ""}>
         <summary>
-          <span>＋</span>
-          ${escapeHtml(this.t("player360.training.create", "Crear sesión de entrenamiento"))}
+          <span>${editing ? "✏️" : "＋"}</span>
+          ${escapeHtml(editing
+            ? this.t("player360.training.edit", "Editar sesión de entrenamiento")
+            : this.t("player360.training.create", "Crear sesión de entrenamiento"))}
         </summary>
 
-        <form id="p360-training-form" class="p360-form">
+        <form id="p360-training-form" class="p360-form" data-editing-session-id="${escapeHtml(editing?.id || "")}">
           <div class="p360-form-grid">
             <label>
               <span>${escapeHtml(this.t("player360.training.date", "Fecha"))}</span>
@@ -374,41 +387,33 @@ export class TrainingView {
 
             <label class="p360-span-2">
               <span>${escapeHtml(this.t("player360.training.title", "Nombre de la sesión"))}</span>
-              <input type="text" id="p360-training-title" maxlength="140" placeholder="Ej. Técnica individual + ventajas 2c1" required />
+              <input type="text" id="p360-training-title" maxlength="140" value="${escapeHtml(editing?.title || "")}" placeholder="Ej. Técnica individual + ventajas 2c1" required />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.start_time", "Inicio"))}</span>
-              <input type="time" id="p360-training-start-time" required />
+              <input type="time" id="p360-training-start-time" value="${escapeHtml(startTime)}" required />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.end_time", "Fin"))}</span>
-              <input type="time" id="p360-training-end-time" required />
+              <input type="time" id="p360-training-end-time" value="${escapeHtml(endTime)}" required />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.duration", "Duración calculada (min)"))}</span>
-              <input
-                type="number"
-                id="p360-training-duration"
-                min="1"
-                max="600"
-                inputmode="numeric"
-                readonly
-                aria-readonly="true"
-                placeholder="Inicio + fin"
-              />
+              <input type="number" id="p360-training-duration" min="1" max="600" inputmode="numeric"
+                value="${escapeHtml(duration)}" readonly aria-readonly="true" placeholder="Inicio + fin" />
             </label>
 
             <label>
               <span>${escapeHtml(this.t("player360.training.intensity", "Intensidad prevista 0-10"))}</span>
-              <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+              <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(editing?.intensity ?? "")}" />
             </label>
 
             <label class="p360-span-2">
               <span>${escapeHtml(this.t("player360.training.objective", "Objetivo principal"))}</span>
-              <textarea id="p360-training-objective" rows="2" maxlength="500" placeholder="Qué queremos provocar o mejorar"></textarea>
+              <textarea id="p360-training-objective" rows="2" maxlength="500" placeholder="Qué queremos provocar o mejorar">${escapeHtml(editing?.objective || "")}</textarea>
             </label>
           </div>
 
@@ -416,45 +421,37 @@ export class TrainingView {
             <div class="p360-subsection-head">
               <div>
                 <strong>${escapeHtml(this.t("player360.training.blocks", "Bloques de trabajo"))}</strong>
-                <small>${escapeHtml(this.t(
-                  "player360.training.blocks_help",
-                  "Divide la sesión en contenidos independientes para poder analizar después qué se entrenó."
-                ))}</small>
+                <small>${escapeHtml(this.t("player360.training.blocks_help", "Divide la sesión en contenidos independientes para poder analizar después qué se entrenó."))}</small>
               </div>
               <button type="button" class="p360-secondary-btn" id="p360-add-block">
                 ＋ ${escapeHtml(this.t("player360.training.add_block", "Añadir bloque"))}
               </button>
             </div>
             <div id="p360-blocks-container">
-              ${this._renderBlockRow(1)}
+              ${blocks.map((block,index) => this._renderBlockRow(index + 1, block)).join("")}
             </div>
           </div>
 
           <div class="p360-subsection">
             <div class="p360-subsection-head">
               <div>
-                <strong>${escapeHtml(this.t("player360.training.planned_roster", "Jugadores planificados"))}</strong>
-                <small>${escapeHtml(this.t(
-                  "player360.training.planned_roster_help",
-                  "Solo se muestran jugadores elegibles en esa fecha. La asistencia real y el RPE se registran después."
-                ))}</small>
+                <strong>${escapeHtml(this.t("player360.training.planned_roster", "Jugadores de la sesión"))}</strong>
+                <small>${escapeHtml(editing
+                  ? "Los jugadores que continúan seleccionados conservan asistencia, minutos y RPE. Desmarcar un jugador elimina su registro de esta sesión."
+                  : this.t("player360.training.planned_roster_help", "Solo se muestran jugadores elegibles en esa fecha. La asistencia real y el RPE se registran después."))}</small>
               </div>
             </div>
             <div id="p360-training-player-options">
-              ${this._renderParticipantChecklist(date)}
+              ${this._renderParticipantChecklist(date, selectedIds)}
             </div>
           </div>
 
           <div class="p360-form-actions">
-            <button
-              type="button"
-              class="p360-secondary-btn p360-cancel-create"
-              id="p360-cancel-training"
-            >
+            <button type="button" class="p360-secondary-btn p360-cancel-create" id="p360-cancel-training">
               ${escapeHtml(this.t("common.cancel", "Cancelar"))}
             </button>
             <button type="submit" class="p360-primary-btn">
-              ${escapeHtml(this.t("player360.training.save_session", "Guardar sesión"))}
+              ${escapeHtml(editing ? "Guardar correcciones" : this.t("player360.training.save_session", "Guardar sesión"))}
             </button>
           </div>
         </form>
@@ -641,15 +638,18 @@ export class TrainingView {
 
         ${this._renderAttendanceEditor(session, directory)}
 
-        ${this._can(Permission.DELETE_TRAINING) ? `
-          <div class="p360-card-actions">
-            <button
-              type="button"
-              class="p360-danger-link p360-archive-session"
-              data-session-id="${escapeHtml(session.id)}"
-            >
-              Archivar sesión
-            </button>
+        ${this._can(Permission.EDIT_TRAINING) || this._can(Permission.DELETE_TRAINING) ? `
+          <div class="p360-card-actions" style="display:flex;gap:12px;flex-wrap:wrap;">
+            ${this._can(Permission.EDIT_TRAINING) && this.capabilities?.update_training ? `
+              <button type="button" class="p360-link-btn p360-edit-session" data-session-id="${escapeHtml(session.id)}">
+                ✏️ Editar sesión
+              </button>
+            ` : ""}
+            ${this._can(Permission.DELETE_TRAINING) ? `
+              <button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">
+                Archivar sesión
+              </button>
+            ` : ""}
           </div>
         ` : ""}
       </article>
@@ -705,74 +705,73 @@ export class TrainingView {
   }
 
   _renderExternalForm() {
-    if (!this._can(Permission.CREATE_EXTERNAL_DEVELOPMENT)) return "";
+    const editing = this.externalSessions.find(item => String(item.id) === String(this.editingExternalId)) || null;
+    const canCreate = this._can(Permission.CREATE_EXTERNAL_DEVELOPMENT);
+    const canEdit = this._can(Permission.EDIT_EXTERNAL_DEVELOPMENT)
+      && Boolean(this.capabilities?.update_external_development);
+    if ((!editing && !canCreate) || (editing && !canEdit)) return "";
 
-    const date = this._defaultDate();
+    const date = editing?.activity_date || this._defaultDate();
     const bounds = this._dateInputBounds();
 
     return `
-      <details class="p360-create-panel" id="p360-create-external-panel">
+      <details class="p360-create-panel" id="p360-create-external-panel" ${editing ? "open" : ""}>
         <summary>
-          <span>＋</span>
-          ${escapeHtml(this.t("player360.external.create", "Registrar desarrollo externo"))}
+          <span>${editing ? "✏️" : "＋"}</span>
+          ${escapeHtml(editing ? "Editar tecnificación / desarrollo externo" : this.t("player360.external.create", "Registrar desarrollo externo"))}
         </summary>
 
-        <form id="p360-external-form" class="p360-form">
+        <form id="p360-external-form" class="p360-form" data-editing-external-id="${escapeHtml(editing?.id || "")}">
           <div class="p360-form-grid">
             <label>
               <span>Fecha</span>
-              <input
-                type="date"
-                id="p360-external-date"
-                value="${escapeHtml(date)}"
+              <input type="date" id="p360-external-date" value="${escapeHtml(date)}"
                 ${bounds.min ? `min="${escapeHtml(bounds.min)}"` : ""}
-                ${bounds.max ? `max="${escapeHtml(bounds.max)}"` : ""}
-                required
-              />
+                ${bounds.max ? `max="${escapeHtml(bounds.max)}"` : ""} required />
             </label>
 
             <label>
               <span>Jugador</span>
               <select id="p360-external-player" required>
-                ${this._renderExternalPlayerOptions(date)}
+                ${this._renderExternalPlayerOptions(date, editing?.player_id || "")}
               </select>
             </label>
 
             <label class="p360-span-2">
               <span>Actividad</span>
-              <input type="text" id="p360-external-title" maxlength="140" placeholder="Ej. Sesión individual de tiro" required />
+              <input type="text" id="p360-external-title" maxlength="140" value="${escapeHtml(editing?.title || "")}" placeholder="Ej. Sesión individual de tiro" required />
             </label>
 
             <label>
               <span>Código / tipo</span>
-              <input type="text" id="p360-external-code" maxlength="80" placeholder="Ej. SHOOTING" />
+              <input type="text" id="p360-external-code" maxlength="80" value="${escapeHtml(editing?.activity_code || "")}" placeholder="Ej. SHOOTING" />
             </label>
 
             <label>
               <span>Proveedor / tecnificador</span>
-              <input type="text" id="p360-external-provider" maxlength="140" placeholder="Nombre opcional" />
+              <input type="text" id="p360-external-provider" maxlength="140" value="${escapeHtml(editing?.provider_name || "")}" placeholder="Nombre opcional" />
             </label>
 
             <label>
               <span>Duración (min)</span>
-              <input type="number" id="p360-external-duration" min="1" max="600" inputmode="numeric" />
+              <input type="number" id="p360-external-duration" min="1" max="600" inputmode="numeric" value="${escapeHtml(editing?.duration_minutes ?? "")}" />
             </label>
 
             <label>
               <span>Intensidad 0-10</span>
-              <input type="number" id="p360-external-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+              <input type="number" id="p360-external-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(editing?.intensity ?? "")}" />
             </label>
 
             <label>
               <span>RPE 0-10</span>
-              <input type="number" id="p360-external-rpe" min="0" max="10" step="0.5" inputmode="decimal" />
+              <input type="number" id="p360-external-rpe" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(editing?.rpe ?? "")}" />
             </label>
 
             <label>
               <span>Tipo de proveedor</span>
               <select id="p360-external-provider-type">
-                ${Object.entries(EXTERNAL_PROVIDER_LABELS).map(([value, label]) => `
-                  <option value="${escapeHtml(value)}" ${value === EXTERNAL_PROVIDER_TYPE.EXTERNAL_COACH ? "selected" : ""}>
+                ${Object.entries(EXTERNAL_PROVIDER_LABELS).map(([value,label]) => `
+                  <option value="${escapeHtml(value)}" ${String(editing?.provider_type || EXTERNAL_PROVIDER_TYPE.EXTERNAL_COACH) === String(value) ? "selected" : ""}>
                     ${escapeHtml(label)}
                   </option>
                 `).join("")}
@@ -781,28 +780,26 @@ export class TrainingView {
 
             <label class="p360-span-2">
               <span>Objetivo</span>
-              <textarea id="p360-external-objective" rows="2" maxlength="500" placeholder="Qué se trabajó o qué se buscaba mejorar"></textarea>
+              <textarea id="p360-external-objective" rows="2" maxlength="500" placeholder="Qué se trabajó o qué se buscaba mejorar">${escapeHtml(editing?.objective || "")}</textarea>
             </label>
 
             <label class="p360-span-2">
               <span>Notas</span>
-              <textarea id="p360-external-notes" rows="2" maxlength="500" placeholder="Observación deportiva opcional"></textarea>
+              <textarea id="p360-external-notes" rows="2" maxlength="500" placeholder="Observación deportiva opcional">${escapeHtml(editing?.notes || "")}</textarea>
             </label>
           </div>
 
           <div class="p360-info-note">
-            Este registro identifica trabajo realizado fuera del equipo para no atribuir automáticamente al club una evolución que puede proceder de tecnificación externa.
+            ${editing
+              ? "Corrige únicamente el registro seleccionado. La procedencia externa se conserva separada del entrenamiento del club."
+              : "Este registro identifica trabajo realizado fuera del equipo para no atribuir automáticamente al club una evolución que puede proceder de tecnificación externa."}
           </div>
 
           <div class="p360-form-actions">
-            <button
-              type="button"
-              class="p360-secondary-btn p360-cancel-create"
-              id="p360-cancel-external"
-            >
+            <button type="button" class="p360-secondary-btn p360-cancel-create" id="p360-cancel-external">
               ${escapeHtml(this.t("common.cancel", "Cancelar"))}
             </button>
-            <button type="submit" class="p360-primary-btn">Guardar desarrollo externo</button>
+            <button type="submit" class="p360-primary-btn">${editing ? "Guardar correcciones" : "Guardar desarrollo externo"}</button>
           </div>
         </form>
       </details>
@@ -857,6 +854,13 @@ export class TrainingView {
 
                     ${session.objective ? `<p class="p360-card-text"><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>` : ""}
                     ${session.notes ? `<p class="p360-card-text"><strong>Nota:</strong> ${escapeHtml(session.notes)}</p>` : ""}
+                    ${this._can(Permission.EDIT_EXTERNAL_DEVELOPMENT) && this.capabilities?.update_external_development ? `
+                      <div class="p360-card-actions">
+                        <button type="button" class="p360-link-btn p360-edit-external" data-external-id="${escapeHtml(session.id)}">
+                          ✏️ Editar tecnificación
+                        </button>
+                      </div>
+                    ` : ""}
                   </article>
                 `;
               }).join("")
@@ -1250,10 +1254,10 @@ export class TrainingView {
     if (externalTab) externalTab.setAttribute("aria-selected", String(external));
   }
 
-  _refreshTrainingPlayerOptions(container, date) {
+  _refreshTrainingPlayerOptions(container, date, selectedIds = []) {
     const target = container.querySelector("#p360-training-player-options");
     if (!target) return;
-    target.innerHTML = this._renderParticipantChecklist(date);
+    target.innerHTML = this._renderParticipantChecklist(date, selectedIds);
     this._bindParticipantSelectionTools(container);
   }
 
@@ -1308,7 +1312,9 @@ export class TrainingView {
 
     const trainingDate = container.querySelector("#p360-training-date");
     trainingDate?.addEventListener("change", () => {
-      this._refreshTrainingPlayerOptions(container, trainingDate.value);
+      const selectedIds = [...container.querySelectorAll('input[name="p360-training-player"]:checked')]
+        .map(input => input.value);
+      this._refreshTrainingPlayerOptions(container, trainingDate.value, selectedIds);
     });
 
     const trainingStart = container.querySelector("#p360-training-start-time");
@@ -1325,20 +1331,22 @@ export class TrainingView {
 
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
 
-    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
+    container.querySelector("#p360-cancel-training")?.addEventListener("click", async () => {
+      if (this.editingSessionId) {
+        this.editingSessionId = null;
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
+
       const panel = container.querySelector("#p360-create-training-panel");
       const form = container.querySelector("#p360-training-form");
       if (!form) return;
-
       form.reset();
-
       const blocks = container.querySelector("#p360-blocks-container");
       if (blocks) blocks.innerHTML = this._renderBlockRow(1);
       blockCounter = 1;
-
       const date = form.querySelector("#p360-training-date")?.value || this._defaultDate();
       this._refreshTrainingPlayerOptions(container, date);
-
       if (panel) panel.open = false;
     });
 
@@ -1452,6 +1460,24 @@ export class TrainingView {
         return;
       }
 
+      const editSession = event.target.closest(".p360-edit-session");
+      if (editSession) {
+        this.editingSessionId = editSession.dataset.sessionId;
+        this.activeTab = "training";
+        await this.render(this.containerId, this.teamId);
+        document.querySelector("#p360-create-training-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+        return;
+      }
+
+      const editExternal = event.target.closest(".p360-edit-external");
+      if (editExternal) {
+        this.editingExternalId = editExternal.dataset.externalId;
+        this.activeTab = "external";
+        await this.render(this.containerId, this.teamId);
+        document.querySelector("#p360-create-external-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+        return;
+      }
+
       const archive = event.target.closest(".p360-archive-session");
       if (archive) {
         if (!confirm("¿Archivar esta sesión? Se conservarán sus datos históricos.")) return;
@@ -1504,18 +1530,34 @@ export class TrainingView {
 
       submit.disabled = true;
       try {
-        await this.service.createSession({
-          teamSeasonId: this.teamSeasonId,
-          sessionDate: date,
-          title,
-          objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
-          durationMinutes,
-          intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
-          startTime,
-          endTime,
-          blocks: this._collectBlocks(form),
-          participants
-        });
+        if (this.editingSessionId) {
+          await this.service.updateSession({
+            trainingSessionId: this.editingSessionId,
+            sessionDate: date,
+            title,
+            objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
+            durationMinutes,
+            intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
+            startTime,
+            endTime,
+            blocks: this._collectBlocks(form),
+            participantIds: selectedPlayers
+          });
+          this.editingSessionId = null;
+        } else {
+          await this.service.createSession({
+            teamSeasonId: this.teamSeasonId,
+            sessionDate: date,
+            title,
+            objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
+            durationMinutes,
+            intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
+            startTime,
+            endTime,
+            blocks: this._collectBlocks(form),
+            participants
+          });
+        }
         await this.render(this.containerId, this.teamId);
       } catch (error) {
         console.error("[TrainingView] Error creando entrenamiento:", error);
@@ -1530,17 +1572,19 @@ export class TrainingView {
       if (select) select.innerHTML = this._renderExternalPlayerOptions(externalDate.value);
     });
 
-    container.querySelector("#p360-cancel-external")?.addEventListener("click", () => {
+    container.querySelector("#p360-cancel-external")?.addEventListener("click", async () => {
+      if (this.editingExternalId) {
+        this.editingExternalId = null;
+        await this.render(this.containerId, this.teamId);
+        return;
+      }
       const panel = container.querySelector("#p360-create-external-panel");
       const form = container.querySelector("#p360-external-form");
       if (!form) return;
-
       form.reset();
-
       const date = form.querySelector("#p360-external-date")?.value || this._defaultDate();
       const select = form.querySelector("#p360-external-player");
       if (select) select.innerHTML = this._renderExternalPlayerOptions(date);
-
       if (panel) panel.open = false;
     });
 
@@ -1560,8 +1604,7 @@ export class TrainingView {
 
       submit.disabled = true;
       try {
-        await this.service.createExternalDevelopment({
-          teamSeasonId: this.teamSeasonId,
+        const payload = {
           playerId,
           activityDate: date,
           title,
@@ -1575,7 +1618,20 @@ export class TrainingView {
           sourceType: PLAYER360_SOURCE_TYPE.EXTERNAL_COACH,
           notes: form.querySelector("#p360-external-notes")?.value.trim() || null,
           provenance: { entered_from: "IQBASKET_PLAYER360_UI" }
-        });
+        };
+
+        if (this.editingExternalId) {
+          await this.service.updateExternalDevelopment({
+            externalDevelopmentId: this.editingExternalId,
+            ...payload
+          });
+          this.editingExternalId = null;
+        } else {
+          await this.service.createExternalDevelopment({
+            teamSeasonId: this.teamSeasonId,
+            ...payload
+          });
+        }
         this.activeTab = "external";
         await this.render(this.containerId, this.teamId);
       } catch (error) {
