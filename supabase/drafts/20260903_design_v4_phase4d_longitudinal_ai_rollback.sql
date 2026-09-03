@@ -96,7 +96,7 @@ as $
           )
         )
     );
-$;
+$$;
 
 create or replace function public.iq_v4_can_view_longitudinal_analytics(
   p_team_season_id uuid
@@ -113,7 +113,7 @@ as $
     array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
     array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
   );
-$;
+$$;
 
 create or replace function public.iq_v4_can_generate_longitudinal_analytics(
   p_team_season_id uuid
@@ -130,7 +130,7 @@ as $
     array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
     array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
   );
-$;
+$$;
 
 create or replace function public.iq_v4_can_view_ai_insights(
   p_team_season_id uuid
@@ -147,7 +147,7 @@ as $
     array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
     array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
   );
-$;
+$$;
 
 create or replace function public.iq_v4_can_generate_ai_insights(
   p_team_season_id uuid
@@ -164,7 +164,7 @@ as $
     array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ANALISTA'],
     array['ADMIN','ENTRENADOR','ANALISTA','PREPARADOR_FISICO']
   );
-$;
+$$;
 
 create or replace function public.iq_v4_can_review_ai_insights(
   p_team_season_id uuid
@@ -181,7 +181,7 @@ as $
     array['ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO'],
     array['ADMIN','ENTRENADOR']
   );
-$;
+$$;
 
 revoke all on function public.iq_v4_has_player360_action_role(uuid,text[],text[],text[]) from public;
 revoke all on function public.iq_v4_can_view_longitudinal_analytics(uuid) from public;
