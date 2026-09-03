@@ -88,4 +88,35 @@ assert.match(
   /\.iq-modal-card\s*\{[\s\S]*min-height:\s*0[\s\S]*overflow-y:\s*auto[\s\S]*touch-action:\s*pan-y/i
 );
 
+assert.match(
+  settingsSource,
+  /_visibleSettingsTabs\(\)[\s\S]*VIEW_TAB_CLUB[\s\S]*VIEW_TAB_PLAYERS[\s\S]*VIEW_TAB_SEASONS/,
+  "Configuración debe resolver pestañas por permisos y no por nombres de rol."
+);
+assert.doesNotMatch(
+  settingsSource,
+  /\[UserRole\.JUGADOR,\s*UserRole\.FAMILIA_TUTOR,\s*UserRole\.VISOR,\s*UserRole\.INVITADO\][\s\S]{0,180}activeTab/,
+  "No debe reintroducirse un bloqueo hardcodeado de pestañas para INVITADO/VISOR/JUGADOR/FAMILIA."
+);
+assert.match(
+  settingsSource,
+  /const canManageClubData = this\._can\("MANAGE_CLUB_DATA"\);/,
+  "La edición de club debe depender de MANAGE_CLUBS."
+);
+assert.match(
+  settingsSource,
+  /const canManageTeams = this\._can\("CREATE_TEAM"\);/,
+  "La edición de equipo debe depender de MANAGE_TEAMS."
+);
+assert.match(
+  settingsSource,
+  /canManageClubData \? '✏️ Editar Club' : '👁️ Ver Club'/,
+  "Los perfiles de lectura deben ver detalle de club sin affordance de edición."
+);
+assert.match(
+  settingsSource,
+  /canManageTeams \? '⚙️ Configurar' : '👁️ Ver Equipo'/,
+  "Los perfiles de lectura deben ver detalle de equipo sin affordance de edición."
+);
+
 console.log("MOBILE_INVITED_READONLY_REGRESSION_OK");
