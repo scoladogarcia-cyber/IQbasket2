@@ -22,6 +22,7 @@ import { ROUTE_PERMISSIONS } from "./security/permissions.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
+import { ApprovalCenterView } from "./views/ApprovalCenterView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { TeamStatsView } from "./views/TeamStatsView.js";
 import { GameController } from "./controllers/GameController.js";
@@ -67,6 +68,7 @@ export class IQBasketApp {
     this.views = {
       auth: new AuthView(),
       dashboard: new SeasonDashboardView(supabase, this.authController),
+      approvals: new ApprovalCenterView(supabase, this.authController),
       team: new TeamStatsView(supabase, this.authController),
       equipo: new TeamStatsView(supabase, this.authController),
       liveeditor: new GameLiveEditorView(this.gameController, this.authController),
@@ -711,6 +713,13 @@ export class IQBasketApp {
       case "live-entry":
         const liveView = this.views.livehud(this.routeParams.id || null);
         await liveView.render(contentArea);
+        break;
+
+      case "approvals":
+      case "requests":
+      case "solicitudes":
+      case "bandeja":
+        if (this.views.approvals) await this.views.approvals.render(contentArea);
         break;
 
       case "games":
