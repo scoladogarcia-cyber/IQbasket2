@@ -1228,6 +1228,8 @@ export class TrainingView {
       this._refreshTrainingPlayerOptions(container, trainingDate.value);
     });
 
+    let blockCounter = container.querySelectorAll(".p360-block-row").length;
+
     container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
       const panel = container.querySelector("#p360-create-training-panel");
       const form = container.querySelector("#p360-training-form");
@@ -1237,6 +1239,7 @@ export class TrainingView {
 
       const blocks = container.querySelector("#p360-blocks-container");
       if (blocks) blocks.innerHTML = this._renderBlockRow(1);
+      blockCounter = 1;
 
       const date = form.querySelector("#p360-training-date")?.value || this._defaultDate();
       this._refreshTrainingPlayerOptions(container, date);
@@ -1244,7 +1247,6 @@ export class TrainingView {
       if (panel) panel.open = false;
     });
 
-    let blockCounter = container.querySelectorAll(".p360-block-row").length;
     container.querySelector("#p360-add-block")?.addEventListener("click", () => {
       blockCounter += 1;
       const target = container.querySelector("#p360-blocks-container");
