@@ -56,6 +56,32 @@ function addWeeks(isoDate, weeks) {
   return isoDay(date);
 }
 
+function normalizeEligibilityPeriods(periods, analysisStart, analysisEnd) {
+  return (Array.isArray(periods) ? periods : [])
+    .map(period => {
+      const fromRaw = period?.from || period?.valid_from || period?.start_date || null;
+      const toRaw = period?.to || period?.valid_until || period?.end_date || null;
+      if (!fromRaw) return null;
+
+      const from = utcDate(fromRaw, "eligibility.from");
+      const to = toRaw ? utcDate(toRaw, "eligibility.to") : new Date(analysisEnd);
+      to.setUTCHours(23, 59, 59, 999);
+
+      const clippedFrom = new Date(Math.max(from.getTime(), analysisStart.getTime()));
+      const clippedTo = new Date(Math.min(to.getTime(), analysisEnd.getTime()));
+      if (clippedTo < clippedFrom) return null;
+
+      return {
+        from: isoDay(clippedFrom),
+        to: isoDay(clippedTo),
+        from_timestamp: clippedFrom.getTime(),
+        to_timestamp: clippedTo.getTime()
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.from_timestamp - right.from_timestamp);
+}
+
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   Object.values(value).forEach(deepFreeze);
@@ -185,6 +211,7 @@ export class LongitudinalAnalyticsCalculator {
     observations = [],
     metricDefinitions = [],
     associationDefinitions = [],
+    eligibilityPeriods = [],
     config = PLAYER360_LONGITUDINAL_CONFIG
   } = {}) {
     const normalizedPlayerId = requiredText(playerId, "playerId");
@@ -195,6 +222,14 @@ export class LongitudinalAnalyticsCalculator {
     if (periodEnd < periodStart) {
       throw new Error("LongitudinalAnalyticsCalculator: period.to no puede ser anterior a period.from.");
     }
+
+    const eligiblePeriods = normalizeEligibilityPeriods(
+      eligibilityPeriods,
+      periodStart,
+      periodEnd
+    );
+    const eligibilityRestricted = Array.isArray(eligibilityPeriods)
+      && eligibilityPeriods.length > 0;
 
     const definitions = metricDefinitions.map(definition =>
       normalizeMetricDefinition(definition, config)
@@ -219,6 +254,12 @@ export class LongitudinalAnalyticsCalculator {
         return;
       }
       if (timestamp < periodStart.getTime() || timestamp > periodEnd.getTime()) return;
+      if (
+        eligibilityRestricted
+        && !eligiblePeriods.some(period =>
+          timestamp >= period.from_timestamp && timestamp <= period.to_timestamp
+        )
+      ) return;
 
       const bucketStart = isoDay(startOfUtcWeek(new Date(timestamp)));
       const metricBuckets = bucketsByMetric.get(definition.key);
@@ -226,11 +267,25 @@ export class LongitudinalAnalyticsCalculator {
       metricBuckets.get(bucketStart).push({ value, timestamp });
     });
 
-    const firstExpectedBucket = startOfUtcWeek(periodStart);
-    const lastExpectedBucket = startOfUtcWeek(periodEnd);
-    const expectedBuckets = Math.floor(
-      (lastExpectedBucket.getTime() - firstExpectedBucket.getTime()) / WEEK_MS
-    ) + 1;
+    const expectedBucketStarts = new Set();
+    const expectedRanges = eligibilityRestricted
+      ? eligiblePeriods
+      : [{
+          from: isoDay(periodStart),
+          to: isoDay(periodEnd),
+          from_timestamp: periodStart.getTime(),
+          to_timestamp: periodEnd.getTime()
+        }];
+
+    expectedRanges.forEach(range => {
+      let cursor = startOfUtcWeek(new Date(range.from_timestamp));
+      const last = startOfUtcWeek(new Date(range.to_timestamp));
+      while (cursor.getTime() <= last.getTime()) {
+        expectedBucketStarts.add(isoDay(cursor));
+        cursor = new Date(cursor.getTime() + WEEK_MS);
+      }
+    });
+    const expectedBuckets = expectedBucketStarts.size;
 
     const series = definitions.map(definition => {
       const bucketEntries = [...bucketsByMetric.get(definition.key).entries()]
@@ -248,7 +303,9 @@ export class LongitudinalAnalyticsCalculator {
         coverage: {
           expected_buckets: expectedBuckets,
           observed_buckets: points.length,
-          coverage_pct: round((points.length / expectedBuckets) * 100, 2)
+          coverage_pct: expectedBuckets
+            ? round((points.length / expectedBuckets) * 100, 2)
+            : 0
         },
         trend: trendFor(points, definition, config.minimumTrendBuckets)
       };
@@ -333,6 +390,10 @@ export class LongitudinalAnalyticsCalculator {
         to: isoDay(periodEnd)
       },
       bucket_unit: config.bucketUnit,
+      eligibility_periods: eligiblePeriods.map(period => ({
+        from: period.from,
+        to: period.to
+      })),
       expected_buckets: expectedBuckets,
       rejected_observations: rejectedObservations,
       series,
