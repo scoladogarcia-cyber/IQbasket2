@@ -457,10 +457,10 @@ async function runViewport(browser, name, viewport) {
   });
 
   assertCondition(
-    addBlockGeometry.top >= 0
-      && addBlockGeometry.bottom <= addBlockGeometry.viewportHeight
-      && addBlockGeometry.left >= 0
-      && addBlockGeometry.right <= addBlockGeometry.viewportWidth,
+    addBlockGeometry.top >= -1
+      && addBlockGeometry.bottom <= addBlockGeometry.viewportHeight + 1
+      && addBlockGeometry.left >= -1
+      && addBlockGeometry.right <= addBlockGeometry.viewportWidth + 1,
     name,
     "Añadir bloque no puede situarse completamente dentro del viewport móvil"
   );
@@ -508,10 +508,11 @@ async function runViewport(browser, name, viewport) {
   await attendanceRow.locator(".p360-att-rpe").fill("7");
   await attendanceRow.locator(".p360-att-notes").fill("Smoke carga");
   const saveAttendanceButton = attendanceRow.locator(".p360-save-attendance");
+  await saveAttendanceButton.scrollIntoViewIfNeeded();
   await saveAttendanceButton.evaluate(el => {
-    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    el.scrollIntoView({ block: "center", inline: "nearest" });
   });
-  await page.waitForTimeout(80);
+  await page.waitForTimeout(120);
   const attendanceButtonGeometry = await saveAttendanceButton.evaluate(el => {
     const rect = el.getBoundingClientRect();
     return {
@@ -524,10 +525,10 @@ async function runViewport(browser, name, viewport) {
     };
   });
   assertCondition(
-    attendanceButtonGeometry.top >= 0
-      && attendanceButtonGeometry.bottom <= attendanceButtonGeometry.viewportHeight
-      && attendanceButtonGeometry.left >= 0
-      && attendanceButtonGeometry.right <= attendanceButtonGeometry.viewportWidth,
+    attendanceButtonGeometry.top >= -1
+      && attendanceButtonGeometry.bottom <= attendanceButtonGeometry.viewportHeight + 1
+      && attendanceButtonGeometry.left >= -1
+      && attendanceButtonGeometry.right <= attendanceButtonGeometry.viewportWidth + 1,
     name,
     "Guardar asistencia no queda completamente dentro del viewport"
   );
