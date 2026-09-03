@@ -7,6 +7,7 @@ import {
   WELLNESS_VALUE_TYPE
 } from "../config/player360-wellness.config.js";
 import { WellnessObservationFactory } from "../domain/player360/WellnessObservationFactory.js";
+import { WellnessRecommendationEngine } from "../domain/player360/WellnessRecommendationEngine.js";
 
 const codes = new Set(PLAYER360_WELLNESS_DEFAULT_METRICS.map(metric => metric.code));
 for (const prohibited of PLAYER360_WELLNESS_PROHIBITED_DEFAULT_CODES) {
@@ -18,6 +19,9 @@ for (const prohibited of PLAYER360_WELLNESS_PROHIBITED_DEFAULT_CODES) {
 }
 
 assert.equal(PLAYER360_WELLNESS_CONFIG.allowFreeTextValue, false);
+assert.equal(PLAYER360_WELLNESS_CONFIG.manualInputEnabled, true);
+assert.equal(PLAYER360_WELLNESS_CONFIG.externalImportEnabled, false);
+assert.equal(PLAYER360_WELLNESS_CONFIG.recommendationsEnabled, true);
 assert.equal(PLAYER360_WELLNESS_CONFIG.aiProcessingEnabled, false);
 assert.deepEqual(
   [...new Set(PLAYER360_WELLNESS_DEFAULT_METRICS.map(metric => metric.module))].sort(),
@@ -149,5 +153,90 @@ const choice = WellnessObservationFactory.create({
   value: "morning"
 });
 assert.equal(choice.value, "MORNING");
+
+const fatigueMetric = PLAYER360_WELLNESS_DEFAULT_METRICS.find(
+  metric => metric.code === "FATIGUE"
+);
+const hydrationMetric = PLAYER360_WELLNESS_DEFAULT_METRICS.find(
+  metric => metric.code === "HYDRATION_ADHERENCE"
+);
+const readinessMetric = PLAYER360_WELLNESS_DEFAULT_METRICS.find(
+  metric => metric.code === "READINESS"
+);
+
+const supportObservations = [
+  WellnessObservationFactory.create({
+    metric: fatigueMetric,
+    playerId: "player-1",
+    teamSeasonId: "team-season-1",
+    occurredAt: "2026-09-03T15:00:00+02:00",
+    sourceType: "PLAYER_SELF_REPORT",
+    value: 4
+  }),
+  WellnessObservationFactory.create({
+    metric: hydrationMetric,
+    playerId: "player-1",
+    teamSeasonId: "team-season-1",
+    occurredAt: "2026-09-03T15:00:00+02:00",
+    sourceType: "PLAYER_SELF_REPORT",
+    value: 2
+  }),
+  WellnessObservationFactory.create({
+    metric: readinessMetric,
+    playerId: "player-1",
+    teamSeasonId: "team-season-1",
+    occurredAt: "2026-09-03T15:00:00+02:00",
+    sourceType: "PLAYER_SELF_REPORT",
+    value: 4
+  })
+];
+
+const recommendations = WellnessRecommendationEngine.evaluate({
+  observations: supportObservations
+});
+assert.equal(recommendations.length, 2);
+assert.equal(recommendations[0].priority, "REVIEW");
+assert.equal(recommendations[0].clinical_claim, false);
+assert.equal(recommendations[0].causal_claim, false);
+assert.equal(recommendations.every(item => item.source === "DETERMINISTIC_RULE"), true);
+assert.equal(
+  recommendations.some(item => item.code === "REVIEW_FATIGUE_LOAD"),
+  true
+);
+assert.equal(
+  recommendations.some(item => item.code === "SUPPORT_HYDRATION_PLAN"),
+  true
+);
+
+const summary = WellnessRecommendationEngine.summarize(recommendations);
+assert.deepEqual(summary, {
+  total: 2,
+  review: 1,
+  support: 1,
+  info: 0,
+  hasRecommendations: true
+});
+
+const noRecommendations = WellnessRecommendationEngine.evaluate({
+  observations: [
+    WellnessObservationFactory.create({
+      metric: fatigueMetric,
+      playerId: "player-1",
+      teamSeasonId: "team-season-1",
+      occurredAt: "2026-09-03T15:00:00+02:00",
+      sourceType: "PLAYER_SELF_REPORT",
+      value: 2
+    }),
+    WellnessObservationFactory.create({
+      metric: hydrationMetric,
+      playerId: "player-1",
+      teamSeasonId: "team-season-1",
+      occurredAt: "2026-09-03T15:00:00+02:00",
+      sourceType: "PLAYER_SELF_REPORT",
+      value: 5
+    })
+  ]
+});
+assert.equal(noRecommendations.length, 0);
 
 console.log("PLAYER360_PHASE4E2_WELLNESS_FOUNDATION_OK");
