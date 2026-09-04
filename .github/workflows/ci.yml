@@ -88,6 +88,9 @@ jobs:
       - name: Demo invited scope hotfix boundary
         run: node tests/demo-invited-scope-hotfix-sql.mjs
 
+      - name: Team membership SELECT RLS
+        run: node tests/context-identity-select-rls-v1.mjs
+
       - name: Game locking SQL
         run: node tests/game-locking-sql.mjs
 

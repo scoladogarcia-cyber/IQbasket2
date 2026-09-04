@@ -1,0 +1,115 @@
+name: Team Membership SELECT RLS V1 Controlled Apply
+
+on:
+  push:
+    branches:
+      - fix/invited-mobile-runtime-scope-v2
+    paths:
+      - ".github/workflows/context-identity-select-rls-v1-controlled-apply.yml"
+      - "supabase/ready/20260904_preflight_v3_context_identity_select_rls_v1_readonly.sql"
+      - "supabase/ready/20260904_apply_v3_context_identity_select_rls_v1.sql"
+      - "supabase/ready/20260904_verify_v3_context_identity_select_rls_v1_readonly.sql"
+      - "supabase/ready/20260904_rollback_v3_context_identity_select_rls_v1.sql"
+      - "supabase/drafts/20260904_smoke_invited_context_identity_rls_readonly.sql"
+      - "tests/context-identity-select-rls-v1.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + restore membership SELECT + verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Static policy contract
+        run: node tests/context-identity-select-rls-v1.mjs
+      - name: Read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_preflight_v3_context_identity_select_rls_v1_readonly.sql)
+          echo "$OUT"
+          PREFLIGHT=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_PREFLIGHT,' | tail -n 1)
+          HELPER=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_HELPER,' | tail -n 1)
+          test "$PREFLIGHT" = "TEAM_MEMBERSHIP_RLS_PREFLIGHT,t,t,t,t"
+          test "$HELPER" = "TEAM_MEMBERSHIP_RLS_HELPER,t,t,t"
+      - name: Capture membership row baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select count(*)::text from public.team_season_memberships;
+          " | tr -d '[:space:]')
+          echo "value=$BASE" >> "$GITHUB_OUTPUT"
+          echo "TEAM_MEMBERSHIP_BASELINE=$BASE"
+      - name: Apply team membership SELECT policy
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_v3_context_identity_select_rls_v1.sql
+      - name: Verify installed policy boundary
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_verify_v3_context_identity_select_rls_v1_readonly.sql)
+          echo "$OUT"
+          POLICY=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_POLICY,' | tail -n 1)
+          SHAPE=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_POLICY_SHAPE,' | tail -n 1)
+          test "$POLICY" = "TEAM_MEMBERSHIP_RLS_POLICY,t,t"
+          test "$SHAPE" = "TEAM_MEMBERSHIP_RLS_POLICY_SHAPE,t,t"
+      - name: INVITADO runtime RLS smoke
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260904_smoke_invited_context_identity_rls_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^INVITED_CONTEXT_RLS_RUNTIME,' | tail -n 1)
+          test "$LAST" = "INVITED_CONTEXT_RLS_RUNTIME,t,t,t"
+      - name: Confirm no membership rows changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select count(*)::text from public.team_season_memberships;
+          " | tr -d '[:space:]')
+          echo "TEAM_MEMBERSHIP_AFTER=$AFTER"
+          test "$AFTER" = "${{ steps.baseline.outputs.value }}"
+      - name: Emergency rollback membership SELECT policy
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_v3_context_identity_select_rls_v1.sql
+      - name: Confirm emergency rollback state
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          COUNT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select count(*) from pg_policies
+            where schemaname='public'
+              and tablename='team_season_memberships'
+              and policyname='v3 team memberships scoped read';
+          " | tr -d '[:space:]')
+          test "$COUNT" = "0"
