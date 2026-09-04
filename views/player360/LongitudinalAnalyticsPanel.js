@@ -70,9 +70,10 @@ function renderStructuredValue(value) {
 }
 
 export class LongitudinalAnalyticsPanel {
-  constructor({ analyticsService, orchestrator, can } = {}) {
+  constructor({ analyticsService, orchestrator, aiGatewayService, can } = {}) {
     this.analyticsService = analyticsService;
     this.orchestrator = orchestrator;
+    this.aiGatewayService = aiGatewayService;
     this.can = typeof can === "function" ? can : () => false;
 
     this.context = null;
@@ -329,14 +330,22 @@ export class LongitudinalAnalyticsPanel {
         }).join("") + '</div>'
       : '<div class="p360d-empty">Todavía no hay interpretaciones IA guardadas para este snapshot.</div>';
 
-    const generationNote = this._can(Permission.GENERATE_AI_INSIGHTS) && !PLAYER360_AI_UI_CONFIG.generationEnabled
-      ? '<div class="p360d-note">La generación externa está bloqueada deliberadamente hasta desplegar el adaptador backend seguro. No se almacenan claves de proveedor ni se realizan llamadas a modelos desde el navegador.</div>'
+    const canGenerateAi = this._can(Permission.GENERATE_AI_INSIGHTS);
+    const gatewayEnabled = Boolean(
+      PLAYER360_AI_UI_CONFIG.generationEnabled
+      && this.aiGatewayService?.isEnabled?.()
+    );
+    const generationControl = canGenerateAi
+      ? gatewayEnabled
+        ? '<div class="p360d-review-actions"><button type="button" id="p360d-generate-ai" class="p360d-primary">Generar interpretación IA</button></div>' +
+          '<div class="p360d-note">La IA recibe únicamente evidencia longitudinal autorizada y guarda siempre un borrador sujeto a revisión humana.</div>'
+        : '<div class="p360d-note">La pasarela IA está preparada pero permanece desactivada hasta validar backend, secretos y cuotas. El navegador nunca llama directamente al proveedor.</div>'
       : "";
 
     return '<div class="p360d-card">' +
       '<div class="p360d-head"><div><h3>Interpretación IA</h3>' +
       '<p>Separada de la evidencia objetiva y sometida a revisión humana.</p></div></div>' +
-      generationNote + list +
+      generationControl + list +
       '</div>';
   }
 
@@ -427,6 +436,27 @@ export class LongitudinalAnalyticsPanel {
         console.error("[LongitudinalAnalyticsPanel] Error generando snapshot:", error);
         alert("❌ " + (error.message || error));
         submit.disabled = false;
+      }
+    });
+
+    container.querySelector("#p360d-generate-ai")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      if (!this.selectedSnapshotId) return;
+      if (!confirm("¿Generar una interpretación IA? Esta acción puede consumir cuota de la licencia y el resultado se guardará como borrador.")) return;
+
+      button.disabled = true;
+      try {
+        await this.aiGatewayService.generateInsight({
+          snapshotId: this.selectedSnapshotId,
+          audience: "STAFF",
+          locale: "es"
+        });
+        await this.load(this.context);
+        await refresh();
+      } catch (error) {
+        console.error("[LongitudinalAnalyticsPanel] Error generando insight IA:", error);
+        alert("❌ " + (error.message || error));
+        button.disabled = false;
       }
     });
 
