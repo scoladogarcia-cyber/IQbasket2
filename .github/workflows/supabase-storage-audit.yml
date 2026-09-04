@@ -75,6 +75,27 @@ jobs:
             limit 80;
           "
 
+      - name: Players payload anatomy without values
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select kv.key as column_name,
+                   sum(length(kv.value))::bigint as total_text_chars,
+                   max(length(kv.value))::bigint as max_text_chars,
+                   count(*) filter (where length(kv.value) > 10000) as values_over_10k
+            from public.players p
+            cross join lateral jsonb_each_text(to_jsonb(p)) kv
+            group by kv.key
+            order by total_text_chars desc;
+          "
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select id,
+                   pg_column_size(p.*) as logical_row_bytes
+            from public.players p
+            order by logical_row_bytes desc;
+          "
+
       - name: IQBasket backup schemas
         shell: bash
         run: |
