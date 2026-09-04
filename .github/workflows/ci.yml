@@ -121,5 +121,8 @@ jobs:
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
+      - name: Shot outcome normalization regression
+        run: node tests/shot-outcome-resolver.mjs
+
       - name: Build
         run: npm run build
