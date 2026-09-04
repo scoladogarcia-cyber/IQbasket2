@@ -201,8 +201,7 @@ async function inspectShell(page) {
 async function inspectDrawer(page) {
   await page.click("#btn-mobile-more-toggle");
   await page.waitForSelector("#mobile-more-drawer", { state: "visible" });
-  await page.waitForTimeout(80);
-
+  // The drawer has a 300 ms CSS transition. Geometry must be asserted\n  // after the transition settles, otherwise the test measures an\n  // intentional intermediate translateY state as viewport overflow.\n  await page.waitForTimeout(360);\n
   return page.evaluate(() => {
     const drawer = document.querySelector("#mobile-more-drawer");
     const content = drawer?.querySelector(".mobile-drawer-content");
