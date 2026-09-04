@@ -1,0 +1,134 @@
+name: Player 360 Phase 4E.3 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feature/wellness-v2-phase4e3
+    paths:
+      - ".github/player360-phase4e3-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + rehearsal + apply + verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Phase 4E.3 SQL structure guard
+        run: node tests/player360-phase4e3-sql-structure.mjs
+
+      - name: Capture wellness baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_metric_catalog;" | tr -d '[:space:]')
+          ENTRIES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_entries;" | tr -d '[:space:]')
+          OBSERVATIONS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_observations;" | tr -d '[:space:]')
+          echo "metrics=$METRICS" >> "$GITHUB_OUTPUT"
+          echo "entries=$ENTRIES" >> "$GITHUB_OUTPUT"
+          echo "observations=$OBSERVATIONS" >> "$GITHUB_OUTPUT"
+          echo "PHASE4E3_BASELINE=$METRICS|$ENTRIES|$OBSERVATIONS"
+
+      - name: Reconfirm Phase 4E.3 preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_preflight_v4_phase4e3_wellness_v2_readonly.sql
+
+      - name: Rehearse additive rollback without persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/drafts/20260904_rehearse_v4_phase4e3_wellness_v2_rollback.sql
+
+      - name: Confirm rehearsal left baseline unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_metric_catalog;" | tr -d '[:space:]')
+          ENTRIES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_entries;" | tr -d '[:space:]')
+          OBSERVATIONS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_observations;" | tr -d '[:space:]')
+          test "$METRICS" = "${{ steps.baseline.outputs.metrics }}"
+          test "$ENTRIES" = "${{ steps.baseline.outputs.entries }}"
+          test "$OBSERVATIONS" = "${{ steps.baseline.outputs.observations }}"
+
+      - name: Apply Phase 4E.3
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_v4_phase4e3_wellness_v2.sql
+
+      - name: Verify Phase 4E.3
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_verify_v4_phase4e3_wellness_v2_readonly.sql
+
+      - name: Confirm only expected catalog row changed
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          METRICS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_metric_catalog;" | tr -d '[:space:]')
+          ENTRIES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_entries;" | tr -d '[:space:]')
+          OBSERVATIONS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_observations;" | tr -d '[:space:]')
+          EXPECTED_METRICS=$(( ${{ steps.baseline.outputs.metrics }} + 1 ))
+          echo "PHASE4E3_POST_APPLY=$METRICS|$ENTRIES|$OBSERVATIONS"
+          test "$METRICS" = "$EXPECTED_METRICS"
+          test "$ENTRIES" = "${{ steps.baseline.outputs.entries }}"
+          test "$OBSERVATIONS" = "${{ steps.baseline.outputs.observations }}"
+
+      - name: Emergency rollback Phase 4E.3 only
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_v4_phase4e3_wellness_v2.sql
+
+      - name: Verify emergency rollback preserves Phase 4E.2
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_verify_v4_phase4e3_postrollback_readonly.sql
+
+      - name: Confirm personal data unchanged after emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENTRIES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_entries;" | tr -d '[:space:]')
+          OBSERVATIONS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_wellness_observations;" | tr -d '[:space:]')
+          test "$ENTRIES" = "${{ steps.baseline.outputs.entries }}"
+          test "$OBSERVATIONS" = "${{ steps.baseline.outputs.observations }}"
