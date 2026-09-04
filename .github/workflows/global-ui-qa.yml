@@ -5,6 +5,7 @@ on:
     branches:
       - qa/global-ui-acceptance-v1
     paths:
+      - "index.js"
       - "views/**"
       - "styles/**"
       - "security/**"
@@ -19,6 +20,7 @@ on:
     branches:
       - main
     paths:
+      - "index.js"
       - "views/**"
       - "styles/**"
       - "security/**"
@@ -86,6 +88,9 @@ jobs:
 
       - name: Invited route matrix
         run: node tests/invited-route-matrix-ui-smoke.mjs
+
+      - name: Mobile shell logout and viewport modals
+        run: node tests/mobile-shell-interaction-ui-smoke.mjs
 
       - name: Contextual RBAC browser smoke
         run: node tests/phase3f-rbac-ui-smoke.mjs

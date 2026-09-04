@@ -96,85 +96,79 @@ export class LayoutView {
     LayoutView._restoreSidebarScroll();
     LayoutView._bindSidebarScrollPreservation();
 
-    setTimeout(() => {
-      LayoutView._restoreSidebarScroll();
-      
-      const btnToggle = document.getElementById("btn-mobile-more-toggle");
-      const btnClose = document.getElementById("btn-close-drawer");
-      const drawerOverlay = document.getElementById("mobile-more-drawer");
+    const btnToggle = document.getElementById("btn-mobile-more-toggle");
+    const btnClose = document.getElementById("btn-close-drawer");
+    const drawerOverlay = document.getElementById("mobile-more-drawer");
+    if (!btnToggle || !drawerOverlay) return;
 
-      if (!btnToggle || !drawerOverlay) return;
+    const setDrawerOpen = (open) => {
+      drawerOverlay.classList.toggle("open", open);
+      drawerOverlay.classList.toggle("is-visible", open);
+      drawerOverlay.setAttribute("aria-hidden", open ? "false" : "true");
+      drawerOverlay.style.display = open ? "flex" : "none";
+      btnToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      document.body.style.overflow = open ? "hidden" : "";
+    };
 
-      const closeDrawer = (e) => {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        drawerOverlay.classList.remove("open", "is-visible");
-        drawerOverlay.setAttribute("aria-hidden", "true");
-        drawerOverlay.style.display = "none";
-        document.body.style.overflow = "";
-      };
-
-      const openDrawer = (e) => {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        drawerOverlay.classList.add("open", "is-visible");
-        drawerOverlay.setAttribute("aria-hidden", "false");
-        drawerOverlay.style.display = "flex";
-        document.body.style.overflow = "hidden";
-      };
-
-      btnToggle.onclick = (e) => {
-        const isOpen = drawerOverlay.classList.contains("open") || drawerOverlay.style.display === "flex";
-        if (isOpen) {
-          closeDrawer(e);
-        } else {
-          openDrawer(e);
-        }
-      };
-
-      if (btnClose) {
-        btnClose.onclick = (e) => closeDrawer(e);
-      }
-
-      drawerOverlay.onclick = (e) => {
-        if (e.target === drawerOverlay) {
-          closeDrawer(e);
-        }
-      };
-
-      const drawerItems = drawerOverlay.querySelectorAll("a, button, .drawer-item");
-      drawerItems.forEach(item => {
-        item.onclick = (e) => {
-          if (item.classList.contains("disabled-link")) {
-            e.preventDefault();
-            alert("⚠️ Esta función no está disponible para tu rol de usuario.");
-            return;
-          }
-          closeDrawer();
-        };
+    if (btnToggle.dataset.drawerBound !== "true") {
+      btnToggle.dataset.drawerBound = "true";
+      btnToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDrawerOpen(!drawerOverlay.classList.contains("open"));
       });
+    }
 
-      document.querySelectorAll(".disabled-link").forEach(link => {
-        link.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+    if (btnClose && btnClose.dataset.drawerBound !== "true") {
+      btnClose.dataset.drawerBound = "true";
+      btnClose.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDrawerOpen(false);
+      });
+    }
+
+    if (drawerOverlay.dataset.drawerBound !== "true") {
+      drawerOverlay.dataset.drawerBound = "true";
+      drawerOverlay.addEventListener("click", (event) => {
+        if (event.target === drawerOverlay) setDrawerOpen(false);
+      });
+    }
+
+    drawerOverlay.querySelectorAll("a, button, .drawer-item").forEach((item) => {
+      if (item.dataset.drawerActionBound === "true") return;
+      item.dataset.drawerActionBound = "true";
+      item.addEventListener("click", (event) => {
+        if (item.classList.contains("disabled-link")) {
+          event.preventDefault();
+          event.stopPropagation();
           alert("⚠️ Esta función no está disponible para tu rol de usuario.");
-        };
+          return;
+        }
+        setDrawerOpen(false);
       });
+    });
 
-      document.querySelectorAll(".nav-link").forEach(link => {
-        link.addEventListener("click", () => {
-          const sidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
-          if (sidebar) {
-            sessionStorage.setItem("iq_sidebar_scroll", sidebar.scrollTop);
-          }
-        });
+    document.querySelectorAll(".disabled-link").forEach((link) => {
+      if (link.dataset.disabledBound === "true") return;
+      link.dataset.disabledBound = "true";
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        alert("⚠️ Esta función no está disponible para tu rol de usuario.");
       });
-    }, 30);
+    });
+
+    document.querySelectorAll(".nav-link").forEach((link) => {
+      if (link.dataset.scrollBound === "true") return;
+      link.dataset.scrollBound = "true";
+      link.addEventListener("click", () => {
+        const sidebar = document.querySelector(".sidebar-inner, .app-sidebar, #app-sidebar");
+        if (sidebar) sessionStorage.setItem("iq_sidebar_scroll", sidebar.scrollTop);
+      });
+    });
+
+    setDrawerOpen(false);
   }
 
   static wrap(contentHtml, activeRoute = "dashboard", userRole = "ADMIN") {
@@ -211,7 +205,6 @@ export class LayoutView {
         ? [{ id: "fallback-active-season", name: currentActiveSeason, isActive: true }]
         : []);
 
-    LayoutView.bindMobileDrawerEvents();
 
     const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
     const hasRolePermission = permission => rolePermissions.includes(permission);

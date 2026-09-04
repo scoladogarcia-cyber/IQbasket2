@@ -35,9 +35,11 @@ assert.match(
 
 assert.match(
   appSource,
-  /querySelectorAll\('\[data-session-action="logout"\]'\)/,
-  "La aplicación debe enlazar todas las superficies de cierre de sesión, no solo el botón desktop."
+  /closest\?\.\(\'\[data-session-action="logout"\]\'\)/,
+  "La aplicación debe delegar el cierre de sesión para sobrevivir a re-renders del shell."
 );
+assert.match(appSource, /signOut\(\{\s*scope:\s*"local"\s*\}\)/, "Logout debe cerrar la sesión local del dispositivo.");
+assert.match(appSource, /history\.replaceState\([^)]*#\/dashboard/, "Logout debe neutralizar la ruta anterior.");
 
 for (const key of [
   "iq_user_email",

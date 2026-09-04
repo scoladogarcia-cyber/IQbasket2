@@ -1392,13 +1392,17 @@ if (!document.getElementById("livescore-hud-custom-styles")) {
     .btn-action-shot, .btn-action-direct, .btn-opp-action { border: none; color: #ffffff; padding: 12px 6px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; min-height: 48px; display: flex; align-items: center; justify-content: center; text-align: center; }
     .hud-modal-overlay {
       position: fixed !important; inset: 0 !important; background: rgba(15, 23, 42, 0.8) !important;
-      display: flex !important; align-items: center !important; justify-content: center !important;
-      z-index: 999999 !important; padding: 16px !important; box-sizing: border-box !important;
+      display: flex !important; align-items: flex-start !important; justify-content: center !important;
+      z-index: 999999 !important; box-sizing: border-box !important; overflow-y: auto !important;
+      overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+      padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px)) !important;
     }
     .hud-modal-content {
       background: #ffffff !important; border-radius: 14px !important; padding: 20px !important;
       width: 100% !important; box-shadow: 0 10px 30px rgba(0,0,0,0.4) !important;
-      box-sizing: border-box !important; max-height: 90vh !important; overflow-y: auto !important;
+      box-sizing: border-box !important; overflow-y: auto !important; overflow-x: hidden !important;
+      max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+      margin: auto 0 !important;
     }
     .btn-clock-adj {
       background: #1e293b; color: #38bdf8; border: 1px solid #334155;
