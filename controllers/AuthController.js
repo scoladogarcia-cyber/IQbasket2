@@ -10,6 +10,7 @@ import {
   UserRole,
   UNIQUE_SUPERADMIN_EMAIL
 } from "../security/PermissionService.js";
+import { AccountStatusService } from "../services/security/AccountStatusService.js";
 
 export { UserRole, Permission, UNIQUE_SUPERADMIN_EMAIL };
 
@@ -17,6 +18,7 @@ export class AuthController extends PermissionService {
   constructor(supabaseClient = defaultSupabase) {
     super();
     this.supabase = supabaseClient?.auth ? supabaseClient : defaultSupabase;
+    this.accountStatusService = new AccountStatusService(this.supabase);
   }
 
   async _fetchProfile(email) {
@@ -47,15 +49,30 @@ export class AuthController extends PermissionService {
         return { success: false, error: error?.message || "Credenciales no válidas." };
       }
 
-      const profile = await this._fetchProfile(data.user.email);
+      const [profile, accountState] = await Promise.all([
+        this._fetchProfile(data.user.email),
+        this.accountStatusService.getCurrentState()
+      ]);
       const user = this.setCurrentUser({
         ...(profile || {}),
         id: data.user.id,
         email: data.user.email,
         role: profile?.role || data.user.user_metadata?.role || UserRole.INVITADO,
         first_name: profile?.first_name || data.user.user_metadata?.first_name || "",
-        last_name: profile?.last_name || data.user.user_metadata?.last_name || ""
+        last_name: profile?.last_name || data.user.user_metadata?.last_name || "",
+        account_status: accountState.accountStatus
       });
+
+      if (!accountState.active || !this.isAccountActive()) {
+        await this.supabase.auth.signOut({ scope: "local" });
+        this.clear();
+        return {
+          success: false,
+          error: "ACCOUNT_NOT_ACTIVE",
+          code: "ACCOUNT_NOT_ACTIVE",
+          accountStatus: accountState.accountStatus
+        };
+      }
 
       return { success: true, user };
     } catch (err) {
@@ -83,13 +100,21 @@ export class AuthController extends PermissionService {
         return { success: false, error: error?.message || "No se pudo crear la cuenta." };
       }
 
+      const accountState = await this.accountStatusService.getCurrentState();
       const user = this.setCurrentUser({
         id: data.user.id,
         email: data.user.email,
         role: UserRole.INVITADO,
         first_name: safeMetadata.first_name || "",
-        last_name: safeMetadata.last_name || ""
+        last_name: safeMetadata.last_name || "",
+        account_status: accountState.accountStatus
       });
+
+      if (!accountState.active || !this.isAccountActive()) {
+        await this.supabase.auth.signOut({ scope: "local" });
+        this.clear();
+        return { success: false, error: "ACCOUNT_NOT_ACTIVE", code: "ACCOUNT_NOT_ACTIVE", accountStatus: accountState.accountStatus };
+      }
 
       return { success: true, user };
     } catch (err) {
@@ -104,13 +129,23 @@ export class AuthController extends PermissionService {
       if (error || !data?.session?.user) return null;
 
       const authUser = data.session.user;
-      const profile = await this._fetchProfile(authUser.email);
-      return this.setCurrentUser({
+      const [profile, accountState] = await Promise.all([
+        this._fetchProfile(authUser.email),
+        this.accountStatusService.getCurrentState()
+      ]);
+      const user = this.setCurrentUser({
         ...(profile || {}),
         id: authUser.id,
         email: authUser.email,
-        role: profile?.role || authUser.user_metadata?.role || UserRole.INVITADO
+        role: profile?.role || authUser.user_metadata?.role || UserRole.INVITADO,
+        account_status: accountState.accountStatus
       });
+      if (!accountState.active || !this.isAccountActive()) {
+        await this.supabase.auth.signOut({ scope: "local" });
+        this.clear();
+        return null;
+      }
+      return user;
     } catch (err) {
       console.warn("[AuthController] No se pudo restaurar la sesión:", err);
       return null;

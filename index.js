@@ -17,8 +17,10 @@ import { DataStore } from "./services/DataStore.js";
 import { TranslationStore } from "./services/TranslationStore.js";
 import { I18n } from "./services/I18nService.js";
 import { AuthorizationContextService } from "./services/security/AuthorizationContextService.js";
+import { AccountStatusService } from "./services/security/AccountStatusService.js";
 import { PermissionService, Permission, UserRole } from "./security/PermissionService.js";
 import { ROUTE_PERMISSIONS } from "./security/permissions.js";
+import { AccountAccessError, AccountStatus, assertAccountActive } from "./security/accountStatus.js";
 import { LazyViewRegistry } from "./services/LazyViewRegistry.js";
 
 import { AuthView } from "./views/AuthView.js";
@@ -42,6 +44,7 @@ export class IQBasketApp {
     this.permissionService = new PermissionService();
     this.authController = this.permissionService;
     this.authorizationContextService = new AuthorizationContextService(supabase);
+    this.accountStatusService = new AccountStatusService(supabase);
     this._authorizationRefreshPromise = null;
 
     // Se elimina el bypass histórico { can: () => true }.
@@ -159,6 +162,7 @@ export class IQBasketApp {
 
     const normalizedUser = this.permissionService.setCurrentUser(mergedProfile);
     if (!normalizedUser) return null;
+    assertAccountActive(normalizedUser.accountStatus);
 
     this.userEmail = normalizedUser.email;
     this.userRole = normalizedUser.role;
@@ -189,11 +193,58 @@ export class IQBasketApp {
       email: authUser?.email || profileData?.email || ""
     };
 
+    // El estado de cuenta es un gate anterior al RBAC: si no puede verificarse,
+    // no se hidratan membresías ni se concede acceso por compatibilidad legacy.
+    const accountState = await this.accountStatusService.getCurrentState();
+    if (!accountState.active) throw new AccountAccessError(accountState.accountStatus);
+    baseProfile.account_status = accountState.accountStatus;
+
     try {
       return await this.authorizationContextService.enrichProfile(baseProfile);
     } catch (error) {
       console.warn("[RBAC] No se pudo cargar el contexto v3; se mantiene compatibilidad legacy:", error.message);
       return baseProfile;
+    }
+  }
+
+  _getAccountAccessMessage(error) {
+    if (error?.code === "ACCOUNT_NOT_ACTIVE") {
+      const byStatus = {
+        [AccountStatus.SUSPENDED]: ["account_suspended", "Tu cuenta está suspendida. Contacta con un administrador."],
+        [AccountStatus.PENDING_ACTIVATION]: ["account_pending_activation", "Tu cuenta está pendiente de activación."],
+        [AccountStatus.DISABLED]: ["account_disabled", "Tu cuenta está desactivada. Contacta con un administrador."]
+      };
+      const [key, fallback] = byStatus[error.accountStatus] || byStatus[AccountStatus.DISABLED];
+      return TranslationStore?.t?.(key, fallback) || fallback;
+    }
+    return TranslationStore?.t?.(
+      "account_status_unavailable",
+      "No se ha podido verificar de forma segura el estado de tu cuenta. Inténtalo de nuevo."
+    ) || "No se ha podido verificar de forma segura el estado de tu cuenta. Inténtalo de nuevo.";
+  }
+
+  _isAccountSecurityError(error) {
+    return error?.code === "ACCOUNT_NOT_ACTIVE"
+      || error?.code === "ACCOUNT_STATUS_LOOKUP_FAILED"
+      || error?.message === "ACCOUNT_STATUS_BACKEND_UNAVAILABLE";
+  }
+
+  async _closeRejectedAccountSession(error, { renderAuth = false } = {}) {
+    try {
+      if (supabase) await supabase.auth.signOut({ scope: "local" });
+    } catch (signOutError) {
+      console.warn("[ACCOUNT] No se pudo cerrar la sesión rechazada:", signOutError?.message || signOutError);
+    }
+    this._clearSessionContext();
+
+    if (renderAuth) {
+      const appContainer = document.getElementById("app");
+      if (appContainer) {
+        appContainer.innerHTML = this.views.auth.render({
+          errorMessage: this._getAccountAccessMessage(error)
+        });
+        this.bindAuthEvents();
+      }
     }
   }
 
@@ -239,6 +290,9 @@ export class IQBasketApp {
         return Boolean(normalizedUser);
       } catch (error) {
         console.warn(`[RBAC] No se pudo refrescar la autorizacion (${reason}):`, error?.message || error);
+        if (this._isAccountSecurityError(error)) {
+          await this._closeRejectedAccountSession(error, { renderAuth: true });
+        }
         return false;
       } finally {
         this._authorizationRefreshPromise = null;
@@ -270,6 +324,9 @@ export class IQBasketApp {
       return true;
     } catch (err) {
       console.warn("[RBAC] No se pudo restaurar la sesión:", err);
+      if (this._isAccountSecurityError(err)) {
+        await this._closeRejectedAccountSession(err);
+      }
       return false;
     }
   }
@@ -374,6 +431,12 @@ export class IQBasketApp {
           this.render();
         } catch (err) {
           console.error("Excepción en inicio de sesión:", err);
+          if (this._isAccountSecurityError(err)) {
+            const message = this._getAccountAccessMessage(err);
+            await this._closeRejectedAccountSession(err, { renderAuth: true });
+            alert(`⛔ ${message}`);
+            return;
+          }
           this.isAuthenticated = false;
           alert("❌ Ocurrió un error inesperado al validar las credenciales.");
           this.render();
@@ -419,12 +482,13 @@ export class IQBasketApp {
             return;
           }
 
-          const normalizedUser = this._applyAuthenticatedUser(authData.user, {
+          const registrationProfile = await this._enrichAuthenticatedProfile(authData.user, {
             email,
             first_name: firstName,
             last_name: lastName,
             role: assignedRole
           });
+          const normalizedUser = this._applyAuthenticatedUser(authData.user, registrationProfile);
           if (!normalizedUser) {
             throw new Error("No se pudo inicializar el perfil INVITADO.");
           }

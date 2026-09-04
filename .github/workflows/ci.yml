@@ -130,6 +130,18 @@ jobs:
       - name: Season head-coach history regression
         run: node tests/season-head-coach-history-regression.mjs
 
+      - name: Account status SQL security contract
+        run: node tests/account-status-sql.mjs
+
+      - name: Account status RBAC regression
+        run: node tests/account-status-rbac-regression.mjs
+
+      - name: Profile security boundary
+        run: node tests/profile-security-boundary.mjs
+
+      - name: Security perimeter hardening
+        run: node tests/security-perimeter-hardening-sql.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
