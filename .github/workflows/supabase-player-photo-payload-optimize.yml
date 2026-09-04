@@ -1,0 +1,188 @@
+name: Supabase Player Photo Payload Optimize
+
+on:
+  push:
+    branches:
+      - ops/supabase-storage-audit
+    paths:
+      - ".github/workflows/supabase-player-photo-payload-optimize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  optimize:
+    name: Atomic avatar compression + reclaim
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Install PostgreSQL 17 + Python image tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y curl ca-certificates python3-venv
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+          python3 -m venv /tmp/iq-photo-opt
+          /tmp/iq-photo-opt/bin/pip install --quiet pillow 'psycopg[binary]'
+
+      - name: Read-only baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          PSQL=/usr/lib/postgresql/17/bin/psql
+          DB_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          REL_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_total_relation_size('public.players');")
+          PLAYERS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          PHOTO_ROWS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players where photo_url like 'data:image/%;base64,%' and length(photo_url)>10000;")
+          PHOTO_CHARS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select coalesce(sum(length(photo_url)),0) from public.players where photo_url like 'data:image/%;base64,%' and length(photo_url)>10000;")
+          echo "db_bytes=$DB_BYTES" >> "$GITHUB_OUTPUT"
+          echo "rel_bytes=$REL_BYTES" >> "$GITHUB_OUTPUT"
+          echo "players=$PLAYERS" >> "$GITHUB_OUTPUT"
+          echo "photo_rows=$PHOTO_ROWS" >> "$GITHUB_OUTPUT"
+          echo "photo_chars=$PHOTO_CHARS" >> "$GITHUB_OUTPUT"
+          echo "PHOTO_BASELINE db_bytes=$DB_BYTES players_relation_bytes=$REL_BYTES players=$PLAYERS photo_rows=$PHOTO_ROWS photo_chars=$PHOTO_CHARS"
+          test "$PHOTO_ROWS" -gt 0
+          test "$PHOTO_CHARS" -gt 1000000
+
+      - name: Compress embedded avatars atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/iq-photo-opt/bin/python - <<'PY'
+          import base64
+          import hashlib
+          import io
+          import os
+          import re
+
+          import psycopg
+          from PIL import Image, ImageOps
+
+          DB_URL = os.environ["SUPABASE_DB_URL"]
+          DATA_URI = re.compile(r"^data:image/[^;]+;base64,(.+)$", re.I | re.S)
+          MAX_EDGE = 512
+          QUALITY = 82
+
+          conn = psycopg.connect(DB_URL)
+          try:
+              with conn.transaction():
+                  rows = conn.execute(
+                      """
+                      select id, photo_url
+                      from public.players
+                      where photo_url like 'data:image/%;base64,%'
+                        and length(photo_url) > 10000
+                      for update
+                      """
+                  ).fetchall()
+                  if not rows:
+                      raise RuntimeError("NO_EMBEDDED_PLAYER_PHOTOS")
+
+                  before_chars = 0
+                  after_chars = 0
+                  hashes = []
+
+                  for player_id, data_uri in rows:
+                      match = DATA_URI.match(data_uri or "")
+                      if not match:
+                          raise RuntimeError(f"INVALID_DATA_URI:{player_id}")
+
+                      original = base64.b64decode(match.group(1), validate=True)
+                      original_hash = hashlib.sha256(original).hexdigest()
+                      before_chars += len(data_uri)
+
+                      with Image.open(io.BytesIO(original)) as source:
+                          image = ImageOps.exif_transpose(source)
+                          image.thumbnail((MAX_EDGE, MAX_EDGE), Image.Resampling.LANCZOS)
+                          if image.mode not in ("RGB", "RGBA"):
+                              image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+                          out = io.BytesIO()
+                          image.save(out, format="WEBP", quality=QUALITY, method=6)
+                          encoded = base64.b64encode(out.getvalue()).decode("ascii")
+                          replacement = f"data:image/webp;base64,{encoded}"
+
+                      if len(replacement) >= len(data_uri):
+                          raise RuntimeError(f"PHOTO_NOT_REDUCED:{player_id}")
+
+                      # Validate the exact replacement before persisting it.
+                      decoded = base64.b64decode(replacement.split(",", 1)[1], validate=True)
+                      with Image.open(io.BytesIO(decoded)) as check:
+                          check.verify()
+
+                      conn.execute(
+                          "update public.players set photo_url=%s where id=%s",
+                          (replacement, player_id),
+                      )
+                      after_chars += len(replacement)
+                      hashes.append((str(player_id), original_hash[:12], len(data_uri), len(replacement)))
+
+                  if after_chars >= before_chars * 0.25:
+                      raise RuntimeError(
+                          f"PHOTO_REDUCTION_TOO_SMALL:{before_chars}->{after_chars}"
+                      )
+
+                  remaining = conn.execute(
+                      """
+                      select count(*)
+                      from public.players
+                      where photo_url like 'data:image/%;base64,%'
+                        and length(photo_url) > 500000
+                      """
+                  ).fetchone()[0]
+                  if remaining != 0:
+                      raise RuntimeError(f"OVERSIZED_PHOTOS_REMAIN:{remaining}")
+
+                  print(
+                      f"PHOTO_COMPRESSION_OK rows={len(rows)} "
+                      f"before_chars={before_chars} after_chars={after_chars} "
+                      f"reduction_pct={(1-after_chars/before_chars)*100:.1f}"
+                  )
+                  for player_id, digest, before, after in hashes:
+                      print(
+                          f"PHOTO_ROW id={player_id} source_sha256_prefix={digest} "
+                          f"before_chars={before} after_chars={after}"
+                      )
+          finally:
+              conn.close()
+          PY
+
+      - name: Reclaim obsolete TOAST pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" \
+            --set=ON_ERROR_STOP=1 \
+            --command="vacuum (full, analyze) public.players;"
+
+      - name: Verify payload and database reduction
+        shell: bash
+        run: |
+          set -euo pipefail
+          PSQL=/usr/lib/postgresql/17/bin/psql
+          PLAYERS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          PHOTO_ROWS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players where photo_url like 'data:image/webp;base64,%';")
+          PHOTO_CHARS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select coalesce(sum(length(photo_url)),0) from public.players where photo_url like 'data:image/webp;base64,%';")
+          REL_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_total_relation_size('public.players');")
+          DB_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          FREED_DB=$(( ${{ steps.baseline.outputs.db_bytes }} - DB_BYTES ))
+          FREED_REL=$(( ${{ steps.baseline.outputs.rel_bytes }} - REL_BYTES ))
+          test "$PLAYERS" = "${{ steps.baseline.outputs.players }}"
+          test "$PHOTO_ROWS" = "${{ steps.baseline.outputs.photo_rows }}"
+          test "$PHOTO_CHARS" -lt 3000000
+          test "$REL_BYTES" -lt 5000000
+          echo "PHOTO_POST_OPTIMIZE db_bytes=$DB_BYTES players_relation_bytes=$REL_BYTES photo_rows=$PHOTO_ROWS photo_chars=$PHOTO_CHARS freed_db_bytes=$FREED_DB freed_players_relation_bytes=$FREED_REL"
