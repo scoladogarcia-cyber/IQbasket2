@@ -11,7 +11,8 @@ Convertir la capa RBAC + ABAC de Player 360 en una experiencia administrable y a
 - **Scope obligatorio**: toda consulta y mutación se limita a un `team_season_id` autorizado.
 - **Separación de responsabilidades**: View → Service → RPC → tablas/RLS.
 - **Sin bypass de datos sensibles**: administrar autorizaciones no concede automáticamente acceso a datos de Nutrition/Recovery/Neuro.
-- **Auditoría**: las mutaciones siguen usando los RPC 4E existentes, que registran eventos de privacidad.
+- **Auditoría**: las mutaciones siguen usando RPC controlados que registran eventos de privacidad.
+- **Despliegue reversible**: Phase 4F se aplica con preflight, verificación y rollback específico sin desmontar la fundación 4E.
 
 ## UX V1
 
@@ -22,7 +23,7 @@ Pestañas:
 1. **Resumen**: estado de autorizaciones, grants, solicitudes y relaciones por jugador.
 2. **Autorizaciones**: base de tratamiento, módulos, finalidades, vigencia, IA y representante.
 3. **Accesos**: grants explícitos a usuarios con módulos/acciones/finalidades y vigencia.
-4. **Solicitudes**: solicitudes de acceso sensible y estado de revisión.
+4. **Solicitudes**: solicitudes de acceso sensible y estado de revisión; conceder y rechazar son acciones independientes.
 5. **Auditoría**: eventos recientes con actor, jugador, acción, decisión y motivo.
 
 ## Permisos frontend
@@ -32,21 +33,24 @@ Pestañas:
 - `REVOKE_PRIVACY_AUTHORIZATION`: revocar autorización/relación.
 - `VIEW_SENSITIVE_ACCESS_GRANTS`: consultar grants y solicitudes.
 - `GRANT_SENSITIVE_ACCESS`: conceder acceso mediante RPC controlado.
+- `REVIEW_SENSITIVE_ACCESS_REQUESTS`: revisar y rechazar una solicitud pendiente sin conceder acceso.
 - `REVOKE_SENSITIVE_ACCESS`: revocar grant.
 - `VIEW_PRIVACY_AUDIT`: consultar auditoría.
 
-La visibilidad de botones es UX; la seguridad real permanece en RPC/DB.
+La visibilidad de botones es UX; la seguridad real permanece en RPC/DB y se vuelve a validar por contexto en cada operación.
 
 ## Backend V1
 
-Se añaden únicamente RPC de lectura. No se crean nuevas tablas ni se concede `SELECT` directo a `authenticated`.
+Se añaden RPC administrativos de lectura y una mutación específica de revisión. No se crean nuevas tablas ni se concede `SELECT` directo a `authenticated`.
+
+RPC de lectura:
 
 - `iq_v4f_privacy_center_snapshot(team_season_id, player_id?)`
 - `iq_v4f_list_privacy_authorizations(team_season_id, player_id?)`
 - `iq_v4f_list_sensitive_access(team_season_id, player_id?)`
 - `iq_v4f_list_privacy_audit(team_season_id, player_id?, limit)`
 
-Cada función:
+Cada función de lectura:
 
 1. exige sesión autenticada;
 2. exige `iq_v4e_can_admin_privacy(team_season_id)`;
@@ -65,8 +69,27 @@ Se reutilizan los RPC 4E existentes:
 - `iq_v4e_revoke_processing_authorization`
 - `iq_v4e_grant_sensitive_access`
 - `iq_v4e_revoke_sensitive_access_grant`
+- `iq_v4e_request_sensitive_access`
 
-Las solicitudes del staff continúan usando `iq_v4e_request_sensitive_access`; el Centro V1 las visualiza y permite convertirlas en grant sólo mediante el RPC existente y sus reglas.
+Phase 4F añade `iq_v4f_reject_sensitive_access_request(request_id, reason)` para cerrar explícitamente una solicitud pendiente sin conceder acceso. El RPC bloquea la fila durante la revisión, vuelve a validar `iq_v4e_can_admin_privacy(team_season_id)`, exige motivo y registra la decisión `DENY` en la auditoría.
+
+Conceder y rechazar no comparten permiso de interfaz: `GRANT_SENSITIVE_ACCESS` y `REVIEW_SENSITIVE_ACCESS_REQUESTS` permiten aplicar mínimo privilegio y evolucionar después hacia revisores especializados.
+
+## Despliegue controlado Phase 4F
+
+El despliegue de base de datos se realiza mediante `.github/workflows/privacy-center-phase4f-controlled-apply.yml` y sólo después de superar los gates de aplicación.
+
+Secuencia:
+
+1. guard estructural estático;
+2. captura de baseline de las cinco tablas de gobierno 4E;
+3. preflight read-only;
+4. aplicación de los RPC de lectura;
+5. aplicación del RPC de revisión/rechazo;
+6. verificación de presencia, ACL y aislamiento;
+7. comprobación de que los conteos de datos de gobierno no han cambiado.
+
+Ante un fallo posterior al inicio del apply, el workflow revierte únicamente Phase 4F, ejecuta `20260904_verify_v4_phase4f_postrollback_readonly.sql` y comprueba que la fundación Phase 4E y sus datos permanecen intactos.
 
 ## Evolución
 
