@@ -75,6 +75,36 @@ export const PLAYER360_AI_OUTPUT_JSON_SCHEMA = Object.freeze({
   }
 });
 
+const PROVIDER_EVIDENCE_FIELDS = Object.freeze(new Set([
+  "fact_type",
+  "evidence_type",
+  "metric_key",
+  "left_metric_key",
+  "right_metric_key",
+  "unit",
+  "aggregation",
+  "sample_size",
+  "direction",
+  "slope_per_week",
+  "first_value",
+  "last_value",
+  "absolute_change",
+  "relative_change_pct",
+  "coverage_pct",
+  "lag_buckets",
+  "coefficient",
+  "strength",
+  "causal_claim_allowed",
+  "status",
+  "series_total",
+  "series_with_data",
+  "observed_buckets",
+  "minimum_buckets",
+  "observed_pairs",
+  "minimum_pairs",
+  "reason"
+]));
+
 function normalizeModule(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -153,6 +183,53 @@ export function assertEvidenceAllowedForAi(evidenceBundle = {}) {
   }
 
   return { modules, bytes };
+}
+
+function cleanProviderRecord(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (!PROVIDER_EVIDENCE_FIELDS.has(key)) continue;
+    if (
+      item === null
+      || typeof item === "string"
+      || typeof item === "number"
+      || typeof item === "boolean"
+    ) {
+      output[key] = item;
+    }
+  }
+  return Object.keys(output).length ? output : null;
+}
+
+/**
+ * Construye el único payload de evidencia que puede abandonar IQBasket.
+ * Identificadores internos, procedencia, timestamps y cualquier campo futuro no
+ * expresamente permitido se eliminan por allowlist antes de invocar proveedor.
+ * @param {Record<string, any>} evidenceBundle
+ * @returns {Record<string, any>}
+ */
+export function sanitizeEvidenceForAiProvider(evidenceBundle = {}) {
+  assertEvidenceAllowedForAi(evidenceBundle);
+
+  const facts = (Array.isArray(evidenceBundle.facts) ? evidenceBundle.facts : [])
+    .map(cleanProviderRecord)
+    .filter(Boolean);
+  const missingData = (Array.isArray(evidenceBundle.missing_data) ? evidenceBundle.missing_data : [])
+    .map(cleanProviderRecord)
+    .filter(Boolean);
+  const limitations = (Array.isArray(evidenceBundle.limitations) ? evidenceBundle.limitations : [])
+    .map(item => String(item ?? "").trim().slice(0, 500))
+    .filter(Boolean)
+    .slice(0, PLAYER360_AI_GATEWAY_CONFIG.maxListItems);
+
+  return {
+    evidence_version: evidenceBundle.evidence_version,
+    calculation_version: String(evidenceBundle.calculation_version || "").slice(0, 160),
+    facts,
+    missing_data: missingData,
+    limitations
+  };
 }
 
 function cleanString(value, maxLength) {
