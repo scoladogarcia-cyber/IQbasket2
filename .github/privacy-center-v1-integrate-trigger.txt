@@ -1,1 +1,0 @@
-Apply deterministic Privacy Center V1 routing/navigation/i18n integration after standalone UI/service foundation.
