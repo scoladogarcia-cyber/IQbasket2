@@ -11,6 +11,8 @@ import { Player360AiGatewayService } from "../services/player360/Player360AiGate
 
 const edgeSource = fs.readFileSync("supabase/functions/player360-ai-insight/index.ts", "utf8");
 const clientSource = fs.readFileSync("services/player360/Player360AiGatewayService.js", "utf8");
+const player360ViewSource = fs.readFileSync("views/Player360View.js", "utf8");
+const panelSource = fs.readFileSync("views/player360/LongitudinalAnalyticsPanel.js", "utf8");
 
 assert.equal(PLAYER360_AI_GATEWAY_CONFIG.generationEnabled, false, "deployment gate must remain closed by default");
 assert.deepEqual(PLAYER360_AI_GATEWAY_CONFIG.allowedAudiences, ["STAFF"]);
@@ -141,5 +143,17 @@ assert.match(edgeSource, /AI_PROVIDER_ENDPOINT_NOT_ALLOWED/);
 assert.match(edgeSource, /AI_PROVIDER_OUTPUT_INCOMPLETE/);
 assert.match(edgeSource, /AI_PROVIDER_REFUSED/);
 assert.match(edgeSource, /type\s*===\s*"refusal"/);
+
+// UI integration: Player360 owns the gateway dependency, the panel checks the
+// granular generate permission, and the button can exist only behind the
+// double deployment gate. The feature remains incapable of paid calls in Gate A.
+assert.match(player360ViewSource, /new Player360AiGatewayService\(this\.supabase\)/);
+assert.match(player360ViewSource, /aiGatewayService:\s*this\.aiGatewayService/);
+assert.match(panelSource, /Permission\.GENERATE_AI_INSIGHTS/);
+assert.match(panelSource, /PLAYER360_AI_UI_CONFIG\.generationEnabled[\s\S]*aiGatewayService\?\.isEnabled/);
+assert.match(panelSource, /id="p360d-generate-ai"/);
+assert.match(panelSource, /aiGatewayService\.generateInsight\(\{/);
+assert.match(panelSource, /audience:\s*"STAFF"/);
+assert.doesNotMatch(panelSource, /api\.openai\.com|IQB_AI_API_KEY|Authorization:\s*`Bearer/i);
 
 console.log("Player 360 AI gateway contract: OK");
