@@ -57,7 +57,7 @@ jobs:
         run: node tests/player360-phase4d-orchestrator-smoke.mjs
 
       - name: Existing privacy ABAC regression
-        run: node tests/player360-phase4e-privacy-smoke.mjs
+        run: node tests/player360-phase4e-privacy-abac-smoke.mjs
 
       - name: Build
         run: npm run build
