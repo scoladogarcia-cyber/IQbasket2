@@ -83,6 +83,18 @@ export const PLAYER360_WELLNESS_DEFAULT_METRICS = Object.freeze([
     sort_order: 50
   }),
   metric({
+    module: "recovery",
+    code: "DAILY_ENERGY",
+    name: "Energía percibida",
+    description: "Nivel subjetivo de energía disponible para la actividad diaria o deportiva.",
+    value_type: WELLNESS_VALUE_TYPE.SCALE,
+    unit: "SCALE_1_5",
+    min_value: 1,
+    max_value: 5,
+    step: 1,
+    sort_order: 60
+  }),
+  metric({
     module: "nutrition",
     code: "HYDRATION_ADHERENCE",
     name: "Hidratación percibida",
@@ -186,6 +198,16 @@ export const WELLNESS_RECOMMENDATION_RULES = Object.freeze([
     message: "La preparación percibida es baja. Antes de la sesión, revisa objetivos y carga para mantener una ejecución de calidad."
   }),
   Object.freeze({
+    module: "recovery",
+    metric_code: "DAILY_ENERGY",
+    trigger: "LTE",
+    threshold: 2,
+    priority: WELLNESS_RECOMMENDATION_PRIORITY.SUPPORT,
+    code: "SUPPORT_DAILY_ENERGY",
+    title: "Protege la energía del día",
+    message: "La energía percibida es baja. Prioriza una preparación sencilla, descanso suficiente y una carga acorde con el objetivo de la sesión."
+  }),
+  Object.freeze({
     module: "nutrition",
     metric_code: "HYDRATION_ADHERENCE",
     trigger: "LTE",
@@ -228,13 +250,14 @@ export const WELLNESS_RECOMMENDATION_RULES = Object.freeze([
 ]);
 
 export const PLAYER360_WELLNESS_CONFIG = Object.freeze({
-  contractVersion: "PLAYER360_WELLNESS_V1",
+  contractVersion: "PLAYER360_WELLNESS_V2",
   supportedModules: Object.freeze(["nutrition", "recovery"]),
   supportedValueTypes: Object.freeze(Object.values(WELLNESS_VALUE_TYPE)),
   allowFreeTextValue: false,
   manualInputEnabled: true,
   externalImportEnabled: false,
   recommendationsEnabled: true,
+  trendWindowsDays: Object.freeze([7, 28]),
   aiProcessingEnabled: false,
   defaultMetrics: PLAYER360_WELLNESS_DEFAULT_METRICS,
   recommendationRules: WELLNESS_RECOMMENDATION_RULES

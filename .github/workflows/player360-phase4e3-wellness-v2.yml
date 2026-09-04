@@ -1,0 +1,89 @@
+name: Player 360 Phase 4E.3 Wellness V2
+
+on:
+  push:
+    branches:
+      - feature/wellness-v2-phase4e3
+    paths:
+      - "config/player360-wellness.config.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "domain/player360/WellnessTrendEngine.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "tests/browser-test-support.mjs"
+      - "tests/player360-phase4e3-*.mjs"
+      - "supabase/ready/20260904_*phase4e3*"
+      - "supabase/drafts/20260904_*phase4e3*"
+      - ".github/workflows/player360-phase4e3-wellness-v2.yml"
+  pull_request:
+    paths:
+      - "config/player360-wellness.config.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "domain/player360/WellnessTrendEngine.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "tests/browser-test-support.mjs"
+      - "tests/player360-phase4e3-*.mjs"
+      - "supabase/ready/20260904_*phase4e3*"
+      - "supabase/drafts/20260904_*phase4e3*"
+      - ".github/workflows/player360-phase4e3-wellness-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  wellness-v2:
+    name: Wellness V2 domain + SQL + desktop/iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: V2 deterministic trends
+        run: node tests/player360-phase4e3-wellness-trends.mjs
+
+      - name: V2 SQL guard
+        run: node tests/player360-phase4e3-sql-structure.mjs
+
+      - name: Existing wellness foundation regression
+        run: node tests/player360-phase4e2-wellness-foundation.mjs
+
+      - name: Existing wellness service route regression
+        run: node tests/player360-phase4e2-service-route.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/player360-phase4e3-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/player360-phase4e3-vite.log
+          exit 1
+
+      - name: V2 desktop + iPhone trend smoke
+        env:
+          PLAYER360_BASE_URL: http://127.0.0.1:4173/
+        run: node tests/player360-phase4e3-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/player360-phase4e3-vite.log || true

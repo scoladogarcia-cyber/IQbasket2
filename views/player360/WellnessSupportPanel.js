@@ -3,10 +3,15 @@
  *
  * Manual check-ins only. No external imports, AI processing or clinical fields.
  * Every personal read/write is delegated to WellnessService -> backend ABAC.
+ * Trend summaries are derived locally only after an authorized read succeeds.
  */
 
 import { Permission } from "../../security/PermissionService.js";
 import { WellnessRecommendationEngine } from "../../domain/player360/WellnessRecommendationEngine.js";
+import {
+  WellnessTrendEngine,
+  WELLNESS_TREND_DIRECTION
+} from "../../domain/player360/WellnessTrendEngine.js";
 
 const MODULES = Object.freeze({
   nutrition: Object.freeze({
@@ -23,6 +28,13 @@ const MODULES = Object.freeze({
   })
 });
 
+const TREND_LABELS = Object.freeze({
+  [WELLNESS_TREND_DIRECTION.UP]: "↑ Sube",
+  [WELLNESS_TREND_DIRECTION.DOWN]: "↓ Baja",
+  [WELLNESS_TREND_DIRECTION.STABLE]: "→ Estable",
+  [WELLNESS_TREND_DIRECTION.INSUFFICIENT]: "Datos insuficientes"
+});
+
 function escapeHtml(value = "") {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -34,6 +46,10 @@ function escapeHtml(value = "") {
 
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function normalizeCode(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
 function localIsoDate() {
@@ -52,6 +68,20 @@ function displayValue(observation = {}) {
   return observation.unit === "HOURS"
     ? `${Number(value).toLocaleString(undefined,{ maximumFractionDigits: 2 })} h`
     : String(value);
+}
+
+function displayTrendValue(summary = {}, value, { aggregate = false } = {}) {
+  if (value === null || value === undefined || value === "") return "—";
+
+  if (summary.value_type === "BOOLEAN") {
+    if (!aggregate) return value ? "Sí" : "No";
+    return `${Math.round(Number(value) * 100)}%`;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
+  const formatted = numeric.toLocaleString(undefined,{ maximumFractionDigits: 2 });
+  return summary.unit === "HOURS" ? `${formatted} h` : formatted;
 }
 
 function sortEntries(rows) {
@@ -177,14 +207,23 @@ export class WellnessSupportPanel {
   _existingValues(entry) {
     return new Map(
       normalizeArray(entry?.observations).map(item => [
-        String(item.metric_code || "").toUpperCase(),
+        normalizeCode(item.metric_code),
         item.value
       ])
     );
   }
 
+  _metricMap(module = this.activeModule) {
+    return new Map(
+      normalizeArray(this.data[module]?.metrics).map(metric => [
+        normalizeCode(metric.code),
+        metric
+      ])
+    );
+  }
+
   _renderMetricInput(metric, existingValue) {
-    const code=String(metric.code || "").toUpperCase();
+    const code=normalizeCode(metric.code);
     const id=`p360w-${this.activeModule}-${code}`;
     const common=`class="p360w-input" data-metric-code="${escapeHtml(code)}" data-value-type="${escapeHtml(metric.value_type)}"`;
     const current=existingValue ?? "";
@@ -294,7 +333,7 @@ export class WellnessSupportPanel {
               <label class="p360w-metric">
                 <span class="p360w-metric-name">${escapeHtml(metric.name)}</span>
                 <small>${escapeHtml(metric.description || "")}</small>
-                ${this._renderMetricInput(metric,existing.get(String(metric.code).toUpperCase()))}
+                ${this._renderMetricInput(metric,existing.get(normalizeCode(metric.code)))}
               </label>
             `).join("")}
           </div>
@@ -357,12 +396,72 @@ export class WellnessSupportPanel {
     `;
   }
 
+  _renderTrends() {
+    const data=this.data[this.activeModule] || {};
+    if (!data.entries?.length) return "";
+
+    const analysis=WellnessTrendEngine.analyze({
+      entries:data.entries,
+      metrics:data.metrics,
+      shortWindowDays:7,
+      longWindowDays:28
+    });
+    if (!analysis.metrics.length) return "";
+
+    return `
+      <section class="p360w-trend-section" aria-label="Tendencias descriptivas de los check-ins">
+        <div class="p360w-trend-head">
+          <div>
+            <h3>Tendencia 7 / 28 días</h3>
+            <p>
+              Resumen descriptivo anclado al último check-in (${escapeHtml(analysis.anchorDate || "—")}).
+              La flecha indica cambio, no si el cambio es bueno o malo.
+            </p>
+          </div>
+          <span class="p360w-badge">Descriptivo</span>
+        </div>
+        <div class="p360w-trends">
+          ${analysis.metrics.map(summary => `
+            <article class="p360w-trend">
+              <div class="p360w-trend-title">
+                <strong>${escapeHtml(summary.name)}</strong>
+                <span class="p360w-trend-direction p360w-trend-${escapeHtml(String(summary.direction).toLowerCase())}">
+                  ${escapeHtml(TREND_LABELS[summary.direction] || "Datos insuficientes")}
+                </span>
+              </div>
+              <div class="p360w-trend-stats">
+                <span>
+                  <small>Último</small>
+                  <b>${escapeHtml(displayTrendValue(summary,summary.latest_value))}</b>
+                </span>
+                <span>
+                  <small>7 días</small>
+                  <b>${escapeHtml(displayTrendValue(summary,summary.short_value,{ aggregate:true }))}</b>
+                  <em>n=${summary.short_samples}</em>
+                </span>
+                <span>
+                  <small>28 días</small>
+                  <b>${escapeHtml(displayTrendValue(summary,summary.long_value,{ aggregate:true }))}</b>
+                  <em>n=${summary.long_samples}</em>
+                </span>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+        <p class="p360w-trend-disclaimer">
+          No es un diagnóstico ni una relación causal con el rendimiento. Sirve para observar consistencia y preparar conversaciones con jugador, familia o staff según permisos.
+        </p>
+      </section>
+    `;
+  }
+
   _renderHistory() {
     const module=this.activeModule;
     const data=this.data[module] || {};
     const access=data.access || {};
     const canEdit=this._baseCanEdit(module) && access.can_update;
     const canArchive=this._baseCanEdit(module) && access.can_archive;
+    const metricMap=this._metricMap(module);
 
     if (!data.entries.length) {
       return '<div class="p360w-empty">Todavía no hay check-ins registrados.</div>';
@@ -385,12 +484,16 @@ export class WellnessSupportPanel {
               ` : ""}
             </div>
             <div class="p360w-values">
-              ${normalizeArray(entry.observations).map(observation => `
-                <span>
-                  <b>${escapeHtml(observation.metric_code.replaceAll("_"," "))}</b>
-                  ${escapeHtml(displayValue(observation))}
-                </span>
-              `).join("")}
+              ${normalizeArray(entry.observations).map(observation => {
+                const code=normalizeCode(observation.metric_code);
+                const metric=metricMap.get(code);
+                return `
+                  <span>
+                    <b>${escapeHtml(metric?.name || code.replaceAll("_"," "))}</b>
+                    ${escapeHtml(displayValue(observation))}
+                  </span>
+                `;
+              }).join("")}
             </div>
           </article>
         `).join("")}
@@ -427,15 +530,24 @@ export class WellnessSupportPanel {
         .p360w-link{border:0;background:transparent;color:#0f766e;font-weight:800;cursor:pointer;padding:6px}
         .p360w-values{display:flex;flex-wrap:wrap;gap:7px}.p360w-values span{display:inline-flex;gap:6px;align-items:center;border-radius:999px;background:#f1f5f9;padding:5px 8px;font-size:10px;color:#475569}
         .p360w-values b{font-size:9px;color:#0f172a}
+        .p360w-trend-section{display:grid;gap:10px;margin:12px 0 16px;padding:13px;border:1px solid #ccfbf1;background:#f0fdfa;border-radius:12px}
+        .p360w-trend-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.p360w-trend-head h3{margin:0;font-size:14px}.p360w-trend-head p{margin:4px 0 0;color:#475569;font-size:11px;line-height:1.45}
+        .p360w-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.p360w-trend{display:grid;gap:9px;border:1px solid #d1fae5;background:#fff;border-radius:10px;padding:10px;min-width:0}
+        .p360w-trend-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.p360w-trend-title strong{font-size:12px;line-height:1.35}
+        .p360w-trend-direction{font-size:9px;font-weight:900;white-space:nowrap;color:#475569}.p360w-trend-up{color:#0369a1}.p360w-trend-down{color:#7c3aed}.p360w-trend-stable{color:#047857}.p360w-trend-insufficient{color:#64748b}
+        .p360w-trend-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.p360w-trend-stats span{display:grid;gap:1px;background:#f8fafc;border-radius:8px;padding:7px;min-width:0}
+        .p360w-trend-stats small{font-size:9px;color:#64748b;font-weight:800}.p360w-trend-stats b{font-size:13px;color:#0f172a}.p360w-trend-stats em{font-style:normal;font-size:8px;color:#94a3b8}
+        .p360w-trend-disclaimer{margin:0;color:#64748b;font-size:10px;line-height:1.45}
         .p360w-recommendations{display:grid;gap:8px}.p360w-recommendation{display:flex;justify-content:space-between;gap:10px;border:1px solid #d1fae5;border-radius:11px;padding:11px;background:#f0fdf4}
         .p360w-recommendation strong{font-size:13px}.p360w-recommendation p{margin:4px 0 0;font-size:12px;line-height:1.5;color:#475569}
         .p360w-recommendation>span{font-size:10px;font-weight:900;text-transform:uppercase;color:#047857;white-space:nowrap}
         .p360w-priority-review{background:#fffbeb;border-color:#fde68a}.p360w-priority-review>span{color:#b45309}
         @media(max-width:640px){
-          .p360w-head,.p360w-history-top,.p360w-recommendation{display:grid}
-          .p360w-metrics{grid-template-columns:1fr}.p360w-date{max-width:none}
+          .p360w-head,.p360w-history-top,.p360w-recommendation,.p360w-trend-head{display:grid}
+          .p360w-metrics,.p360w-trends{grid-template-columns:1fr}.p360w-date{max-width:none}
           .p360w-actions{display:grid}.p360w-actions button{width:100%}
           .p360w-toolbar .p360w-primary{width:100%}.p360w-inline-actions{justify-content:flex-start}
+          .p360w-trend-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
         }
       </style>
     `;
@@ -489,6 +601,7 @@ export class WellnessSupportPanel {
                 <button type="button" class="p360w-primary" id="p360w-new">＋ Añadir check-in</button>
               </div>
             ` : ""}
+            ${this._renderTrends()}
             ${this._renderHistory()}
           </article>
 
