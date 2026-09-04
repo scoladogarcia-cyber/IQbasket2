@@ -1,15 +1,6 @@
 name: Player 360 AI Edge Controlled Deploy
 
 on:
-  push:
-    branches:
-      - feature/player360-ai-edge-deploy-v1
-    paths:
-      - ".github/workflows/player360-ai-edge-deploy-controlled.yml"
-      - "supabase/functions/player360-ai-insight/**"
-      - "config/player360-ai-gateway.config.js"
-      - "config/env.js"
-      - "tests/player360-ai-edge-deploy-contract.mjs"
   workflow_dispatch:
 
 permissions:

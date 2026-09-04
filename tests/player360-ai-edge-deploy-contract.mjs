@@ -19,6 +19,8 @@ assert.match(edge, /!environmentGenerationEnabled \|\| !configurationGenerationE
 assert.ok(providerIndex > gateIndex, "provider config must be after server gate");
 assert.ok(reserveIndex > providerIndex, "quota reservation must be after provider validation");
 
+assert.match(workflow, /workflow_dispatch:/);
+assert.doesNotMatch(workflow, /\bpush:/);
 assert.match(workflow, /SUPABASE_ACCESS_TOKEN:\s*\$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
 assert.match(workflow, /IQB_AI_GENERATION_ENABLED=false/);
 assert.match(workflow, /functions deploy player360-ai-insight/);
