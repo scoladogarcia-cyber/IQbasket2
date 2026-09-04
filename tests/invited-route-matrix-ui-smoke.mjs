@@ -42,15 +42,34 @@ async function installFixture(page) {
 
     app.isAuthenticated = true;
     app.teamId = TEAM_ID;
+    // Simula una sesion abierta antes de conceder el alcance Demo.
     app.permissionService.setCurrentUser({
       id: "guest-user",
       email: "test@test.com",
       role: "INVITADO",
       global_role: "INVITADO",
-      assigned_team_ids: [TEAM_ID],
-      allowed_team_season_ids: [TEAM_SEASON_ID],
       contextualMemberships: []
     });
+
+    let refreshCalls = 0;
+    app.refreshAuthenticatedAuthorizationContext = async () => {
+      refreshCalls += 1;
+      app.permissionService.setCurrentUser({
+        id: "guest-user",
+        email: "test@test.com",
+        role: "INVITADO",
+        global_role: "INVITADO",
+        allowedTeamIds: [TEAM_ID],
+        allowedTeamSeasonIds: [TEAM_SEASON_ID],
+        contextualMemberships: [{
+          teamId: TEAM_ID,
+          teamSeasonId: TEAM_SEASON_ID,
+          role: "INVITADO",
+          status: "ACTIVE"
+        }]
+      });
+      return true;
+    };
 
     DataStore.getActiveTeamId = () => TEAM_ID;
     DataStore.getActiveTeamSeasonId = () => TEAM_SEASON_ID;
@@ -81,7 +100,7 @@ async function installFixture(page) {
     const routeResults = [];
     for (const routePath of READ_ROUTES) {
       history.replaceState(null, "", "#/" + routePath);
-      app.parseHashRoute();
+      await app.parseHashRoute();
       const expectedRoute = routePath.split("/")[0];
       routeResults.push({
         routePath,
@@ -118,6 +137,8 @@ async function installFixture(page) {
       desktopLinks,
       mobileLinks,
       alerts,
+      refreshCalls,
+      effectiveRole: app.permissionService.getEffectiveRole({ teamId: TEAM_ID, teamSeasonId: TEAM_SEASON_ID }),
       playerId: PLAYER_ID
     };
   }, { TEAM_ID, TEAM_SEASON_ID, PLAYER_ID, READ_ROUTES });
@@ -160,6 +181,9 @@ async function runViewport(browser, viewportName, viewport) {
     assertCondition(!link.disabled, viewportName, "Ruta móvil bloqueada para INVITADO: " + key);
     assertCondition(link.href.startsWith("#/"), viewportName, "Ruta móvil inválida para INVITADO: " + key);
   }
+
+  assertCondition(matrix.refreshCalls >= 1, viewportName, "No se refresco el alcance obsoleto antes de denegar");
+  assertCondition(matrix.effectiveRole === "INVITADO", viewportName, "La membresia Demo elevo el rol funcional");
 
   assertCondition(
     matrix.alerts.length === 0,

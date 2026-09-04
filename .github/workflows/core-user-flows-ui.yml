@@ -8,6 +8,7 @@ on:
       - fix/invited-wellness-shell-v1
       - qa/invited-route-matrix-v1
     paths:
+      - "index.js"
       - "views/TrainingView.js"
       - "views/GameBoxScoreView.js"
       - "views/NutritionView.js"
@@ -27,6 +28,7 @@ on:
     branches:
       - main
     paths:
+      - "index.js"
       - "views/TrainingView.js"
       - "views/GameBoxScoreView.js"
       - "views/NutritionView.js"
@@ -39,6 +41,7 @@ on:
       - "tests/player360-phase4b-ui-smoke.mjs"
       - "tests/boxscore-edit-ui-smoke.mjs"
       - "tests/nutrition-route-ui-smoke.mjs"
+      - "tests/invited-route-matrix-ui-smoke.mjs"
       - "tests/browser-test-support.mjs"
       - ".github/workflows/core-user-flows-ui.yml"
   workflow_dispatch:
