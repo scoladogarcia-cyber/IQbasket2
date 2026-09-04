@@ -1,0 +1,136 @@
+name: AI Gateway UI Integrate
+
+on:
+  push:
+    branches:
+      - feature/player360-ai-gateway-v1
+    paths:
+      - ".github/workflows/ai-gateway-ui-integrate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/player360-ai-gateway-v1
+
+      - name: Integrate gateway service into Player 360 UI
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const viewPath = 'views/Player360View.js';
+          let view = fs.readFileSync(viewPath, 'utf8');
+          const serviceImportAnchor = 'import { LongitudinalAnalyticsService } from "../services/player360/LongitudinalAnalyticsService.js";';
+          const gatewayImport = 'import { Player360AiGatewayService } from "../services/player360/Player360AiGatewayService.js";';
+          if (!view.includes(gatewayImport)) {
+            if (!view.includes(serviceImportAnchor)) throw new Error('Player360View import anchor not found');
+            view = view.replace(serviceImportAnchor, `${serviceImportAnchor}\n${gatewayImport}`);
+          }
+
+          const analyticsCtorAnchor = '    this.analyticsService = new LongitudinalAnalyticsService(this.supabase);';
+          const gatewayCtor = '    this.aiGatewayService = new Player360AiGatewayService(this.supabase);';
+          if (!view.includes(gatewayCtor)) {
+            if (!view.includes(analyticsCtorAnchor)) throw new Error('Player360View service constructor anchor not found');
+            view = view.replace(analyticsCtorAnchor, `${analyticsCtorAnchor}\n${gatewayCtor}`);
+          }
+
+          const panelOld = `    this.analyticsPanel = new LongitudinalAnalyticsPanel({
+              analyticsService: this.analyticsService,
+              orchestrator: this.analyticsOrchestrator,
+              can: permission => this._can(permission)
+            });`;
+          const panelNew = `    this.analyticsPanel = new LongitudinalAnalyticsPanel({
+              analyticsService: this.analyticsService,
+              orchestrator: this.analyticsOrchestrator,
+              aiGatewayService: this.aiGatewayService,
+              can: permission => this._can(permission)
+            });`;
+          if (!view.includes(panelNew)) {
+            if (!view.includes(panelOld)) throw new Error('Player360View panel constructor anchor not found');
+            view = view.replace(panelOld, panelNew);
+          }
+          fs.writeFileSync(viewPath, view);
+
+          const panelPath = 'views/player360/LongitudinalAnalyticsPanel.js';
+          let panel = fs.readFileSync(panelPath, 'utf8');
+          const ctorOld = `  constructor({ analyticsService, orchestrator, can } = {}) {
+              this.analyticsService = analyticsService;
+              this.orchestrator = orchestrator;
+              this.can = typeof can === "function" ? can : () => false;`;
+          const ctorNew = `  constructor({ analyticsService, orchestrator, aiGatewayService, can } = {}) {
+              this.analyticsService = analyticsService;
+              this.orchestrator = orchestrator;
+              this.aiGatewayService = aiGatewayService;
+              this.can = typeof can === "function" ? can : () => false;`;
+          if (!panel.includes(ctorNew)) {
+            if (!panel.includes(ctorOld)) throw new Error('LongitudinalAnalyticsPanel constructor anchor not found');
+            panel = panel.replace(ctorOld, ctorNew);
+          }
+
+          const noteOld = `    const generationNote = this._can(Permission.GENERATE_AI_INSIGHTS) && !PLAYER360_AI_UI_CONFIG.generationEnabled
+              ? '<div class="p360d-note">La generación externa está bloqueada deliberadamente hasta desplegar el adaptador backend seguro. No se almacenan claves de proveedor ni se realizan llamadas a modelos desde el navegador.</div>'
+              : "";`;
+          const noteNew = `    const canGenerateAi = this._can(Permission.GENERATE_AI_INSIGHTS);
+              const gatewayEnabled = Boolean(
+                PLAYER360_AI_UI_CONFIG.generationEnabled
+                && this.aiGatewayService?.isEnabled?.()
+              );
+              const generationControl = canGenerateAi
+                ? gatewayEnabled
+                  ? '<div class="p360d-review-actions"><button type="button" id="p360d-generate-ai" class="p360d-primary">Generar interpretación IA</button></div>' +
+                    '<div class="p360d-note">La IA recibe únicamente la evidencia longitudinal autorizada y guarda siempre un borrador sujeto a revisión humana.</div>'
+                  : '<div class="p360d-note">La pasarela IA está preparada pero permanece desactivada hasta validar su despliegue backend, secretos y cuotas. El navegador nunca llama directamente al proveedor.</div>'
+                : "";`;
+          if (!panel.includes(noteNew)) {
+            if (!panel.includes(noteOld)) throw new Error('LongitudinalAnalyticsPanel generation note anchor not found');
+            panel = panel.replace(noteOld, noteNew);
+          }
+          panel = panel.replace('      generationNote + list +', '      generationControl + list +');
+
+          const bindAnchor = `    container.querySelectorAll(".p360d-review-insight").forEach(button => {`;
+          const bindBlock = `    container.querySelector("#p360d-generate-ai")?.addEventListener("click", async event => {
+              const button = event.currentTarget;
+              if (!this.selectedSnapshotId) return;
+              if (!confirm("¿Generar una interpretación IA? Esta acción puede consumir cuota de la licencia y el resultado se guardará como borrador.")) return;
+
+              button.disabled = true;
+              try {
+                await this.aiGatewayService.generateInsight({
+                  snapshotId: this.selectedSnapshotId,
+                  audience: "STAFF",
+                  locale: "es"
+                });
+                await this.load(this.context);
+                await refresh();
+              } catch (error) {
+                console.error("[LongitudinalAnalyticsPanel] Error generando insight IA:", error);
+                alert("❌ " + (error.message || error));
+                button.disabled = false;
+              }
+            });
+
+`;
+          if (!panel.includes('querySelector("#p360d-generate-ai")')) {
+            if (!panel.includes(bindAnchor)) throw new Error('LongitudinalAnalyticsPanel bind anchor not found');
+            panel = panel.replace(bindAnchor, bindBlock + bindAnchor);
+          }
+          fs.writeFileSync(panelPath, panel);
+          NODE
+
+      - name: Commit integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add views/Player360View.js views/player360/LongitudinalAnalyticsPanel.js
+          git commit -m "feat(ai): prepare gated Player360 AI generation UI"
+          git push origin HEAD:feature/player360-ai-gateway-v1
