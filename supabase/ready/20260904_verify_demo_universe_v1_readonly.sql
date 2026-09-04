@@ -43,8 +43,8 @@ begin
   end if;
 
   if (select count(*) from public.training_sessions where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid) <> 24
-     or (select count(*) from public.training_session_blocks b join public.training_sessions s on s.id=b.session_id where s.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid) <> 72
-     or (select count(*) from public.training_participants p join public.training_sessions s on s.id=p.session_id where s.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid) <> 288 then
+     or (select count(*) from public.training_blocks b join public.training_sessions s on s.id=b.training_session_id where s.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid) <> 72
+     or (select count(*) from public.training_participants p join public.training_sessions s on s.id=p.training_session_id where s.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid) <> 288 then
     raise exception 'DEMO_V1_VERIFY_TRAINING_COUNTS_FAILED';
   end if;
 
