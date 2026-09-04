@@ -1,0 +1,52 @@
+name: INVITADO Mobile Scope V2 Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/invited-mobile-runtime-scope-v2
+    paths:
+      - ".github/workflows/invited-mobile-scope-v2-diagnostic.yml"
+      - "supabase/ready/20260904_diagnose_invited_mobile_scope_v2_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Read-only production scope diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Assert diagnostic remains read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/ready/20260904_diagnose_invited_mobile_scope_v2_readonly.sql
+          if grep -Eiq '^[[:space:]]*(insert|update|delete|truncate|alter|drop|create|grant|revoke|call)[[:space:]]' "$FILE"; then
+            echo "Unsafe SQL statement detected."
+            exit 1
+          fi
+          grep -Eiq '^begin read only;' "$FILE"
+          grep -Eiq '^rollback;' "$FILE"
+      - name: Diagnose authenticated INVITADO scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_diagnose_invited_mobile_scope_v2_readonly.sql)
+          echo "$OUT"
+          ADMIN=$(printf '%s\n' "$OUT" | grep '^INVITED_SCOPE_ADMIN,' | tail -n 1)
+          RLS=$(printf '%s\n' "$OUT" | grep '^INVITED_SCOPE_RLS,' | tail -n 1)
+          TEAM_SEASON=$(printf '%s\n' "$OUT" | grep '^INVITED_TEAM_SEASON_RLS,' | tail -n 1)
+          test -n "$ADMIN" && test -n "$RLS" && test -n "$TEAM_SEASON"
