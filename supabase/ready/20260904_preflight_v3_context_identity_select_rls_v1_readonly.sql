@@ -1,4 +1,5 @@
 -- Read-only preflight for team-season membership SELECT RLS restoration V1.
+-- Safe to run before the first apply and before later idempotent re-applies.
 \set ON_ERROR_STOP on
 
 select
@@ -9,7 +10,7 @@ select
   (select count(*) from pg_policies p
     where p.schemaname='public'
       and p.tablename='team_season_memberships'
-      and p.cmd='SELECT') = 0 as select_policy_missing
+      and p.cmd='SELECT') <= 1 as select_policy_state_safe
 from pg_class c
 join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public' and c.relname='team_season_memberships';

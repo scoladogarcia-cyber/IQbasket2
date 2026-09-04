@@ -5,6 +5,10 @@ const apply = fs.readFileSync(
   "supabase/ready/20260904_apply_v3_context_identity_select_rls_v1.sql",
   "utf8"
 );
+const preflight = fs.readFileSync(
+  "supabase/ready/20260904_preflight_v3_context_identity_select_rls_v1_readonly.sql",
+  "utf8"
+);
 const verify = fs.readFileSync(
   "supabase/ready/20260904_verify_v3_context_identity_select_rls_v1_readonly.sql",
   "utf8"
@@ -21,6 +25,8 @@ assert.doesNotMatch(apply, /club_season_memberships/);
 assert.doesNotMatch(apply, /user_player_links/);
 assert.doesNotMatch(apply, /for\s+(insert|update|delete)/i);
 
+assert.match(preflight, /select_policy_state_safe/);
+assert.match(preflight, /count\(\*\).*<= 1/s);
 assert.match(verify, /no_write_policies/);
 assert.match(verify, /own_scope_present/);
 assert.match(verify, /manager_scope_present/);
