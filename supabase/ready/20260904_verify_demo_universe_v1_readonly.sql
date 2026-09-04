@@ -79,14 +79,14 @@ begin
     join public.user_profiles u on u.id=m.user_id
     where lower(u.email)='test@test.com'
       and m.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid
-      and upper(m.function_role)='ANALISTA'
+      and upper(m.function_role)='INVITADO'
       and upper(m.status)='ACTIVE'
   ) then
     raise exception 'DEMO_V1_VERIFY_TEST_SCOPE_FAILED';
   end if;
 
   -- V3 separates the global security role from the legacy/application role.
-  -- The demo may add contextual ANALISTA scope, but it must never escalate either
+  -- The demo adds scope-only INVITADO membership and must never escalate either
   -- identity layer: the test account remains global USER + application INVITADO.
   if exists(
     select 1 from public.user_profiles u
