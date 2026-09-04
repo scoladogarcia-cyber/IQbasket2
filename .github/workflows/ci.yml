@@ -124,5 +124,8 @@ jobs:
       - name: Shot outcome normalization regression
         run: node tests/shot-outcome-resolver.mjs
 
+      - name: Player 360 AI gateway contract
+        run: node tests/player360-ai-gateway-contract.mjs
+
       - name: Build
         run: npm run build
