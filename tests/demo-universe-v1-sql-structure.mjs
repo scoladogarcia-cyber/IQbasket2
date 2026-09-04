@@ -14,6 +14,9 @@ for (const src of [core,p360,preflight,verify,rollback,post]) {
 }
 
 assert.match(core,/IQB-DEMO-2026-27-V1/);
+assert.match(core,/insert into public\.team_season_memberships[\s\S]*?'INVITADO'[\s\S]*?'ACTIVE'/i);
+assert.doesNotMatch(core,/insert into public\.team_season_memberships[\s\S]{0,500}?'ANALISTA'/i);
+assert.match(verify,/upper\(m\.function_role\)='INVITADO'/i);
 assert.match(core,/\'OPEN\',\s*null,\s*null,\s*null/i);
 assert.match(core,/DEMO_V1_SUPERADMIN_PROFILE_MISSING/);
 assert.match(core,/set edit_state='LOCKED'/i);

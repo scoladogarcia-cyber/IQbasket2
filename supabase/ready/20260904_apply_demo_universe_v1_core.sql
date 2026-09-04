@@ -113,14 +113,14 @@ insert into public.team_seasons(
 );
 
 -- Read-only contextual scope for the existing INVITADO test account.
--- Global role remains INVITADO; ANALISTA is used only as a contextual read role.
+-- Global and contextual functional role remain INVITADO; the membership grants scope only.
 insert into public.team_season_memberships(
   user_id,team_season_id,function_role,status,valid_from,valid_until
 )
 select
   up.id,
   'd0000000-0000-4000-8000-000000000005'::uuid,
-  'ANALISTA',
+  'INVITADO',
   'ACTIVE',
   now() - interval '1 day',
   null

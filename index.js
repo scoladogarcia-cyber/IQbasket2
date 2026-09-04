@@ -59,6 +59,7 @@ export class IQBasketApp {
     this.permissionService = new PermissionService();
     this.authController = this.permissionService;
     this.authorizationContextService = new AuthorizationContextService(supabase);
+    this._authorizationRefreshPromise = null;
 
     // Se elimina el bypass histórico { can: () => true }.
     this.gameController = new GameController(
@@ -223,6 +224,57 @@ export class IQBasketApp {
       console.warn("[RBAC] No se pudo cargar el contexto v3; se mantiene compatibilidad legacy:", error.message);
       return baseProfile;
     }
+  }
+
+  /**
+   * Refresca roles y alcances desde Supabase sin cerrar la sesion.
+   * Recupera cambios de membresia realizados mientras la sesion permanece abierta.
+   * En caso de error conserva el contexto anterior: la autorizacion sigue deny-by-default.
+   */
+  async refreshAuthenticatedAuthorizationContext({ reason = "runtime" } = {}) {
+    if (!supabase || !this.isAuthenticated) return false;
+    if (this._authorizationRefreshPromise) return this._authorizationRefreshPromise;
+
+    this._authorizationRefreshPromise = (async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        const authUser = sessionData?.session?.user;
+        if (sessionError || !authUser?.email) {
+          if (sessionError) {
+            console.warn(`[RBAC] Refresco de autorizacion (${reason}) sin sesion valida:`, sessionError.message);
+          }
+          return false;
+        }
+
+        const { data: profileData, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("id,email,first_name,last_name,phone,role,global_role,status,assigned_team_ids,linked_player_id,created_at")
+          .eq("email", authUser.email)
+          .maybeSingle();
+
+        if (profileError) {
+          console.warn(`[RBAC] Refresco de autorizacion (${reason}) sin perfil:`, profileError.message);
+          return false;
+        }
+
+        const previousPreviewRole = this.permissionService.previewRole || null;
+        const enrichedProfile = await this._enrichAuthenticatedProfile(authUser, profileData);
+        const normalizedUser = this._applyAuthenticatedUser(authUser, enrichedProfile);
+
+        if (previousPreviewRole && normalizedUser?.role === UserRole.SUPERADMIN) {
+          this.permissionService.setPreviewRole(previousPreviewRole);
+        }
+
+        return Boolean(normalizedUser);
+      } catch (error) {
+        console.warn(`[RBAC] No se pudo refrescar la autorizacion (${reason}):`, error?.message || error);
+        return false;
+      } finally {
+        this._authorizationRefreshPromise = null;
+      }
+    })();
+
+    return this._authorizationRefreshPromise;
   }
 
   /**
@@ -509,8 +561,17 @@ export class IQBasketApp {
 
     const handleTeamChange = async (e) => {
       const newTeamId = e.target.value;
-      if (!this.permissionService.can(Permission.SELECT_TEAM, { teamId: newTeamId })) {
-        alert("⚠️ No tienes permiso para acceder a este equipo.");
+      let canSelectTeam = this.permissionService.can(Permission.SELECT_TEAM, { teamId: newTeamId });
+
+      // La membresia puede haberse concedido despues del login. Antes de denegar,
+      // refrescamos una vez el contexto autenticado desde su fuente real.
+      if (!canSelectTeam) {
+        await this.refreshAuthenticatedAuthorizationContext({ reason: "team_change" });
+        canSelectTeam = this.permissionService.can(Permission.SELECT_TEAM, { teamId: newTeamId });
+      }
+
+      if (!canSelectTeam) {
+        alert("No tienes permiso para acceder a este equipo.");
         this.render();
         return;
       }
@@ -544,6 +605,9 @@ export class IQBasketApp {
       const newSeason = e.target.value;
       localStorage.setItem("iq_active_season", newSeason);
 
+      // Sincroniza cambios de alcance/rol de temporada hechos con la sesion abierta.
+      await this.refreshAuthenticatedAuthorizationContext({ reason: "season_change" });
+
       this.showLoadingOverlay("syncing_season");
 
       if (typeof DataStore.setActiveTeamAndSeason === "function") {
@@ -569,7 +633,7 @@ export class IQBasketApp {
 
     if (!window.isHashBound) {
       window.isHashBound = true;
-      window.onhashchange = () => {
+      window.onhashchange = async () => {
         if (window.hasUnsavedChanges) {
           const confirmLeave = confirm("⚠️ Tienes cambios sin guardar. Si cambias de pantalla se perderán las modificaciones. ¿Deseas salir sin guardar?");
           if (!confirmLeave) {
@@ -579,13 +643,13 @@ export class IQBasketApp {
           window.hasUnsavedChanges = false;
         }
 
-        this.parseHashRoute();
-        this.render();
+        await this.parseHashRoute();
+        await this.render();
       };
     }
   }
 
-  parseHashRoute() {
+  async parseHashRoute() {
     const rawHash = window.location.hash.replace("#/", "").trim();
     if (!rawHash) {
       this.currentRoute = "dashboard";
@@ -609,12 +673,23 @@ export class IQBasketApp {
       playerId: routePlayerId,
       playerTeamId: this.teamId || DataStore.getActiveTeamId?.() || null
     };
-    if (requiredPermission && this.isAuthenticated && !this.permissionService.canPreview(requiredPermission, routeContext)) {
-      alert("⚠️ Tu perfil no tiene acceso a esta sección. Has sido redirigido al Dashboard.");
-      window.location.hash = "#/dashboard";
-      this.currentRoute = "dashboard";
-      this.routeParams = {};
-      return;
+    if (requiredPermission && this.isAuthenticated) {
+      let canNavigate = this.permissionService.canPreview(requiredPermission, routeContext);
+
+      // Una sesion larga puede conservar un alcance anterior a una invitacion,
+      // asignacion o cambio de temporada. Revalidamos una vez antes de denegar.
+      if (!canNavigate) {
+        await this.refreshAuthenticatedAuthorizationContext({ reason: `route:${targetRoute}` });
+        canNavigate = this.permissionService.canPreview(requiredPermission, routeContext);
+      }
+
+      if (!canNavigate) {
+        alert("Tu perfil no tiene acceso a esta seccion. Has sido redirigido al Dashboard.");
+        window.location.hash = "#/dashboard";
+        this.currentRoute = "dashboard";
+        this.routeParams = {};
+        return;
+      }
     }
 
     this.currentRoute = targetRoute;
@@ -848,8 +923,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const app = new IQBasketApp();
   window.iqApp = app;
   await app.restoreAuthenticatedSession();
-  app.parseHashRoute();
-  app.render();
+  await app.parseHashRoute();
+  await app.render();
 });
 
 export default IQBasketApp;
