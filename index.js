@@ -19,31 +19,14 @@ import { I18n } from "./services/I18nService.js";
 import { AuthorizationContextService } from "./services/security/AuthorizationContextService.js";
 import { PermissionService, Permission, UserRole } from "./security/PermissionService.js";
 import { ROUTE_PERMISSIONS } from "./security/permissions.js";
+import { LazyViewRegistry } from "./services/LazyViewRegistry.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
 import { ApprovalCenterView } from "./views/ApprovalCenterView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
-import { TeamStatsView } from "./views/TeamStatsView.js";
 import { GameController } from "./controllers/GameController.js";
-import { GameLiveEditorView } from "./views/GameLiveEditorView.js";
-import { LiveScoreHUDView } from "./views/LiveScoreHUDView.js";
-import { EasyStatsEntryView } from "./views/EasyStatsEntryView.js";
-import { HeatmapAnalysisView } from "./views/HeatmapAnalysisView.js";
-import { GameBoxScoreView } from "./views/GameBoxScoreView.js";
-import { AdvancedStatsView } from "./views/AdvancedStatsView.js";
-import { PlayerStatsView } from "./views/PlayerStatsView.js";
-import { LineupsView } from "./views/LineupsView.js";
-import { ComparatorView } from "./views/ComparatorView.js";
-import { ReportsView } from "./views/ReportsView.js";
 import { TranslationsView } from "./views/TranslationsView.js";
-import { AskAIView } from "./views/AskAIView.js";
-import { ProfileView } from "./views/ProfileView.js";
-import { FamilyAdvisorView } from "./views/FamilyAdvisorView.js";
-import { TrainingView } from "./views/TrainingView.js";
-import { NutritionView } from "./views/NutritionView.js";
-import { Player360View } from "./views/Player360View.js";
-import { PrivacyCenterView } from "./views/PrivacyCenterView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -68,32 +51,20 @@ export class IQBasketApp {
       { supabase }
     );
 
+    // El shell crítico permanece eager. Las vistas secundarias se cargan por ruta
+    // y se cachean tras el primer acceso para reducir el coste inicial en móvil.
     this.views = {
       auth: new AuthView(),
       dashboard: new SeasonDashboardView(supabase, this.authController),
       approvals: new ApprovalCenterView(supabase, this.authController),
-      team: new TeamStatsView(supabase, this.authController),
-      equipo: new TeamStatsView(supabase, this.authController),
-      liveeditor: new GameLiveEditorView(this.gameController, this.authController),
-      livehud: (gameId) => new LiveScoreHUDView(this.authController, gameId),
-      easyentry: (gameId) => new EasyStatsEntryView(this.gameController, this.authController, I18n, gameId),
-      heatmap: new HeatmapAnalysisView(supabase, this.authController),
-      advanced: new AdvancedStatsView(this.gameController),
-      boxscore: new GameBoxScoreView(supabase, this.authController),
-      player: new PlayerStatsView(supabase, this.authController),
-      lineups: new LineupsView(this.authController),
-      comparator: new ComparatorView(this.authController),
-      reports: new ReportsView(this.authController),
-      familyadvisor: new FamilyAdvisorView(this.authController),
-      training: new TrainingView(supabase, this.authController),
-      nutrition: new NutritionView(supabase, this.authController),
-      player360: new Player360View(supabase, this.authController),
-      privacy: new PrivacyCenterView(supabase, this.authController),
-      settings: new TranslationsView(this.authController),
-      ask: new AskAIView(this.authController),
-      profile: new ProfileView(this.authController),
-      perfil: new ProfileView(this.authController)
+      settings: new TranslationsView(this.authController)
     };
+    this.lazyViews = new LazyViewRegistry({
+      supabase,
+      authController: this.authController,
+      gameController: this.gameController,
+      i18n: I18n
+    }, this.views);
   }
 
   /**
@@ -780,9 +751,11 @@ export class IQBasketApp {
         break;
 
       case "team":
-      case "equipo":
-        if (this.views.team) await this.views.team.render(contentArea, this.teamId);
+      case "equipo": {
+        const view = await this.lazyViews.get("team");
+        await view.render(contentArea, this.teamId);
         break;
+      }
 
       // MODO ANOTACIÓN EN VIVO (HUD PRO)
       case "live":
@@ -792,7 +765,9 @@ export class IQBasketApp {
       case "easy":
       case "entrada-facil":
       case "live-entry":
-        const liveView = this.views.livehud(this.routeParams.id || null);
+        const liveView = await this.lazyViews.create("livehud", {
+          gameId: this.routeParams.id || null
+        });
         await liveView.render(contentArea);
         break;
 
@@ -805,76 +780,88 @@ export class IQBasketApp {
 
       case "games":
       case "partidos":
-      case "game":
-        if (this.views.liveeditor) {
-          await this.views.liveeditor.render(contentArea, this.routeParams.id, this.teamId);
-        } else {
-          this.renderPlaceholder("Listado y Editor de Partidos", "GameLiveEditorView");
-        }
+      case "game": {
+        const view = await this.lazyViews.get("liveeditor");
+        await view.render(contentArea, this.routeParams.id, this.teamId);
         break;
+      }
 
-      case "advanced":
-        if (this.views.advanced) await this.views.advanced.render(contentArea);
+      case "advanced": {
+        const view = await this.lazyViews.get("advanced");
+        await view.render(contentArea);
         break;
+      }
 
       case "heatmap":
       case "calor":
-      case "shotchart":
-        if (this.views.heatmap) await this.views.heatmap.render(contentArea, this.teamId);
+      case "shotchart": {
+        const view = await this.lazyViews.get("heatmap");
+        await view.render(contentArea, this.teamId);
         break;
+      }
 
       case "boxscore":
-      case "registro":
-        if (this.views.boxscore) await this.views.boxscore.render(contentArea, this.routeParams.id);
+      case "registro": {
+        const view = await this.lazyViews.get("boxscore");
+        await view.render(contentArea, this.routeParams.id);
         break;
+      }
 
       case "players":
       case "jugadores":
       case "player":
-      case "jugador":
-        if (this.views.player) await this.views.player.render(contentArea, this.routeParams.id, this.teamId);
+      case "jugador": {
+        const view = await this.lazyViews.get("player");
+        await view.render(contentArea, this.routeParams.id, this.teamId);
         break;
+      }
 
       case "lineups":
-      case "quintetos":
-        if (this.views.lineups) await this.views.lineups.render(contentArea);
+      case "quintetos": {
+        const view = await this.lazyViews.get("lineups");
+        await view.render(contentArea);
         break;
+      }
 
       case "training":
       case "entrenamientos":
       case "development":
-      case "desarrollo":
-        if (this.views.training) {
-          await this.views.training.render(contentArea, this.teamId);
-        }
+      case "desarrollo": {
+        const view = await this.lazyViews.get("training");
+        await view.render(contentArea, this.teamId);
         break;
+      }
 
       case "nutrition":
-      case "nutricion":
-        if (this.views.nutrition) {
-          await this.views.nutrition.render(contentArea, this.routeParams.id, this.teamId);
-        }
+      case "nutricion": {
+        const view = await this.lazyViews.get("nutrition");
+        await view.render(contentArea, this.routeParams.id, this.teamId);
         break;
+      }
 
       case "player360":
       case "player-360":
-      case "desarrollo-jugador":
-        if (this.views.player360) {
-          await this.views.player360.render(contentArea, this.routeParams.id, this.teamId);
-        }
+      case "desarrollo-jugador": {
+        const view = await this.lazyViews.get("player360");
+        await view.render(contentArea, this.routeParams.id, this.teamId);
         break;
+      }
 
 
       case "comparator":
-      case "comparador":
-        if (this.views.comparator) await this.views.comparator.render(contentArea);
+      case "comparador": {
+        const view = await this.lazyViews.get("comparator");
+        await view.render(contentArea);
         break;
+      }
 
       case "reports":
       case "informes":
-      case "informe":
-        if (this.views.reports) await this.views.reports.render(contentArea);
+      case "informe": {
+        const view = await this.lazyViews.get("reports");
+        await view.render(contentArea);
         break;
+      }
 
       // NUEVO MÓDULO FAMILIAS & BIENESTAR
       case "family-advisor":
@@ -882,29 +869,37 @@ export class IQBasketApp {
       case "familia":
       case "familias":
       case "bienestar":
-      case "advisor":
-        if (this.views.familyadvisor) await this.views.familyadvisor.render(contentArea);
+      case "advisor": {
+        const view = await this.lazyViews.get("familyadvisor");
+        await view.render(contentArea);
         break;
+      }
 
       case "ask":
       case "ask-ai":
       case "pregunta":
       case "preguntale":
       case "ai":
-      case "ia":
-        if (this.views.ask) await this.views.ask.render(contentArea);
+      case "ia": {
+        const view = await this.lazyViews.get("ask");
+        await view.render(contentArea);
         break;
+      }
 
       case "profile":
-      case "perfil":
-        if (this.views.profile) await this.views.profile.render(contentArea);
+      case "perfil": {
+        const view = await this.lazyViews.get("profile");
+        await view.render(contentArea);
         break;
+      }
 
       case "privacy":
       case "privacy-center":
-      case "privacidad":
-        if (this.views.privacy) await this.views.privacy.render(contentArea);
+      case "privacidad": {
+        const view = await this.lazyViews.get("privacy");
+        await view.render(contentArea);
         break;
+      }
 
       case "settings":
       case "configuracion":
