@@ -139,7 +139,7 @@ assert.match(edgeSource, /iq_v4_can_generate_ai_insights/);
 assert.match(edgeSource, /sanitizeEvidenceForAiProvider/);
 assert.match(edgeSource, /IQB_AI_GENERATION_ENABLED/);
 assert.match(edgeSource, /AI_GATEWAY_NOT_ENABLED/);
-assert.match(edgeSource, /PLAYER360_AI_GATEWAY_CONFIG\.generationEnabled === true/);
+assert.match(edgeSource, /Boolean\(PLAYER360_AI_GATEWAY_CONFIG\.generationEnabled\)/);
 assert.match(edgeSource, /!environmentGenerationEnabled \|\| !configurationGenerationEnabled/);
 const serverGateIndex = edgeSource.indexOf('Deno.env.get("IQB_AI_GENERATION_ENABLED")');
 const providerRuntimeIndex = edgeSource.indexOf('providerRuntime = resolveProviderRuntimeConfig()');

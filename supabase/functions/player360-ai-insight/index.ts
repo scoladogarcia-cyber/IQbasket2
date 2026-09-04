@@ -290,7 +290,7 @@ Deno.serve(async (req) => {
   // safe until this environment flag is explicitly enabled.
   const environmentGenerationEnabled = String(Deno.env.get("IQB_AI_GENERATION_ENABLED") || "")
     .trim().toLowerCase() === "true";
-  const configurationGenerationEnabled = PLAYER360_AI_GATEWAY_CONFIG.generationEnabled === true;
+  const configurationGenerationEnabled = Boolean(PLAYER360_AI_GATEWAY_CONFIG.generationEnabled);
   if (!environmentGenerationEnabled || !configurationGenerationEnabled) {
     return json({ success: false, error_code: "AI_GATEWAY_NOT_ENABLED" }, 503);
   }

@@ -14,7 +14,7 @@ const gateIndex = edge.indexOf("IQB_AI_GENERATION_ENABLED");
 const providerIndex = edge.indexOf("providerRuntime = resolveProviderRuntimeConfig()");
 const reserveIndex = edge.indexOf('"iq_ai_reserve_usage"');
 assert.ok(gateIndex >= 0, "server-side generation gate must exist");
-assert.match(edge, /PLAYER360_AI_GATEWAY_CONFIG\.generationEnabled === true/);
+assert.match(edge, /Boolean\(PLAYER360_AI_GATEWAY_CONFIG\.generationEnabled\)/);
 assert.match(edge, /!environmentGenerationEnabled \|\| !configurationGenerationEnabled/);
 assert.ok(providerIndex > gateIndex, "provider config must be after server gate");
 assert.ok(reserveIndex > providerIndex, "quota reservation must be after provider validation");
