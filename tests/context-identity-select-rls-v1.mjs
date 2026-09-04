@@ -16,17 +16,16 @@ const smoke = fs.readFileSync(
 
 assert.match(apply, /v3 team memberships scoped read/);
 assert.match(apply, /user_id\s*=\s*auth\.uid\(\)/);
-assert.match(apply, /iq_v3_has_team_season_role/);
-assert.match(apply, /v3 club memberships own or superadmin read/);
-assert.match(apply, /iq_v3_is_superadmin/);
-assert.match(apply, /v3 user player links own or manager read/);
-assert.match(apply, /iq_v3_can_manage_player/);
-
-// This hotfix restores read context only. It must not create write policies.
+assert.match(apply, /iq_v3_can_manage_team_season\(team_season_id\)/);
+assert.doesNotMatch(apply, /club_season_memberships/);
+assert.doesNotMatch(apply, /user_player_links/);
 assert.doesNotMatch(apply, /for\s+(insert|update|delete)/i);
-assert.match(verify, /no_new_write_policies/);
+
+assert.match(verify, /no_write_policies/);
+assert.match(verify, /own_scope_present/);
+assert.match(verify, /manager_scope_present/);
 assert.match(smoke, /own_demo_membership_visible/);
 assert.match(smoke, /no_foreign_membership_visible/);
 assert.match(smoke, /role_remains_invited/);
 
-console.log("CONTEXT_IDENTITY_SELECT_RLS_V1_OK");
+console.log("TEAM_MEMBERSHIP_SELECT_RLS_V1_OK");

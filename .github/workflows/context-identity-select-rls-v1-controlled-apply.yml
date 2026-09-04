@@ -1,4 +1,4 @@
-name: Context Identity SELECT RLS V1 Controlled Apply
+name: Team Membership SELECT RLS V1 Controlled Apply
 
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   controlled-apply:
-    name: Preflight + restore SELECT policies + verify
+    name: Preflight + restore membership SELECT + verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -42,23 +42,21 @@ jobs:
           OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
             --file=supabase/ready/20260904_preflight_v3_context_identity_select_rls_v1_readonly.sql)
           echo "$OUT"
-          PREFLIGHT=$(printf '%s\n' "$OUT" | grep '^CONTEXT_IDENTITY_RLS_PREFLIGHT,' | tail -n 1)
-          HELPERS=$(printf '%s\n' "$OUT" | grep '^CONTEXT_IDENTITY_RLS_HELPERS,' | tail -n 1)
-          test "$PREFLIGHT" = "CONTEXT_IDENTITY_RLS_PREFLIGHT,t,t,t,t,t"
-          test "$HELPERS" = "CONTEXT_IDENTITY_RLS_HELPERS,t,t,t"
-      - name: Capture identity row baseline
+          PREFLIGHT=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_PREFLIGHT,' | tail -n 1)
+          HELPER=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_HELPER,' | tail -n 1)
+          test "$PREFLIGHT" = "TEAM_MEMBERSHIP_RLS_PREFLIGHT,t,t,t,t"
+          test "$HELPER" = "TEAM_MEMBERSHIP_RLS_HELPER,t,t,t"
+      - name: Capture membership row baseline
         id: baseline
         shell: bash
         run: |
           set -euo pipefail
           BASE=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
-            select (select count(*) from public.team_season_memberships)::text || '|' ||
-                   (select count(*) from public.club_season_memberships)::text || '|' ||
-                   (select count(*) from public.user_player_links)::text;
+            select count(*)::text from public.team_season_memberships;
           " | tr -d '[:space:]')
           echo "value=$BASE" >> "$GITHUB_OUTPUT"
-          echo "CONTEXT_IDENTITY_BASELINE=$BASE"
-      - name: Apply contextual identity SELECT policies
+          echo "TEAM_MEMBERSHIP_BASELINE=$BASE"
+      - name: Apply team membership SELECT policy
         id: apply
         shell: bash
         run: |
@@ -73,10 +71,10 @@ jobs:
           OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
             --file=supabase/ready/20260904_verify_v3_context_identity_select_rls_v1_readonly.sql)
           echo "$OUT"
-          POLICIES=$(printf '%s\n' "$OUT" | grep '^CONTEXT_IDENTITY_RLS_POLICIES,' | tail -n 1)
-          WRITES=$(printf '%s\n' "$OUT" | grep '^CONTEXT_IDENTITY_RLS_WRITES,' | tail -n 1)
-          test "$POLICIES" = "CONTEXT_IDENTITY_RLS_POLICIES,t,t,t"
-          test "$WRITES" = "CONTEXT_IDENTITY_RLS_WRITES,t"
+          POLICY=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_POLICY,' | tail -n 1)
+          SHAPE=$(printf '%s\n' "$OUT" | grep '^TEAM_MEMBERSHIP_RLS_POLICY_SHAPE,' | tail -n 1)
+          test "$POLICY" = "TEAM_MEMBERSHIP_RLS_POLICY,t,t"
+          test "$SHAPE" = "TEAM_MEMBERSHIP_RLS_POLICY_SHAPE,t,t"
       - name: INVITADO runtime RLS smoke
         id: smoke
         shell: bash
@@ -87,18 +85,16 @@ jobs:
           echo "$OUT"
           LAST=$(printf '%s\n' "$OUT" | grep '^INVITED_CONTEXT_RLS_RUNTIME,' | tail -n 1)
           test "$LAST" = "INVITED_CONTEXT_RLS_RUNTIME,t,t,t"
-      - name: Confirm no identity rows changed
+      - name: Confirm no membership rows changed
         shell: bash
         run: |
           set -euo pipefail
           AFTER=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
-            select (select count(*) from public.team_season_memberships)::text || '|' ||
-                   (select count(*) from public.club_season_memberships)::text || '|' ||
-                   (select count(*) from public.user_player_links)::text;
+            select count(*)::text from public.team_season_memberships;
           " | tr -d '[:space:]')
-          echo "CONTEXT_IDENTITY_AFTER=$AFTER"
+          echo "TEAM_MEMBERSHIP_AFTER=$AFTER"
           test "$AFTER" = "${{ steps.baseline.outputs.value }}"
-      - name: Emergency rollback SELECT policies only
+      - name: Emergency rollback membership SELECT policy
         if: failure() && steps.apply.outcome == 'success'
         shell: bash
         run: |
@@ -113,7 +109,7 @@ jobs:
           COUNT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
             select count(*) from pg_policies
             where schemaname='public'
-              and tablename in ('team_season_memberships','club_season_memberships','user_player_links')
-              and policyname in ('v3 team memberships scoped read','v3 club memberships own or superadmin read','v3 user player links own or manager read');
+              and tablename='team_season_memberships'
+              and policyname='v3 team memberships scoped read';
           " | tr -d '[:space:]')
           test "$COUNT" = "0"
