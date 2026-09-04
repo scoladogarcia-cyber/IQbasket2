@@ -28,12 +28,14 @@ jobs:
 
           p = Path('tests/global-ui-shell-qa.mjs')
           src = p.read_text(encoding='utf-8')
-          old = r'''  // The drawer has a 300 ms CSS transition. Geometry must be asserted\n  // after the transition settles, otherwise the test measures an\n  // intentional intermediate translateY state as viewport overflow.\n  await page.waitForTimeout(360);\n'''
-          new = '''  // The drawer has a 300 ms CSS transition. Geometry must be asserted
-  // after the transition settles, otherwise the test measures an
-  // intentional intermediate translateY state as viewport overflow.
-  await page.waitForTimeout(360);
-'''
+          old = "  // The drawer has a 300 ms CSS transition. Geometry must be asserted\\n  // after the transition settles, otherwise the test measures an\\n  // intentional intermediate translateY state as viewport overflow.\\n  await page.waitForTimeout(360);\\n"
+          new = "\n".join([
+              "  // The drawer has a 300 ms CSS transition. Geometry must be asserted",
+              "  // after the transition settles, otherwise the test measures an",
+              "  // intentional intermediate translateY state as viewport overflow.",
+              "  await page.waitForTimeout(360);",
+              ""
+          ])
           if src.count(old) != 1:
               raise SystemExit(f'Expected one malformed settle block, found {src.count(old)}')
           p.write_text(src.replace(old, new, 1), encoding='utf-8')
