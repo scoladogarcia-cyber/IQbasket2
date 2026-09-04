@@ -16,6 +16,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+import { resolveShotMade } from "../domain/analytics/ShotOutcomeResolver.js";
 
 export class HeatmapAnalysisView {
   constructor(supabaseClient = null, authController = null) {
@@ -50,21 +51,7 @@ export class HeatmapAnalysisView {
   }
 
   _parseIsMade(ev) {
-    const act = String(ev.action_type ?? ev.action ?? ev.event_type ?? '').toLowerCase();
-    
-    if (act.includes("attempted") || act.includes("fallo") || act.includes("missed") || act.includes("out")) {
-      return false;
-    }
-    if (act.includes("made") || act.includes("anotad") || act.includes("in") || Number(ev.points || 0) > 0) {
-      return true;
-    }
-    if (ev.made !== undefined && ev.made !== null) {
-      return Boolean(ev.made);
-    }
-    if (ev.coordinates?.made !== undefined && ev.coordinates?.made !== null) {
-      return Boolean(ev.coordinates.made);
-    }
-    return false;
+    return resolveShotMade(ev);
   }
 
   _isShotEvent(ev) {
