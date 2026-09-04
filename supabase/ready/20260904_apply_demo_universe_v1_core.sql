@@ -244,12 +244,10 @@ select
   0,
   '[]'::jsonb,
   'd0000000-0000-4000-8000-000000000005'::uuid,
-  case when g.idx <= 10 then 'LOCKED' else 'OPEN' end,
-  case when g.idx <= 10 then now() - interval '1 day' else null end,
-  case when g.idx <= 10 then (
-    select id from public.user_profiles where lower(email)='scolado@nechigroup.com' limit 1
-  ) else null end,
-  case when g.idx <= 10 then 'Partido demo revisado y validado' else null end
+  'OPEN',
+  null,
+  null,
+  null
 from (
   values
     (1,'BC Marina Demo'),
@@ -659,6 +657,56 @@ from (
   group by pgs.player_id
 ) s
 where p.id=s.player_id;
+
+-- -----------------------------------------------------------------------------
+-- 9. Finalize historical game locks only after every child resource is seeded
+-- -----------------------------------------------------------------------------
+-- The V5 lock guard is intentionally respected. We provide a transaction-local
+-- authenticated SUPERADMIN context so the normal lifecycle trigger performs the
+-- state transition and writes the immutable lock history. No trigger is disabled.
+do $demo_lock_context$
+declare
+  v_admin_id uuid;
+  v_claims text;
+begin
+  select id into v_admin_id
+  from public.user_profiles
+  where lower(email)='scolado@nechigroup.com'
+  limit 1;
+
+  if v_admin_id is null then
+    raise exception 'DEMO_V1_SUPERADMIN_PROFILE_MISSING';
+  end if;
+
+  v_claims := jsonb_build_object(
+    'sub', v_admin_id::text,
+    'email', 'scolado@nechigroup.com',
+    'role', 'authenticated'
+  )::text;
+
+  perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  perform set_config('request.jwt.claim.email', 'scolado@nechigroup.com', true);
+  perform set_config('request.jwt.claim', v_claims, true);
+  perform set_config('request.jwt.claims', v_claims, true);
+end
+$demo_lock_context$;
+
+with ranked_games as (
+  select id, row_number() over(order by date,id)::int as rn
+  from public.games
+  where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid
+)
+update public.games g
+set edit_state='LOCKED',
+    lock_reason='Partido demo revisado y validado'
+from ranked_games r
+where g.id=r.id
+  and r.rn <= 10;
+
+select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claim.email','',true);
+select set_config('request.jwt.claim','',true);
+select set_config('request.jwt.claims','',true);
 
 commit;
 

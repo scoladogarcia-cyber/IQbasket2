@@ -32,6 +32,12 @@ begin
     raise exception 'DEMO_V1_VERIFY_PBP_TOO_SMALL';
   end if;
 
+  if (select count(*) from public.games where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid and upper(coalesce(edit_state,'OPEN'))='LOCKED') <> 10
+     or (select count(*) from public.games where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid and upper(coalesce(edit_state,'OPEN'))='OPEN') <> 2
+     or (select count(*) from public.game_lock_history h join public.games g on g.id=h.game_id where g.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid and upper(h.action)='LOCKED') <> 10 then
+    raise exception 'DEMO_V1_VERIFY_LOCK_STATE_FAILED';
+  end if;
+
   select count(*) into v_bad
   from public.games g
   where g.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid

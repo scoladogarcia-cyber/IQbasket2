@@ -5,6 +5,52 @@
 \set ON_ERROR_STOP on
 begin;
 
+-- Reopen only demo games through the normal V5 lifecycle before deleting child
+-- rows. This keeps the immutable lock guard active even during emergency rollback.
+do $demo_reopen_context$
+declare
+  v_admin_id uuid;
+  v_claims text;
+begin
+  if exists (
+    select 1 from public.games
+    where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid
+      and upper(coalesce(edit_state,'OPEN'))='LOCKED'
+  ) then
+    select id into v_admin_id
+    from public.user_profiles
+    where lower(email)='scolado@nechigroup.com'
+    limit 1;
+
+    if v_admin_id is null then
+      raise exception 'DEMO_V1_ROLLBACK_SUPERADMIN_PROFILE_MISSING';
+    end if;
+
+    v_claims := jsonb_build_object(
+      'sub', v_admin_id::text,
+      'email', 'scolado@nechigroup.com',
+      'role', 'authenticated'
+    )::text;
+
+    perform set_config('request.jwt.claim.sub', v_admin_id::text, true);
+    perform set_config('request.jwt.claim.email', 'scolado@nechigroup.com', true);
+    perform set_config('request.jwt.claim', v_claims, true);
+    perform set_config('request.jwt.claims', v_claims, true);
+
+    update public.games
+    set edit_state='OPEN',
+        lock_reason='Demo Universe V1 rollback'
+    where team_season_id='d0000000-0000-4000-8000-000000000005'::uuid
+      and upper(coalesce(edit_state,'OPEN'))='LOCKED';
+
+    perform set_config('request.jwt.claim.sub','',true);
+    perform set_config('request.jwt.claim.email','',true);
+    perform set_config('request.jwt.claim','',true);
+    perform set_config('request.jwt.claims','',true);
+  end if;
+end
+$demo_reopen_context$;
+
 -- Player 360 / AI
 DELETE FROM public.player_ai_insights
 WHERE team_season_id='d0000000-0000-4000-8000-000000000005'::uuid;
