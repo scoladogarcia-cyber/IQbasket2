@@ -1,0 +1,44 @@
+name: Context Identity RLS V2 Audit
+
+on:
+  push:
+    branches:
+      - audit/context-identity-rls-v2
+    paths:
+      - ".github/workflows/context-identity-rls-v2-audit.yml"
+      - "supabase/ready/20260904_audit_context_identity_rls_v2_readonly.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Assert audit is read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=supabase/ready/20260904_audit_context_identity_rls_v2_readonly.sql
+          grep -Eiq '^begin read only;' "$FILE"
+          grep -Eiq '^rollback;' "$FILE"
+          if grep -Eiq '^[[:space:]]*(insert|update|delete|truncate|alter|drop|create|grant|revoke|call)[[:space:]]' "$FILE"; then
+            echo "Unsafe statement detected"
+            exit 1
+          fi
+      - name: Audit production RLS
+        run: |
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_audit_context_identity_rls_v2_readonly.sql
