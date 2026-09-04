@@ -351,8 +351,11 @@ export class PrivacyCenterView {
               ${(row.actions || []).map(value => `<span class="privacy-chip privacy-chip-blue">${this._escape(value)}</span>`).join("")}
               ${(row.purposes || []).map(value => `<span class="privacy-chip privacy-chip-purple">${this._escape(value)}</span>`).join("")}
             </div>
-            ${this._can(Permission.GRANT_SENSITIVE_ACCESS)
-              ? `<div class="privacy-card-actions"><button class="privacy-btn privacy-btn-primary" type="button" data-grant-request="${this._escape(row.id)}">Revisar y conceder</button></div>`
+            ${this._can(Permission.GRANT_SENSITIVE_ACCESS) || this._can(Permission.REVIEW_SENSITIVE_ACCESS_REQUESTS)
+              ? `<div class="privacy-card-actions">
+                  ${this._can(Permission.GRANT_SENSITIVE_ACCESS) ? `<button class="privacy-btn privacy-btn-primary" type="button" data-grant-request="${this._escape(row.id)}">Revisar y conceder</button>` : ""}
+                  ${this._can(Permission.REVIEW_SENSITIVE_ACCESS_REQUESTS) ? `<button class="privacy-btn privacy-btn-danger" type="button" data-reject-request="${this._escape(row.id)}">Rechazar</button>` : ""}
+                </div>`
               : ""}
           </article>
         `).join("")}
@@ -462,6 +465,7 @@ export class PrivacyCenterView {
     this.container.querySelectorAll("[data-revoke-grant]").forEach(button => button.addEventListener("click", () => this._revokeGrant(button.dataset.revokeGrant)));
     this.container.querySelectorAll("[data-revoke-relationship]").forEach(button => button.addEventListener("click", () => this._revokeRelationship(button.dataset.revokeRelationship)));
     this.container.querySelectorAll("[data-grant-request]").forEach(button => button.addEventListener("click", () => this._openGrantModal(button.dataset.grantRequest)));
+    this.container.querySelectorAll("[data-reject-request]").forEach(button => button.addEventListener("click", () => this._rejectRequest(button.dataset.rejectRequest)));
   }
 
   _openAuthorizationModal() {
@@ -572,6 +576,20 @@ export class PrivacyCenterView {
 
   _setFormBusy(form, busy) {
     form.querySelectorAll("button,input,select,textarea").forEach(element => { element.disabled = Boolean(busy); });
+  }
+
+  /** Rechaza una solicitud sin conceder acceso y conserva trazabilidad. */
+  async _rejectRequest(id) {
+    if (!this._can(Permission.REVIEW_SENSITIVE_ACCESS_REQUESTS)) return;
+    const reason = window.prompt("Motivo del rechazo de la solicitud:");
+    if (!reason?.trim()) return;
+    if (!window.confirm("¿Rechazar esta solicitud de acceso? La decisión quedará auditada.")) return;
+    try {
+      await this.service.rejectSensitiveAccessRequest({ requestId: id, reason });
+      await this._load();
+    } catch (error) {
+      alert(`No se pudo rechazar la solicitud: ${error.message || error}`);
+    }
   }
 
   async _revokeAuthorization(id) {

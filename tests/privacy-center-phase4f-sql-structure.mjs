@@ -17,6 +17,14 @@ const verify = readFileSync(
   new URL("../supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql", import.meta.url),
   "utf8"
 );
+const requestReview = readFileSync(
+  new URL("../supabase/ready/20260904_apply_v4_phase4f_privacy_center_request_review.sql", import.meta.url),
+  "utf8"
+);
+const requestReviewRollback = readFileSync(
+  new URL("../supabase/ready/20260904_rollback_v4_phase4f_privacy_center_request_review.sql", import.meta.url),
+  "utf8"
+);
 
 const functions = [
   "iq_v4f_privacy_center_snapshot",
@@ -70,5 +78,18 @@ assert.match(preflight, /preflight_ok/);
 assert.match(verify, /PRIVACY_CENTER_V1_VERIFY/);
 assert.match(verify, /anon_snapshot_blocked/);
 assert.match(verify, /verify_ok/);
+assert.match(verify, /reject_request_ok/);
+assert.match(verify, /authenticated_reject_execute/);
+assert.match(verify, /anon_reject_blocked/);
+
+assert.match(requestReview, /create function public\.iq_v4f_reject_sensitive_access_request\s*\(/i);
+assert.match(requestReviewRollback, /drop function if exists public\.iq_v4f_reject_sensitive_access_request\s*\(/i);
+assert.match(requestReview, /AUTH_REQUIRED/);
+assert.match(requestReview, /iq_v4e_can_admin_privacy\(v_row\.team_season_id\)/);
+assert.match(requestReview, /security definer/i);
+assert.match(requestReview, /set search_path = ''/i);
+assert.doesNotMatch(requestReview, /grant\s+(select|insert|update|delete)\s+on\s+(table\s+)?public\.player360_/i);
+assert.match(requestReview, /revoke all on function public\.iq_v4f_reject_sensitive_access_request\(uuid,text\)[\s\S]*from public, anon, authenticated/i);
+assert.match(requestReview, /grant execute on function public\.iq_v4f_reject_sensitive_access_request\(uuid,text\)[\s\S]*to authenticated/i);
 
 console.log("PRIVACY_CENTER_PHASE4F_SQL_STRUCTURE_OK");

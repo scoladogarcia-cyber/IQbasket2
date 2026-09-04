@@ -216,6 +216,19 @@ export class PrivacyGovernanceService {
     });
   }
 
+  /**
+   * Rechaza una solicitud pendiente mediante el RPC auditado de Phase 4F.
+   * La autorización contextual se vuelve a comprobar en PostgreSQL.
+   */
+  async rejectSensitiveAccessRequest({ requestId, reason } = {}) {
+    required(requestId, "requestId");
+    required(reason, "reason");
+    return Boolean(await this._rpc("iq_v4f_reject_sensitive_access_request", {
+      p_request_id: requestId,
+      p_reason: String(reason).trim()
+    }));
+  }
+
   async revokeSensitiveGrant({ grantId, reason } = {}) {
     required(grantId, "grantId");
     required(reason, "reason");
