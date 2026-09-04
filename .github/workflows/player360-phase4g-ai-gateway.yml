@@ -1,0 +1,63 @@
+name: Player 360 Phase 4G FREE_ONLY AI Gateway
+
+on:
+  push:
+    branches:
+      - feature/ai-gateway-free-v1
+    paths:
+      - "config/player360-ai.config.js"
+      - "services/player360/AiInsightGatewayService.js"
+      - "supabase/functions/player360-ai-insight/**"
+      - "supabase/ready/20260904_*phase4g*"
+      - "supabase/drafts/20260904_*phase4g*"
+      - "tests/player360-phase4g-*.mjs"
+      - "views/player360/LongitudinalAnalyticsPanel.js"
+      - "views/Player360View.js"
+      - ".github/workflows/player360-phase4g-ai-gateway.yml"
+  pull_request:
+    paths:
+      - "config/player360-ai.config.js"
+      - "services/player360/AiInsightGatewayService.js"
+      - "supabase/functions/player360-ai-insight/**"
+      - "supabase/ready/20260904_*phase4g*"
+      - "supabase/drafts/20260904_*phase4g*"
+      - "tests/player360-phase4g-*.mjs"
+      - "views/player360/LongitudinalAnalyticsPanel.js"
+      - "views/Player360View.js"
+      - ".github/workflows/player360-phase4g-ai-gateway.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gateway:
+    name: Free-only contract + regressions + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Phase 4G FREE_ONLY gateway contract
+        run: node tests/player360-phase4g-ai-gateway.mjs
+
+      - name: Existing longitudinal service regression
+        run: node tests/player360-phase4d-service-smoke.mjs
+
+      - name: Existing longitudinal orchestrator regression
+        run: node tests/player360-phase4d-orchestrator-smoke.mjs
+
+      - name: Existing privacy ABAC regression
+        run: node tests/player360-phase4e-privacy-smoke.mjs
+
+      - name: Build
+        run: npm run build
