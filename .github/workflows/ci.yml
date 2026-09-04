@@ -91,6 +91,9 @@ jobs:
       - name: Team membership SELECT RLS
         run: node tests/context-identity-select-rls-v1.mjs
 
+      - name: Context identity RLS V2 hardening
+        run: node tests/context-identity-rls-v2.mjs
+
       - name: Game locking SQL
         run: node tests/game-locking-sql.mjs
 
