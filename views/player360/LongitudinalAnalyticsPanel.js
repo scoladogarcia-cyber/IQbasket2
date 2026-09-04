@@ -4,16 +4,17 @@
  * UI/controller responsibilities only:
  * - render deterministic snapshots and persisted AI insights;
  * - request snapshot generation through LongitudinalAnalyticsOrchestrator;
+ * - request real AI interpretation only through AiInsightGatewayService;
  * - review AI insights through the persistence boundary;
  * - never calculate metrics or call an external model directly.
  */
 
 import { Permission } from "../../security/PermissionService.js";
 import {
-  PLAYER360_AI_UI_CONFIG,
   PLAYER360_LONGITUDINAL_ASSOCIATIONS,
   PLAYER360_LONGITUDINAL_SOURCE_METRICS
 } from "../../config/player360-analytics.config.js";
+import { AiInsightGatewayService } from "../../services/player360/AiInsightGatewayService.js";
 
 function escapeHtml(value = "") {
   return String(value ?? "")
@@ -70,17 +71,21 @@ function renderStructuredValue(value) {
 }
 
 export class LongitudinalAnalyticsPanel {
-  constructor({ analyticsService, orchestrator, can } = {}) {
+  constructor({ analyticsService, orchestrator, aiGatewayService = null, can } = {}) {
     this.analyticsService = analyticsService;
     this.orchestrator = orchestrator;
+    this.aiGatewayService = aiGatewayService
+      || new AiInsightGatewayService(analyticsService?.supabase || null);
     this.can = typeof can === "function" ? can : () => false;
 
     this.context = null;
     this.capabilities = null;
+    this.aiCapabilities = null;
     this.snapshots = [];
     this.insights = [];
     this.selectedSnapshotId = null;
     this.lastError = null;
+    this.aiGenerating = false;
   }
 
   _can(permission) {
@@ -131,15 +136,20 @@ export class LongitudinalAnalyticsPanel {
 
     const canViewAnalytics = this._can(Permission.VIEW_LONGITUDINAL_ANALYTICS);
     const canViewAi = this._can(Permission.VIEW_AI_INSIGHTS);
+    const canGenerateAi = this._can(Permission.GENERATE_AI_INSIGHTS);
 
     if ((!canViewAnalytics && !canViewAi) || !this.analyticsService?.supabase) {
       this.capabilities = null;
+      this.aiCapabilities = null;
       return;
     }
 
     try {
       this.capabilities = await this.analyticsService.getCapabilities({ force: true });
-      if (!this.capabilities?.ready) return;
+      if (!this.capabilities?.ready) {
+        this.aiCapabilities = null;
+        return;
+      }
 
       if (canViewAnalytics) {
         this.snapshots = await this.analyticsService.listSnapshots({
@@ -156,6 +166,10 @@ export class LongitudinalAnalyticsPanel {
         this.selectedSnapshotId = null;
       }
       this.selectedSnapshotId = this.selectedSnapshotId || this.snapshots[0]?.id || null;
+
+      this.aiCapabilities = canGenerateAi
+        ? await this.aiGatewayService.getCapabilities()
+        : null;
 
       if (canViewAi && this.selectedSnapshotId) {
         this.insights = await this.analyticsService.listInsights({
@@ -192,6 +206,7 @@ export class LongitudinalAnalyticsPanel {
       '.p360d-primary,.p360d-secondary{min-height:44px;border-radius:9px;padding:9px 13px;font-weight:800;cursor:pointer}' +
       '.p360d-primary{background:#1e3a8a;color:#fff;border:1px solid #1e3a8a}' +
       '.p360d-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}' +
+      '.p360d-primary:disabled,.p360d-secondary:disabled{opacity:.6;cursor:not-allowed}' +
       '.p360d-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}' +
       '.p360d-kpi{border:1px solid #e2e8f0;border-radius:10px;padding:11px;background:#f8fafc;display:grid;gap:3px}' +
       '.p360d-kpi span{font-size:10px;color:#64748b;font-weight:800;text-transform:uppercase}' +
@@ -209,10 +224,12 @@ export class LongitudinalAnalyticsPanel {
       '.p360d-list{margin:0;padding-left:20px;color:#334155;font-size:12px;line-height:1.5}' +
       '.p360d-pre{margin:0;max-width:100%;overflow:auto;white-space:pre-wrap;font-size:11px;background:#f8fafc;border-radius:8px;padding:9px}' +
       '.p360d-review{display:grid;gap:8px;border-top:1px solid #f1f5f9;padding-top:8px}.p360d-review-actions{display:flex;gap:8px;flex-wrap:wrap}' +
+      '.p360d-ai-control{display:grid;gap:9px;margin-bottom:10px}.p360d-ai-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}' +
+      '.p360d-ai-free{display:inline-flex;width:fit-content;border-radius:999px;padding:4px 8px;background:#dcfce7;color:#166534;font-size:10px;font-weight:900}' +
       '.p360d-note,.p360d-empty,.p360d-error{border-radius:10px;padding:12px;font-size:12px;line-height:1.5}' +
       '.p360d-note{background:#f0f9ff;border:1px solid #bae6fd;color:#0c4a6e}.p360d-empty{background:#f8fafc;border:1px dashed #cbd5e1;color:#64748b;text-align:center}.p360d-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}' +
       '@media(max-width:900px){.p360d-series{grid-template-columns:repeat(2,minmax(0,1fr))}.p360d-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}' +
-      '@media(max-width:640px){.p360d-period{grid-template-columns:1fr}.p360d-period button{width:100%}.p360d-series{grid-template-columns:1fr}.p360d-head{display:grid}.p360d-review-actions{display:grid}.p360d-review-actions button{width:100%}}' +
+      '@media(max-width:640px){.p360d-period{grid-template-columns:1fr}.p360d-period button{width:100%}.p360d-series{grid-template-columns:1fr}.p360d-head{display:grid}.p360d-review-actions,.p360d-ai-actions{display:grid}.p360d-review-actions button,.p360d-ai-actions button{width:100%}}' +
       '</style>';
   }
 
@@ -289,7 +306,8 @@ export class LongitudinalAnalyticsPanel {
       ["interpretation", "Interpretación"],
       ["priorities", "Prioridades"],
       ["recommendations", "Recomendaciones"],
-      ["action_plan", "Plan de acción"]
+      ["action_plan", "Plan de acción"],
+      ["limitations", "Limitaciones"]
     ].filter(([key]) => content?.[key] !== undefined && content?.[key] !== null);
 
     if (!sections.length) {
@@ -299,6 +317,30 @@ export class LongitudinalAnalyticsPanel {
     return '<div class="p360d-content">' + sections.map(([key, label]) =>
       '<section><h5>' + label + '</h5>' + renderStructuredValue(content[key]) + '</section>'
     ).join("") + '</div>';
+  }
+
+  _renderAiGenerationControl() {
+    if (!this._can(Permission.GENERATE_AI_INSIGHTS)) return "";
+
+    const capabilities = this.aiCapabilities;
+    const available = Boolean(capabilities?.available && capabilities?.freeOnly);
+    if (!available) {
+      return '<div class="p360d-ai-control">' +
+        '<div class="p360d-note"><strong>IA sin coste preparada, pero inactiva.</strong> ' +
+        'No hay un LLM gratuito/local habilitado en el backend. IQBasket no enviará datos a ningún modelo ni usará una API de pago.</div>' +
+      '</div>';
+    }
+
+    return '<div class="p360d-ai-control">' +
+      '<div class="p360d-note">La interpretación se genera únicamente con el LLM gratuito/autogestionado configurado. ' +
+      'Se envía evidencia minimizada, nunca claves ni datos identificativos del jugador, y el resultado queda como borrador para revisión humana.</div>' +
+      '<div class="p360d-ai-actions">' +
+        '<button type="button" id="p360d-generate-ai" class="p360d-primary"' + (this.aiGenerating ? ' disabled' : '') + '>' +
+          (this.aiGenerating ? 'Generando…' : 'Generar interpretación IA') +
+        '</button>' +
+        '<span class="p360d-ai-free">Coste API: 0 €</span>' +
+      '</div>' +
+    '</div>';
   }
 
   _renderInsights() {
@@ -329,14 +371,10 @@ export class LongitudinalAnalyticsPanel {
         }).join("") + '</div>'
       : '<div class="p360d-empty">Todavía no hay interpretaciones IA guardadas para este snapshot.</div>';
 
-    const generationNote = this._can(Permission.GENERATE_AI_INSIGHTS) && !PLAYER360_AI_UI_CONFIG.generationEnabled
-      ? '<div class="p360d-note">La generación externa está bloqueada deliberadamente hasta desplegar el adaptador backend seguro. No se almacenan claves de proveedor ni se realizan llamadas a modelos desde el navegador.</div>'
-      : "";
-
     return '<div class="p360d-card">' +
       '<div class="p360d-head"><div><h3>Interpretación IA</h3>' +
-      '<p>Separada de la evidencia objetiva y sometida a revisión humana.</p></div></div>' +
-      generationNote + list +
+      '<p>Separada de la evidencia objetiva, con coste de API cero y sometida a revisión humana.</p></div></div>' +
+      this._renderAiGenerationControl() + list +
       '</div>';
   }
 
@@ -427,6 +465,35 @@ export class LongitudinalAnalyticsPanel {
         console.error("[LongitudinalAnalyticsPanel] Error generando snapshot:", error);
         alert("❌ " + (error.message || error));
         submit.disabled = false;
+      }
+    });
+
+    container.querySelector("#p360d-generate-ai")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      const snapshotId = this.selectedSnapshotId;
+      if (!snapshotId || !this.aiCapabilities?.available || !this.aiCapabilities?.freeOnly) return;
+
+      if (!confirm(
+        "¿Generar una interpretación con el LLM gratuito configurado? Se enviará únicamente evidencia minimizada y el resultado quedará como borrador para revisión."
+      )) return;
+
+      button.disabled = true;
+      this.aiGenerating = true;
+      try {
+        await this.aiGatewayService.generateInsight({
+          snapshotId,
+          audience: "STAFF",
+          locale: this.context?.locale || "es",
+          purpose: "SPORT_PERFORMANCE"
+        });
+        this.aiGenerating = false;
+        await this.load(this.context);
+        await refresh();
+      } catch (error) {
+        this.aiGenerating = false;
+        console.error("[LongitudinalAnalyticsPanel] Error generando insight IA:", error);
+        alert("❌ " + (error.message || error));
+        button.disabled = false;
       }
     });
 
