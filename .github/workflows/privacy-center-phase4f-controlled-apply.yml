@@ -1,0 +1,153 @@
+name: Privacy Center Phase 4F Controlled Apply
+
+on:
+  push:
+    branches:
+      - feature/privacy-center-v1
+    paths:
+      - ".github/privacy-center-phase4f-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + apply + verify + emergency rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Phase 4F SQL structure guard
+        run: node tests/privacy-center-phase4f-sql-structure.mjs
+
+      - name: Capture privacy data baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_subject_relationships)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_requests)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4F_PRIVACY_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm Phase 4F preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_preflight_v4_phase4f_privacy_center_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PRIVACY_CENTER_V1_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Apply Phase 4F read API
+        id: apply_read
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_v4_phase4f_privacy_center.sql
+
+      - name: Apply Phase 4F request review
+        id: apply_review
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_v4_phase4f_privacy_center_request_review.sql
+
+      - name: Verify installed Phase 4F
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PRIVACY_CENTER_V1_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Confirm privacy data unchanged
+        id: baseline_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_subject_relationships)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_requests)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4F_PRIVACY_POST_APPLY=$RESULT"
+          test "$RESULT" = "${{ steps.baseline.outputs.value }}"
+
+      - name: Emergency rollback Phase 4F only
+        if: failure() && (steps.apply_read.outcome == 'success' || steps.apply_review.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_v4_phase4f_privacy_center_request_review.sql
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_v4_phase4f_privacy_center.sql
+
+      - name: Verify emergency rollback preserves Phase 4E
+        if: failure() && (steps.apply_read.outcome == 'success' || steps.apply_review.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260904_verify_v4_phase4f_postrollback_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PRIVACY_CENTER_V1_POST_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          FINAL=${LAST##*,}
+          if [ "$FINAL" != "t" ] && [ "$FINAL" != "true" ]; then exit 1; fi
+
+      - name: Confirm privacy data unchanged after emergency rollback
+        if: failure() && (steps.apply_read.outcome == 'success' || steps.apply_review.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player360_subject_relationships)::text || '|' ||
+              (select count(*) from public.player360_processing_authorizations)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_requests)::text || '|' ||
+              (select count(*) from public.player360_sensitive_access_grants)::text || '|' ||
+              (select count(*) from public.player360_privacy_audit_log)::text;
+          " | tr -d '[:space:]')
+          echo "PHASE4F_PRIVACY_AFTER_ROLLBACK=$RESULT"
+          test "$RESULT" = "${{ steps.baseline.outputs.value }}"

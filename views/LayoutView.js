@@ -33,6 +33,7 @@ export class LayoutView {
     if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
     if (['training', 'entrenamientos', 'development', 'desarrollo'].includes(r)) return 'training';
     if (['nutrition', 'nutricion'].includes(r)) return 'nutrition';
+    if (['privacy', 'privacy-center', 'privacidad', 'autorizaciones'].includes(r)) return 'privacy';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
@@ -218,6 +219,7 @@ export class LayoutView {
     const isAiRestricted = !hasRolePermission(Permission.USE_AI);
     const isTrainingRestricted = !hasRolePermission(Permission.VIEW_TRAINING);
     const isNutritionRestricted = !hasRolePermission(Permission.VIEW_NUTRITION);
+    const canViewPrivacy = hasRolePermission(Permission.VIEW_PRIVACY_AUTHORIZATIONS);
 
     const navGroups = [
       {
@@ -283,6 +285,7 @@ export class LayoutView {
         defaultTitle: "MI PERFIL",
         items: [
           { key: "profile", labelKey: "profile", fallback: "Mi Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
+          ...(canViewPrivacy ? [{ key: "privacy", labelKey: "privacy_center", fallback: "Privacidad y accesos", route: "privacy", svg: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path>' }] : []),
           { key: "settings", labelKey: "settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
         ]
       }
@@ -490,6 +493,11 @@ export class LayoutView {
                 <span class="drawer-icon">🤖</span>
                 <span>${LayoutView.t("ask_ai", "Asistente IQ")}${isAiRestricted ? ' 🔒' : ''}</span>
               </a>
+              ${canViewPrivacy ? `
+              <a href="#/privacy" class="drawer-item" data-route-key="privacy">
+                <span class="drawer-icon">🛡️</span>
+                <span>${LayoutView.t("privacy_center", "Privacidad y accesos")}</span>
+              </a>` : ""}
               <a href="#/profile" class="drawer-item">
                 <span class="drawer-icon">👤</span>
                 <span>${LayoutView.t("profile", "Perfil")}</span>
@@ -1073,7 +1081,8 @@ if (I18n && typeof I18n.subscribe === "function") {
         "family-advisor": "family_advisor",
         ask: "ask_ai",
         profile: "profile",
-        settings: "settings"
+        settings: "settings",
+        privacy: "privacy_center"
       };
 
       document.querySelectorAll(".nav-link, .mobile-nav-item, .drawer-item").forEach(item => {
