@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   PLAYER360_AI_GATEWAY_CONFIG,
   PLAYER360_AI_OUTPUT_JSON_SCHEMA,
-  assertEvidenceAllowedForAi,
+  sanitizeEvidenceForAiProvider,
   normalizeAiInsightContent
 } from "../../../config/player360-ai-gateway.config.js";
 
@@ -13,6 +13,7 @@ const corsHeaders = {
 };
 
 const ALLOWED_LOCALES = new Set(["es", "ca", "en", "fr"]);
+const DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -40,6 +41,12 @@ function safeLocale(value: unknown) {
   return ALLOWED_LOCALES.has(locale) ? locale : "es";
 }
 
+function boundedEnvNumber(name: string, fallback: number, min: number, max: number) {
+  const parsed = Number(Deno.env.get(name));
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
 function parseQuotaMap(raw: string | undefined) {
   if (!raw) return {} as Record<string, number>;
   try {
@@ -61,6 +68,24 @@ function resolveQuotaRole(profile: JsonRecord | null) {
   return appRole || "INVITADO";
 }
 
+function resolveOpenAiEndpoint() {
+  const configured = Deno.env.get("IQB_AI_ENDPOINT") || DEFAULT_OPENAI_ENDPOINT;
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new Error("AI_PROVIDER_ENDPOINT_INVALID");
+  }
+  if (url.protocol !== "https:") throw new Error("AI_PROVIDER_ENDPOINT_INVALID");
+
+  const customAllowed = String(Deno.env.get("IQB_AI_ALLOW_CUSTOM_ENDPOINT") || "")
+    .trim().toLowerCase() === "true";
+  if (!customAllowed && url.origin !== "https://api.openai.com") {
+    throw new Error("AI_PROVIDER_ENDPOINT_NOT_ALLOWED");
+  }
+  return url.toString();
+}
+
 function buildSystemPrompt(locale: string) {
   return [
     "Eres el motor de interpretación deportiva de IQBasket.",
@@ -74,12 +99,13 @@ function buildSystemPrompt(locale: string) {
   ].join("\n");
 }
 
-function buildUserPrompt(snapshot: JsonRecord) {
-  const evidence = snapshot.evidence_bundle;
-  const period = {
-    start: snapshot.period_start || null,
-    end: snapshot.period_end || null
-  };
+function buildUserPrompt({
+  period,
+  evidence
+}: {
+  period: { start: unknown; end: unknown };
+  evidence: JsonRecord;
+}) {
   return JSON.stringify({
     task: "Interpretar evidencia longitudinal para staff deportivo y proponer próximos focos de observación/entrenamiento.",
     period,
@@ -109,40 +135,81 @@ function extractResponseText(payload: JsonRecord) {
   return "";
 }
 
-async function callOpenAiProvider({ snapshot, locale }: { snapshot: JsonRecord; locale: string }): Promise<ProviderResult> {
+function hasProviderRefusal(payload: JsonRecord) {
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  return output.some(item => {
+    if (!item || typeof item !== "object") return false;
+    const content = Array.isArray((item as JsonRecord).content)
+      ? (item as JsonRecord).content as unknown[]
+      : [];
+    return content.some(part => {
+      if (!part || typeof part !== "object") return false;
+      const record = part as JsonRecord;
+      return record.type === "refusal" || typeof record.refusal === "string";
+    });
+  });
+}
+
+async function callOpenAiProvider({
+  evidence,
+  period,
+  locale
+}: {
+  evidence: JsonRecord;
+  period: { start: unknown; end: unknown };
+  locale: string;
+}): Promise<ProviderResult> {
   const apiKey = Deno.env.get("IQB_AI_API_KEY") || "";
   const modelName = Deno.env.get("IQB_AI_MODEL") || "";
-  const endpoint = Deno.env.get("IQB_AI_ENDPOINT") || "https://api.openai.com/v1/responses";
   if (!apiKey || !modelName) throw new Error("AI_PROVIDER_NOT_CONFIGURED");
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: modelName,
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: buildSystemPrompt(locale) }]
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: buildUserPrompt(snapshot) }]
+  const endpoint = resolveOpenAiEndpoint();
+  const timeoutMs = boundedEnvNumber("IQB_AI_TIMEOUT_MS", 45000, 5000, 90000);
+  const maxOutputTokens = boundedEnvNumber("IQB_AI_MAX_OUTPUT_TOKENS", 1800, 256, 4000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: modelName,
+        store: false,
+        max_output_tokens: maxOutputTokens,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: buildSystemPrompt(locale) }]
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: buildUserPrompt({ period, evidence }) }]
+          }
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "iqbasket_player360_insight",
+            strict: true,
+            schema: PLAYER360_AI_OUTPUT_JSON_SCHEMA
+          }
         }
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "iqbasket_player360_insight",
-          strict: true,
-          schema: PLAYER360_AI_OUTPUT_JSON_SCHEMA
-        }
-      }
-    })
-  });
+      })
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("AI_PROVIDER_TIMEOUT");
+    }
+    throw new Error("AI_PROVIDER_REQUEST_FAILED");
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     console.error("[player360-ai-insight] Provider HTTP failure", response.status);
@@ -150,6 +217,13 @@ async function callOpenAiProvider({ snapshot, locale }: { snapshot: JsonRecord; 
   }
 
   const payload = await response.json() as JsonRecord;
+  if (String(payload.status || "").toLowerCase() === "incomplete") {
+    throw new Error("AI_PROVIDER_OUTPUT_INCOMPLETE");
+  }
+  if (hasProviderRefusal(payload)) {
+    throw new Error("AI_PROVIDER_REFUSED");
+  }
+
   const rawText = extractResponseText(payload);
   if (!rawText) throw new Error("AI_PROVIDER_EMPTY_OUTPUT");
 
@@ -176,7 +250,11 @@ async function callOpenAiProvider({ snapshot, locale }: { snapshot: JsonRecord; 
   };
 }
 
-async function callProvider(args: { snapshot: JsonRecord; locale: string }): Promise<ProviderResult> {
+async function callProvider(args: {
+  evidence: JsonRecord;
+  period: { start: unknown; end: unknown };
+  locale: string;
+}): Promise<ProviderResult> {
   const provider = safeUpper(Deno.env.get("IQB_AI_PROVIDER"));
   if (provider === "OPENAI") return callOpenAiProvider(args);
   throw new Error("AI_PROVIDER_NOT_CONFIGURED");
@@ -240,8 +318,9 @@ Deno.serve(async (req) => {
     return json({ success: false, error_code: "PLAYER360_AI_GENERATE_DENIED" }, 403);
   }
 
+  let providerEvidence: JsonRecord;
   try {
-    assertEvidenceAllowedForAi(snapshot.evidence_bundle || {});
+    providerEvidence = sanitizeEvidenceForAiProvider(snapshot.evidence_bundle || {}) as JsonRecord;
   } catch (error) {
     return json({
       success: false,
@@ -283,7 +362,14 @@ Deno.serve(async (req) => {
 
   const startedAt = performance.now();
   try {
-    const result = await callProvider({ snapshot: snapshot as JsonRecord, locale });
+    const result = await callProvider({
+      evidence: providerEvidence,
+      period: {
+        start: snapshot.period_start || null,
+        end: snapshot.period_end || null
+      },
+      locale
+    });
     const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
     const trustedContent = {
       ...result.content,
