@@ -1,0 +1,168 @@
+name: Supabase Storage Optimization - Player Photos
+
+on:
+  push:
+    branches:
+      - ops/supabase-storage-audit
+    paths:
+      - ".github/workflows/supabase-storage-optimize-player-photos.yml"
+      - "scripts/ops/optimize_player_photos.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-player-photo-optimization
+  cancel-in-progress: false
+
+jobs:
+  optimize:
+    name: Backup + optimize + verify player photos
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PHOTO_WORKDIR: photo-migration
+      PHOTO_MAX_EDGE: "640"
+      PHOTO_WEBP_QUALITY: "84"
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install image/database tooling
+        run: |
+          python -m pip install --disable-pip-version-check --quiet "psycopg[binary]==3.2.9" "Pillow==11.3.0"
+
+      - name: Capture baseline
+        id: baseline
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          with psycopg.connect(os.environ['SUPABASE_DB_URL']) as conn:
+              db_bytes = conn.execute('select pg_database_size(current_database())').fetchone()[0]
+              players = conn.execute('select count(*) from public.players').fetchone()[0]
+              games = conn.execute('select count(*) from public.games').fetchone()[0]
+              stats = conn.execute('select count(*) from public.player_game_stats').fetchone()[0]
+              events = conn.execute('select count(*) from public.game_events').fetchone()[0]
+              photos, photo_chars = conn.execute("select count(*), coalesce(sum(length(photo_url)),0) from public.players where photo_url like 'data:image/%;base64,%'").fetchone()
+          out = os.environ['GITHUB_OUTPUT']
+          with open(out, 'a', encoding='utf-8') as fh:
+              for key, value in [('db_bytes',db_bytes),('players',players),('games',games),('stats',stats),('events',events),('photos',photos),('photo_chars',photo_chars)]:
+                  fh.write(f'{key}={value}\n')
+          print(f'PHOTO_BASELINE db_bytes={db_bytes} photos={photos} photo_uri_chars={photo_chars} players={players} games={games} stats={stats} events={events}')
+          if photos < 1 or photo_chars < 1_000_000:
+              raise SystemExit('Photo optimization preflight threshold not met')
+          PY
+
+      - name: Export and optimize originals locally
+        run: python scripts/ops/optimize_player_photos.py export
+
+      - name: Build encrypted safety archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf player-photo-originals.tar.gz \
+            photo-migration/originals \
+            photo-migration/original-photo-rows.json.gz \
+            photo-migration/manifest.json
+          KEY=$(printf '%s' "$SUPABASE_DB_URL" | sha256sum | awk '{print $1}')
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+            -in player-photo-originals.tar.gz \
+            -out player-photo-originals.tar.gz.enc \
+            -pass pass:"$KEY"
+          sha256sum player-photo-originals.tar.gz.enc > player-photo-originals.tar.gz.enc.sha256
+          rm -f player-photo-originals.tar.gz
+          test -s player-photo-originals.tar.gz.enc
+
+      - name: Upload encrypted original-photo backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: iqbasket-player-photo-originals-20260904-encrypted
+          path: |
+            player-photo-originals.tar.gz.enc
+            player-photo-originals.tar.gz.enc.sha256
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Apply optimized photos
+        id: apply
+        run: python scripts/ops/optimize_player_photos.py apply
+
+      - name: Verify optimized photo payloads
+        run: python scripts/ops/optimize_player_photos.py verify
+
+      - name: Reclaim PostgreSQL relation space
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          conn = psycopg.connect(os.environ['SUPABASE_DB_URL'], autocommit=True)
+          try:
+              conn.execute('vacuum (full, analyze) public.players')
+          finally:
+              conn.close()
+          print('PHOTO_VACUUM_FULL completed')
+          PY
+
+      - name: Verify database integrity and released space
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          before = int('${{ steps.baseline.outputs.db_bytes }}')
+          with psycopg.connect(os.environ['SUPABASE_DB_URL']) as conn:
+              after = conn.execute('select pg_database_size(current_database())').fetchone()[0]
+              players = conn.execute('select count(*) from public.players').fetchone()[0]
+              games = conn.execute('select count(*) from public.games').fetchone()[0]
+              stats = conn.execute('select count(*) from public.player_game_stats').fetchone()[0]
+              events = conn.execute('select count(*) from public.game_events').fetchone()[0]
+              photos, photo_chars = conn.execute("select count(*), coalesce(sum(length(photo_url)),0) from public.players where photo_url like 'data:image/%;base64,%'").fetchone()
+          expected = {
+              'players': int('${{ steps.baseline.outputs.players }}'),
+              'games': int('${{ steps.baseline.outputs.games }}'),
+              'stats': int('${{ steps.baseline.outputs.stats }}'),
+              'events': int('${{ steps.baseline.outputs.events }}'),
+              'photos': int('${{ steps.baseline.outputs.photos }}'),
+          }
+          actual = {'players':players,'games':games,'stats':stats,'events':events,'photos':photos}
+          if actual != expected:
+              raise SystemExit(f'Integrity mismatch: {actual} != {expected}')
+          before_photo_chars = int('${{ steps.baseline.outputs.photo_chars }}')
+          if photo_chars >= before_photo_chars * 0.25:
+              raise SystemExit('Photo payload did not shrink enough')
+          freed = before - after
+          print(f'PHOTO_STORAGE_POST db_bytes={after} freed_bytes={freed} photo_uri_chars={photo_chars}')
+          if freed < 5_000_000:
+              raise SystemExit('Database space release below safety target')
+          PY
+
+      - name: Emergency restore originals after post-apply failure
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/ops/optimize_player_photos.py restore
+          python - <<'PY'
+          import os
+          import psycopg
+          conn = psycopg.connect(os.environ['SUPABASE_DB_URL'], autocommit=True)
+          try:
+              conn.execute('vacuum (full, analyze) public.players')
+          finally:
+              conn.close()
+          print('PHOTO_EMERGENCY_RESTORE completed')
+          PY
