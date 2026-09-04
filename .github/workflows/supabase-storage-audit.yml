@@ -1,0 +1,106 @@
+name: Supabase Storage Audit
+
+on:
+  push:
+    branches:
+      - ops/supabase-storage-audit
+    paths:
+      - ".github/workflows/supabase-storage-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Read-only database size audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Database total size
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select current_database() as database,
+                   pg_database_size(current_database()) as bytes,
+                   pg_size_pretty(pg_database_size(current_database())) as total_size;
+          "
+
+      - name: Schema sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select n.nspname as schema,
+                   sum(pg_total_relation_size(c.oid))::bigint as bytes,
+                   pg_size_pretty(sum(pg_total_relation_size(c.oid))::bigint) as total_size
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where c.relkind in ('r','m','p')
+              and n.nspname not in ('pg_catalog','information_schema')
+              and n.nspname not like 'pg_toast%'
+            group by n.nspname
+            order by bytes desc;
+          "
+
+      - name: Largest relations
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select n.nspname as schema,
+                   c.relname as relation,
+                   pg_total_relation_size(c.oid) as total_bytes,
+                   pg_size_pretty(pg_total_relation_size(c.oid)) as total_size,
+                   pg_size_pretty(pg_relation_size(c.oid)) as heap_size,
+                   pg_size_pretty(pg_indexes_size(c.oid)) as indexes_size
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where c.relkind in ('r','m','p')
+              and n.nspname not in ('pg_catalog','information_schema')
+              and n.nspname not like 'pg_toast%'
+            order by total_bytes desc
+            limit 80;
+          "
+
+      - name: IQBasket backup schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select n.nspname as backup_schema,
+                   coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint as bytes,
+                   pg_size_pretty(coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint) as total_size,
+                   count(c.oid) filter (where c.relkind in ('r','m','p')) as relations
+            from pg_namespace n
+            left join pg_class c on c.relnamespace = n.oid and c.relkind in ('r','m','p')
+            where n.nspname like 'iqbackup%'
+            group by n.nspname
+            order by bytes desc;
+          "
+
+      - name: Public high-volume IQBasket rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --pset=pager=off --command="
+            select schemaname, relname,
+                   n_live_tup::bigint as estimated_rows,
+                   pg_size_pretty(pg_total_relation_size(format('%I.%I', schemaname, relname)::regclass)) as total_size
+            from pg_stat_user_tables
+            where schemaname = 'public'
+            order by pg_total_relation_size(format('%I.%I', schemaname, relname)::regclass) desc
+            limit 50;
+          "
