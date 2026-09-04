@@ -142,6 +142,9 @@ jobs:
       - name: Security perimeter hardening
         run: node tests/security-perimeter-hardening-sql.mjs
 
+      - name: Family-first SaaS entitlements contract
+        run: node tests/saas-entitlements-v1-contract.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
