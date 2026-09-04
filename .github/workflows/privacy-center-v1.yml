@@ -1,0 +1,73 @@
+name: Privacy Center V1
+
+on:
+  push:
+    branches:
+      - feature/privacy-center-v1
+    paths:
+      - "views/PrivacyCenterView.js"
+      - "services/player360/PrivacyGovernanceService.js"
+      - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
+      - "tests/privacy-center-*.mjs"
+      - "docs/architecture/PRIVACY_CENTER_V1.md"
+      - ".github/workflows/privacy-center-v1.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/PrivacyCenterView.js"
+      - "services/player360/PrivacyGovernanceService.js"
+      - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
+      - "tests/privacy-center-*.mjs"
+      - "docs/architecture/PRIVACY_CENTER_V1.md"
+      - ".github/workflows/privacy-center-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-center:
+    name: Privacy Center desktop + iPhone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRIVACY_CENTER_BASE_URL: http://127.0.0.1:4173/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Static Privacy Center SQL guard
+        run: node tests/privacy-center-phase4f-sql-structure.mjs
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/privacy-center-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$PRIVACY_CENTER_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/privacy-center-vite.log
+          exit 1
+
+      - name: Privacy Center browser smoke
+        run: node tests/privacy-center-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/privacy-center-vite.log || true
