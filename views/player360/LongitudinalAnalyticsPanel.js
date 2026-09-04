@@ -339,7 +339,7 @@ export class LongitudinalAnalyticsPanel {
       ? gatewayEnabled
         ? '<div class="p360d-review-actions"><button type="button" id="p360d-generate-ai" class="p360d-primary">Generar interpretación IA</button></div>' +
           '<div class="p360d-note">La IA recibe únicamente evidencia longitudinal autorizada y guarda siempre un borrador sujeto a revisión humana.</div>'
-        : '<div class="p360d-note">La pasarela IA está preparada pero permanece desactivada hasta validar backend, secretos y cuotas. El navegador nunca llama directamente al proveedor.</div>'
+        : '<div class="p360d-note">La pasarela IA está preparada pero permanece desactivada hasta validar backend, secretos y cuotas. No se almacenan claves de proveedor en el navegador y el navegador nunca llama directamente al proveedor.</div>'
       : "";
 
     return '<div class="p360d-card">' +
