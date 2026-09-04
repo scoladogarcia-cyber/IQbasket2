@@ -15,6 +15,7 @@ import { DataStore } from "../services/DataStore.js";
 import { EvaluationService } from "../services/player360/EvaluationService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
 import { LongitudinalAnalyticsService } from "../services/player360/LongitudinalAnalyticsService.js";
+import { Player360AiGatewayService } from "../services/player360/Player360AiGatewayService.js";
 import { LongitudinalAnalyticsOrchestrator } from "../services/player360/LongitudinalAnalyticsOrchestrator.js";
 import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPanel.js";
 import { WellnessService } from "../services/player360/WellnessService.js";
@@ -88,6 +89,7 @@ export class Player360View {
     this.service = new EvaluationService(this.supabase);
     this.trainingService = new TrainingService(this.supabase);
     this.analyticsService = new LongitudinalAnalyticsService(this.supabase);
+    this.aiGatewayService = new Player360AiGatewayService(this.supabase);
     this.analyticsOrchestrator = new LongitudinalAnalyticsOrchestrator({
       dataStore: DataStore,
       trainingService: this.trainingService,
@@ -97,6 +99,7 @@ export class Player360View {
     this.analyticsPanel = new LongitudinalAnalyticsPanel({
       analyticsService: this.analyticsService,
       orchestrator: this.analyticsOrchestrator,
+      aiGatewayService: this.aiGatewayService,
       can: permission => this._can(permission)
     });
     this.wellnessService = new WellnessService(this.supabase);

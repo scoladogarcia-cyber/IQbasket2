@@ -1,0 +1,57 @@
+name: Player 360 AI Gateway
+
+on:
+  push:
+    branches:
+      - feature/player360-ai-gateway-v1
+    paths:
+      - "config/player360-ai-gateway.config.js"
+      - "config/player360-analytics.config.js"
+      - "services/player360/Player360AiGatewayService.js"
+      - "supabase/functions/player360-ai-insight/**"
+      - "tests/player360-ai-gateway-contract.mjs"
+      - "views/Player360View.js"
+      - "views/player360/LongitudinalAnalyticsPanel.js"
+      - "docs/architecture/PLAYER_360_AI_GATEWAY_V1.md"
+      - ".github/workflows/player360-ai-gateway.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "config/player360-ai-gateway.config.js"
+      - "config/player360-analytics.config.js"
+      - "services/player360/Player360AiGatewayService.js"
+      - "supabase/functions/player360-ai-insight/**"
+      - "tests/player360-ai-gateway-contract.mjs"
+      - "views/Player360View.js"
+      - "views/player360/LongitudinalAnalyticsPanel.js"
+      - "docs/architecture/PLAYER_360_AI_GATEWAY_V1.md"
+      - ".github/workflows/player360-ai-gateway.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gateway-contract:
+    name: Gateway contract + Edge typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Gateway security contract
+        run: node tests/player360-ai-gateway-contract.mjs
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typecheck Edge Function dependency graph
+        run: deno check supabase/functions/player360-ai-insight/index.ts
