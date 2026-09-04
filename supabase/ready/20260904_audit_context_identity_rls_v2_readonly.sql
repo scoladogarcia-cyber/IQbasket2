@@ -1,4 +1,4 @@
--- IQBasket contextual identity RLS V2 audit. READ ONLY.
+﻿-- IQBasket contextual identity RLS V2 audit. READ ONLY.
 \set ON_ERROR_STOP on
 begin read only;
 
@@ -15,14 +15,14 @@ select 'CTX_RLS_TABLE' as section,
 from pg_class c
 join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public'
-  and c.relname in ('club_season_memberships','user_player_links')
+  and c.relname in ('team_season_memberships','club_season_memberships','user_player_links')
 order by c.relname;
 
 select 'CTX_RLS_POLICY' as section,
        tablename, policyname, cmd, roles, qual, with_check
 from pg_policies
 where schemaname='public'
-  and tablename in ('club_season_memberships','user_player_links')
+  and tablename in ('team_season_memberships','club_season_memberships','user_player_links')
 order by tablename, policyname;
 select 'CTX_RLS_ROWS' as section,
        (select count(*) from public.club_season_memberships) as club_memberships,
@@ -44,3 +44,4 @@ where n.nspname='public'
 order by p.proname;
 
 rollback;
+
