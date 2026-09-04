@@ -1,0 +1,165 @@
+name: Demo Universe V1 Controlled Apply
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + apply + integrity + storage cap + emergency rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      MAX_DEMO_GROWTH_BYTES: "8388608"
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static demo contract
+        run: node tests/demo-universe-v1-sql-structure.mjs
+
+      - name: Capture non-demo baseline and database size
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.game_events)::text || '|' ||
+              (select count(*) from public.play_by_play_events)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots)::text || '|' ||
+              (select count(*) from public.player_ai_insights)::text;
+          " | tr -d '[:space:]')
+          BYTES=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select pg_database_size(current_database());" | tr -d '[:space:]')
+          echo "DEMO_BASELINE_COUNTS=$BASE"
+          echo "DEMO_DATABASE_BYTES_BEFORE=$BYTES"
+          echo "counts=$BASE" >> "$GITHUB_OUTPUT"
+          echo "bytes=$BYTES" >> "$GITHUB_OUTPUT"
+
+      - name: Read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_preflight_demo_universe_v1_readonly.sql)
+          echo "$OUT"
+          grep -q 'DEMO_UNIVERSE_V1_PREFLIGHT preflight_ok' <<< "$OUT"
+
+      # We intentionally avoid a large insert+ROLLBACK rehearsal on production:
+      # PostgreSQL may retain newly allocated relation pages after rollback, which
+      # would defeat the user's storage-reduction objective. Static gates + strict
+      # preflight + emergency rollback provide the safer low-storage path here.
+      - name: Apply demo sporting core
+        id: apply_core
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_apply_demo_universe_v1_core.sql
+
+      - name: Apply Player 360 demo layer
+        id: apply_p360
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_apply_demo_universe_v1_player360.sql
+
+      - name: Verify complete synthetic universe
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_verify_demo_universe_v1_readonly.sql)
+          echo "$OUT"
+          grep -q 'DEMO_UNIVERSE_V1_VERIFY verify_ok' <<< "$OUT"
+
+      - name: Confirm existing non-demo row counts unchanged
+        id: isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players where team_id <> 'd0000000-0000-4000-8000-000000000002'::uuid)::text || '|' ||
+              (select count(*) from public.games where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text || '|' ||
+              (select count(*) from public.player_game_stats s where not exists(select 1 from public.games g where g.id=s.game_id and g.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid))::text || '|' ||
+              (select count(*) from public.game_events e where not exists(select 1 from public.games g where g.id=e.game_id and g.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid))::text || '|' ||
+              (select count(*) from public.play_by_play_events e where not exists(select 1 from public.games g where g.id=e.game_id and g.team_season_id='d0000000-0000-4000-8000-000000000005'::uuid))::text || '|' ||
+              (select count(*) from public.training_sessions where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text || '|' ||
+              (select count(*) from public.player_evaluations where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text || '|' ||
+              (select count(*) from public.player_ai_insights where team_season_id is distinct from 'd0000000-0000-4000-8000-000000000005'::uuid)::text;
+          " | tr -d '[:space:]')
+          echo "NON_DEMO_COUNTS_AFTER=$AFTER"
+          test "$AFTER" = "${{ steps.baseline.outputs.counts }}"
+
+      - name: Enforce storage growth cap
+        id: storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          AFTER=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select pg_database_size(current_database());" | tr -d '[:space:]')
+          BEFORE="${{ steps.baseline.outputs.bytes }}"
+          DELTA=$((AFTER-BEFORE))
+          echo "DEMO_DATABASE_BYTES_AFTER=$AFTER"
+          echo "DEMO_DATABASE_GROWTH_BYTES=$DELTA"
+          test "$DELTA" -le "$MAX_DEMO_GROWTH_BYTES"
+
+      - name: Emergency rollback demo only
+        if: failure() && (steps.apply_core.outcome == 'success' || steps.apply_p360.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_rollback_demo_universe_v1.sql
+
+      - name: Verify emergency rollback
+        if: failure() && (steps.apply_core.outcome == 'success' || steps.apply_p360.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260904_verify_demo_universe_v1_postrollback_readonly.sql)
+          echo "$OUT"
+          grep -q 'DEMO_UNIVERSE_V1_POSTROLLBACK postrollback_ok' <<< "$OUT"
+
+      - name: Confirm baseline restored after emergency rollback
+        if: failure() && (steps.apply_core.outcome == 'success' || steps.apply_p360.outcome == 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESTORED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_game_stats)::text || '|' ||
+              (select count(*) from public.game_events)::text || '|' ||
+              (select count(*) from public.play_by_play_events)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.player360_wellness_entries)::text || '|' ||
+              (select count(*) from public.player_evaluations)::text || '|' ||
+              (select count(*) from public.player_longitudinal_snapshots)::text || '|' ||
+              (select count(*) from public.player_ai_insights)::text;
+          " | tr -d '[:space:]')
+          echo "BASELINE_AFTER_ROLLBACK=$RESTORED"
+          test "$RESTORED" = "${{ steps.baseline.outputs.counts }}"

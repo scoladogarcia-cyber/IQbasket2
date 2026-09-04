@@ -1,0 +1,43 @@
+name: Demo Universe V1
+
+on:
+  push:
+    branches:
+      - feature/demo-universe-v1
+    paths:
+      - "supabase/ready/20260904_apply_demo_universe_v1_core.sql"
+      - "supabase/ready/20260904_apply_demo_universe_v1_player360.sql"
+      - "supabase/ready/20260904_preflight_demo_universe_v1_readonly.sql"
+      - "supabase/ready/20260904_verify_demo_universe_v1_readonly.sql"
+      - "supabase/ready/20260904_rollback_demo_universe_v1.sql"
+      - "supabase/ready/20260904_verify_demo_universe_v1_postrollback_readonly.sql"
+      - "tests/demo-universe-v1-sql-structure.mjs"
+      - ".github/workflows/demo-universe-v1.yml"
+  pull_request:
+    paths:
+      - "supabase/ready/20260904_apply_demo_universe_v1_core.sql"
+      - "supabase/ready/20260904_apply_demo_universe_v1_player360.sql"
+      - "supabase/ready/20260904_preflight_demo_universe_v1_readonly.sql"
+      - "supabase/ready/20260904_verify_demo_universe_v1_readonly.sql"
+      - "supabase/ready/20260904_rollback_demo_universe_v1.sql"
+      - "supabase/ready/20260904_verify_demo_universe_v1_postrollback_readonly.sql"
+      - "tests/demo-universe-v1-sql-structure.mjs"
+      - ".github/workflows/demo-universe-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract:
+    name: Synthetic dataset structure guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify demo SQL contract
+        run: node tests/demo-universe-v1-sql-structure.mjs
