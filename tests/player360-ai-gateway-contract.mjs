@@ -4,6 +4,7 @@ import {
   PLAYER360_AI_GATEWAY_CONFIG,
   assertEvidenceAllowedForAi,
   getEvidenceModules,
+  sanitizeEvidenceForAiProvider,
   normalizeAiInsightContent
 } from "../config/player360-ai-gateway.config.js";
 import { Player360AiGatewayService } from "../services/player360/Player360AiGatewayService.js";
@@ -17,8 +18,16 @@ assert.deepEqual(PLAYER360_AI_GATEWAY_CONFIG.allowedAudiences, ["STAFF"]);
 const safeEvidence = {
   evidence_version: "PLAYER360_EVIDENCE_V1",
   calculation_version: "v1",
+  player_id: "player-secret-id",
+  team_season_id: "team-season-secret-id",
+  generated_at: "2026-09-04T00:00:00Z",
   facts: [
-    { fact_type: "LONGITUDINAL_TREND", metric_key: "training.SESSION_LOAD", direction: "UP" },
+    {
+      fact_type: "LONGITUDINAL_TREND",
+      metric_key: "training.SESSION_LOAD",
+      direction: "UP",
+      source_id: "must-not-leave-iqbasket"
+    },
     { fact_type: "LONGITUDINAL_TREND", metric_key: "competition.EVALUATION", direction: "STABLE" },
     {
       fact_type: "DESCRIPTIVE_ASSOCIATION",
@@ -32,6 +41,19 @@ const safeEvidence = {
 };
 assert.deepEqual(getEvidenceModules(safeEvidence), ["competition", "training"]);
 assert.deepEqual(assertEvidenceAllowedForAi(safeEvidence).modules, ["competition", "training"]);
+
+const providerEvidence = sanitizeEvidenceForAiProvider(safeEvidence);
+assert.equal(providerEvidence.evidence_version, "PLAYER360_EVIDENCE_V1");
+assert.equal(providerEvidence.calculation_version, "v1");
+assert.equal("player_id" in providerEvidence, false, "provider payload must remove player id");
+assert.equal("team_season_id" in providerEvidence, false, "provider payload must remove team-season id");
+assert.equal("generated_at" in providerEvidence, false, "provider payload must remove timestamps not needed for interpretation");
+assert.equal("source_id" in providerEvidence.facts[0], false, "provider fact allowlist must remove source ids");
+assert.deepEqual(providerEvidence.facts[0], {
+  fact_type: "LONGITUDINAL_TREND",
+  metric_key: "training.SESSION_LOAD",
+  direction: "UP"
+});
 
 assert.throws(() => assertEvidenceAllowedForAi({
   ...safeEvidence,
@@ -101,11 +123,23 @@ assert.doesNotMatch(clientSource, /api\.openai\.com|IQB_AI_API_KEY|Bearer\s+\$\{
 assert.match(edgeSource, /callerClient\.auth\.getUser\(\)/);
 assert.match(edgeSource, /callerClient[\s\S]*?from\("player_longitudinal_snapshots"\)/);
 assert.match(edgeSource, /iq_v4_can_generate_ai_insights/);
-assert.match(edgeSource, /assertEvidenceAllowedForAi/);
+assert.match(edgeSource, /sanitizeEvidenceForAiProvider/);
 assert.match(edgeSource, /IQB_AI_MONTHLY_LIMITS_JSON/);
 assert.match(edgeSource, /AI_QUOTA_NOT_CONFIGURED/);
 assert.match(edgeSource, /iq_v4_save_ai_insight/);
 assert.match(edgeSource, /Deno\.env\.get\("IQB_AI_API_KEY"\)/);
 assert.doesNotMatch(edgeSource, /adminClient\.rpc\([\s\S]*?iq_v4_save_ai_insight/);
+
+// Provider hardening: stateless Responses API call, bounded output/timeout,
+// HTTPS endpoint allowlist and explicit incomplete/refusal handling.
+assert.match(edgeSource, /store:\s*false/);
+assert.match(edgeSource, /max_output_tokens:\s*maxOutputTokens/);
+assert.match(edgeSource, /IQB_AI_TIMEOUT_MS/);
+assert.match(edgeSource, /IQB_AI_MAX_OUTPUT_TOKENS/);
+assert.match(edgeSource, /url\.protocol\s*!==\s*"https:"/);
+assert.match(edgeSource, /AI_PROVIDER_ENDPOINT_NOT_ALLOWED/);
+assert.match(edgeSource, /AI_PROVIDER_OUTPUT_INCOMPLETE/);
+assert.match(edgeSource, /AI_PROVIDER_REFUSED/);
+assert.match(edgeSource, /type\s*===\s*"refusal"/);
 
 console.log("Player 360 AI gateway contract: OK");
