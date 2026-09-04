@@ -121,3 +121,19 @@ where n.nspname='public'
     to_regprocedure('public.iq_v3_can_manage_player(uuid)')
   )
 order by p.proname;
+
+select
+  'CURRENT_CONTEXT_HELPERS' as section,
+  p.proname,
+  p.prosecdef as security_definer,
+  coalesce(array_to_string(p.proconfig,'|'),'') as function_config,
+  pg_get_userbyid(p.proowner) as owner_name
+from pg_proc p
+join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.oid in (
+    to_regprocedure('public.iq_v3_can_manage_team_season(uuid)'),
+    to_regprocedure('public.iq_v3_is_global_superadmin()'),
+    to_regprocedure('public.iq_v3_can_read_team_season(uuid)')
+  )
+order by p.proname;
