@@ -7,6 +7,8 @@ import {
   PLAYER360_AI_GATEWAY_CONFIG
 } from "../config/player360-ai.config.js";
 import { AiInsightGatewayService } from "../services/player360/AiInsightGatewayService.js";
+import { LongitudinalAnalyticsPanel } from "../views/player360/LongitudinalAnalyticsPanel.js";
+import { Permission } from "../security/PermissionService.js";
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -71,6 +73,45 @@ assert.equal(generated.estimatedCostEurMicros, 0);
 assert.equal(calls[1].name, "player360-ai-insight");
 assert.equal(calls[1].options.body.audience, "STAFF");
 assert.equal(calls[1].options.body.purpose, "SPORT_PERFORMANCE");
+
+const allowedPermissions = new Set([
+  Permission.VIEW_LONGITUDINAL_ANALYTICS,
+  Permission.VIEW_AI_INSIGHTS,
+  Permission.GENERATE_AI_INSIGHTS
+]);
+const panel = new LongitudinalAnalyticsPanel({
+  analyticsService: { supabase: {} },
+  orchestrator: {},
+  aiGatewayService: service,
+  can: permission => allowedPermissions.has(permission)
+});
+panel.context = { dateBounds: {}, locale: "es" };
+panel.capabilities = { ready: true };
+panel.aiCapabilities = capabilities;
+panel.snapshots = [{
+  id: "snapshot-1",
+  period_start: "2026-08-01",
+  period_end: "2026-08-31",
+  snapshot: { expected_buckets: 4, series: [], associations: [] },
+  evidence_bundle: { facts: [], missing_data: [] }
+}];
+panel.selectedSnapshotId = "snapshot-1";
+
+const availableHtml = panel.render();
+assert.match(availableHtml, /id="p360d-generate-ai"/);
+assert.match(availableHtml, /Coste API: 0 €/);
+assert.match(availableHtml, /LLM gratuito\/autogestionado/);
+assert.doesNotMatch(availableHtml, /API de pago/);
+
+panel.aiCapabilities = {
+  available: false,
+  freeOnly: true,
+  reason: "AI_FREE_MODEL_NOT_CONFIGURED"
+};
+const unavailableHtml = panel.render();
+assert.doesNotMatch(unavailableHtml, /id="p360d-generate-ai"/);
+assert.match(unavailableHtml, /IA sin coste preparada, pero inactiva/);
+assert.match(unavailableHtml, /no enviará datos a ningún modelo ni usará una API de pago/);
 
 const edge = read("supabase/functions/player360-ai-insight/index.ts");
 assert.match(edge, /ALLOWED_PROVIDER\s*=\s*"LOCAL_OPENAI_COMPATIBLE"/);
