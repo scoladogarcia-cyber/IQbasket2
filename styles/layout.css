@@ -65,6 +65,8 @@
 
 .mobile-header .mobile-brand .brand-title {
   color: inherit !important;
+  font-size: 13px !important;
+  line-height: 1.1;
 }
 
 /* =========================================================================
@@ -142,6 +144,13 @@
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+/* Los spans globales usan tipografía body; el shell debe heredar la escala
+   del componente para evitar labels móviles sobredimensionados/truncados. */
+.app-sidebar .nav-link .nav-label,
+.app-sidebar .nav-item .nav-label {
+  font-size: inherit !important;
+}
+
 .nav-item .nav-svg, .nav-link .nav-svg {
   stroke: #e2e8f0 !important;
   color: #e2e8f0 !important;
@@ -217,12 +226,51 @@
 
 .mobile-bottom-bar .mobile-nav-item .mobile-label {
   color: inherit !important;
+  font-size: inherit !important;
+  line-height: 1.05;
+  max-width: 100%;
+  max-height: 2.1em;
+  padding-inline: 2px;
+  text-align: center;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 
 .mobile-svg {
   width: 20px;
   height: 20px;
   margin-bottom: 2px;
+}
+
+/* El drawer define su propia escala tipográfica; los spans no deben heredar
+   el tamaño global de body porque rompe tarjetas y puede provocar overflow. */
+.mobile-drawer-content .drawer-item > span:last-child {
+  color: inherit !important;
+  font-size: inherit !important;
+  line-height: 1.2;
+}
+
+.mobile-drawer-content .drawer-icon {
+  color: inherit !important;
+  font-size: 18px !important;
+  line-height: 1;
+}
+
+/* Safari/iOS y Chromium pueden resolver 100dvh de forma distinta al viewport
+   visual. El drawer usa svh como límite estable para que todo el contenedor
+   desplazable permanezca físicamente dentro de pantalla. */
+@media (max-width: 767px) {
+  .mobile-drawer-overlay {
+    height: 100svh !important;
+    min-height: 100svh !important;
+  }
+
+  .mobile-drawer-content {
+    box-sizing: border-box !important;
+    max-height: calc(100svh - max(12px, env(safe-area-inset-top, 0px))) !important;
+  }
 }
 
 /* =========================================================================

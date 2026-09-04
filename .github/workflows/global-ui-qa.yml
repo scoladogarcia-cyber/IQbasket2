@@ -1,0 +1,199 @@
+name: Global UI QA
+
+on:
+  push:
+    branches:
+      - qa/global-ui-acceptance-v1
+    paths:
+      - "views/**"
+      - "styles/**"
+      - "security/**"
+      - "services/**"
+      - "controllers/**"
+      - "domain/**"
+      - "locales/**"
+      - "tests/**"
+      - "docs/qa/GLOBAL_UI_ACCEPTANCE_V1.md"
+      - ".github/workflows/global-ui-qa.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/**"
+      - "styles/**"
+      - "security/**"
+      - "services/**"
+      - "controllers/**"
+      - "domain/**"
+      - "locales/**"
+      - "tests/**"
+      - ".github/workflows/global-ui-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: global-ui-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QA_BASE_URL: http://127.0.0.1:4173/
+  GLOBAL_UI_QA_BASE_URL: http://127.0.0.1:4173/
+  ROLE_ACCEPTANCE_BASE_URL: http://127.0.0.1:4173/
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+  PLAYER360_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  shell-rbac:
+    name: Shell + RBAC + read-only
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/global-ui-shell-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$QA_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/global-ui-shell-vite.log
+          exit 1
+
+      - name: Global shell acceptance
+        run: node tests/global-ui-shell-qa.mjs
+
+      - name: Role acceptance
+        run: node tests/role-acceptance-ui-smoke.mjs
+
+      - name: Invited route matrix
+        run: node tests/invited-route-matrix-ui-smoke.mjs
+
+      - name: Contextual RBAC browser smoke
+        run: node tests/phase3f-rbac-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/global-ui-shell-vite.log || true
+
+  player360:
+    name: Player 360 + wellness
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/global-ui-player360-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$QA_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/global-ui-player360-vite.log
+          exit 1
+
+      - name: Training and technification
+        run: node tests/player360-phase4b-ui-smoke.mjs
+
+      - name: Evaluation and objective profile
+        run: node tests/player360-phase4c-ui-smoke.mjs
+
+      - name: Longitudinal analytics and AI review
+        run: node tests/player360-phase4d-ui-smoke.mjs
+
+      - name: Nutrition and Recovery support
+        run: node tests/player360-phase4e2-ui-smoke.mjs
+
+      - name: Nutrition route and contrast regression
+        run: node tests/nutrition-route-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/global-ui-player360-vite.log || true
+
+  operations:
+    name: Roster + transfers + locks + BoxScore
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/global-ui-operations-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$QA_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/global-ui-operations-vite.log
+          exit 1
+
+      - name: Roster UI smoke
+        run: node tests/phase3e-ui-smoke.mjs
+
+      - name: Roster lifecycle
+        run: node tests/phase3e-roster-lifecycle-smoke.mjs
+
+      - name: Dual transfer flow
+        run: node tests/dual-transfer-ui-smoke.mjs
+
+      - name: Team-season freeze flow
+        run: node tests/team-season-freeze-ui-smoke.mjs
+
+      - name: BoxScore edit and lock behavior
+        run: node tests/boxscore-edit-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/global-ui-operations-vite.log || true
