@@ -8,16 +8,19 @@ const permissions = read("security/permissions.js");
 const layout = read("views/LayoutView.js");
 const translations = read("services/TranslationStore.js");
 const service = read("services/player360/PrivacyGovernanceService.js");
+const lazyViews = read("services/LazyViewRegistry.js");
 
-for (const [name, source] of [["index.js", index], ["app.js", app]]) {
-  assert.match(
-    source,
-    /import\s+\{\s*PrivacyCenterView\s*\}\s+from\s+["']\.\/views\/PrivacyCenterView\.js["']/,
-    `${name} debe importar PrivacyCenterView.`
-  );
-  assert.match(source, /case\s+["']privacy["']\s*:/, `${name} debe enrutar #/privacy.`);
-  assert.match(source, /new\s+PrivacyCenterView\(/, `${name} debe construir PrivacyCenterView.`);
-}
+assert.match(index, /case\s+["']privacy["']\s*:/, "index.js debe enrutar #/privacy.");
+assert.match(index, /case "privacy"[\s\S]{0,500}lazyViews\.get\("privacy"\)/,
+  "index.js debe cargar privacidad bajo demanda.");
+assert.match(lazyViews, /import\("\.\.\/views\/PrivacyCenterView\.js"\)/,
+  "El registro lazy debe cargar PrivacyCenterView.");
+assert.match(lazyViews, /new PrivacyCenterView\(supabase, authController\)/,
+  "El registro lazy debe conservar las dependencias de PrivacyCenterView.");
+assert.match(app, /import\s+\{\s*PrivacyCenterView\s*\}/,
+  "app.js legacy debe conservar PrivacyCenterView.");
+assert.match(app, /case\s+["']privacy["']\s*:/, "app.js debe enrutar #/privacy.");
+assert.match(app, /new\s+PrivacyCenterView\(/, "app.js debe construir PrivacyCenterView.");
 
 assert.match(
   permissions,

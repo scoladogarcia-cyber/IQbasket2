@@ -7,19 +7,19 @@ const index = fs.readFileSync(new URL("../index.js", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const playerStats = fs.readFileSync(new URL("../views/PlayerStatsView.js", import.meta.url), "utf8");
 const permissions = fs.readFileSync(new URL("../security/permissions.js", import.meta.url), "utf8");
+const lazyViews = fs.readFileSync(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
 
-for (const [name, source] of [["index.js", index], ["app.js", app]]) {
-  assert.match(
-    source,
-    /import\s+\{\s*Player360View\s*\}\s+from\s+["']\.\/views\/Player360View\.js["']/,
-    `${name} debe importar Player360View`
-  );
-  assert.match(
-    source,
-    /case\s+["']player360["'][\s\S]{0,500}Player360View|case\s+["']player360["'][\s\S]{0,500}views\.player360/,
-    `${name} debe resolver #/player360/:playerId`
-  );
-}
+assert.match(index, /import \{ LazyViewRegistry \}/, "index.js debe usar el registro lazy.");
+assert.match(index, /case "player360"[\s\S]{0,500}lazyViews\.get\("player360"\)/,
+  "index.js debe resolver Player 360 mediante carga lazy.");
+assert.match(lazyViews, /import\("\.\.\/views\/Player360View\.js"\)/,
+  "El registro lazy debe cargar Player360View bajo demanda.");
+assert.match(lazyViews, /new Player360View\(supabase, authController\)/,
+  "El registro lazy debe conservar las dependencias de Player360View.");
+assert.match(app, /import\s+\{\s*Player360View\s*\}/,
+  "app.js legacy debe conservar su integración de Player360View.");
+assert.match(app, /case\s+["']player360["'][\s\S]{0,500}(Player360View|views\.player360)/,
+  "app.js debe resolver #/player360/:playerId");
 
 assert.match(
   playerStats,

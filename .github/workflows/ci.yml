@@ -85,6 +85,9 @@ jobs:
       - name: Mobile invited read-only regression
         run: node tests/mobile-invited-readonly-regression.mjs
 
+      - name: Initial bundle performance budget
+        run: node tests/initial-bundle-budget.mjs
+
       - name: Demo invited scope hotfix boundary
         run: node tests/demo-invited-scope-hotfix-sql.mjs
 

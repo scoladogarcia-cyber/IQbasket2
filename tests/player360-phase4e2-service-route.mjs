@@ -148,11 +148,14 @@ assert.match(nutritionViewSource,/Permission\.VIEW_NUTRITION/);
 assert.match(nutritionViewSource,/WellnessSupportPanel/);
 assert.match(nutritionViewSource,/#\/nutrition\//);
 
-for (const routerFile of ["../index.js","../app.js"]) {
-  const routerSource=readFileSync(new URL(routerFile,import.meta.url),"utf8");
-  assert.match(routerSource,/NutritionView/);
-  assert.match(routerSource,/case "nutrition"/);
-}
+const indexRouterSource=readFileSync(new URL("../index.js",import.meta.url),"utf8");
+const legacyRouterSource=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+const lazyRouterSource=readFileSync(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8");
+assert.match(indexRouterSource,/case "nutrition"[\s\S]{0,300}lazyViews\.get\("nutrition"\)/);
+assert.match(lazyRouterSource,/import\("\.\.\/views\/NutritionView\.js"\)/);
+assert.match(lazyRouterSource,/new NutritionView\(supabase, authController\)/);
+assert.match(legacyRouterSource,/NutritionView/);
+assert.match(legacyRouterSource,/case "nutrition"/);
 
 const layoutSource=readFileSync(
   new URL("../views/LayoutView.js",import.meta.url),
