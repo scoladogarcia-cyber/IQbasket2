@@ -397,10 +397,15 @@ Deno.serve(async (req) => {
       ? "AI_PROVIDER_TIMEOUT"
       : String((error as Error)?.message || "AI_GATEWAY_FAILED").slice(0, 120);
 
-    await adminClient.rpc("iq_v4g_fail_ai_gateway_request", {
-      p_request_id: requestId,
-      p_error_code: code
-    }).catch(() => null);
+    try {
+      await adminClient.rpc("iq_v4g_fail_ai_gateway_request", {
+        p_request_id: requestId,
+        p_error_code: code
+      });
+    } catch {
+      // The provider failure remains the primary response. A secondary audit
+      // failure must never hide it or trigger a retry against the model.
+    }
 
     return json({ error: code }, code === "AI_PROVIDER_TIMEOUT" ? 504 : 502);
   } finally {
