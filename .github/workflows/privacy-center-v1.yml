@@ -7,6 +7,7 @@ on:
     paths:
       - "views/PrivacyCenterView.js"
       - "services/player360/PrivacyGovernanceService.js"
+      - "security/permissions.js"
       - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
       - "tests/privacy-center-*.mjs"
       - "docs/architecture/PRIVACY_CENTER_V1.md"
@@ -17,6 +18,7 @@ on:
     paths:
       - "views/PrivacyCenterView.js"
       - "services/player360/PrivacyGovernanceService.js"
+      - "security/permissions.js"
       - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
       - "tests/privacy-center-*.mjs"
       - "docs/architecture/PRIVACY_CENTER_V1.md"
