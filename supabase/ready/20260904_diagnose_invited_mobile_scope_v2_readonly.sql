@@ -78,3 +78,16 @@ select
 from pg_class c
 join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public' and c.relname='team_season_memberships';
+
+select
+  'CONTEXT_TABLE_SECURITY' as section,
+  c.relname as table_name,
+  c.relrowsecurity as rls_enabled,
+  c.relforcerowsecurity as rls_forced,
+  has_table_privilege('authenticated',format('public.%I',c.relname),'SELECT') as authenticated_select_granted,
+  (select count(*) from pg_policies p where p.schemaname='public' and p.tablename=c.relname and p.cmd='SELECT') as select_policy_count
+from pg_class c
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public'
+  and c.relname in ('team_season_memberships','club_season_memberships','user_player_links')
+order by c.relname;
