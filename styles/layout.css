@@ -258,6 +258,21 @@
   line-height: 1;
 }
 
+/* Safari/iOS y Chromium pueden resolver 100dvh de forma distinta al viewport
+   visual. El drawer usa svh como límite estable para que todo el contenedor
+   desplazable permanezca físicamente dentro de pantalla. */
+@media (max-width: 767px) {
+  .mobile-drawer-overlay {
+    height: 100svh !important;
+    min-height: 100svh !important;
+  }
+
+  .mobile-drawer-content {
+    box-sizing: border-box !important;
+    max-height: calc(100svh - max(12px, env(safe-area-inset-top, 0px))) !important;
+  }
+}
+
 /* =========================================================================
    5. REGLAS ESPECÍFICAS DE CONTRASTE DEL DASHBOARD
    ========================================================================= */
