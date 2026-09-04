@@ -57,3 +57,15 @@ from public.team_seasons
 where id='d0000000-0000-4000-8000-000000000005'::uuid;
 
 rollback;
+
+-- This runs after rollback as the DB connection owner, to explain RLS behavior.
+select
+  'INVITED_MEMBERSHIP_POLICY' as section,
+  policyname,
+  cmd,
+  array_to_string(roles, '|') as roles,
+  coalesce(qual,'') as using_expression
+from pg_policies
+where schemaname='public'
+  and tablename='team_season_memberships'
+order by policyname;
