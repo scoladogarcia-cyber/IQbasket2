@@ -1,11 +1,8 @@
 name: Player 360 Phase 4E.3 Controlled Apply
 
+# Historical controlled migration workflow. Phase 4E.3 was applied once after
+# green CI/browser gates. It remains manual-only for audit/recovery purposes.
 on:
-  push:
-    branches:
-      - feature/wellness-v2-phase4e3
-    paths:
-      - ".github/player360-phase4e3-apply-trigger.txt"
   workflow_dispatch:
 
 permissions:
