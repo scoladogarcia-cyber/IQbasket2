@@ -288,9 +288,10 @@ Deno.serve(async (req) => {
 
   // Independent server-side deployment gate. Deploying the Edge Function is
   // safe until this environment flag is explicitly enabled.
-  const generationEnabled = String(Deno.env.get("IQB_AI_GENERATION_ENABLED") || "")
+  const environmentGenerationEnabled = String(Deno.env.get("IQB_AI_GENERATION_ENABLED") || "")
     .trim().toLowerCase() === "true";
-  if (!generationEnabled) {
+  const configurationGenerationEnabled = Boolean(PLAYER360_AI_GATEWAY_CONFIG.generationEnabled);
+  if (!environmentGenerationEnabled || !configurationGenerationEnabled) {
     return json({ success: false, error_code: "AI_GATEWAY_NOT_ENABLED" }, 503);
   }
 
