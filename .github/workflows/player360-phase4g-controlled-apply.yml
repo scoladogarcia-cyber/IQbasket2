@@ -1,8 +1,13 @@
 name: Player 360 Phase 4G Controlled Apply
 
-# Manual-only by default. A temporary one-shot branch trigger may be added only
-# after the complete Phase 4G and IQBasket gates are green, then removed again.
+# Temporary one-shot branch trigger. Remove immediately after the controlled
+# migration finishes successfully or rolls back safely.
 on:
+  push:
+    branches:
+      - feature/ai-gateway-free-v1
+    paths:
+      - ".github/workflows/player360-phase4g-controlled-apply.yml"
   workflow_dispatch:
 
 permissions:
