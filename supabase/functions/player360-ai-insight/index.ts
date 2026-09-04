@@ -25,6 +25,17 @@ type ProviderResult = {
   usage: { input_tokens: number | null; output_tokens: number | null };
 };
 
+type ProviderRuntimeConfig = {
+  provider: "OPENAI";
+  apiKey: string;
+  modelName: string;
+  endpoint: string;
+  timeoutMs: number;
+  maxOutputTokens: number;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -84,6 +95,24 @@ function resolveOpenAiEndpoint() {
     throw new Error("AI_PROVIDER_ENDPOINT_NOT_ALLOWED");
   }
   return url.toString();
+}
+
+function resolveProviderRuntimeConfig(): ProviderRuntimeConfig {
+  const provider = safeUpper(Deno.env.get("IQB_AI_PROVIDER"));
+  if (provider !== "OPENAI") throw new Error("AI_PROVIDER_NOT_CONFIGURED");
+
+  const apiKey = Deno.env.get("IQB_AI_API_KEY") || "";
+  const modelName = Deno.env.get("IQB_AI_MODEL") || "";
+  if (!apiKey || !modelName) throw new Error("AI_PROVIDER_NOT_CONFIGURED");
+
+  return {
+    provider: "OPENAI",
+    apiKey,
+    modelName,
+    endpoint: resolveOpenAiEndpoint(),
+    timeoutMs: boundedEnvNumber("IQB_AI_TIMEOUT_MS", 45000, 5000, 90000),
+    maxOutputTokens: boundedEnvNumber("IQB_AI_MAX_OUTPUT_TOKENS", 1800, 256, 4000)
+  };
 }
 
 function buildSystemPrompt(locale: string) {
@@ -158,14 +187,8 @@ async function callOpenAiProvider({
   evidence: JsonRecord;
   period: { start: unknown; end: unknown };
   locale: string;
-}): Promise<ProviderResult> {
-  const apiKey = Deno.env.get("IQB_AI_API_KEY") || "";
-  const modelName = Deno.env.get("IQB_AI_MODEL") || "";
-  if (!apiKey || !modelName) throw new Error("AI_PROVIDER_NOT_CONFIGURED");
-
-  const endpoint = resolveOpenAiEndpoint();
-  const timeoutMs = boundedEnvNumber("IQB_AI_TIMEOUT_MS", 45000, 5000, 90000);
-  const maxOutputTokens = boundedEnvNumber("IQB_AI_MAX_OUTPUT_TOKENS", 1800, 256, 4000);
+}, runtime: ProviderRuntimeConfig): Promise<ProviderResult> {
+  const { apiKey, modelName, endpoint, timeoutMs, maxOutputTokens } = runtime;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -254,15 +277,22 @@ async function callProvider(args: {
   evidence: JsonRecord;
   period: { start: unknown; end: unknown };
   locale: string;
-}): Promise<ProviderResult> {
-  const provider = safeUpper(Deno.env.get("IQB_AI_PROVIDER"));
-  if (provider === "OPENAI") return callOpenAiProvider(args);
+}, runtime: ProviderRuntimeConfig): Promise<ProviderResult> {
+  if (runtime.provider === "OPENAI") return callOpenAiProvider(args, runtime);
   throw new Error("AI_PROVIDER_NOT_CONFIGURED");
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ success: false, error_code: "METHOD_NOT_ALLOWED" }, 405);
+
+  // Independent server-side deployment gate. Deploying the Edge Function is
+  // safe until this environment flag is explicitly enabled.
+  const generationEnabled = String(Deno.env.get("IQB_AI_GENERATION_ENABLED") || "")
+    .trim().toLowerCase() === "true";
+  if (!generationEnabled) {
+    return json({ success: false, error_code: "AI_GATEWAY_NOT_ENABLED" }, 503);
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -292,15 +322,18 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const snapshotId = String(body?.snapshot_id || "").trim();
+  const idempotencyKey = String(body?.idempotency_key || "").trim();
   const audience = safeUpper(body?.audience || "STAFF");
   const locale = safeLocale(body?.locale);
   if (!snapshotId) return json({ success: false, error_code: "SNAPSHOT_REQUIRED" }, 400);
+  if (!UUID_PATTERN.test(idempotencyKey)) {
+    return json({ success: false, error_code: "AI_IDEMPOTENCY_KEY_INVALID" }, 400);
+  }
   if (!PLAYER360_AI_GATEWAY_CONFIG.allowedAudiences.includes(audience)) {
     return json({ success: false, error_code: "AI_AUDIENCE_UNSUPPORTED" }, 400);
   }
 
-  // The caller-context client deliberately relies on existing RLS. A service
-  // key is never used to obtain the evidence payload.
+  // Evidence is always obtained with caller RLS; service_role never reads it.
   const { data: snapshot, error: snapshotError } = await callerClient
     .from("player_longitudinal_snapshots")
     .select("id,team_season_id,player_id,period_start,period_end,source_fingerprint,evidence_bundle")
@@ -328,40 +361,124 @@ Deno.serve(async (req) => {
     }, 403);
   }
 
-  // Paid consumption is enforced server-side. No quota configuration means
-  // deny-by-default, avoiding accidental spend after deployment.
+  // Validate provider runtime before reserving quota. Misconfiguration must not
+  // consume a licensed unit.
+  let providerRuntime: ProviderRuntimeConfig;
+  try {
+    providerRuntime = resolveProviderRuntimeConfig();
+  } catch (error) {
+    return json({
+      success: false,
+      error_code: error instanceof Error ? error.message : "AI_PROVIDER_NOT_CONFIGURED"
+    }, 503);
+  }
+
   const quotaMap = parseQuotaMap(Deno.env.get("IQB_AI_MONTHLY_LIMITS_JSON"));
-  const { data: profile } = await adminClient
+  const { data: profile, error: profileError } = await adminClient
     .from("user_profiles")
     .select("role,global_role")
     .eq("id", caller.id)
     .maybeSingle();
-  const quotaRole = resolveQuotaRole(profile as JsonRecord | null);
+  if (profileError || !profile) {
+    return json({ success: false, error_code: "AI_QUOTA_PROFILE_UNAVAILABLE" }, 503);
+  }
+  const quotaRole = resolveQuotaRole(profile as JsonRecord);
   const monthlyLimit = quotaMap[quotaRole] ?? 0;
   if (monthlyLimit <= 0) {
     return json({ success: false, error_code: "AI_QUOTA_NOT_CONFIGURED" }, 403);
   }
 
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const { count: monthlyUsed, error: quotaError } = await adminClient
-    .from("player_ai_insights")
-    .select("id", { count: "exact", head: true })
-    .eq("requested_by", caller.id)
-    .neq("provider", "SYNTHETIC_DEMO")
-    .gte("created_at", monthStart.toISOString());
-  if (quotaError) return json({ success: false, error_code: "AI_QUOTA_CHECK_FAILED" }, 503);
-  if ((monthlyUsed || 0) >= monthlyLimit) {
+  // Atomic reservation serializes concurrent attempts for the same user/month.
+  const { data: reservationData, error: reservationError } = await adminClient.rpc(
+    "iq_ai_reserve_usage",
+    {
+      p_user_id: caller.id,
+      p_team_season_id: snapshot.team_season_id,
+      p_snapshot_id: snapshot.id,
+      p_idempotency_key: idempotencyKey,
+      p_monthly_limit: monthlyLimit,
+      p_operation: "PLAYER360_AI_INSIGHT"
+    }
+  );
+  if (reservationError || !reservationData || typeof reservationData !== "object") {
+    console.error("[player360-ai-insight] Usage reservation failed", reservationError?.message || "unknown");
+    return json({ success: false, error_code: "AI_USAGE_RESERVATION_FAILED" }, 503);
+  }
+
+  const reservation = reservationData as JsonRecord;
+  const ledgerId = String(reservation.ledger_id || "").trim();
+  const used = Math.max(0, Number(reservation.used) || 0);
+  const limit = Math.max(0, Number(reservation.limit) || monthlyLimit);
+  const state = safeUpper(reservation.state);
+
+  if (reservation.replayed === true && reservation.insight_id) {
+    const insightId = String(reservation.insight_id);
+    const { data: existingInsight } = await callerClient
+      .from("player_ai_insights")
+      .select("id,status,provider,model_name,prompt_version")
+      .eq("id", insightId)
+      .maybeSingle();
     return json({
-      success: false,
-      error_code: "AI_MONTHLY_QUOTA_EXCEEDED",
-      usage: { used: monthlyUsed || 0, limit: monthlyLimit }
-    }, 429);
+      success: true,
+      replayed: true,
+      insight_id: insightId,
+      status: existingInsight?.status || "DRAFT",
+      provider: existingInsight?.provider || null,
+      model_name: existingInsight?.model_name || null,
+      prompt_version: existingInsight?.prompt_version || PLAYER360_AI_GATEWAY_CONFIG.promptVersion,
+      usage: { used, limit }
+    });
+  }
+
+  if (reservation.accepted !== true || !ledgerId) {
+    if (state === "DENIED" || reservation.reason === "QUOTA_EXCEEDED") {
+      return json({
+        success: false,
+        error_code: "AI_MONTHLY_QUOTA_EXCEEDED",
+        usage: { used, limit }
+      }, 429);
+    }
+    if (state === "RESERVED" || state === "IN_PROGRESS") {
+      return json({ success: false, error_code: "AI_REQUEST_IN_PROGRESS", usage: { used, limit } }, 409);
+    }
+    if (state === "FAILED") {
+      return json({
+        success: false,
+        error_code: "AI_REQUEST_PREVIOUSLY_FAILED",
+        previous_failure_code: reservation.failure_code || null,
+        usage: { used, limit }
+      }, 409);
+    }
+    return json({ success: false, error_code: "AI_USAGE_RESERVATION_DENIED" }, 409);
+  }
+
+  // Membership can change while a request is being prepared. Recheck before
+  // crossing the paid-provider boundary; a denial releases the reservation.
+  const { data: canGenerateNow, error: permissionRecheckError } = await callerClient.rpc(
+    "iq_v4_can_generate_ai_insights",
+    { p_team_season_id: snapshot.team_season_id }
+  );
+  if (permissionRecheckError || canGenerateNow !== true) {
+    await adminClient.rpc("iq_ai_fail_usage", {
+      p_ledger_id: ledgerId,
+      p_user_id: caller.id,
+      p_failure_code: "PLAYER360_AI_GENERATE_DENIED"
+    });
+    return json({ success: false, error_code: "PLAYER360_AI_GENERATE_DENIED" }, 403);
   }
 
   const startedAt = performance.now();
   try {
+    // From this transition onward one unit is consumed even if the provider or
+    // persistence later fails, because an external paid attempt can occur.
+    const { error: startUsageError } = await adminClient.rpc("iq_ai_mark_provider_started", {
+      p_ledger_id: ledgerId,
+      p_user_id: caller.id,
+      p_provider: providerRuntime.provider,
+      p_model_name: providerRuntime.modelName
+    });
+    if (startUsageError) throw new Error("AI_USAGE_PROVIDER_START_FAILED");
+
     const result = await callProvider({
       evidence: providerEvidence,
       period: {
@@ -369,13 +486,14 @@ Deno.serve(async (req) => {
         end: snapshot.period_end || null
       },
       locale
-    });
+    }, providerRuntime);
     const latencyMs = Math.max(0, Math.round(performance.now() - startedAt));
     const trustedContent = {
       ...result.content,
       _generation: {
         contract_version: PLAYER360_AI_GATEWAY_CONFIG.outputContractVersion,
         gateway_version: PLAYER360_AI_GATEWAY_CONFIG.gatewayVersion,
+        usage_ledger_id: ledgerId,
         provider_request_id: result.providerRequestId,
         input_tokens: result.usage.input_tokens,
         output_tokens: result.usage.output_tokens,
@@ -384,8 +502,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Persist through the existing caller-context RPC, so authorization is
-    // rechecked immediately before creating the DRAFT insight.
+    // Persist through caller context so authorization is rechecked by Phase 4D.
     const { data: insightId, error: persistError } = await callerClient.rpc(
       "iq_v4_save_ai_insight",
       {
@@ -400,21 +517,58 @@ Deno.serve(async (req) => {
     );
     if (persistError || !insightId) throw new Error("AI_INSIGHT_PERSIST_FAILED");
 
+    const { data: completionData, error: completionError } = await adminClient.rpc(
+      "iq_ai_complete_usage",
+      {
+        p_ledger_id: ledgerId,
+        p_user_id: caller.id,
+        p_insight_id: insightId,
+        p_provider_request_id: result.providerRequestId,
+        p_input_tokens: result.usage.input_tokens,
+        p_output_tokens: result.usage.output_tokens,
+        p_latency_ms: latencyMs
+      }
+    );
+    if (completionError) {
+      // Do not mark failed: the insight already exists and the consumed ledger
+      // remains IN_PROGRESS for safe reconciliation without under-counting cost.
+      console.error("[player360-ai-insight] Usage finalization failed", completionError.message);
+      return json({
+        success: false,
+        error_code: "AI_USAGE_FINALIZE_FAILED",
+        insight_id: insightId,
+        usage_ledger_id: ledgerId
+      }, 503);
+    }
+
+    const completion = (completionData && typeof completionData === "object")
+      ? completionData as JsonRecord
+      : {};
     return json({
       success: true,
+      replayed: false,
       insight_id: insightId,
       status: "DRAFT",
       provider: result.provider,
       model_name: result.modelName,
       prompt_version: PLAYER360_AI_GATEWAY_CONFIG.promptVersion,
+      usage_ledger_id: ledgerId,
       usage: {
         ...result.usage,
-        used: (monthlyUsed || 0) + 1,
-        limit: monthlyLimit
+        used: Math.max(0, Number(completion.used) || used),
+        limit: Math.max(0, Number(completion.limit) || limit)
       }
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "AI_GATEWAY_GENERATION_FAILED";
+    const { error: failUsageError } = await adminClient.rpc("iq_ai_fail_usage", {
+      p_ledger_id: ledgerId,
+      p_user_id: caller.id,
+      p_failure_code: code
+    });
+    if (failUsageError) {
+      console.error("[player360-ai-insight] Usage failure finalization failed", failUsageError.message);
+    }
     console.error("[player360-ai-insight] Generation failed", code);
     return json({ success: false, error_code: code }, 502);
   }
