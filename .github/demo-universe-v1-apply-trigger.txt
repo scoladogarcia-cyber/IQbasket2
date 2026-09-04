@@ -1,1 +1,0 @@
-Final controlled apply after validating the actual training schema contract (training_blocks/training_participants via training_session_id). Static demo contract and full IQBasket CI are green. Require complete verify, strict non-demo isolation and <=8 MiB physical database growth.
