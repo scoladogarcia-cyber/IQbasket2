@@ -1,1 +1,1 @@
-Controlled apply requested after static contract + full IQBasket CI passed. Enforce strict non-demo isolation and maximum physical DB growth of 8 MiB.
+Retry Demo Universe V1 after lock-order fix. Games seed OPEN, all child sporting and Player360 data completes first, then the 10 historical games lock through the normal V5 lifecycle. Enforce strict non-demo isolation and maximum physical DB growth of 8 MiB.
