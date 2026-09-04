@@ -1,11 +1,6 @@
 name: Demo Universe V1 Controlled Apply
 
 on:
-  push:
-    branches:
-      - feature/demo-universe-v1
-    paths:
-      - ".github/demo-universe-v1-apply-trigger.txt"
   workflow_dispatch:
 
 permissions:
