@@ -1,9 +1,9 @@
-name: Context Identity RLS V2 Audit
+﻿name: Context Identity RLS V2 Audit
 
 on:
   push:
     branches:
-      - audit/context-identity-rls-v2
+      - fix/context-identity-rls-v2
     paths:
       - ".github/workflows/context-identity-rls-v2-audit.yml"
       - "supabase/ready/20260904_audit_context_identity_rls_v2_readonly.sql"
@@ -42,3 +42,4 @@ jobs:
         run: |
           psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
             --file=supabase/ready/20260904_audit_context_identity_rls_v2_readonly.sql
+
