@@ -10,6 +10,10 @@ select 'CTX_RLS_TABLE' as section,
        has_table_privilege('authenticated', c.oid, 'INSERT') as auth_insert,
        has_table_privilege('authenticated', c.oid, 'UPDATE') as auth_update,
        has_table_privilege('authenticated', c.oid, 'DELETE') as auth_delete,
+       has_table_privilege('anon', c.oid, 'SELECT') as anon_select,
+       has_table_privilege('anon', c.oid, 'INSERT') as anon_insert,
+       has_table_privilege('anon', c.oid, 'UPDATE') as anon_update,
+       has_table_privilege('anon', c.oid, 'DELETE') as anon_delete,
        (select count(*) from pg_policies p
         where p.schemaname='public' and p.tablename=c.relname) as policy_count
 from pg_class c
@@ -44,4 +48,5 @@ where n.nspname='public'
 order by p.proname;
 
 rollback;
+
 
