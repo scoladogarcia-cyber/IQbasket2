@@ -119,6 +119,7 @@ class App {
     // Estructurar el Layout principal si no está montado
     if (!document.getElementById("dashboard-content-area")) {
       appContainer.innerHTML = LayoutView.wrap('<div id="dashboard-content-area"></div>', route, userRole);
+      LayoutView.bindMobileDrawerEvents();
       this._bindGlobalLayoutEvents();
     } else {
       LayoutView.updateActiveMenu(route);
@@ -364,12 +365,15 @@ class App {
     document.getElementById("sidebar-select-season")?.addEventListener("change", handleSeasonChange);
     document.getElementById("mobile-select-season")?.addEventListener("change", handleSeasonChange);
 
-    // Cerrar sesión
-    document.getElementById("btn-logout")?.addEventListener("click", async () => {
-      if (confirm("¿Deseas cerrar tu sesión actual?")) {
+    // Cerrar sesión desde desktop o drawer móvil.
+    document.querySelectorAll('[data-session-action="logout"]').forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (!confirm("¿Deseas cerrar tu sesión actual?")) return;
         await this.authController.logout();
+        document.body.style.overflow = "";
         window.location.hash = "#/login";
-      }
+      });
     });
   }
 }

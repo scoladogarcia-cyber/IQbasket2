@@ -1073,8 +1073,8 @@ async _openEditForm(gameId, container) {
 
     if (type === "shot_missed") {
       return `
-        <div style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
-          <div style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
+        <div class="game-continuation-overlay" style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
+          <div class="game-continuation-card" style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
             <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 900; color: #0f172a;">🏀 Tiro Fallado por ${shooterName}</h3>
             <p style="font-size: 12px; color: #475569; margin: 0 0 14px 0;">¿Quién capturó el rebote?</p>
             
@@ -1103,8 +1103,8 @@ async _openEditForm(gameId, container) {
 
     if (type === "shot_made") {
       return `
-        <div style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
-          <div style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
+        <div class="game-continuation-overlay" style="position: fixed; inset: 0; background: rgba(15,23,42,0.75); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px;">
+          <div class="game-continuation-card" style="background: #ffffff; border-radius: 14px; padding: 20px; max-width: 440px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center;">
             <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 900; color: #16a34a;">🎯 ¡Canasta de ${shooterName}!</h3>
             <p style="font-size: 12px; color: #475569; margin: 0 0 14px 0;">¿Hubo asistencia de algún compañero?</p>
             

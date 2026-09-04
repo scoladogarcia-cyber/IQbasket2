@@ -472,28 +472,40 @@ export class IQBasketApp {
 
     sessionKeys.forEach((key) => localStorage.removeItem(key));
     sessionStorage.removeItem("iq_sidebar_scroll");
+    document.body.style.overflow = "";
   }
 
   bindLayoutEvents() {
-    const logoutButtons = document.querySelectorAll('[data-session-action="logout"]');
-    logoutButtons.forEach((logoutBtn) => {
-      if (logoutBtn.dataset.bound) return;
+    const appRoot = document.getElementById("app");
+    if (appRoot && appRoot.dataset.sessionActionsBound !== "true") {
+      appRoot.dataset.sessionActionsBound = "true";
+      appRoot.addEventListener("click", async (event) => {
+        const logoutBtn = event.target.closest?.('[data-session-action="logout"]');
+        if (!logoutBtn || !appRoot.contains(logoutBtn)) return;
 
-      logoutBtn.dataset.bound = "true";
-      logoutBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
+        if (logoutBtn.dataset.logoutBusy === "true") return;
+        logoutBtn.dataset.logoutBusy = "true";
+        logoutBtn.disabled = true;
+        logoutBtn.setAttribute("aria-busy", "true");
 
         try {
-          if (supabase) await supabase.auth.signOut();
+          if (supabase) {
+            const { error } = await supabase.auth.signOut({ scope: "local" });
+            if (error) console.warn("Nota al cerrar sesión:", error.message || error);
+          }
         } catch (err) {
           console.warn("Nota al cerrar sesión:", err);
         }
 
         this._clearSessionContext();
-        this.render();
+        if (window.location.hash !== "#/dashboard") {
+          window.history.replaceState(null, "", "#/dashboard");
+        }
+        await this.render();
       });
-    });
+    }
 
     const handleLanguageChange = async (e) => {
       const lang = e.target.value;
@@ -739,6 +751,7 @@ export class IQBasketApp {
       this.userRole
     );
 
+    LayoutView.bindMobileDrawerEvents();
     this.bindLayoutEvents();
     LayoutView.updateActiveMenu(this.currentRoute);
 

@@ -172,6 +172,7 @@ async function installFixture(page, spec) {
       "settings",
       spec.role
     );
+    LayoutView.bindMobileDrawerEvents();
     await view.render("dashboard-content-area");
   }, { spec, TEAM_A, TEAM_B, TS_A, SEASON });
 
