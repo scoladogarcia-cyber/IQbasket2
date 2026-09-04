@@ -14,6 +14,7 @@ on:
       - "views/player360/LongitudinalAnalyticsPanel.js"
       - "views/Player360View.js"
       - ".github/workflows/player360-phase4g-ai-gateway.yml"
+      - ".github/workflows/player360-phase4g-controlled-apply.yml"
   pull_request:
     paths:
       - "config/player360-ai.config.js"
@@ -25,6 +26,7 @@ on:
       - "views/player360/LongitudinalAnalyticsPanel.js"
       - "views/Player360View.js"
       - ".github/workflows/player360-phase4g-ai-gateway.yml"
+      - ".github/workflows/player360-phase4g-controlled-apply.yml"
 
 permissions:
   contents: read
