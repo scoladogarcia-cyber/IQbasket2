@@ -775,7 +775,7 @@ create or replace function public.iq_saas_entitlement_check(
   p_subject_type text,p_subject_id uuid,p_team_season_id uuid,
   p_entitlement_code text,p_required_units integer default 1
 )
-returns jsonb language plpgsql stable security invoker set search_path=''
+returns jsonb language plpgsql stable security definer set search_path=''
 as $function$
 declare
   v_result jsonb;
@@ -814,7 +814,7 @@ grant execute on function public.iq_saas_entitlement_check(text,uuid,uuid,text,i
 create or replace function public.iq_saas_entitlement_snapshot(
   p_subject_type text,p_subject_id uuid,p_team_season_id uuid default null
 )
-returns jsonb language plpgsql stable security invoker set search_path=''
+returns jsonb language plpgsql stable security definer set search_path=''
 as $function$
 declare v_entitlements jsonb;
 begin
@@ -878,8 +878,8 @@ begin
     select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public'
       and p.proname in ('iq_saas_entitlement_check','iq_saas_entitlement_snapshot')
-      and p.prosecdef
-  ) then raise exception 'SAAS_V1_PUBLIC_WRAPPER_SECURITY_DEFINER'; end if;
+      and not p.prosecdef
+  ) then raise exception 'SAAS_V1_PUBLIC_WRAPPER_NOT_SECURITY_DEFINER'; end if;
 
   if exists (
     select 1 from public.saas_plan_entitlements pe

@@ -5,6 +5,7 @@ const sql = fs.readFileSync("supabase/ready/20260904_apply_saas_entitlements_v1.
 const contract = fs.readFileSync("security/entitlements.js", "utf8");
 const service = fs.readFileSync("services/security/EntitlementService.js", "utf8");
 const smoke = fs.readFileSync("supabase/drafts/20260904_smoke_saas_entitlements_family_first_v1_rollback.sql", "utf8");
+const boundaryFix = fs.readFileSync("supabase/ready/20260904_fix_saas_entitlements_v1_rpc_boundary.sql", "utf8");
 
 assert.match(sql, /create table public\.saas_billing_accounts/i);
 assert.match(sql, /account_type in \('FAMILY','TEAM','CLUB','ACADEMY','INTERNAL'\)/i);
@@ -28,7 +29,9 @@ assert.match(sql, /player360_subject_relationships/i);
 assert.match(sql, /iq_v4_can_view_player360_team_season/i);
 assert.match(sql, /beneficiary_scope in \('ACCOUNT_MEMBERS','AUTHORIZED_STAFF','ALL_AUTHORIZED'\)/i);
 assert.match(sql, /revoke all on table public\.%I from public,anon,authenticated/i);
-assert.match(sql, /security invoker/i);
+assert.match(sql, /SAAS_V1_PUBLIC_WRAPPER_NOT_SECURITY_DEFINER/i);
+assert.match(boundaryFix, /security definer/i);
+assert.match(boundaryFix, /SAAS_V1_INTERNAL_RESOLVER_EXPOSED/i);
 
 assert.match(contract, /FAMILY: "FAMILY"/);
 assert.match(contract, /PLAYER: "PLAYER"/);
