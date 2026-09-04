@@ -25,24 +25,36 @@ jobs:
       - name: Require database secret
         run: test -n "$SUPABASE_DB_URL"
 
-      - name: Install PostgreSQL client
+      - name: Install PostgreSQL 17 client
+        shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/psql --version
 
       - name: Preflight legacy snapshot and baseline
         id: baseline
         shell: bash
         run: |
           set -euo pipefail
-          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          PSQL=/usr/lib/postgresql/17/bin/psql
+          EXISTS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
           test "$EXISTS" = "1"
-          BEFORE_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
-          BACKUP_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint from pg_namespace n left join pg_class c on c.relnamespace=n.oid and c.relkind in ('r','m','p') where n.nspname='$BACKUP_SCHEMA';")
-          PLAYERS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
-          GAMES=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
-          STATS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
-          EVENTS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
+          BEFORE_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          BACKUP_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint from pg_namespace n left join pg_class c on c.relnamespace=n.oid and c.relkind in ('r','m','p') where n.nspname='$BACKUP_SCHEMA';")
+          PLAYERS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          GAMES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
+          STATS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
+          EVENTS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
           echo "before_bytes=$BEFORE_BYTES" >> "$GITHUB_OUTPUT"
           echo "backup_bytes=$BACKUP_BYTES" >> "$GITHUB_OUTPUT"
           echo "players=$PLAYERS" >> "$GITHUB_OUTPUT"
@@ -56,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pg_dump "$SUPABASE_DB_URL" \
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" \
             --schema="$BACKUP_SCHEMA" \
             --format=custom \
             --compress=9 \
@@ -69,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pg_restore --list "$BACKUP_FILE" > restore-list.txt
+          /usr/lib/postgresql/17/bin/pg_restore --list "$BACKUP_FILE" > restore-list.txt
           test -s restore-list.txt
           grep -q "$BACKUP_SCHEMA" restore-list.txt
           echo "Backup archive structure validated."
@@ -89,7 +101,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 <<SQL
+          PSQL=/usr/lib/postgresql/17/bin/psql
+          $PSQL "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 <<SQL
           begin;
           drop schema "$BACKUP_SCHEMA" cascade;
           do \$\$
@@ -101,7 +114,7 @@ jobs:
           \$\$;
           rollback;
           SQL
-          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          EXISTS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
           test "$EXISTS" = "1"
 
       - name: Remove duplicated in-database snapshot
@@ -109,24 +122,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --command="drop schema \"$BACKUP_SCHEMA\" cascade;"
+          /usr/lib/postgresql/17/bin/psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --command="drop schema \"$BACKUP_SCHEMA\" cascade;"
 
       - name: Verify application data unchanged and space released
         id: verify
         shell: bash
         run: |
           set -euo pipefail
-          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          PSQL=/usr/lib/postgresql/17/bin/psql
+          EXISTS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
           test "$EXISTS" = "0"
-          PLAYERS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
-          GAMES=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
-          STATS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
-          EVENTS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
+          PLAYERS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          GAMES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
+          STATS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
+          EVENTS=$($PSQL "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
           test "$PLAYERS" = "${{ steps.baseline.outputs.players }}"
           test "$GAMES" = "${{ steps.baseline.outputs.games }}"
           test "$STATS" = "${{ steps.baseline.outputs.stats }}"
           test "$EVENTS" = "${{ steps.baseline.outputs.events }}"
-          AFTER_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          AFTER_BYTES=$($PSQL "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
           FREED=$(( ${{ steps.baseline.outputs.before_bytes }} - AFTER_BYTES ))
           echo "STORAGE_POST_CLEANUP total_bytes=$AFTER_BYTES freed_bytes=$FREED"
           test "$FREED" -gt 1000000
@@ -136,9 +150,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          PSQL=/usr/lib/postgresql/17/bin/psql
           if [ -s "$BACKUP_FILE" ]; then
-            pg_restore --dbname="$SUPABASE_DB_URL" --exit-on-error "$BACKUP_FILE"
-            test "$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")" = "1"
+            /usr/lib/postgresql/17/bin/pg_restore --dbname="$SUPABASE_DB_URL" --exit-on-error "$BACKUP_FILE"
+            test "$($PSQL "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")" = "1"
             echo "Emergency restore completed."
           else
             echo "Backup file missing; cannot auto-restore." >&2
