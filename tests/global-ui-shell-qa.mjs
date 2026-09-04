@@ -241,7 +241,9 @@ async function runScenario(browser, scenario) {
 
   await installFixture(page, scenario);
   const shell = await inspectShell(page);
-  const isMobileLayout = scenario.viewport.width < 1024;
+  // LayoutView usa breakpoint móvil < 768px. Entre 768px y desktop ancho,
+  // incluidas tablets portrait de 820px, el shell correcto es sidebar/tablet.
+  const isMobileLayout = scenario.viewport.width < 768;
 
   assertCondition(!shell.globalOverflow, scenario.name, "Hay overflow horizontal global", shell.viewport);
   assertCondition(pageErrors.length === 0, scenario.name, "Se produjeron pageerror", pageErrors);
