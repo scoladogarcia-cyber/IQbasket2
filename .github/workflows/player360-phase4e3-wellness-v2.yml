@@ -1,0 +1,61 @@
+name: Player 360 Phase 4E.3 Wellness V2
+
+on:
+  push:
+    branches:
+      - feature/wellness-v2-phase4e3
+    paths:
+      - "config/player360-wellness.config.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "domain/player360/WellnessTrendEngine.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "tests/player360-phase4e3-*.mjs"
+      - "supabase/ready/20260904_*phase4e3*"
+      - "supabase/drafts/20260904_*phase4e3*"
+      - ".github/workflows/player360-phase4e3-wellness-v2.yml"
+  pull_request:
+    paths:
+      - "config/player360-wellness.config.js"
+      - "domain/player360/WellnessRecommendationEngine.js"
+      - "domain/player360/WellnessTrendEngine.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "tests/player360-phase4e3-*.mjs"
+      - "supabase/ready/20260904_*phase4e3*"
+      - "supabase/drafts/20260904_*phase4e3*"
+      - ".github/workflows/player360-phase4e3-wellness-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  wellness-v2:
+    name: Wellness V2 domain + SQL + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: V2 deterministic trends
+        run: node tests/player360-phase4e3-wellness-trends.mjs
+
+      - name: V2 SQL guard
+        run: node tests/player360-phase4e3-sql-structure.mjs
+
+      - name: Existing wellness foundation regression
+        run: node tests/player360-phase4e2-wellness-foundation.mjs
+
+      - name: Existing wellness service route regression
+        run: node tests/player360-phase4e2-service-route.mjs
+
+      - name: Build
+        run: npm run build
