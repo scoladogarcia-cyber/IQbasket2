@@ -69,3 +69,12 @@ from pg_policies
 where schemaname='public'
   and tablename='team_season_memberships'
 order by policyname;
+
+select
+  'INVITED_MEMBERSHIP_TABLE_SECURITY' as section,
+  c.relrowsecurity as rls_enabled,
+  c.relforcerowsecurity as rls_forced,
+  has_table_privilege('authenticated','public.team_season_memberships','SELECT') as authenticated_select_granted
+from pg_class c
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public' and c.relname='team_season_memberships';
