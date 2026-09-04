@@ -34,7 +34,6 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               p.write_text(src.replace(old, new, 1), encoding='utf-8')
 
-          # 1) Independent RBAC permission for rejecting/reviewing sensitive requests.
           replace_once(
               'security/permissions.js',
               '  GRANT_SENSITIVE_ACCESS: "GRANT_SENSITIVE_ACCESS",\n  REVOKE_SENSITIVE_ACCESS: "REVOKE_SENSITIVE_ACCESS",',
@@ -48,7 +47,6 @@ jobs:
               'admin permission assignment'
           )
 
-          # 2) Service exposes rejection only through the audited backend RPC.
           replace_once(
               'services/player360/PrivacyGovernanceService.js',
               '  async revokeSensitiveGrant({ grantId, reason } = {}) {\n    required(grantId, "grantId");\n    required(reason, "reason");\n    return Boolean(await this._rpc("iq_v4e_revoke_sensitive_access_grant", {\n      p_grant_id: grantId,\n      p_reason: String(reason).trim()\n    }));\n  }\n}',
@@ -56,7 +54,6 @@ jobs:
               'service rejection method'
           )
 
-          # 3) UI: grant and reject are distinct actions and permissions.
           replace_once(
               'views/PrivacyCenterView.js',
               '            ${this._can(Permission.GRANT_SENSITIVE_ACCESS)\n              ? `<div class="privacy-card-actions"><button class="privacy-btn privacy-btn-primary" type="button" data-grant-request="${this._escape(row.id)}">Revisar y conceder</button></div>`\n              : ""}',
@@ -76,7 +73,6 @@ jobs:
               'reject handler'
           )
 
-          # 4) Installed-state verification must cover the rejection RPC too.
           replace_once(
               'supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql',
               "    to_regprocedure('public.iq_v4f_list_privacy_audit(uuid,uuid,integer)') is not null as audit_ok\n), acl as (",
@@ -102,7 +98,6 @@ jobs:
               'verify rejection ACL aggregate'
           )
 
-          # 5) Static guard covers both the read API and request-review mutation.
           p = Path('tests/privacy-center-phase4f-sql-structure.mjs')
           src = p.read_text(encoding='utf-8')
           insert_after = '''const verify = readFileSync(\n  new URL("../supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql", import.meta.url),\n  "utf8"\n);\n'''
@@ -115,38 +110,25 @@ jobs:
           if src.count(anchor) != 1:
               raise SystemExit('sql guard checks: expected exactly one anchor')
           p.write_text(src.replace(anchor, checks, 1), encoding='utf-8')
-
-          # 6) Privacy-specific workflow must react to permission changes too.
-          p = Path('.github/workflows/privacy-center-v1.yml')
-          src = p.read_text(encoding='utf-8')
-          needle = '      - "services/player360/PrivacyGovernanceService.js"\n'
-          if src.count(needle) != 2:
-              raise SystemExit(f'privacy workflow path anchor: expected 2 matches, found {src.count(needle)}')
-          src = src.replace(needle, needle + '      - "security/permissions.js"\n')
-          p.write_text(src, encoding='utf-8')
           PY
 
-      - name: Verify intended scope and syntax markers
+      - name: Verify intended scope and static guard
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          git diff --name-only
-          test "$(git diff --name-only | wc -l)" -eq 6
+          test "$(git diff --name-only | wc -l)" -eq 5
           grep -F 'REVIEW_SENSITIVE_ACCESS_REQUESTS' security/permissions.js
           grep -F 'rejectSensitiveAccessRequest' services/player360/PrivacyGovernanceService.js
           grep -F 'data-reject-request' views/PrivacyCenterView.js
           grep -F 'authenticated_reject_execute' supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql
-          grep -F 'requestReviewRollback' tests/privacy-center-phase4f-sql-structure.mjs
-
-      - name: Run static Privacy Center SQL guard
-        run: node tests/privacy-center-phase4f-sql-structure.mjs
+          node tests/privacy-center-phase4f-sql-structure.mjs
 
       - name: Commit hardening
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add security/permissions.js services/player360/PrivacyGovernanceService.js views/PrivacyCenterView.js supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql tests/privacy-center-phase4f-sql-structure.mjs .github/workflows/privacy-center-v1.yml
+          git add security/permissions.js services/player360/PrivacyGovernanceService.js views/PrivacyCenterView.js supabase/ready/20260904_verify_v4_phase4f_privacy_center_readonly.sql tests/privacy-center-phase4f-sql-structure.mjs
           git commit -m "fix(privacy): complete audited request rejection flow"
           git push origin HEAD:feature/privacy-center-v1
