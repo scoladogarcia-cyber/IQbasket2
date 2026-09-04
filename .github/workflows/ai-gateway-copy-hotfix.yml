@@ -1,0 +1,46 @@
+name: AI Gateway Copy Hotfix
+
+on:
+  push:
+    branches:
+      - feature/player360-ai-gateway-v1
+    paths:
+      - ".github/workflows/ai-gateway-copy-hotfix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/player360-ai-gateway-v1
+
+      - name: Preserve explicit provider safety copy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('views/player360/LongitudinalAnalyticsPanel.js')
+          src = path.read_text()
+          old = 'La pasarela IA está preparada pero permanece desactivada hasta validar backend, secretos y cuotas. El navegador nunca llama directamente al proveedor.'
+          new = 'La pasarela IA está preparada pero permanece desactivada hasta validar backend, secretos y cuotas. No se almacenan claves de proveedor en el navegador y el navegador nunca llama directamente al proveedor.'
+          if old not in src and new not in src:
+              raise SystemExit('AI gateway safety copy anchor not found')
+          path.write_text(src.replace(old, new, 1))
+          PY
+
+      - name: Commit copy fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add views/player360/LongitudinalAnalyticsPanel.js
+          git commit -m "fix(ai): keep explicit provider-key safety copy"
+          git push origin HEAD:feature/player360-ai-gateway-v1
