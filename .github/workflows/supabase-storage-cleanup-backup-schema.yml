@@ -1,0 +1,146 @@
+name: Supabase Storage Cleanup - Legacy Backup Schema
+
+on:
+  push:
+    branches:
+      - ops/supabase-storage-audit
+    paths:
+      - ".github/workflows/supabase-storage-cleanup-backup-schema.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Export + rehearse + remove legacy in-db snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_SCHEMA: iqbackup_pre_v3_20260901
+      BACKUP_FILE: iqbackup_pre_v3_20260901.dump
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Preflight legacy snapshot and baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          test "$EXISTS" = "1"
+          BEFORE_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          BACKUP_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint from pg_namespace n left join pg_class c on c.relnamespace=n.oid and c.relkind in ('r','m','p') where n.nspname='$BACKUP_SCHEMA';")
+          PLAYERS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          GAMES=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
+          STATS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
+          EVENTS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
+          echo "before_bytes=$BEFORE_BYTES" >> "$GITHUB_OUTPUT"
+          echo "backup_bytes=$BACKUP_BYTES" >> "$GITHUB_OUTPUT"
+          echo "players=$PLAYERS" >> "$GITHUB_OUTPUT"
+          echo "games=$GAMES" >> "$GITHUB_OUTPUT"
+          echo "stats=$STATS" >> "$GITHUB_OUTPUT"
+          echo "events=$EVENTS" >> "$GITHUB_OUTPUT"
+          echo "STORAGE_BASELINE total_bytes=$BEFORE_BYTES backup_bytes=$BACKUP_BYTES players=$PLAYERS games=$GAMES stats=$STATS events=$EVENTS"
+          test "$BACKUP_BYTES" -gt 1000000
+
+      - name: Export legacy snapshot outside Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema="$BACKUP_SCHEMA" \
+            --format=custom \
+            --compress=9 \
+            --file="$BACKUP_FILE"
+          test -s "$BACKUP_FILE"
+          sha256sum "$BACKUP_FILE" | tee "$BACKUP_FILE.sha256"
+          ls -lh "$BACKUP_FILE" "$BACKUP_FILE.sha256"
+
+      - name: Validate dump can be read
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_restore --list "$BACKUP_FILE" > restore-list.txt
+          test -s restore-list.txt
+          grep -q "$BACKUP_SCHEMA" restore-list.txt
+          echo "Backup archive structure validated."
+
+      - name: Upload external safety artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iqbasket-pre-v3-snapshot-20260901
+          path: |
+            ${{ env.BACKUP_FILE }}
+            ${{ env.BACKUP_FILE }}.sha256
+            restore-list.txt
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Rehearse exact schema removal with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 <<SQL
+          begin;
+          drop schema "$BACKUP_SCHEMA" cascade;
+          do \$\$
+          begin
+            if to_regnamespace('$BACKUP_SCHEMA') is not null then
+              raise exception 'BACKUP_SCHEMA_STILL_PRESENT_IN_REHEARSAL';
+            end if;
+          end
+          \$\$;
+          rollback;
+          SQL
+          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          test "$EXISTS" = "1"
+
+      - name: Remove duplicated in-database snapshot
+        id: drop_snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --command="drop schema \"$BACKUP_SCHEMA\" cascade;"
+
+      - name: Verify application data unchanged and space released
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXISTS=$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")
+          test "$EXISTS" = "0"
+          PLAYERS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.players;")
+          GAMES=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.games;")
+          STATS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.player_game_stats;")
+          EVENTS=$(psql "$SUPABASE_DB_URL" -Atqc "select count(*) from public.game_events;")
+          test "$PLAYERS" = "${{ steps.baseline.outputs.players }}"
+          test "$GAMES" = "${{ steps.baseline.outputs.games }}"
+          test "$STATS" = "${{ steps.baseline.outputs.stats }}"
+          test "$EVENTS" = "${{ steps.baseline.outputs.events }}"
+          AFTER_BYTES=$(psql "$SUPABASE_DB_URL" -Atqc "select pg_database_size(current_database());")
+          FREED=$(( ${{ steps.baseline.outputs.before_bytes }} - AFTER_BYTES ))
+          echo "STORAGE_POST_CLEANUP total_bytes=$AFTER_BYTES freed_bytes=$FREED"
+          test "$FREED" -gt 1000000
+
+      - name: Emergency restore snapshot if verification failed
+        if: failure() && steps.drop_snapshot.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -s "$BACKUP_FILE" ]; then
+            pg_restore --dbname="$SUPABASE_DB_URL" --exit-on-error "$BACKUP_FILE"
+            test "$(psql "$SUPABASE_DB_URL" -Atqc "select (to_regnamespace('$BACKUP_SCHEMA') is not null)::int;")" = "1"
+            echo "Emergency restore completed."
+          else
+            echo "Backup file missing; cannot auto-restore." >&2
+            exit 1
+          fi
