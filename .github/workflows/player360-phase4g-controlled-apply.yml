@@ -1,0 +1,128 @@
+name: Player 360 Phase 4G Controlled Apply
+
+# Manual-only by default. A temporary one-shot branch trigger may be added only
+# after the complete Phase 4G and IQBasket gates are green, then removed again.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Preflight + rollback rehearsal + apply + verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Capture Phase 4D baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          SNAPSHOTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_longitudinal_snapshots;" | tr -d '[:space:]')
+          INSIGHTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_insights;" | tr -d '[:space:]')
+          echo "snapshots=$SNAPSHOTS" >> "$GITHUB_OUTPUT"
+          echo "insights=$INSIGHTS" >> "$GITHUB_OUTPUT"
+          echo "PHASE4G_BASELINE=$SNAPSHOTS|$INSIGHTS"
+
+      - name: Phase 4G readonly preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_preflight_v4_phase4g_ai_gateway_free_readonly.sql
+
+      - name: Rehearse exact Phase 4G migration with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          TMP_SQL=$(mktemp)
+          sed 's/^commit;$/rollback;/' \
+            supabase/ready/20260904_apply_v4_phase4g_ai_gateway_free.sql > "$TMP_SQL"
+          test "$(grep -c '^rollback;$' "$TMP_SQL")" = "1"
+          test "$(grep -c '^commit;$' "$TMP_SQL")" = "0"
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file="$TMP_SQL"
+          rm -f "$TMP_SQL"
+
+      - name: Confirm rehearsal left database unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          SNAPSHOTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_longitudinal_snapshots;" | tr -d '[:space:]')
+          INSIGHTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_insights;" | tr -d '[:space:]')
+          test "$SNAPSHOTS" = "${{ steps.baseline.outputs.snapshots }}"
+          test "$INSIGHTS" = "${{ steps.baseline.outputs.insights }}"
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_preflight_v4_phase4g_ai_gateway_free_readonly.sql
+
+      - name: Apply Phase 4G
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_v4_phase4g_ai_gateway_free.sql
+
+      - name: Verify Phase 4G
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_verify_v4_phase4g_ai_gateway_free_readonly.sql
+
+      - name: Confirm migration did not alter Player 360 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          SNAPSHOTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_longitudinal_snapshots;" | tr -d '[:space:]')
+          INSIGHTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_insights;" | tr -d '[:space:]')
+          REQUESTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_gateway_requests;" | tr -d '[:space:]')
+          LIMITS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.ai_gateway_role_limits;" | tr -d '[:space:]')
+          COST_VIOLATIONS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_gateway_requests where estimated_cost_eur_micros <> 0;" | tr -d '[:space:]')
+          echo "PHASE4G_POST_APPLY=$SNAPSHOTS|$INSIGHTS|$REQUESTS|$LIMITS|$COST_VIOLATIONS"
+          test "$SNAPSHOTS" = "${{ steps.baseline.outputs.snapshots }}"
+          test "$INSIGHTS" = "${{ steps.baseline.outputs.insights }}"
+          test "$REQUESTS" = "0"
+          test "$LIMITS" = "9"
+          test "$COST_VIOLATIONS" = "0"
+
+      - name: Emergency rollback Phase 4G only
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_v4_phase4g_ai_gateway_free.sql
+
+      - name: Verify emergency rollback preserves Phase 4D/4E
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_verify_v4_phase4g_postrollback_readonly.sql
+
+      - name: Confirm evidence unchanged after emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SNAPSHOTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_longitudinal_snapshots;" | tr -d '[:space:]')
+          INSIGHTS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player_ai_insights;" | tr -d '[:space:]')
+          test "$SNAPSHOTS" = "${{ steps.baseline.outputs.snapshots }}"
+          test "$INSIGHTS" = "${{ steps.baseline.outputs.insights }}"
