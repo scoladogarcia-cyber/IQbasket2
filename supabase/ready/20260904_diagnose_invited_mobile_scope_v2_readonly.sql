@@ -91,3 +91,33 @@ join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public'
   and c.relname in ('team_season_memberships','club_season_memberships','user_player_links')
 order by c.relname;
+
+select
+  'CONTEXT_HELPER_METADATA' as section,
+  p.proname,
+  p.prosecdef as security_definer,
+  coalesce(array_to_string(p.proconfig,'|'),'') as function_config,
+  pg_get_userbyid(p.proowner) as owner_name
+from pg_proc p
+join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.oid in (
+    to_regprocedure('public.iq_v3_has_team_season_role(uuid,text[])'),
+    to_regprocedure('public.iq_v3_is_superadmin()'),
+    to_regprocedure('public.iq_v3_can_manage_player(uuid)')
+  )
+order by p.proname;
+
+select
+  'CONTEXT_HELPER_DEFINITION' as section,
+  p.proname,
+  encode(convert_to(pg_get_functiondef(p.oid),'UTF8'),'base64') as definition_base64
+from pg_proc p
+join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.oid in (
+    to_regprocedure('public.iq_v3_has_team_season_role(uuid,text[])'),
+    to_regprocedure('public.iq_v3_is_superadmin()'),
+    to_regprocedure('public.iq_v3_can_manage_player(uuid)')
+  )
+order by p.proname;
