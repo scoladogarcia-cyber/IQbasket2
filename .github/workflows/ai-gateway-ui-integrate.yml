@@ -134,3 +134,5 @@ jobs:
           git add views/Player360View.js views/player360/LongitudinalAnalyticsPanel.js
           git commit -m "feat(ai): prepare gated Player360 AI generation UI"
           git push origin HEAD:feature/player360-ai-gateway-v1
+
+# One-shot workflow: remove after successful integration.
