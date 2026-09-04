@@ -467,23 +467,22 @@ export class TranslationsView {
       throw new Error("No puedes gestionar usuarios de otro club.");
     }
 
-    let finalIds = normalizedIds;
-    if (this.auth?.getAuthenticatedRole?.() === UserRole.ADMIN) {
-      const ownClubTeamIds = new Set((DataStore.getTeams() || []).map(t => String(t.id)));
-      const existingIds = Array.isArray(targetProfile?.assigned_team_ids)
-        ? targetProfile.assigned_team_ids.map(String)
-        : [];
-      const externalIds = existingIds.filter(id => !ownClubTeamIds.has(id));
-      finalIds = [...new Set([...externalIds, ...normalizedIds])];
+    if (!targetProfile?.id) {
+      throw new Error("No se ha podido resolver el usuario objetivo.");
     }
 
-    const { error } = await supabase
-      .from("user_profiles")
-      .update({ assigned_team_ids: finalIds })
-      .eq("email", email);
+    const { data, error } = await supabase.rpc("iq_v7_set_user_team_assignments", {
+      p_user_id: targetProfile.id,
+      p_team_ids: normalizedIds
+    });
 
     if (error) throw error;
 
+    const returnedIds = data?.assigned_team_ids;
+    const finalIds = Array.isArray(returnedIds)
+      ? returnedIds.map(String)
+      : normalizedIds;
+    targetProfile.assigned_team_ids = finalIds;
     this.userTeamAssignments[email] = finalIds;
     this._saveAssignmentsLocal();
   }
@@ -2468,10 +2467,10 @@ export class TranslationsView {
 
         try {
           if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { error } = await supabase
-            .from("user_profiles")
-            .update({ role: newRole })
-            .eq("id", userId);
+          const { data, error } = await supabase.rpc("iq_v7_assign_user_role", {
+            p_user_id: userId,
+            p_role: newRole
+          });
 
           if (error) {
             this.hideSyncOverlay();
@@ -2480,7 +2479,8 @@ export class TranslationsView {
           }
 
           if (userObj) {
-            userObj.role = newRole;
+            userObj.role = data?.role || newRole;
+            userObj.global_role = (data?.role || newRole) === UserRole.ADMIN ? UserRole.ADMIN : null;
           }
 
           this.hideSyncOverlay();

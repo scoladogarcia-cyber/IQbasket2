@@ -17,6 +17,7 @@ import {
   ROLE_PERMISSIONS,
   AI_MONTHLY_LIMITS
 } from "./permissions.js";
+import { normalizeAccountStatus, isAccountStatusActive } from "./accountStatus.js";
 
 const LEGACY_PERMISSION_ALIASES = Object.freeze({
   EDIT_PLAY_BY_PLAY: Permission.EDIT_GAME,
@@ -128,7 +129,9 @@ export class PermissionService {
           ?? user.player_ids
           ?? (user.linked_player_id ? [user.linked_player_id] : [])
       ),
-      status: String(user.status || "Activo")
+      // user_profiles.status pertenece al flujo legacy pending/approved/rejected.
+      registrationStatus: String(user.status || ""),
+      accountStatus: normalizeAccountStatus(user.accountStatus ?? user.account_status)
     };
 
     // La cuenta maestra es siempre el único SUPERADMIN de la aplicación.
@@ -209,26 +212,36 @@ export class PermissionService {
     return CONTEXT_ROLE_PRIORITY.find(role => mappedRoles.includes(role)) || null;
   }
 
+  isAccountActive() {
+    return Boolean(this.currentUser)
+      && isAccountStatusActive(this.currentUser.accountStatus);
+  }
+
   isAuthenticated() {
-    return Boolean(this.currentUser?.id || this.currentUser?.email);
+    return Boolean(this.currentUser?.id || this.currentUser?.email)
+      && this.isAccountActive();
   }
 
   isAdmin() {
-    return [UserRole.SUPERADMIN, UserRole.ADMIN].includes(this.getAuthenticatedRole());
+    return this.isAccountActive()
+      && [UserRole.SUPERADMIN, UserRole.ADMIN].includes(this.getAuthenticatedRole());
   }
 
   isScout() {
-    return [UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.ENTRENADOR, UserRole.ANALISTA]
-      .includes(this.getAuthenticatedRole());
+    return this.isAccountActive()
+      && [UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.ENTRENADOR, UserRole.ANALISTA]
+        .includes(this.getAuthenticatedRole());
   }
 
   hasRole(roleOrRoles, { preview = true } = {}) {
+    if (!this.isAccountActive()) return false;
     const currentRole = preview ? this.getEffectiveRole() : this.getAuthenticatedRole();
     const targets = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
     return targets.some(role => canonicalRoleName(role) === currentRole);
   }
 
   can(permissionKey, context = {}) {
+    if (!this.isAccountActive()) return false;
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
     const role = this.getRoleForContext(context);
     const allowed = ROLE_PERMISSIONS[role] || [];
@@ -237,6 +250,7 @@ export class PermissionService {
   }
 
   canPreview(permissionKey, context = {}) {
+    if (!this.isAccountActive()) return false;
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
     const role = this.getRoleForContext(context, { preview: true });
     const allowed = ROLE_PERMISSIONS[role] || [];
@@ -245,11 +259,13 @@ export class PermissionService {
   }
 
   getAiMonthlyLimit({ preview = false } = {}) {
+    if (!this.isAccountActive()) return 0;
     const role = preview ? this.getEffectiveRole() : this.getAuthenticatedRole();
     return AI_MONTHLY_LIMITS[role] ?? 0;
   }
 
   setPreviewRole(role) {
+    if (!this.isAccountActive()) return false;
     if (this.getAuthenticatedRole() !== UserRole.SUPERADMIN) return false;
     this.previewRole = canonicalRoleName(role);
     return true;
@@ -260,12 +276,14 @@ export class PermissionService {
   }
 
   canAccessClub(clubId) {
+    if (!this.isAccountActive()) return false;
     if (!clubId || !this.currentUser) return false;
     if (this.getAuthenticatedRole() === UserRole.SUPERADMIN) return true;
     return String(this.currentUser.clubId || "") === String(clubId);
   }
 
   canAccessTeam(teamId) {
+    if (!this.isAccountActive()) return false;
     if (!teamId || !this.currentUser) return false;
     const role = this.getAuthenticatedRole();
     if (role === UserRole.SUPERADMIN) return true;
@@ -279,6 +297,7 @@ export class PermissionService {
   }
 
   canAccessSeason(seasonId) {
+    if (!this.isAccountActive()) return false;
     if (!seasonId || !this.currentUser) return false;
     if (this.getAuthenticatedRole() === UserRole.SUPERADMIN) return true;
     if (this.currentUser.allowedSeasonIds.length === 0) return true;
@@ -286,6 +305,7 @@ export class PermissionService {
   }
 
   canAccessTeamSeason(teamSeasonId) {
+    if (!this.isAccountActive()) return false;
     if (!teamSeasonId || !this.currentUser) return false;
     if (this.getAuthenticatedRole() === UserRole.SUPERADMIN) return true;
 
@@ -299,6 +319,7 @@ export class PermissionService {
   }
 
   getContextRoles(teamSeasonId) {
+    if (!this.isAccountActive()) return [];
     if (!teamSeasonId || !this.currentUser) return [];
     const target = String(teamSeasonId);
     return this.currentUser.contextualMemberships
@@ -311,6 +332,7 @@ export class PermissionService {
   }
 
   canAccessPlayer(playerId, playerTeamId = null) {
+    if (!this.isAccountActive()) return false;
     if (!playerId || !this.currentUser) return false;
     const role = this.getAuthenticatedRole();
     if (role === UserRole.SUPERADMIN) return true;
@@ -328,6 +350,7 @@ export class PermissionService {
   }
 
   canAssignRole(targetRole, targetEmail = "") {
+    if (!this.isAccountActive()) return false;
     const requestedRole = canonicalRoleName(targetRole);
     const targetIsUniqueSuperadmin = isUniqueSuperadmin(targetEmail);
 
