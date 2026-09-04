@@ -79,23 +79,39 @@ function normalizeModule(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function addMetricModule(modules, value) {
+  const key = String(value || "").trim();
+  if (!key) return;
+  const prefix = normalizeModule(key.split(".")[0]);
+  if (prefix) modules.add(prefix);
+}
+
+function collectModulesFromRecord(modules, record = {}) {
+  const explicit = normalizeModule(record?.module);
+  if (explicit) modules.add(explicit);
+
+  addMetricModule(modules, record?.key);
+  addMetricModule(modules, record?.metric_key);
+  addMetricModule(modules, record?.left_metric_key);
+  addMetricModule(modules, record?.right_metric_key);
+}
+
 /**
- * Extrae módulos mencionados por los hechos deterministas.
+ * Extrae módulos de hechos y ausencias de datos. Revisar también `missing_data`
+ * evita que un módulo restringido entre por el gateway genérico únicamente
+ * porque no dispone de muestra suficiente para convertirse en hecho.
  * @param {Record<string, any>} evidenceBundle
  * @returns {string[]}
  */
 export function getEvidenceModules(evidenceBundle = {}) {
   const modules = new Set();
   const facts = Array.isArray(evidenceBundle?.facts) ? evidenceBundle.facts : [];
+  const missingData = Array.isArray(evidenceBundle?.missing_data)
+    ? evidenceBundle.missing_data
+    : [];
 
-  for (const fact of facts) {
-    const explicit = normalizeModule(fact?.module);
-    if (explicit) modules.add(explicit);
-
-    const key = String(fact?.key || fact?.metric_key || "").trim();
-    const prefix = normalizeModule(key.split(".")[0]);
-    if (prefix) modules.add(prefix);
-  }
+  for (const fact of facts) collectModulesFromRecord(modules, fact);
+  for (const missing of missingData) collectModulesFromRecord(modules, missing);
 
   return [...modules].sort();
 }
