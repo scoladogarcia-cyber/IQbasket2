@@ -1,3 +1,5 @@
+import { PLAYER360_AI_GATEWAY_CONFIG } from "./player360-ai-gateway.config.js";
+
 /**
  * Deterministic configuration for Player 360 longitudinal analytics.
  *
@@ -22,7 +24,6 @@ export const PLAYER360_LONGITUDINAL_CONFIG = Object.freeze({
   ]),
   defaultStableTolerance: 0.000001
 });
-
 
 /**
  * Source-to-observation mappings used by the real-data analytics adapter.
@@ -64,15 +65,14 @@ export const PLAYER360_LONGITUDINAL_ASSOCIATIONS = Object.freeze([
   })
 ]);
 
+/**
+ * Alias de compatibilidad para la UI 4D. La fuente de verdad de generación IA
+ * vive ahora en player360-ai-gateway.config.js.
+ */
 export const PLAYER360_AI_UI_CONFIG = Object.freeze({
-  /**
-   * External model calls are intentionally disabled until a server-side
-   * provider adapter/Edge Function is deployed. Never put provider secrets in
-   * the browser bundle.
-   */
-  generationEnabled: false,
-  edgeFunctionName: "player360-ai-insight",
-  promptVersion: "PLAYER360_STAFF_ES_V1"
+  generationEnabled: PLAYER360_AI_GATEWAY_CONFIG.generationEnabled,
+  edgeFunctionName: PLAYER360_AI_GATEWAY_CONFIG.edgeFunctionName,
+  promptVersion: PLAYER360_AI_GATEWAY_CONFIG.promptVersion
 });
 
 export default PLAYER360_LONGITUDINAL_CONFIG;
