@@ -1,0 +1,1 @@
+Apply isolated synthetic Demo Universe V1 after static contract and IQBasket CI passed. Enforce non-demo isolation and <=8 MiB physical database growth.
