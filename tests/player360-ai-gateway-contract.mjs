@@ -114,10 +114,21 @@ await assert.rejects(() => disabled.generateInsight({ snapshotId: "s1" }), /AI_G
 assert.equal(invoked, null);
 
 const enabled = new Player360AiGatewayService(mockClient, { generationEnabled: true });
-const result = await enabled.generateInsight({ snapshotId: "s1", audience: "staff", locale: "es" });
+const result = await enabled.generateInsight({
+  snapshotId: "s1",
+  audience: "staff",
+  locale: "es",
+  idempotencyKey: "11111111-1111-4111-8111-111111111111"
+});
 assert.equal(result.insightId, "insight-1");
+assert.equal(result.idempotencyKey, "11111111-1111-4111-8111-111111111111");
 assert.equal(invoked.name, PLAYER360_AI_GATEWAY_CONFIG.edgeFunctionName);
-assert.deepEqual(invoked.options.body, { snapshot_id: "s1", audience: "STAFF", locale: "es" });
+assert.deepEqual(invoked.options.body, {
+  snapshot_id: "s1",
+  idempotency_key: "11111111-1111-4111-8111-111111111111",
+  audience: "STAFF",
+  locale: "es"
+});
 assert.doesNotMatch(clientSource, /api\.openai\.com|IQB_AI_API_KEY|Bearer\s+\$\{apiKey\}/i);
 
 // Edge boundary: authenticated caller context reads evidence and rechecks the
@@ -126,11 +137,19 @@ assert.match(edgeSource, /callerClient\.auth\.getUser\(\)/);
 assert.match(edgeSource, /callerClient[\s\S]*?from\("player_longitudinal_snapshots"\)/);
 assert.match(edgeSource, /iq_v4_can_generate_ai_insights/);
 assert.match(edgeSource, /sanitizeEvidenceForAiProvider/);
+assert.match(edgeSource, /IQB_AI_GENERATION_ENABLED/);
+assert.match(edgeSource, /AI_GATEWAY_NOT_ENABLED/);
+assert.match(edgeSource, /idempotency_key/);
 assert.match(edgeSource, /IQB_AI_MONTHLY_LIMITS_JSON/);
 assert.match(edgeSource, /AI_QUOTA_NOT_CONFIGURED/);
+assert.match(edgeSource, /iq_ai_reserve_usage/);
+assert.match(edgeSource, /iq_ai_mark_provider_started/);
+assert.match(edgeSource, /iq_ai_complete_usage/);
+assert.match(edgeSource, /iq_ai_fail_usage/);
 assert.match(edgeSource, /iq_v4_save_ai_insight/);
+assert.doesNotMatch(edgeSource, /from\("player_ai_insights"\)[\s\S]{0,250}count:\s*"exact"/);
 assert.match(edgeSource, /Deno\.env\.get\("IQB_AI_API_KEY"\)/);
-assert.doesNotMatch(edgeSource, /adminClient\.rpc\([\s\S]*?iq_v4_save_ai_insight/);
+assert.doesNotMatch(edgeSource, /adminClient\.rpc\(\s*["']iq_v4_save_ai_insight["']/);
 
 // Provider hardening: stateless Responses API call, bounded output/timeout,
 // HTTPS endpoint allowlist and explicit incomplete/refusal handling.
@@ -143,6 +162,9 @@ assert.match(edgeSource, /AI_PROVIDER_ENDPOINT_NOT_ALLOWED/);
 assert.match(edgeSource, /AI_PROVIDER_OUTPUT_INCOMPLETE/);
 assert.match(edgeSource, /AI_PROVIDER_REFUSED/);
 assert.match(edgeSource, /type\s*===\s*"refusal"/);
+assert.match(edgeSource, /resolveProviderRuntimeConfig\(\)/);
+assert.match(edgeSource, /usage_ledger_id/);
+assert.match(edgeSource, /AI_USAGE_FINALIZE_FAILED/);
 
 // UI integration: Player360 owns the gateway dependency, the panel checks the
 // granular generate permission, and the button can exist only behind the

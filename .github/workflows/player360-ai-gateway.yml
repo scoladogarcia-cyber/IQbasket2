@@ -10,6 +10,12 @@ on:
       - "services/player360/Player360AiGatewayService.js"
       - "supabase/functions/player360-ai-insight/**"
       - "tests/player360-ai-gateway-contract.mjs"
+      - "tests/player360-ai-gate-b-sql.mjs"
+      - "supabase/ready/20260904_apply_ai_usage_ledger_v1.sql"
+      - "supabase/ready/20260904_preflight_ai_usage_ledger_v1_readonly.sql"
+      - "supabase/ready/20260904_verify_ai_usage_ledger_v1_readonly.sql"
+      - "supabase/ready/20260904_rollback_ai_usage_ledger_v1.sql"
+      - "supabase/drafts/20260904_smoke_ai_usage_ledger_v1_rollback.sql"
       - "views/Player360View.js"
       - "views/player360/LongitudinalAnalyticsPanel.js"
       - "docs/architecture/PLAYER_360_AI_GATEWAY_V1.md"
@@ -23,6 +29,12 @@ on:
       - "services/player360/Player360AiGatewayService.js"
       - "supabase/functions/player360-ai-insight/**"
       - "tests/player360-ai-gateway-contract.mjs"
+      - "tests/player360-ai-gate-b-sql.mjs"
+      - "supabase/ready/20260904_apply_ai_usage_ledger_v1.sql"
+      - "supabase/ready/20260904_preflight_ai_usage_ledger_v1_readonly.sql"
+      - "supabase/ready/20260904_verify_ai_usage_ledger_v1_readonly.sql"
+      - "supabase/ready/20260904_rollback_ai_usage_ledger_v1.sql"
+      - "supabase/drafts/20260904_smoke_ai_usage_ledger_v1_rollback.sql"
       - "views/Player360View.js"
       - "views/player360/LongitudinalAnalyticsPanel.js"
       - "docs/architecture/PLAYER_360_AI_GATEWAY_V1.md"
@@ -47,6 +59,9 @@ jobs:
 
       - name: Gateway security contract
         run: node tests/player360-ai-gateway-contract.mjs
+
+      - name: Gate B atomic usage ledger contract
+        run: node tests/player360-ai-gate-b-sql.mjs
 
       - name: Setup Deno
         uses: denoland/setup-deno@v2

@@ -19,6 +19,14 @@ function assertClient(client) {
   }
 }
 
+function resolveIdempotencyKey(value = null) {
+  if (value) return String(value).trim();
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  throw new Error("AI_IDEMPOTENCY_KEY_UNAVAILABLE");
+}
+
 export class Player360AiGatewayService {
   constructor(supabaseClient = null, options = {}) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
@@ -32,7 +40,7 @@ export class Player360AiGatewayService {
     return Boolean(this.generationEnabled);
   }
 
-  async generateInsight({ snapshotId, audience = "STAFF", locale = "es" } = {}) {
+  async generateInsight({ snapshotId, audience = "STAFF", locale = "es", idempotencyKey = null } = {}) {
     assertClient(this.supabase);
     required(snapshotId, "snapshotId");
 
@@ -44,10 +52,12 @@ export class Player360AiGatewayService {
     if (!PLAYER360_AI_GATEWAY_CONFIG.allowedAudiences.includes(normalizedAudience)) {
       throw new Error("AI_AUDIENCE_UNSUPPORTED");
     }
+    const requestKey = resolveIdempotencyKey(idempotencyKey);
 
     const { data, error } = await this.supabase.functions.invoke(this.edgeFunctionName, {
       body: {
         snapshot_id: snapshotId,
+        idempotency_key: requestKey,
         audience: normalizedAudience,
         locale: String(locale || "es").trim().toLowerCase()
       }
@@ -66,7 +76,10 @@ export class Player360AiGatewayService {
       provider: data.provider || null,
       modelName: data.model_name || null,
       promptVersion: data.prompt_version || null,
-      usage: data.usage || null
+      usage: data.usage || null,
+      usageLedgerId: data.usage_ledger_id || null,
+      idempotencyKey: requestKey,
+      replayed: Boolean(data.replayed)
     };
   }
 }
