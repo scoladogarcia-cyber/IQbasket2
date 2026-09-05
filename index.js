@@ -376,12 +376,6 @@ export class IQBasketApp {
     if (btnSwitchReg) btnSwitchReg.addEventListener("click", () => { this.views.auth.activeTab = "register"; this.render(); });
     if (btnSwitchLog) btnSwitchLog.addEventListener("click", () => { this.views.auth.activeTab = "login"; this.render(); });
 
-    document.getElementById("btn-forgot-password")?.addEventListener("click", async () => {
-      const email = document.getElementById("login-email")?.value?.trim() || "";
-      const { PasswordRecoveryCoordinator } = await import("./features/auth/PasswordRecoveryCoordinator.js");
-      await new PasswordRecoveryCoordinator().openRequest({ email });
-    });
-
     const loginForm = document.getElementById("login-form");
     if (loginForm) {
       loginForm.addEventListener("submit", async (e) => {
