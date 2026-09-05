@@ -80,6 +80,7 @@ async function idbAll() {
 }
 
 function fallbackRead() {
+  if (typeof localStorage === "undefined") return [];
   try {
     const parsed = JSON.parse(localStorage.getItem(FALLBACK_KEY) || "[]");
     return Array.isArray(parsed) ? parsed : [];
@@ -89,6 +90,7 @@ function fallbackRead() {
 }
 
 function fallbackWrite(rows) {
+  if (typeof localStorage === "undefined") return;
   localStorage.setItem(FALLBACK_KEY, JSON.stringify(rows));
 }
 
@@ -123,16 +125,17 @@ async function readAll() {
 }
 
 export function isTransientSyncError(error) {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   const message = String(error?.message || error || "").toLowerCase();
   const code = String(error?.code || "").toUpperCase();
 
-  // Never convert authorization/data-integrity failures into an offline success.
+  // Authorization and integrity always win over connectivity. Being offline must
+  // never turn a forbidden mutation into a locally accepted mutation.
   if (
     code === "42501"
     || /permission|denied|rls|row.level.security|jwt|unauthori[sz]ed|forbidden|constraint|duplicate|invalid|locked|frozen/.test(message)
   ) return false;
 
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   return /failed to fetch|network|networkerror|fetch failed|timeout|timed out|connection|offline|load failed/.test(message);
 }
 
@@ -170,7 +173,8 @@ export class GameSyncOutboxService {
       updatedAt: nowIso()
     };
     await persist(record);
-    dispatchStatus({ gameId: record.gameId, status: navigator?.onLine === false ? GAME_SYNC_STATUS.OFFLINE : GAME_SYNC_STATUS.PENDING, pending: true });
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    dispatchStatus({ gameId: record.gameId, status: offline ? GAME_SYNC_STATUS.OFFLINE : GAME_SYNC_STATUS.PENDING, pending: true });
     return record;
   }
 
