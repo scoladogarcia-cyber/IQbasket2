@@ -9,6 +9,7 @@ const ROOT_SELECTOR = ".easy-entry-wrapper";
 const STATUS_SELECTOR = "[data-match-capture-status]";
 const FLOATING_UNDO_SELECTOR = "[data-match-capture-floating-undo]";
 const MODE_PREFERENCE_KEY = "iqbasket.matchCapture.mode";
+let observerScheduled = false;
 
 function canVibrate() {
   return typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
@@ -96,6 +97,15 @@ function ensureStatus(root) {
   return status;
 }
 
+function renderStatus(status, step, html) {
+  if (!status) return;
+  const signature = `${step}:${html}`;
+  if (status.dataset.renderSignature === signature) return;
+  status.dataset.renderSignature = signature;
+  status.dataset.step = step;
+  status.innerHTML = html;
+}
+
 function ensureFloatingUndo(root) {
   let button = root.querySelector(FLOATING_UNDO_SELECTOR);
   if (button) return button;
@@ -130,8 +140,7 @@ function syncPlayerSelection(root) {
   root.querySelectorAll(".player-card-btn").forEach(button => {
     const active = button === selected;
     button.setAttribute("aria-pressed", String(active));
-    if (active) button.classList.add("match-capture-player-selected");
-    else button.classList.remove("match-capture-player-selected");
+    button.classList.toggle("match-capture-player-selected", active);
   });
 
   const name = selectedPlayerName(root);
@@ -144,22 +153,34 @@ function syncPlayerSelection(root) {
       button.removeAttribute("aria-disabled");
     }
     const actionLabel = String(button.textContent || "Acción").trim();
-    button.setAttribute("aria-label", name ? `${actionLabel} · ${name}` : `${actionLabel} · selecciona primero un jugador`);
+    const ariaLabel = name
+      ? `${actionLabel} · ${name}`
+      : `${actionLabel} · selecciona primero un jugador`;
+    if (button.getAttribute("aria-label") !== ariaLabel) button.setAttribute("aria-label", ariaLabel);
   });
 
   const status = ensureStatus(root);
   if (!isFastMode(root)) {
-    status.innerHTML = '<strong>Captura de partido</strong><span>Elige el modo que mejor encaje con la tarea.</span>';
-    status.dataset.step = "mode";
+    renderStatus(
+      status,
+      "mode",
+      '<strong>Captura de partido</strong><span>Elige el modo que mejor encaje con la tarea.</span>'
+    );
     return;
   }
 
   if (!name) {
-    status.innerHTML = '<strong>1 · Elige jugador</strong><span>Después podrás registrar la acción con un solo toque.</span>';
-    status.dataset.step = "player";
+    renderStatus(
+      status,
+      "player",
+      '<strong>1 · Elige jugador</strong><span>Después podrás registrar la acción con un solo toque.</span>'
+    );
   } else {
-    status.innerHTML = `<strong>2 · Registra acción</strong><span>${escapeHtml(name)} seleccionado.</span>`;
-    status.dataset.step = "action";
+    renderStatus(
+      status,
+      "action",
+      `<strong>2 · Registra acción</strong><span>${escapeHtml(name)} seleccionado.</span>`
+    );
   }
 }
 
@@ -249,6 +270,17 @@ function enhanceAll() {
   document.querySelectorAll(ROOT_SELECTOR).forEach(enhanceRoot);
 }
 
+function scheduleEnhanceAll() {
+  if (observerScheduled) return;
+  observerScheduled = true;
+  const run = () => {
+    observerScheduled = false;
+    enhanceAll();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  else setTimeout(run, 0);
+}
+
 if (typeof document !== "undefined") {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", enhanceAll, { once: true });
@@ -256,7 +288,7 @@ if (typeof document !== "undefined") {
     enhanceAll();
   }
 
-  const observer = new MutationObserver(() => enhanceAll());
+  const observer = new MutationObserver(scheduleEnhanceAll);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
