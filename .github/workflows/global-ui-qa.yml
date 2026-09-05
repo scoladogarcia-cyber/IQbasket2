@@ -208,6 +208,9 @@ jobs:
       - name: BoxScore edit and lock behavior
         run: node tests/boxscore-edit-ui-smoke.mjs
 
+      - name: Game lifecycle mobile permissions
+        run: node tests/game-lifecycle-mobile-ui-smoke.mjs
+
       - name: Print Vite log on failure
         if: failure()
         run: cat /tmp/global-ui-operations-vite.log || true
