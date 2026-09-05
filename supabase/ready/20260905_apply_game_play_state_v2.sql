@@ -2,6 +2,7 @@
 -- IQBasket · Game Play State V2
 -- Date: 2026-09-05
 -- Separates sporting lifecycle (play_state) from historical edit lock (edit_state).
+-- play_state is canonical; status remains a temporary compatibility projection.
 -- =============================================================================
 
 begin;
@@ -23,7 +24,9 @@ begin
 end
 $play_state_prereq$;
 
--- 1. Additive canonical sporting state. Existing edit_state remains untouched.
+-- -----------------------------------------------------------------------------
+-- 1. Additive canonical sporting state
+-- -----------------------------------------------------------------------------
 alter table public.games
   add column if not exists play_state text,
   add column if not exists play_state_changed_at timestamptz,
@@ -37,6 +40,7 @@ set play_state=case
   when lower(coalesce(status,'')) like '%final%' or lower(coalesce(status,'')) like '%finish%' then 'FINISHED'
   when lower(coalesce(status,'')) like '%curso%' or lower(coalesce(status,'')) like '%live%' or lower(coalesce(status,'')) like '%progress%' then 'LIVE'
   when lower(coalesce(status,'')) like '%prepar%' or lower(coalesce(status,'')) like '%ready%' then 'READY'
+  when lower(coalesce(status,'')) like '%program%' or lower(coalesce(status,'')) like '%schedul%' then 'SCHEDULED'
   else 'SCHEDULED'
 end,
 play_state_changed_at=coalesce(play_state_changed_at,updated_at,created_at,now())
@@ -62,7 +66,69 @@ create index if not exists games_play_state_idx
 create index if not exists games_play_state_changed_by_fk_idx
   on public.games(play_state_changed_by);
 
--- 2. Immutable transition audit.
+-- `status` is still read by legacy dashboards/aggregators. Keep it as a projection
+-- until those readers are migrated; no client may use it as the new source of truth.
+create or replace function iq_private.game_legacy_status_for_play_state(p_state text)
+returns text
+language sql
+immutable
+set search_path=''
+as $function$
+  select case upper(coalesce(p_state,''))
+    when 'SCHEDULED' then 'Programado'
+    when 'READY' then 'Preparado'
+    when 'LIVE' then 'En curso'
+    when 'FINISHED' then 'Finalizado'
+    when 'CANCELLED' then 'Cancelado'
+    else 'Programado'
+  end;
+$function$;
+revoke all on function iq_private.game_legacy_status_for_play_state(text) from public,anon,authenticated;
+
+-- Normalize existing legacy projection immediately.
+update public.games
+set status=iq_private.game_legacy_status_for_play_state(play_state)
+where status is distinct from iq_private.game_legacy_status_for_play_state(play_state);
+
+create or replace function iq_private.sync_game_play_state_legacy_status_v2()
+returns trigger
+language plpgsql
+set search_path=''
+as $function$
+declare
+  v_legacy text:=lower(trim(coalesce(new.status,'')));
+begin
+  if tg_op='INSERT' then
+    -- Existing clients do not yet send play_state. Preserve their historical
+    -- create semantics by interpreting a recognized legacy status once on INSERT.
+    if new.play_state='SCHEDULED' then
+      if v_legacy like '%cancel%' then new.play_state:='CANCELLED';
+      elsif v_legacy like '%final%' or v_legacy like '%finish%' then new.play_state:='FINISHED';
+      elsif v_legacy like '%curso%' or v_legacy like '%live%' or v_legacy like '%progress%' then new.play_state:='LIVE';
+      elsif v_legacy like '%prepar%' or v_legacy like '%ready%' then new.play_state:='READY';
+      end if;
+    end if;
+  elsif new.play_state is not distinct from old.play_state
+        and new.status is distinct from old.status then
+    -- Once V2 exists, legacy status writes cannot mutate the canonical lifecycle.
+    new.status:=iq_private.game_legacy_status_for_play_state(old.play_state);
+    return new;
+  end if;
+
+  new.status:=iq_private.game_legacy_status_for_play_state(new.play_state);
+  return new;
+end;
+$function$;
+revoke all on function iq_private.sync_game_play_state_legacy_status_v2() from public,anon,authenticated;
+
+drop trigger if exists trg_iq_v13_sync_game_legacy_status on public.games;
+create trigger trg_iq_v13_sync_game_legacy_status
+before insert or update of play_state,status on public.games
+for each row execute function iq_private.sync_game_play_state_legacy_status_v2();
+
+-- -----------------------------------------------------------------------------
+-- 2. Immutable transition audit
+-- -----------------------------------------------------------------------------
 create table public.game_play_state_transitions (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete restrict,
@@ -87,7 +153,9 @@ create policy iq_game_play_state_transitions_no_direct_client_access
   on public.game_play_state_transitions for all to anon,authenticated
   using(false) with check(false);
 
--- 3. Transition policy helper. Each target is an independent action boundary.
+-- -----------------------------------------------------------------------------
+-- 3. Transition and action policy helpers
+-- -----------------------------------------------------------------------------
 create or replace function iq_private.game_play_state_transition_allowed(
   p_from text,p_to text
 )
@@ -101,6 +169,20 @@ as $function$
   end;
 $function$;
 revoke all on function iq_private.game_play_state_transition_allowed(text,text) from public,anon,authenticated;
+
+create or replace function iq_private.game_play_state_action_for_target(p_target text)
+returns text language sql immutable set search_path=''
+as $function$
+  select case upper(coalesce(p_target,''))
+    when 'SCHEDULED' then 'PREPARE_GAME'
+    when 'READY' then 'PREPARE_GAME'
+    when 'LIVE' then 'START_GAME'
+    when 'FINISHED' then 'FINISH_GAME'
+    when 'CANCELLED' then 'CANCEL_GAME'
+    else null
+  end;
+$function$;
+revoke all on function iq_private.game_play_state_action_for_target(text) from public,anon,authenticated;
 
 create or replace function iq_private.game_play_state_actor_allowed(
   p_game_id uuid,p_target text
@@ -136,16 +218,21 @@ as $function$
       public.iq_v3_is_global_superadmin()
       or exists (
         select 1 from membership_roles mr
-        where case upper(coalesce(p_target,''))
-          when 'CANCELLED' then mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR')
-          else mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA')
+        where case iq_private.game_play_state_action_for_target(p_target)
+          when 'CANCEL_GAME' then mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR')
+          when 'PREPARE_GAME' then mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA')
+          when 'START_GAME' then mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA')
+          when 'FINISH_GAME' then mr.role in ('ADMIN','COORDINADOR','DIRECTOR_DEPORTIVO','ENTRENADOR','AYUDANTE','ANALISTA')
+          else false
         end
       )
     );
 $function$;
 revoke all on function iq_private.game_play_state_actor_allowed(uuid,text) from public,anon,authenticated;
 
--- 4. Authoritative action RPC.
+-- -----------------------------------------------------------------------------
+-- 4. Authoritative action RPC
+-- -----------------------------------------------------------------------------
 create or replace function public.iq_v13_set_game_play_state(
   p_game_id uuid,
   p_target_state text,
@@ -157,6 +244,7 @@ declare
   v_game public.games%rowtype;
   v_target text:=upper(trim(coalesce(p_target_state,'')));
   v_reason text:=nullif(trim(coalesce(p_reason,'')),'');
+  v_legacy_status text;
 begin
   if auth.uid() is null or not public.iq_account_is_active() then
     raise exception 'ACCOUNT_ACTIVE_AUTH_REQUIRED' using errcode='42501';
@@ -173,7 +261,8 @@ begin
   if v_game.play_state=v_target then
     return jsonb_build_object(
       'success',true,'reason_code','NO_CHANGE','game_id',v_game.id,
-      'play_state',v_game.play_state,'edit_state',v_game.edit_state
+      'play_state',v_game.play_state,'edit_state',v_game.edit_state,
+      'legacy_status',iq_private.game_legacy_status_for_play_state(v_game.play_state)
     );
   end if;
   if not iq_private.game_play_state_transition_allowed(v_game.play_state,v_target) then
@@ -186,8 +275,11 @@ begin
     raise exception 'GAME_PLAY_STATE_CANCEL_REASON_REQUIRED';
   end if;
 
+  v_legacy_status:=iq_private.game_legacy_status_for_play_state(v_target);
+
   update public.games
   set play_state=v_target,
+      status=v_legacy_status,
       play_state_changed_at=now(),
       play_state_changed_by=auth.uid(),
       play_state_reason=v_reason
@@ -197,20 +289,25 @@ begin
     game_id,from_state,to_state,reason,changed_by,metadata
   ) values (
     v_game.id,v_game.play_state,v_target,v_reason,auth.uid(),
-    jsonb_build_object('version','GAME_PLAY_STATE_V2')
+    jsonb_build_object(
+      'version','GAME_PLAY_STATE_V2',
+      'action',iq_private.game_play_state_action_for_target(v_target)
+    )
   );
 
   return jsonb_build_object(
     'success',true,'reason_code','TRANSITION_APPLIED','game_id',v_game.id,
     'from_state',v_game.play_state,'play_state',v_target,'edit_state',v_game.edit_state,
-    'changed_at',now()
+    'legacy_status',v_legacy_status,'changed_at',now()
   );
 end;
 $function$;
 revoke all on function public.iq_v13_set_game_play_state(uuid,text,text) from public,anon;
 grant execute on function public.iq_v13_set_game_play_state(uuid,text,text) to authenticated;
 
--- 5. Read projection for one game; direct audit table access remains closed.
+-- -----------------------------------------------------------------------------
+-- 5. Read projection; raw actor identifiers stay inside the private audit trail
+-- -----------------------------------------------------------------------------
 create or replace function public.iq_v13_game_play_state_snapshot(p_game_id uuid)
 returns jsonb language plpgsql stable security definer set search_path=''
 as $function$
@@ -224,8 +321,6 @@ begin
   select * into v_game from public.games where id=p_game_id;
   if v_game.id is null then raise exception 'GAME_NOT_FOUND'; end if;
 
-  -- Reading the sport state follows existing game/team visibility. A caller who
-  -- cannot act receives no transition privileges, but this RPC never widens writes.
   if not public.iq_v3_is_global_superadmin()
      and not exists (
        select 1 from public.team_season_memberships m
@@ -248,15 +343,21 @@ begin
   end if;
 
   select coalesce(jsonb_agg(jsonb_build_object(
-    'from_state',h.from_state,'to_state',h.to_state,'reason',h.reason,
-    'changed_by',h.changed_by,'created_at',h.created_at
+    'from_state',h.from_state,
+    'to_state',h.to_state,
+    'reason',h.reason,
+    'created_at',h.created_at
   ) order by h.created_at desc),'[]'::jsonb)
   into v_history
   from public.game_play_state_transitions h where h.game_id=v_game.id;
 
   return jsonb_build_object(
-    'game_id',v_game.id,'play_state',v_game.play_state,'edit_state',v_game.edit_state,
-    'changed_at',v_game.play_state_changed_at,'reason',v_game.play_state_reason,
+    'game_id',v_game.id,
+    'play_state',v_game.play_state,
+    'edit_state',v_game.edit_state,
+    'legacy_status',v_game.status,
+    'changed_at',v_game.play_state_changed_at,
+    'reason',v_game.play_state_reason,
     'history',v_history
   );
 end;
@@ -264,7 +365,12 @@ $function$;
 revoke all on function public.iq_v13_game_play_state_snapshot(uuid) from public,anon;
 grant execute on function public.iq_v13_game_play_state_snapshot(uuid) to authenticated;
 
--- 6. Do not allow the legacy close action to freeze an actually-live game.
+-- -----------------------------------------------------------------------------
+-- 6. Lock compatibility
+-- -----------------------------------------------------------------------------
+-- V6 season freeze intentionally locks every OPEN game in the scope, including
+-- scheduled games. Preserve that lifecycle. Only operational READY/LIVE games
+-- are forbidden from being locked before they are finished/cancelled/reset.
 create or replace function iq_private.guard_lock_live_game_v2()
 returns trigger language plpgsql set search_path=''
 as $function$
@@ -284,7 +390,9 @@ create trigger trg_iq_v13_guard_lock_live_game
 before update of edit_state on public.games
 for each row execute function iq_private.guard_lock_live_game_v2();
 
--- 7. Security invariants.
+-- -----------------------------------------------------------------------------
+-- 7. Security and compatibility invariants
+-- -----------------------------------------------------------------------------
 do $play_state_verify$
 begin
   if has_table_privilege('authenticated','public.game_play_state_transitions','SELECT')
@@ -292,8 +400,16 @@ begin
     raise exception 'GAME_PLAY_STATE_AUDIT_DIRECT_ACCESS_OPEN';
   end if;
   if has_function_privilege('authenticated','iq_private.game_play_state_transition_allowed(text,text)','EXECUTE')
-     or has_function_privilege('authenticated','iq_private.game_play_state_actor_allowed(uuid,text)','EXECUTE') then
+     or has_function_privilege('authenticated','iq_private.game_play_state_action_for_target(text)','EXECUTE')
+     or has_function_privilege('authenticated','iq_private.game_play_state_actor_allowed(uuid,text)','EXECUTE')
+     or has_function_privilege('authenticated','iq_private.game_legacy_status_for_play_state(text)','EXECUTE') then
     raise exception 'GAME_PLAY_STATE_PRIVATE_HELPER_EXPOSED';
+  end if;
+  if exists (
+    select 1 from public.games g
+    where g.status is distinct from iq_private.game_legacy_status_for_play_state(g.play_state)
+  ) then
+    raise exception 'GAME_PLAY_STATE_LEGACY_PROJECTION_MISMATCH';
   end if;
 end
 $play_state_verify$;
@@ -302,6 +418,8 @@ commit;
 
 select 'GAME_PLAY_STATE_V2' section,
   count(*) filter(where play_state='SCHEDULED') scheduled,
+  count(*) filter(where play_state='READY') ready,
   count(*) filter(where play_state='LIVE') live,
-  count(*) filter(where play_state='FINISHED') finished
+  count(*) filter(where play_state='FINISHED') finished,
+  count(*) filter(where play_state='CANCELLED') cancelled
 from public.games;
