@@ -2542,6 +2542,10 @@ export class TranslationsView {
           playerSelectEl?.focus?.();
           return;
         }
+        if (newRole === UserRole.JUGADOR && !provisioningTeamSeasonId) {
+          alert("?? Selecciona primero una temporada activa del equipo antes de vincular el jugador.");
+          return;
+        }
         this.showSyncOverlay("💾 Actualizando rol e identidad deportiva...");
 
         try {
@@ -2549,7 +2553,8 @@ export class TranslationsView {
           const { data, error } = await supabase.rpc("iq_v7_assign_user_role_context", {
             p_user_id: userId,
             p_role: newRole,
-            p_linked_player_id: linkedPlayerId
+            p_linked_player_id: linkedPlayerId,
+            p_team_season_id: newRole === UserRole.JUGADOR ? provisioningTeamSeasonId : null
           });
 
           if (error) {
@@ -2557,6 +2562,14 @@ export class TranslationsView {
             const message = String(error.message || "");
             if (message.includes("PLAYER_LINK_REQUIRED")) {
               alert("Para asignar el rol JUGADOR debes seleccionar primero el jugador vinculado.");
+              playerSelectEl?.focus?.();
+            } else if (message.includes("PLAYER_LINK_TEAM_SEASON_REQUIRED")) {
+              alert("Selecciona primero una temporada activa del equipo antes de vincular el jugador.");
+            } else if (message.includes("PLAYER_LINK_ROSTER_MEMBERSHIP_REQUIRED")) {
+              alert("El jugador seleccionado no pertenece al roster activo de esta temporada. Revisa equipo y temporada.");
+              playerSelectEl?.focus?.();
+            } else if (message.includes("PLAYER_LINK_SCOPE_DENIED")) {
+              alert("No tienes permiso para vincular ese jugador en el equipo seleccionado.");
               playerSelectEl?.focus?.();
             } else {
               alert(`Error actualizando rol: ${message}`);
