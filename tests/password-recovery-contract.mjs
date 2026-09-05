@@ -58,11 +58,17 @@ const view = await readFile(new URL("../views/AuthView.js", import.meta.url), "u
 const app = await readFile(new URL("../index.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const coordinator = await readFile(new URL("../features/auth/PasswordRecoveryCoordinator.js", import.meta.url), "utf8");
+const bootstrap = await readFile(new URL("../features/auth/PasswordRecoveryBootstrap.js", import.meta.url), "utf8");
 
 assert.match(view, /id="btn-forgot-password"/);
 assert.match(app, /__IQ_PASSWORD_RECOVERY__/);
-assert.match(app, /import\("\.\/features\/auth\/PasswordRecoveryCoordinator\.js"\)/);
+assert.doesNotMatch(app, /getElementById\("btn-forgot-password"\)/);
+assert.match(app, /openRecoveryFromCallback/);
+assert.match(bootstrap, /document\.addEventListener\("click"/);
+assert.match(bootstrap, /closest\("#btn-forgot-password"\)/);
+assert.match(bootstrap, /import\("\.\/PasswordRecoveryCoordinator\.js"\)/);
 assert.match(app, /if \(window\.__IQ_PASSWORD_RECOVERY__ === true\) return false/);
+assert.match(html, /PasswordRecoveryBootstrap\.js/);
 assert.match(coordinator, /id="iq-recovery-request-form"/);
 assert.match(coordinator, /id="iq-recovery-update-form"/);
 assert.match(coordinator, /service\.requestReset/);
@@ -71,4 +77,3 @@ assert.match(coordinator, /Las dos contraseñas no coinciden/);
 assert.doesNotMatch(coordinator, /auth\.admin\.updateUserById/);
 
 console.log("PASSWORD_RECOVERY_CONTRACT_OK");
-
