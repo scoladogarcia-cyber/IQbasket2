@@ -163,6 +163,9 @@ jobs:
       - name: Family commercial readiness contract
         run: node tests/family-commercial-readiness-contract.mjs
 
+      - name: Family billing boundary contract
+        run: node tests/family-billing-boundary-contract.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
