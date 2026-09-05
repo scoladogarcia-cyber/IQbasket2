@@ -6,8 +6,10 @@
 
 export const FAMILY_PILOT_CONFIG = Object.freeze({
   pilotCode: "FAMILY_VALUE_V1",
-  defaultTrialDays: 14,
-  allowedTrialDays: Object.freeze([7, 14, 21, 30]),
+  // Four weeks is long enough to observe repeated game/training cycles without
+  // turning the pilot into an indefinite free premium plan.
+  defaultTrialDays: 28,
+  allowedTrialDays: Object.freeze([7, 14, 28, 42, 56]),
   includesAi: false,
   includesSensitiveModules: false,
   entitlementCodes: Object.freeze([
