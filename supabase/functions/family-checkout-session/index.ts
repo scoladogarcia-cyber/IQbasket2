@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
   // identity has been verified. Membership is revalidated for every request.
   const { data: account, error: accountError } = await adminClient
     .from("saas_billing_accounts")
-    .select("id,account_type,status,owner_user_id")
+    .select("id,account_type,status")
     .eq("id", billingAccountId)
     .maybeSingle();
   if (accountError || !account) {
@@ -219,8 +219,7 @@ Deno.serve(async (req) => {
     provider,
     billing_account_id: billingAccountId,
     plan_code: planCode,
-    return_origin: new URL(returnUrl).origin,
-    idempotency_key: idempotencyKey
+    return_origin: new URL(returnUrl).origin
   });
   return json({ success: false, error_code: "BILLING_PROVIDER_NOT_IMPLEMENTED" }, 501);
 });
