@@ -1,0 +1,51 @@
+name: Family Billing Boundary
+
+on:
+  push:
+    branches:
+      - "feature/family-billing-boundary-v1"
+    paths:
+      - "config/family-billing-gateway.config.js"
+      - "services/billing/FamilyBillingGatewayService.js"
+      - "supabase/functions/family-checkout-session/**"
+      - "tests/family-billing-boundary-contract.mjs"
+      - "docs/architecture/FAMILY_BILLING_BOUNDARY_V1.md"
+      - ".github/workflows/family-billing-boundary.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "config/family-billing-gateway.config.js"
+      - "services/billing/FamilyBillingGatewayService.js"
+      - "supabase/functions/family-checkout-session/**"
+      - "tests/family-billing-boundary-contract.mjs"
+      - "docs/architecture/FAMILY_BILLING_BOUNDARY_V1.md"
+      - ".github/workflows/family-billing-boundary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  boundary-contract:
+    name: Billing contract + Edge typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Billing security contract
+        run: node tests/family-billing-boundary-contract.mjs
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typecheck Edge Function dependency graph
+        run: deno check supabase/functions/family-checkout-session/index.ts
