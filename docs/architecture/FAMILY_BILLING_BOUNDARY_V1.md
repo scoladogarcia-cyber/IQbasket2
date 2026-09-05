@@ -18,6 +18,7 @@ FamilyBillingGatewayService
    │ Supabase Functions + JWT usuario
    ▼
 family-checkout-session (Edge Function)
+   ├─ request Origin allowlisted
    ├─ gate servidor
    ├─ readiness comercial servidor
    ├─ autenticación
@@ -66,8 +67,11 @@ Todos fallan cerrados si no están definidos con valor afirmativo reconocido.
 Además requiere:
 
 - `IQB_FAMILY_PAID_PLAN_CODES`: allowlist explícita de códigos de plan;
-- `IQB_APP_ALLOWED_RETURN_ORIGINS`: allowlist exacta de orígenes permitidos para retorno del checkout;
+- `IQB_APP_ALLOWED_REQUEST_ORIGINS`: allowlist exacta de orígenes web que pueden invocar la Edge Function; un `Origin` ausente, inválido o no autorizado se rechaza antes del preflight/POST;
+- `IQB_APP_ALLOWED_RETURN_ORIGINS`: allowlist exacta e independiente de orígenes permitidos para retorno del checkout;
 - `IQB_BILLING_PROVIDER`: reservado para el futuro adapter; hoy ningún proveedor está implementado.
+
+La respuesta CORS nunca usa `Access-Control-Allow-Origin: *`: refleja únicamente un origen previamente validado y añade `Vary: Origin`.
 
 Las credenciales futuras del proveedor serán exclusivamente secretos de Edge Function, nunca `VITE_*`.
 
@@ -75,12 +79,13 @@ Las credenciales futuras del proveedor serán exclusivamente secretos de Edge Fu
 
 Crear una sesión de checkout requerirá:
 
-1. sesión autenticada válida;
-2. cuenta `saas_billing_accounts` tipo `FAMILY` y `ACTIVE`;
-3. membresía activa en `saas_billing_account_members`;
-4. rol comercial `OWNER` o `BILLING`;
-5. plan incluido en la allowlist server-only;
-6. plan `FAMILY`, `ACTIVE` y público.
+1. origen de petición incluido en la allowlist server-only;
+2. sesión autenticada válida;
+3. cuenta `saas_billing_accounts` tipo `FAMILY` y `ACTIVE`;
+4. membresía activa en `saas_billing_account_members`;
+5. rol comercial `OWNER` o `BILLING`;
+6. plan incluido en la allowlist server-only;
+7. plan `FAMILY`, `ACTIVE` y público.
 
 Ser `SUPERADMIN`, entrenador, analista o familiar autorizado a datos deportivos no concede por sí mismo autoridad de facturación sobre una cuenta Family.
 
@@ -116,7 +121,8 @@ El cliente genera un UUID por intento de checkout y lo envía como `idempotency_
 
 ## Seguridad adicional
 
-- Return URLs sólo aceptan orígenes de una allowlist server-only, evitando open redirects.
+- El origen web de la petición debe figurar en `IQB_APP_ALLOWED_REQUEST_ORIGINS`; no se usa CORS wildcard.
+- Return URLs sólo aceptan orígenes de una allowlist server-only distinta, evitando open redirects.
 - Un plan publicado accidentalmente no es suficiente: también debe estar en la allowlist del servidor.
 - La Edge Function no contiene llamadas externas de billing en V1.
 - No hay mutaciones de suscripciones, overrides o entitlements en V1.
@@ -130,7 +136,8 @@ El cliente genera un UUID por intento de checkout y lo envía como `idempotency_
 - con el gate cerrado ni siquiera invoca backend;
 - la petición usa Edge Function e idempotencia;
 - existen gates de readiness independientes en servidor;
-- se valida autenticación, rol de billing, plan y retorno;
+- se valida allowlist de request Origin, autenticación, rol de billing, plan y return URL;
+- no existe CORS wildcard;
 - no existe escritura sobre suscripciones/entitlements;
 - no existe llamada a proveedor externo;
 - el adapter de proveedor sigue explícitamente no implementado.
