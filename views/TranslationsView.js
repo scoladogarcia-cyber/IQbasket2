@@ -2554,7 +2554,13 @@ export class TranslationsView {
 
           if (error) {
             this.hideSyncOverlay();
-            alert(`❌ Error actualizando rol: ${error.message}`);
+            const message = String(error.message || "");
+            if (message.includes("PLAYER_LINK_REQUIRED")) {
+              alert("Para asignar el rol JUGADOR debes seleccionar primero el jugador vinculado.");
+              playerSelectEl?.focus?.();
+            } else {
+              alert(`Error actualizando rol: ${message}`);
+            }
             return;
           }
 

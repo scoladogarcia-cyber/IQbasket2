@@ -31,6 +31,34 @@
   <div id="app"></div>
 
   <!-- Offline-first decora la persistencia antes de arrancar la aplicación. -->
+  <!-- Guard minimo fuera del bundle: evita mezclar una pestana antigua con un backend mas nuevo. -->
+  <script>
+    (() => {
+      let loadedRelease = null;
+      let stale = false;
+      const check = async () => {
+        if (stale) return;
+        try {
+          const response = await fetch(`./release.json?t=${Date.now()}`, { cache: 'no-store' });
+          if (!response.ok) return;
+          const release = String((await response.json())?.release || '').trim();
+          if (!release) return;
+          if (!loadedRelease) { loadedRelease = release; window.__IQBASKET_RELEASE__ = release; return; }
+          if (release === loadedRelease) return;
+          stale = true; window.__IQBASKET_RELEASE_STALE__ = true;
+          const overlay = document.createElement('div');
+          overlay.id = 'iq-release-stale-overlay';
+          overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.88)';
+          overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px"><strong style="font-size:20px">Nueva versi&oacute;n disponible</strong><p>IQBasket se ha actualizado. Actualiza antes de seguir editando.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar ahora</button></div>';
+          document.body.appendChild(overlay);
+          document.getElementById('iq-release-reload')?.addEventListener('click', () => location.reload());
+        } catch (_) {}
+      };
+      addEventListener('focus', check); addEventListener('online', check);
+      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
+      setInterval(check, 60000); check();
+    })();
+  </script>
   <script type="module" src="./features/offline/OfflineFirstBootstrap.js"></script>
   <script type="module" src="./index.js"></script>
   <!-- Mejoras progresivas: el backend continúa siendo autoritativo. -->
