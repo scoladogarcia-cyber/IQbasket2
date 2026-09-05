@@ -10,12 +10,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * subscription activation must happen from a verified provider webhook.
  */
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
-};
-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BILLING_ROLES = new Set(["OWNER", "BILLING"]);
 
@@ -31,10 +25,19 @@ const SERVER_READINESS_FLAGS = Object.freeze([
 
 type JsonRecord = Record<string, unknown>;
 
-function json(body: unknown, status = 200) {
+type CorsHeaders = Record<string, string>;
+
+function baseHeaders(extra: CorsHeaders = {}) {
+  return {
+    "Content-Type": "application/json",
+    ...extra
+  };
+}
+
+function json(body: unknown, status = 200, headers: CorsHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" }
+    headers: baseHeaders(headers)
   });
 }
 
@@ -54,6 +57,39 @@ function parseCsvSet(raw: string | undefined, normalizer = (value: string) => va
       .map(value => normalizer(value.trim()))
       .filter(Boolean)
   );
+}
+
+function normalizeOrigin(value: string) {
+  return value.replace(/\/$/, "").toLowerCase();
+}
+
+function resolveRequestCors(req: Request) {
+  const rawOrigin = String(req.headers.get("Origin") || "").trim();
+  if (!rawOrigin) throw new Error("BILLING_REQUEST_ORIGIN_REQUIRED");
+
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(rawOrigin);
+  } catch {
+    throw new Error("BILLING_REQUEST_ORIGIN_INVALID");
+  }
+  if (parsedOrigin.origin === "null") throw new Error("BILLING_REQUEST_ORIGIN_INVALID");
+
+  const allowedOrigins = parseCsvSet(
+    Deno.env.get("IQB_APP_ALLOWED_REQUEST_ORIGINS"),
+    normalizeOrigin
+  );
+  if (allowedOrigins.size === 0) throw new Error("BILLING_REQUEST_ORIGINS_NOT_CONFIGURED");
+  if (!allowedOrigins.has(normalizeOrigin(parsedOrigin.origin))) {
+    throw new Error("BILLING_REQUEST_ORIGIN_DENIED");
+  }
+
+  return Object.freeze({
+    "Access-Control-Allow-Origin": parsedOrigin.origin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin"
+  });
 }
 
 function commercialReadinessBlockers() {
@@ -80,29 +116,42 @@ function validateReturnUrl(raw: unknown) {
 
   const allowedOrigins = parseCsvSet(
     Deno.env.get("IQB_APP_ALLOWED_RETURN_ORIGINS"),
-    value => value.replace(/\/$/, "").toLowerCase()
+    normalizeOrigin
   );
   if (allowedOrigins.size === 0) throw new Error("BILLING_RETURN_ORIGINS_NOT_CONFIGURED");
-  if (!allowedOrigins.has(url.origin.toLowerCase())) {
+  if (!allowedOrigins.has(normalizeOrigin(url.origin))) {
     throw new Error("BILLING_RETURN_ORIGIN_DENIED");
   }
   return url.toString();
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  let corsHeaders: CorsHeaders;
+  try {
+    corsHeaders = resolveRequestCors(req);
+  } catch (error) {
+    return json({
+      success: false,
+      error_code: error instanceof Error ? error.message : "BILLING_REQUEST_ORIGIN_DENIED"
+    }, 403);
+  }
+  const responseJson = (body: unknown, status = 200) => json(body, status, corsHeaders);
+
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return json({ success: false, error_code: "METHOD_NOT_ALLOWED" }, 405);
+    return responseJson({ success: false, error_code: "METHOD_NOT_ALLOWED" }, 405);
   }
 
   // Server-only rollout gate. The client VITE flag is not trusted.
   if (!envFlag("IQB_FAMILY_BILLING_CHECKOUT_ENABLED")) {
-    return json({ success: false, error_code: "FAMILY_BILLING_GATEWAY_NOT_ENABLED" }, 503);
+    return responseJson({ success: false, error_code: "FAMILY_BILLING_GATEWAY_NOT_ENABLED" }, 503);
   }
 
   const readinessBlockers = commercialReadinessBlockers();
   if (readinessBlockers.length > 0) {
-    return json({
+    return responseJson({
       success: false,
       error_code: "FAMILY_COMMERCIAL_READINESS_BLOCKED",
       readiness_blockers: readinessBlockers
@@ -113,12 +162,12 @@ Deno.serve(async (req) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json({ success: false, error_code: "BILLING_INFRA_NOT_CONFIGURED" }, 503);
+    return responseJson({ success: false, error_code: "BILLING_INFRA_NOT_CONFIGURED" }, 503);
   }
 
   const authorization = req.headers.get("Authorization") || "";
   if (!authorization.startsWith("Bearer ")) {
-    return json({ success: false, error_code: "AUTH_REQUIRED" }, 401);
+    return responseJson({ success: false, error_code: "AUTH_REQUIRED" }, 401);
   }
 
   const callerClient = createClient(supabaseUrl, anonKey, {
@@ -132,7 +181,7 @@ Deno.serve(async (req) => {
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   const caller = userData?.user;
   if (userError || !caller?.id) {
-    return json({ success: false, error_code: "AUTH_INVALID" }, 401);
+    return responseJson({ success: false, error_code: "AUTH_INVALID" }, 401);
   }
 
   const body = await req.json().catch(() => ({} as JsonRecord)) as JsonRecord;
@@ -141,18 +190,18 @@ Deno.serve(async (req) => {
   const idempotencyKey = String(body.idempotency_key || "").trim();
 
   if (!UUID_PATTERN.test(billingAccountId)) {
-    return json({ success: false, error_code: "BILLING_ACCOUNT_INVALID" }, 400);
+    return responseJson({ success: false, error_code: "BILLING_ACCOUNT_INVALID" }, 400);
   }
-  if (!planCode) return json({ success: false, error_code: "BILLING_PLAN_REQUIRED" }, 400);
+  if (!planCode) return responseJson({ success: false, error_code: "BILLING_PLAN_REQUIRED" }, 400);
   if (!UUID_PATTERN.test(idempotencyKey)) {
-    return json({ success: false, error_code: "BILLING_IDEMPOTENCY_KEY_INVALID" }, 400);
+    return responseJson({ success: false, error_code: "BILLING_IDEMPOTENCY_KEY_INVALID" }, 400);
   }
 
   let returnUrl: string;
   try {
     returnUrl = validateReturnUrl(body.return_url);
   } catch (error) {
-    return json({
+    return responseJson({
       success: false,
       error_code: error instanceof Error ? error.message : "BILLING_RETURN_URL_INVALID"
     }, 400);
@@ -162,10 +211,10 @@ Deno.serve(async (req) => {
   // fails closed even if a catalog plan is accidentally published.
   const allowedPlanCodes = parseCsvSet(Deno.env.get("IQB_FAMILY_PAID_PLAN_CODES"), safeUpper);
   if (allowedPlanCodes.size === 0) {
-    return json({ success: false, error_code: "BILLING_PLAN_ALLOWLIST_NOT_CONFIGURED" }, 503);
+    return responseJson({ success: false, error_code: "BILLING_PLAN_ALLOWLIST_NOT_CONFIGURED" }, 503);
   }
   if (!allowedPlanCodes.has(planCode)) {
-    return json({ success: false, error_code: "BILLING_PLAN_NOT_ALLOWED" }, 403);
+    return responseJson({ success: false, error_code: "BILLING_PLAN_NOT_ALLOWED" }, 403);
   }
 
   // Billing tables are backend-owned; service_role is used only after caller
@@ -176,10 +225,10 @@ Deno.serve(async (req) => {
     .eq("id", billingAccountId)
     .maybeSingle();
   if (accountError || !account) {
-    return json({ success: false, error_code: "BILLING_ACCOUNT_NOT_FOUND" }, 404);
+    return responseJson({ success: false, error_code: "BILLING_ACCOUNT_NOT_FOUND" }, 404);
   }
   if (account.account_type !== "FAMILY" || account.status !== "ACTIVE") {
-    return json({ success: false, error_code: "BILLING_ACCOUNT_NOT_ELIGIBLE" }, 403);
+    return responseJson({ success: false, error_code: "BILLING_ACCOUNT_NOT_ELIGIBLE" }, 403);
   }
 
   const { data: membership, error: membershipError } = await adminClient
@@ -189,10 +238,10 @@ Deno.serve(async (req) => {
     .eq("user_id", caller.id)
     .maybeSingle();
   if (membershipError || !membership || membership.status !== "ACTIVE") {
-    return json({ success: false, error_code: "BILLING_ACCOUNT_ACCESS_DENIED" }, 403);
+    return responseJson({ success: false, error_code: "BILLING_ACCOUNT_ACCESS_DENIED" }, 403);
   }
   if (!BILLING_ROLES.has(safeUpper(membership.member_role))) {
-    return json({ success: false, error_code: "BILLING_ACTION_DENIED" }, 403);
+    return responseJson({ success: false, error_code: "BILLING_ACTION_DENIED" }, 403);
   }
 
   const { data: plan, error: planError } = await adminClient
@@ -201,10 +250,10 @@ Deno.serve(async (req) => {
     .eq("code", planCode)
     .maybeSingle();
   if (planError || !plan) {
-    return json({ success: false, error_code: "BILLING_PLAN_NOT_FOUND" }, 404);
+    return responseJson({ success: false, error_code: "BILLING_PLAN_NOT_FOUND" }, 404);
   }
   if (plan.account_type !== "FAMILY" || plan.status !== "ACTIVE" || plan.is_public !== true) {
-    return json({ success: false, error_code: "BILLING_PLAN_NOT_AVAILABLE" }, 409);
+    return responseJson({ success: false, error_code: "BILLING_PLAN_NOT_AVAILABLE" }, 409);
   }
 
   // V1 intentionally stops here. No external provider has been selected and no
@@ -212,7 +261,7 @@ Deno.serve(async (req) => {
   // provider adapter can create a checkout session after all validations above.
   const provider = safeUpper(Deno.env.get("IQB_BILLING_PROVIDER"));
   if (!provider) {
-    return json({ success: false, error_code: "BILLING_PROVIDER_NOT_CONFIGURED" }, 503);
+    return responseJson({ success: false, error_code: "BILLING_PROVIDER_NOT_CONFIGURED" }, 503);
   }
 
   console.info("[family-checkout-session] Provider adapter not implemented", {
@@ -221,5 +270,5 @@ Deno.serve(async (req) => {
     plan_code: planCode,
     return_origin: new URL(returnUrl).origin
   });
-  return json({ success: false, error_code: "BILLING_PROVIDER_NOT_IMPLEMENTED" }, 501);
+  return responseJson({ success: false, error_code: "BILLING_PROVIDER_NOT_IMPLEMENTED" }, 501);
 });
