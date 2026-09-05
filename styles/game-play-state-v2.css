@@ -1,0 +1,38 @@
+/* Game Play State V2 · compact, touch-safe lifecycle controls. */
+.game-play-state-v2{
+  display:grid;gap:10px;margin:0 0 12px;padding:12px 14px;
+  border:1px solid #dbeafe;border-radius:12px;background:#f8fbff;color:#0f172a;
+}
+.game-play-state-copy{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.game-play-state-copy>div{display:grid;gap:2px;min-width:0}
+.game-play-state-copy strong{font-size:12px;line-height:1.4}
+.game-play-state-copy small{font-size:10px;color:#64748b;line-height:1.4}
+.game-play-state-badge{
+  display:inline-flex;align-items:center;justify-content:center;min-height:30px;
+  border-radius:999px;padding:4px 10px;background:#dbeafe;color:#1e3a8a;
+  font-size:10px;font-weight:900;white-space:nowrap;
+}
+.game-play-state-v2[data-play-state="LIVE"] .game-play-state-badge{background:#dcfce7;color:#166534}
+.game-play-state-v2[data-play-state="FINISHED"] .game-play-state-badge{background:#e2e8f0;color:#334155}
+.game-play-state-v2[data-play-state="CANCELLED"] .game-play-state-badge{background:#fee2e2;color:#991b1b}
+.game-play-state-v2[data-edit-state="LOCKED"]{background:#f8fafc;border-color:#cbd5e1}
+.game-play-state-actions{display:flex;gap:8px;flex-wrap:wrap}
+.game-play-state-actions button{
+  min-height:44px;border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;font-weight:850;
+  cursor:pointer;touch-action:manipulation;
+}
+.game-play-state-actions button[data-kind="primary"]{border:1px solid #1d4ed8;background:#1d4ed8;color:#fff}
+.game-play-state-actions button[data-kind="secondary"]{border:1px solid #cbd5e1;background:#fff;color:#334155}
+.game-play-state-actions button[data-kind="danger"]{border:1px solid #dc2626;background:#dc2626;color:#fff}
+.game-play-state-actions button:disabled{opacity:.55;cursor:not-allowed}
+.game-play-state-feedback{min-height:0;font-size:10px;font-weight:750;color:#475569}
+.game-play-state-feedback:not(:empty){min-height:18px}
+.game-play-state-feedback[data-type="error"]{color:#b91c1c}
+@media(max-width:640px){
+  .game-play-state-v2{padding:11px;margin-bottom:10px}
+  .game-play-state-copy{display:grid}
+  .game-play-state-badge{justify-self:start}
+  .game-play-state-actions{display:grid;grid-template-columns:1fr}
+  .game-play-state-actions button{width:100%;min-height:48px}
+}
+@media(prefers-reduced-motion:reduce){.game-play-state-v2 *{scroll-behavior:auto!important;transition:none!important}}
