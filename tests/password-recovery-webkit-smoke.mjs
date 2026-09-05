@@ -1,12 +1,15 @@
-﻿import { webkit } from "@playwright/test";
+import { webkit } from "@playwright/test";
 
 const BASE_URL = process.env.PASSWORD_RECOVERY_BASE_URL
   || "http://127.0.0.1:4173/";
 
 const browser = await webkit.launch({ headless: true });
-const page = await browser.newPage({
-  viewport: { width: 390, height: 844 }
+const context = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  hasTouch: true,
+  isMobile: true
 });
+const page = await context.newPage();
 
 const pageErrors = [];
 page.on("pageerror", error => pageErrors.push(error.message));
@@ -37,4 +40,3 @@ if (overflow) {
 
 await browser.close();
 console.log("PASSWORD_RECOVERY_WEBKIT_SMOKE_OK");
-
