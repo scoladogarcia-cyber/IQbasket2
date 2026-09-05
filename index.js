@@ -956,6 +956,13 @@ export class IQBasketApp {
         break;
       }
 
+      case "business":
+      case "negocio": {
+        const view = await this.lazyViews.get("business");
+        await view.render(contentArea);
+        break;
+      }
+
       case "ask":
       case "ask-ai":
       case "pregunta":

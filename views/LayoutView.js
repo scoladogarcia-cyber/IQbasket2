@@ -40,6 +40,7 @@ export class LayoutView {
     if (['reports', 'informes', 'informe'].includes(r)) return 'reports';
     if (['family', 'familia', 'familias', 'mi-jugador'].includes(r)) return 'family';
     if (['family-advisor', 'bienestar', 'advisor'].includes(r)) return 'family-advisor';
+    if (['business', 'negocio', 'growth'].includes(r)) return 'business';
     if (['ask', 'pregunta', 'preguntale', 'ai', 'ia', 'ask-ai'].includes(r)) return 'ask';
     if (['profile', 'perfil'].includes(r)) return 'profile';
     return r || 'dashboard';
@@ -214,6 +215,7 @@ export class LayoutView {
     const isTrainingRestricted = !hasRolePermission(Permission.VIEW_TRAINING);
     const isNutritionRestricted = !hasRolePermission(Permission.VIEW_NUTRITION);
     const canViewPrivacy = hasRolePermission(Permission.VIEW_PRIVACY_AUTHORIZATIONS);
+    const canViewBusiness = hasRolePermission(Permission.VIEW_BUSINESS_METRICS);
     const isFamilyCentricRole = ['FAMILIA_TUTOR','JUGADOR','INVITADO'].includes(String(userRole || '').toUpperCase());
 
     const navGroups = [
@@ -222,7 +224,8 @@ export class LayoutView {
         defaultTitle: "GENERAL",
         items: [
           { key: "dashboard", labelKey: "dashboard", fallback: "Dashboard", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' },
-          { key: "approvals", labelKey: "approval_center", fallback: "Solicitudes", route: "approvals", svg: '<path d="M4 4h16v16H4z"></path><path d="M4 9h16"></path><path d="M8 13h8"></path><path d="M8 17h5"></path>' }
+          { key: "approvals", labelKey: "approval_center", fallback: "Solicitudes", route: "approvals", svg: '<path d="M4 4h16v16H4z"></path><path d="M4 9h16"></path><path d="M8 13h8"></path><path d="M8 17h5"></path>' },
+          ...(canViewBusiness ? [{ key: "business", labelKey: "business_metrics", fallback: "Negocio", route: "business", svg: '<path d="M4 19V9"></path><path d="M10 19V5"></path><path d="M16 19v-7"></path><path d="M22 19V2"></path>' }] : [])
         ]
       },
       {

@@ -95,6 +95,9 @@ jobs:
       - name: Family workspace mobile smoke
         run: node tests/family-workspace-ui-smoke.mjs
 
+      - name: Business metrics mobile smoke
+        run: node tests/business-metrics-ui-smoke.mjs
+
       - name: Contextual RBAC browser smoke
         run: node tests/phase3f-rbac-ui-smoke.mjs
 
