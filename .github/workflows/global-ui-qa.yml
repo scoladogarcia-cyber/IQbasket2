@@ -92,6 +92,9 @@ jobs:
       - name: Mobile shell logout and viewport modals
         run: node tests/mobile-shell-interaction-ui-smoke.mjs
 
+      - name: Family workspace mobile smoke
+        run: node tests/family-workspace-ui-smoke.mjs
+
       - name: Contextual RBAC browser smoke
         run: node tests/phase3f-rbac-ui-smoke.mjs
 
