@@ -34,6 +34,15 @@ assert.match(backfillExcerpt, /like '%complet%'[\s\S]{0,40}then 'FINISHED'/i);
 const legacyInsertBridge = sql.slice(sql.indexOf("function iq_private.sync_game_play_state_legacy_status_v2"), sql.indexOf("-- -----------------------------------------------------------------------------\n-- 2. Immutable transition audit"));
 assert.match(legacyInsertBridge, /like '%complet%'[\s\S]{0,40}then new\.play_state:='FINISHED'/i);
 
+// Read access must reuse the existing V5/V7 team boundary. Re-implementing only
+// assigned_team_ids would silently diverge from INVITADO/allowed-team semantics.
+assert.match(sql, /to_regprocedure\('public\.iq_v5_can_access_team\(uuid\)'\)/i);
+const snapshotStart = sql.indexOf("function public.iq_v13_game_play_state_snapshot");
+const snapshotEnd = sql.indexOf("-- -----------------------------------------------------------------------------\n-- 6. Lock compatibility", snapshotStart);
+const snapshotExcerpt = sql.slice(snapshotStart, snapshotEnd);
+assert.match(snapshotExcerpt, /public\.iq_v5_can_access_team\(v_game\.team_id\)/);
+assert.doesNotMatch(snapshotExcerpt, /assigned_team_ids|allowed_team_ids/);
+
 assert.doesNotMatch(sql, /grant\s+(?:all|select|insert|update|delete)[\s\S]{0,80}game_play_state_transitions[\s\S]{0,40}authenticated/i);
 assert.match(sql, /revoke all on table public\.game_play_state_transitions from public,anon,authenticated/i);
 
