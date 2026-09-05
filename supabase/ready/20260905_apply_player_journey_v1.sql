@@ -96,10 +96,12 @@ create table public.player_micro_challenges (
   )
 );
 
+-- Journey is longitudinal to the player, not to a roster spell. A transfer or
+-- team-season switch must never allow a second challenge in the same ISO week.
 create unique index player_micro_challenge_one_week_uq
-  on public.player_micro_challenges(team_season_id,player_id,week_start);
+  on public.player_micro_challenges(player_id,week_start);
 create unique index player_micro_challenge_one_active_uq
-  on public.player_micro_challenges(team_season_id,player_id)
+  on public.player_micro_challenges(player_id)
   where status='ACTIVE';
 create index player_micro_challenge_player_history_idx
   on public.player_micro_challenges(player_id,team_season_id,created_at desc);
@@ -169,6 +171,7 @@ revoke all on function iq_private.player_journey_can_start(uuid,uuid,date) from 
 -- -----------------------------------------------------------------------------
 -- 4. Player-only read projection
 -- No evaluation/objective/wellness table is queried here by design.
+-- Active challenge is longitudinal so it survives a mid-week team transfer.
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v12_player_journey_snapshot(
   p_team_season_id uuid,
@@ -216,8 +219,7 @@ begin
   )
   into v_active
   from public.player_micro_challenges mc
-  where mc.team_season_id=p_team_season_id
-    and mc.player_id=p_player_id
+  where mc.player_id=p_player_id
     and mc.status='ACTIVE'
     and mc.ends_on>=current_date
   order by mc.created_at desc
@@ -288,7 +290,7 @@ revoke all on function public.iq_v12_player_journey_snapshot(uuid,uuid) from pub
 grant execute on function public.iq_v12_player_journey_snapshot(uuid,uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- 5. Start exactly one new challenge per ISO week
+-- 5. Start exactly one new challenge per ISO week, longitudinally per player
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v12_player_journey_start(
   p_team_season_id uuid,
@@ -320,15 +322,13 @@ begin
 
   update public.player_micro_challenges
   set status='ARCHIVED'
-  where team_season_id=p_team_season_id
-    and player_id=p_player_id
+  where player_id=p_player_id
     and status='ACTIVE'
     and ends_on<current_date;
 
   if exists (
     select 1 from public.player_micro_challenges mc
-    where mc.team_season_id=p_team_season_id
-      and mc.player_id=p_player_id
+    where mc.player_id=p_player_id
       and mc.status='ACTIVE'
       and mc.ends_on>=current_date
   ) then
@@ -337,8 +337,7 @@ begin
 
   if exists (
     select 1 from public.player_micro_challenges mc
-    where mc.team_season_id=p_team_season_id
-      and mc.player_id=p_player_id
+    where mc.player_id=p_player_id
       and mc.week_start=v_week_start
   ) then
     raise exception 'PLAYER_JOURNEY_WEEK_ALREADY_USED';
