@@ -33,6 +33,30 @@ alter table public.games
   add column if not exists play_state_changed_by uuid references public.user_profiles(id) on delete set null,
   add column if not exists play_state_reason text;
 
+-- V5 and V6 correctly reject ordinary updates to locked/frozen games. The one-time
+-- schema backfill must touch those historical rows, so suspend only those guards
+-- transactionally and restore them before exposing V13. A migration failure rolls
+-- the trigger state back together with every other DDL/DML statement.
+do $backfill_disable_guards$
+declare
+  v_trigger text;
+begin
+  foreach v_trigger in array array[
+    'trg_iq_v5_guard_game_lock_transition',
+    'trg_iq_v6_guard_frozen_team_season_game'
+  ] loop
+    if exists (
+      select 1 from pg_trigger
+      where tgrelid='public.games'::regclass
+        and tgname=v_trigger
+        and not tgisinternal
+    ) then
+      execute format('alter table public.games disable trigger %I',v_trigger);
+    end if;
+  end loop;
+end
+$backfill_disable_guards$;
+
 -- One-time compatibility mapping from the legacy free-text status column.
 update public.games
 set play_state=case
@@ -85,10 +109,31 @@ as $function$
 $function$;
 revoke all on function iq_private.game_legacy_status_for_play_state(text) from public,anon,authenticated;
 
--- Normalize existing legacy projection immediately.
+-- Normalize existing legacy projection while historical guards remain suspended.
 update public.games
 set status=iq_private.game_legacy_status_for_play_state(play_state)
 where status is distinct from iq_private.game_legacy_status_for_play_state(play_state);
+
+-- Restore every pre-existing V5/V6 protection before creating the V13 write path.
+do $backfill_enable_guards$
+declare
+  v_trigger text;
+begin
+  foreach v_trigger in array array[
+    'trg_iq_v5_guard_game_lock_transition',
+    'trg_iq_v6_guard_frozen_team_season_game'
+  ] loop
+    if exists (
+      select 1 from pg_trigger
+      where tgrelid='public.games'::regclass
+        and tgname=v_trigger
+        and not tgisinternal
+    ) then
+      execute format('alter table public.games enable trigger %I',v_trigger);
+    end if;
+  end loop;
+end
+$backfill_enable_guards$;
 
 create or replace function iq_private.sync_game_play_state_legacy_status_v2()
 returns trigger
@@ -410,6 +455,15 @@ begin
     where g.status is distinct from iq_private.game_legacy_status_for_play_state(g.play_state)
   ) then
     raise exception 'GAME_PLAY_STATE_LEGACY_PROJECTION_MISMATCH';
+  end if;
+  if exists (
+    select 1 from pg_trigger
+    where tgrelid='public.games'::regclass
+      and tgname in ('trg_iq_v5_guard_game_lock_transition','trg_iq_v6_guard_frozen_team_season_game')
+      and not tgisinternal
+      and tgenabled='D'
+  ) then
+    raise exception 'GAME_PLAY_STATE_PREEXISTING_GUARD_LEFT_DISABLED';
   end if;
 end
 $play_state_verify$;
