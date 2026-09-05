@@ -67,7 +67,7 @@ set play_state=case
   when lower(coalesce(status,'')) like '%program%' or lower(coalesce(status,'')) like '%schedul%' then 'SCHEDULED'
   else 'SCHEDULED'
 end,
-play_state_changed_at=coalesce(play_state_changed_at,updated_at,created_at,now())
+play_state_changed_at=coalesce(play_state_changed_at,created_at,now())
 where play_state is null;
 
 alter table public.games alter column play_state set default 'SCHEDULED';
