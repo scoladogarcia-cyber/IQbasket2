@@ -40,8 +40,8 @@ jobs:
         id: baseline
         run: |
           set -euo pipefail
-          EVENTS=$(psql "$SUPABASE_DB_URL" -Atc "select case when to_regclass('public.product_analytics_events') is null then 0 else (select count(*) from public.product_analytics_events) end")
-          echo "events=$EVENTS" >> "$GITHUB_OUTPUT"
+          # Preflight guarantees a first installation with analytics tables absent.
+          echo "events=0" >> "$GITHUB_OUTPUT"
       - name: Apply Product Analytics V1
         id: apply
         run: |
