@@ -1,0 +1,6 @@
+-- Superseded before deployment by:
+--   1) 20260905_apply_saas_scoped_entitlement_grants_v1.sql
+--   2) 20260905_apply_family_pilot_cohort_v1.sql
+--
+-- Kept as an inert marker in branch history so no deploy process can execute the
+-- obsolete two-step repair. No statements are intentionally present here.
