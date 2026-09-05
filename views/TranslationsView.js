@@ -778,6 +778,10 @@ export class TranslationsView {
     const currentActiveSeasonName = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
       || DataStore.getActiveSeason()
       || "Sin temporada";
+    const provisioningTeamSeasonId = currentActiveSeasonContext?.team_season_id
+      || currentActiveSeasonContext?.teamSeasonId
+      || (currentActiveSeasonContext?.source === "v3" ? currentActiveSeasonContext?.id : null)
+      || null;
 
     const teamPlayers = DataStore.getPlayers() || [];
     const players = this.activeTab === "players" && this.rosterState
@@ -1423,6 +1427,18 @@ export class TranslationsView {
                     <label>🔑 Contraseña Temporal *</label>
                     <input type="password" id="new-user-pass" placeholder="Contraseña temporal segura" autocomplete="new-password" required />
                   </div>
+                  <div class="form-group" id="new-user-player-group" style="display: none; grid-column: 1 / -1;">
+                    <label>🏀 Jugador que representa esta cuenta *</label>
+                    <select id="new-user-player">
+                      <option value="">Selecciona un jugador del equipo activo</option>
+                      ${teamPlayers.map(player => `
+                        <option value="${player.id}">#${player.jersey ?? '-'} · ${player.first_name || ''} ${player.last_name || ''}</option>
+                      `).join("")}
+                    </select>
+                    <small style="display:block; margin-top:6px; color:#64748b;">
+                      El vínculo SELF se guarda en el perfil y en la relación usuario-jugador. Familia/Tutor se vincula después mediante invitación GUARDIAN.
+                    </small>
+                  </div>
                   <div style="grid-column: 1 / -1; text-align: right;">
                     <button type="submit" id="btn-submit-create-user" class="btn-primary">✉️ Dar de Alta e Invitar Usuario</button>
                   </div>
@@ -1475,6 +1491,17 @@ export class TranslationsView {
                                   <option value="INVITADO" ${prof.role === 'INVITADO' ? 'selected' : ''}>Invitado (Demo)</option>
                                 ` : ''}
                               </select>
+                              ${!isUniqueSuperadmin ? `
+                                <div class="user-player-link-group" data-id="${prof.id}" style="margin-top: 8px; ${prof.role === 'JUGADOR' ? '' : 'display:none;'}">
+                                  <label style="display:block; font-size:11px; font-weight:700; color:#475569; margin-bottom:4px;">🏀 Jugador vinculado *</label>
+                                  <select class="select-user-player-link" data-id="${prof.id}" style="width:100%; padding:6px 8px; border-radius:6px;">
+                                    <option value="">Selecciona jugador del equipo activo</option>
+                                    ${teamPlayers.map(player => `
+                                      <option value="${player.id}" ${String(prof.linked_player_id || '') === String(player.id) ? 'selected' : ''}>#${player.jersey ?? '-'} · ${player.first_name || ''} ${player.last_name || ''}</option>
+                                    `).join("")}
+                                  </select>
+                                </div>
+                              ` : ''}
                             </td>
                             <td>
                               ${isUniqueSuperadmin
@@ -2378,6 +2405,20 @@ export class TranslationsView {
     });
 
     // ALTA DE USUARIO E INVITACIÓN DIRECTA (SUPABASE AUTH + USER_PROFILES)
+    const newUserRoleSelect = container.querySelector("#new-user-role");
+    const newUserPlayerGroup = container.querySelector("#new-user-player-group");
+    const newUserPlayerSelect = container.querySelector("#new-user-player");
+    const syncNewUserPlayerRequirement = () => {
+      const isPlayer = newUserRoleSelect?.value === UserRole.JUGADOR;
+      if (newUserPlayerGroup) newUserPlayerGroup.style.display = isPlayer ? "block" : "none";
+      if (newUserPlayerSelect) {
+        newUserPlayerSelect.required = Boolean(isPlayer);
+        if (!isPlayer) newUserPlayerSelect.value = "";
+      }
+    };
+    newUserRoleSelect?.addEventListener("change", syncNewUserPlayerRequirement);
+    syncNewUserPlayerRequirement();
+
     const formCreateUser = container.querySelector("#form-create-user-profile");
     if (formCreateUser) {
       formCreateUser.addEventListener("submit", async (e) => {
@@ -2388,9 +2429,23 @@ export class TranslationsView {
         const email = container.querySelector("#new-user-email")?.value.trim();
         const role = container.querySelector("#new-user-role")?.value || UserRole.ENTRENADOR;
         const tempPassword = container.querySelector("#new-user-pass")?.value || "";
+        const linkedPlayerId = role === UserRole.JUGADOR
+          ? (container.querySelector("#new-user-player")?.value || null)
+          : null;
+        const contextualProvisioningRoles = new Set([
+          UserRole.ENTRENADOR, UserRole.ANALISTA, UserRole.PREPARADOR_FISICO,
+          UserRole.JUGADOR, UserRole.VISOR, UserRole.INVITADO
+        ]);
+        const teamSeasonIds = provisioningTeamSeasonId && contextualProvisioningRoles.has(role)
+          ? [provisioningTeamSeasonId]
+          : [];
 
         if (!fullName || !email || !tempPassword) {
           alert("⚠️ Completa los campos obligatorios para dar de alta al usuario.");
+          return;
+        }
+        if (role === UserRole.JUGADOR && !linkedPlayerId) {
+          alert("⚠️ Selecciona el jugador que representará esta cuenta.");
           return;
         }
         if (!this.auth?.can?.(Permission.INVITE_USERS)) {
@@ -2410,7 +2465,6 @@ export class TranslationsView {
 
         try {
           if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const activeTeam = DataStore.getTeamById(activeTeamId);
           const { data: functionData, error: functionError } = await supabase.functions.invoke("admin-users", {
             body: {
               action: "create-user",
@@ -2419,8 +2473,9 @@ export class TranslationsView {
               firstName,
               lastName,
               role,
-              clubId: activeTeam?.club_id || activeTeam?.clubId || null,
-              teamIds: activeTeamId ? [activeTeamId] : []
+              teamIds: activeTeamId ? [activeTeamId] : [],
+              teamSeasonIds,
+              linkedPlayerId
             }
           });
 
@@ -2443,7 +2498,22 @@ export class TranslationsView {
       });
     }
 
-    // GUARDAR ROL DE USUARIO EN USER_PROFILES
+    // Mantén visible el vínculo deportivo solo cuando el rol elegido sea JUGADOR.
+    container.querySelectorAll(".select-user-role").forEach(select => {
+      select.addEventListener("change", (e) => {
+        const userId = e.currentTarget.getAttribute("data-id");
+        const group = container.querySelector(`.user-player-link-group[data-id="${userId}"]`);
+        const playerSelect = container.querySelector(`.select-user-player-link[data-id="${userId}"]`);
+        const isPlayer = e.currentTarget.value === UserRole.JUGADOR;
+        if (group) group.style.display = isPlayer ? "block" : "none";
+        if (playerSelect) {
+          playerSelect.required = Boolean(isPlayer);
+          if (!isPlayer) playerSelect.value = "";
+        }
+      });
+    });
+
+    // GUARDAR ROL + IDENTIDAD DE JUGADOR DE FORMA ATÓMICA EN BACKEND.
     container.querySelectorAll(".btn-save-user-role").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -2453,6 +2523,10 @@ export class TranslationsView {
 
         const newRole = selectEl.value;
         const userObj = this.profilesList.find(p => String(p.id) === String(userId));
+        const playerSelectEl = container.querySelector(`.select-user-player-link[data-id="${userId}"]`);
+        const linkedPlayerId = newRole === UserRole.JUGADOR
+          ? (playerSelectEl?.value || null)
+          : null;
         const activeUserEmail = this.auth?.getCurrentUser?.()?.email || "";
         if (!userObj) return;
         if (String(userObj.email || "").toLowerCase() === String(activeUserEmail).toLowerCase()) {
@@ -2463,13 +2537,19 @@ export class TranslationsView {
           alert("⚠️ No tienes permiso para asignar ese rol.");
           return;
         }
-        this.showSyncOverlay("💾 Actualizando rol del usuario...");
+        if (newRole === UserRole.JUGADOR && !linkedPlayerId) {
+          alert("⚠️ Para asignar el rol JUGADOR debes seleccionar qué jugador representa esta cuenta.");
+          playerSelectEl?.focus?.();
+          return;
+        }
+        this.showSyncOverlay("💾 Actualizando rol e identidad deportiva...");
 
         try {
           if (!supabase) throw new Error("Cliente Supabase no configurado");
-          const { data, error } = await supabase.rpc("iq_v7_assign_user_role", {
+          const { data, error } = await supabase.rpc("iq_v7_assign_user_role_context", {
             p_user_id: userId,
-            p_role: newRole
+            p_role: newRole,
+            p_linked_player_id: linkedPlayerId
           });
 
           if (error) {
@@ -2481,6 +2561,7 @@ export class TranslationsView {
           if (userObj) {
             userObj.role = data?.role || newRole;
             userObj.global_role = (data?.role || newRole) === UserRole.ADMIN ? UserRole.ADMIN : null;
+            userObj.linked_player_id = data?.linked_player_id || null;
           }
 
           this.hideSyncOverlay();

@@ -1,0 +1,38 @@
+name: Player Role Link Integrity
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/TranslationsView.js"
+      - "supabase/functions/admin-users/**"
+      - "supabase/ready/20260905_apply_v7_player_role_link_integrity.sql"
+      - "tests/admin-user-provisioning-ui-contract.mjs"
+      - "tests/admin-users-v7-edge-contract.mjs"
+      - "tests/player-role-link-integrity-contract.mjs"
+      - ".github/workflows/player-role-link-integrity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Role + player identity contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate player-role integrity
+        run: |
+          node tests/admin-users-v7-edge-contract.mjs
+          node tests/admin-user-provisioning-ui-contract.mjs
+          node tests/player-role-link-integrity-contract.mjs
