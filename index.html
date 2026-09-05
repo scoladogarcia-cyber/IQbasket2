@@ -11,12 +11,10 @@
 
   <title>IQ Basket - Basketball Stats Studio Pro</title>
 
-  <!-- Parche para entornos cliente y dependencias que leen process.env -->
   <script>
     window.process = window.process || { env: { NODE_ENV: 'development' } };
   </script>
 
-  <!-- Design System y Estilos Modulares -->
   <link rel="stylesheet" href="./styles/tokens.css">
   <link rel="stylesheet" href="./styles/global.css">
   <link rel="stylesheet" href="./styles/layout.css">
@@ -24,20 +22,20 @@
   <link rel="stylesheet" href="./styles/responsive.css">
   <link rel="stylesheet" href="./styles/match-capture-v2.css">
   <link rel="stylesheet" href="./styles/wellness-cards-v1.css">
+  <link rel="stylesheet" href="./styles/player-journey-v1.css">
   <link rel="stylesheet" href="./styles/offline-sync-v1.css">
 </head>
 <body>
 
-  <!-- Contenedor principal donde IQ Basket renderiza las vistas y componentes -->
   <div id="app"></div>
 
   <!-- Offline-first decora la persistencia antes de arrancar la aplicación. -->
   <script type="module" src="./features/offline/OfflineFirstBootstrap.js"></script>
-  <!-- Punto de entrada principal como módulo ES6 -->
   <script type="module" src="./index.js"></script>
-  <!-- Mejoras progresivas: no poseen permisos, persistencia ni cálculos de partido. -->
+  <!-- Mejoras progresivas: el backend continúa siendo autoritativo. -->
   <script type="module" src="./features/match-capture/MatchCaptureUxEnhancer.js"></script>
   <script type="module" src="./features/wellness/WellnessCardsEnhancer.js"></script>
+  <script type="module" src="./features/player-journey/PlayerJourneyEnhancer.js"></script>
   <script type="module" src="./features/offline/OfflineSyncStatusEnhancer.js"></script>
 
 </body>
