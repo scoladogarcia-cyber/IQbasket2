@@ -176,11 +176,17 @@ function updateProgress(editor) {
   const answered = inputs.filter(input => String(input.value ?? "").trim() !== "").length;
   const progress = ensureProgress(editor);
   if (!progress) return;
-  progress.innerHTML = `
+
+  const markup = `
     <span><strong>Check-in express</strong> · ${answered}/${inputs.length} respondidas</span>
     <span class="wellness-checkin-time">≈ 30 s · puedes dejar métricas sin responder</span>
   `;
-  progress.dataset.complete = String(answered === inputs.length);
+
+  // MutationObserver watches childList. Avoid rewriting identical markup or the
+  // enhancer would observe its own progress render forever and keep the UI busy.
+  if (progress.innerHTML !== markup) progress.innerHTML = markup;
+  const complete = String(answered === inputs.length);
+  if (progress.dataset.complete !== complete) progress.dataset.complete = complete;
 }
 
 function enhanceMetric(metric) {
@@ -215,7 +221,17 @@ function enhanceAllWellnessEditors() {
 if (typeof document !== "undefined") {
   const start = () => {
     enhanceAllWellnessEditors();
-    const observer = new MutationObserver(() => enhanceAllWellnessEditors());
+    let scheduled = false;
+    const run = () => {
+      scheduled = false;
+      enhanceAllWellnessEditors();
+    };
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+      else setTimeout(run, 0);
+    });
     observer.observe(document.documentElement, { childList: true, subtree: true });
   };
 
