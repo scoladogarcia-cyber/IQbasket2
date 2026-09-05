@@ -116,7 +116,7 @@ async function installFixture(page, spec) {
     DataStore.setActiveTeamAndSeason(TEAM_A, "2025/2026");
     DataStore._filterAuthorizedData();
 
-    const view = app.views.settings;
+    const view = await app.lazyViews.get("settings");
     view.activeTab = "club";
     view.clubSubView = "list";
     view.seasonsList = DataStore.seasons;
