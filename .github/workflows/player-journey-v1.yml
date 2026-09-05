@@ -1,0 +1,31 @@
+name: Player Journey V1
+
+on:
+  pull_request:
+    paths:
+      - "config/player-journey.config.js"
+      - "services/player360/PlayerJourneyService.js"
+      - "features/player-journey/**"
+      - "styles/player-journey-v1.css"
+      - "supabase/ready/20260905_apply_player_journey_v1.sql"
+      - "supabase/ready/20260905_rollback_player_journey_v1.sql"
+      - "tests/player-journey-contract.mjs"
+      - "index.html"
+      - ".github/workflows/player-journey-v1.yml"
+  push:
+    branches:
+      - feature/player-journey-v1
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Player Journey safety and architecture contract
+        run: node tests/player-journey-contract.mjs
+      - name: Existing Player360 RBAC contract
+        run: node tests/player360-phase4c-route-integration.mjs
