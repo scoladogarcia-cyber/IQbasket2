@@ -166,18 +166,18 @@ begin
       on o.billing_account_id=a.id and o.entitlement_code=v_code
       and o.valid_from<=now() and (o.valid_until is null or o.valid_until>now())
     left join lateral (
-      select grant.*
-      from public.saas_entitlement_grants grant
-      where grant.billing_account_id=a.id
-        and grant.entitlement_code=v_code
-        and grant.status='ACTIVE'
-        and grant.valid_from<=now() and grant.valid_until>now()
+      select sg.*
+      from public.saas_entitlement_grants sg
+      where sg.billing_account_id=a.id
+        and sg.entitlement_code=v_code
+        and sg.status='ACTIVE'
+        and sg.valid_from<=now() and sg.valid_until>now()
         and (
-          (v_subject_type='PLAYER' and grant.subject_type='PLAYER' and grant.player_id=p_subject_id)
-          or (v_subject_type='TEAM' and grant.subject_type='TEAM' and grant.team_id=p_subject_id)
-          or (v_subject_type='CLUB' and grant.subject_type='CLUB' and grant.club_id=p_subject_id)
+          (v_subject_type='PLAYER' and sg.subject_type='PLAYER' and sg.player_id=p_subject_id)
+          or (v_subject_type='TEAM' and sg.subject_type='TEAM' and sg.team_id=p_subject_id)
+          or (v_subject_type='CLUB' and sg.subject_type='CLUB' and sg.club_id=p_subject_id)
         )
-      order by grant.valid_from desc,grant.created_at desc
+      order by sg.valid_from desc,sg.created_at desc
       limit 1
     ) g on true
     where iq_private.saas_subscription_effective(s.id)
