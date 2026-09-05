@@ -135,9 +135,9 @@ export class AuthView {
               <button type="button" id="btn-switch-to-register" style="background: none; border: none; font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer; min-height: 36px;">
                 ${this.t("new_registration", "Alta nueva (Crear cuenta)")}
               </button>
-              <a href="#" style="font-size: 12px; color: #94a3b8; text-decoration: none; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
+              <button type="button" id="btn-forgot-password" style="background:none;border:none;font-size:12px;color:#2563eb;font-weight:700;cursor:pointer;min-height:36px;">
                 ${this.t("forgot_password", "¿Olvidaste tu contraseña?")}
-              </a>
+              </button>
             </div>
           ` : ''}
 

@@ -77,6 +77,11 @@ const SINGLETON_LOADERS = Object.freeze({
     const { ProfileView } = await import("../views/ProfileView.js");
     return new ProfileView(authController);
   }
+,
+  settings: async ({ authController }) => {
+    const { TranslationsView } = await import("../views/TranslationsView.js");
+    return new TranslationsView(authController);
+  }
 });
 
 const ALIASES = Object.freeze({

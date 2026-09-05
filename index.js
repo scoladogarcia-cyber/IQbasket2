@@ -28,7 +28,6 @@ import { LayoutView } from "./views/LayoutView.js";
 import { ApprovalCenterView } from "./views/ApprovalCenterView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { GameController } from "./controllers/GameController.js";
-import { TranslationsView } from "./views/TranslationsView.js";
 
 export class IQBasketApp {
   constructor() {
@@ -59,8 +58,7 @@ export class IQBasketApp {
     this.views = {
       auth: new AuthView(),
       dashboard: new SeasonDashboardView(supabase, this.authController),
-      approvals: new ApprovalCenterView(supabase, this.authController),
-      settings: new TranslationsView(this.authController)
+      approvals: new ApprovalCenterView(supabase, this.authController)
     };
     this.lazyViews = new LazyViewRegistry({
       supabase,
@@ -306,6 +304,7 @@ export class IQBasketApp {
    * Restaura una sesión Supabase válida al recargar la SPA.
    */
   async restoreAuthenticatedSession() {
+    if (window.__IQ_PASSWORD_RECOVERY__ === true) return false;
     if (!supabase) return false;
     try {
       const { data, error } = await supabase.auth.getSession();
@@ -376,6 +375,12 @@ export class IQBasketApp {
     if (tabRegister) tabRegister.addEventListener("click", () => { this.views.auth.activeTab = "register"; this.render(); });
     if (btnSwitchReg) btnSwitchReg.addEventListener("click", () => { this.views.auth.activeTab = "register"; this.render(); });
     if (btnSwitchLog) btnSwitchLog.addEventListener("click", () => { this.views.auth.activeTab = "login"; this.render(); });
+
+    document.getElementById("btn-forgot-password")?.addEventListener("click", async () => {
+      const email = document.getElementById("login-email")?.value?.trim() || "";
+      const { PasswordRecoveryCoordinator } = await import("./features/auth/PasswordRecoveryCoordinator.js");
+      await new PasswordRecoveryCoordinator().openRequest({ email });
+    });
 
     const loginForm = document.getElementById("login-form");
     if (loginForm) {
@@ -708,7 +713,12 @@ export class IQBasketApp {
     const targetRoute = parts[0].toLowerCase();
     
     // Guarda centralizada por permiso. En modo simulación usa el rol de previsualización.
-    const requiredPermission = ROUTE_PERMISSIONS[targetRoute];
+    let requiredPermission = ROUTE_PERMISSIONS[targetRoute];
+    const authenticatedRole = this.permissionService.getAuthenticatedRole();
+    if (['player360', 'player-360', 'desarrollo-jugador'].includes(targetRoute)) {
+      if (authenticatedRole === UserRole.JUGADOR) requiredPermission = Permission.VIEW_OWN_PLAYER_360;
+      if (authenticatedRole === UserRole.FAMILIA_TUTOR) requiredPermission = Permission.VIEW_LINKED_PLAYER_360;
+    }
     const routePlayerId = [
       "player360", "player-360", "desarrollo-jugador", "nutrition", "nutricion"
     ].includes(targetRoute)
@@ -991,9 +1001,11 @@ export class IQBasketApp {
 
       case "settings":
       case "configuracion":
-      case "translations":
-        if (this.views.settings) await this.views.settings.render(contentArea);
+      case "translations": {
+        const view = await this.lazyViews.get("settings");
+        await view.render(contentArea);
         break;
+      }
 
       default:
         this.renderPlaceholder(`Módulo ${route.toUpperCase()}`);
@@ -1003,11 +1015,20 @@ export class IQBasketApp {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  const recoveryMarker = new URLSearchParams(window.location.search).get("recovery") === "1"
+    || /(?:^|[&#])type=recovery(?:&|$)/i.test(window.location.hash || "");
+  if (recoveryMarker) window.__IQ_PASSWORD_RECOVERY__ = true;
+
   const app = new IQBasketApp();
   window.iqApp = app;
   await app.restoreAuthenticatedSession();
   await app.parseHashRoute();
   await app.render();
+
+  if (recoveryMarker) {
+    const { PasswordRecoveryCoordinator } = await import("./features/auth/PasswordRecoveryCoordinator.js");
+    await new PasswordRecoveryCoordinator().openRecoveryFromCallback();
+  }
 });
 
 export default IQBasketApp;

@@ -75,7 +75,7 @@ async function renderRole(page, spec) {
     DataStore.setPermissionService(app.permissionService);
     DataStore.setActiveTeamAndSeason(TEAM_A, "2025/2026");
 
-    const view = app.views.settings;
+    const view = await app.lazyViews.get("settings");
     view.activeTab = "players";
     view.seasonsList = DataStore.seasons;
     view.joinRequests = [];

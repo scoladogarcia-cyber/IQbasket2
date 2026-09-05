@@ -160,7 +160,7 @@ async function installLifecycleFixture(page) {
       DataStore.isLoaded = true;
     };
 
-    const view = app.views.settings;
+    const view = await app.lazyViews.get("settings");
     view.activeTab = "players";
     view.seasonsList = DataStore.seasons;
     view.joinRequests = [];
