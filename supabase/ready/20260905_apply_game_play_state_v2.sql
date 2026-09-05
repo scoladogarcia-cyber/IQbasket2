@@ -13,7 +13,8 @@ begin
      or to_regclass('public.team_seasons') is null
      or to_regclass('public.team_season_memberships') is null
      or to_regprocedure('public.iq_account_is_active()') is null
-     or to_regprocedure('public.iq_v3_is_global_superadmin()') is null then
+     or to_regprocedure('public.iq_v3_is_global_superadmin()') is null
+     or to_regprocedure('public.iq_v5_can_access_team(uuid)') is null then
     raise exception 'GAME_PLAY_STATE_V2_PREREQUISITES_MISSING';
   end if;
 
@@ -355,7 +356,9 @@ revoke all on function public.iq_v13_set_game_play_state(uuid,text,text) from pu
 grant execute on function public.iq_v13_set_game_play_state(uuid,text,text) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- 5. Read projection; raw actor identifiers stay inside the private audit trail
+-- 5. Read projection; raw actor identifiers stay inside the private audit trail.
+-- Reuse the established V5/V7 team-access boundary so INVITADO and every other
+-- read-only scope follow exactly the same team visibility rules as the base game.
 -- -----------------------------------------------------------------------------
 create or replace function public.iq_v13_game_play_state_snapshot(p_game_id uuid)
 returns jsonb language plpgsql stable security definer set search_path=''
@@ -370,22 +373,12 @@ begin
   select * into v_game from public.games where id=p_game_id;
   if v_game.id is null then raise exception 'GAME_NOT_FOUND'; end if;
 
-  if not public.iq_v3_is_global_superadmin()
-     and not exists (
-       select 1 from public.team_season_memberships m
-       where m.user_id=auth.uid() and m.team_season_id=v_game.team_season_id
-         and upper(coalesce(m.status,'ACTIVE'))='ACTIVE'
-     )
+  if not public.iq_v5_can_access_team(v_game.team_id)
      and not exists (
        select 1 from public.user_profiles up
        where up.id=auth.uid()
-         and (
-           up.linked_player_id in (
-             select pgs.player_id from public.player_game_stats pgs where pgs.game_id=v_game.id
-           )
-           or v_game.team_id::text in (
-             select value from jsonb_array_elements_text(coalesce(to_jsonb(up.assigned_team_ids),'[]'::jsonb))
-           )
+         and up.linked_player_id in (
+           select pgs.player_id from public.player_game_stats pgs where pgs.game_id=v_game.id
          )
      ) then
     raise exception 'GAME_PLAY_STATE_VIEW_DENIED' using errcode='42501';
