@@ -1,0 +1,26 @@
+name: V1 Hot-path Indexes
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/ready/20260905_apply_v1_hotpath_fk_indexes.sql"
+      - "tests/v1-hotpath-index-contract.mjs"
+      - ".github/workflows/v1-hotpath-indexes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Hot-path FK index contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node tests/v1-hotpath-index-contract.mjs
