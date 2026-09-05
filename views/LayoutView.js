@@ -33,6 +33,7 @@ export class LayoutView {
     if (['players', 'jugadores', 'player', 'jugador'].includes(r)) return 'players';
     if (['training', 'entrenamientos', 'development', 'desarrollo'].includes(r)) return 'training';
     if (['nutrition', 'nutricion'].includes(r)) return 'nutrition';
+    if (['player360', 'player-360', 'desarrollo-jugador'].includes(r)) return 'player360';
     if (['privacy', 'privacy-center', 'privacidad', 'autorizaciones'].includes(r)) return 'privacy';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
@@ -217,6 +218,11 @@ export class LayoutView {
     const canViewPrivacy = hasRolePermission(Permission.VIEW_PRIVACY_AUTHORIZATIONS);
     const canViewBusiness = hasRolePermission(Permission.VIEW_BUSINESS_METRICS);
     const isFamilyCentricRole = ['FAMILIA_TUTOR','JUGADOR','INVITADO'].includes(String(userRole || '').toUpperCase());
+    const currentUser = DataStore.permissionService?.getCurrentUser?.() || null;
+    const ownPlayerId = currentUser?.playerId || currentUser?.linkedPlayerIds?.[0] || null;
+    const isPlayerSelfRole = String(userRole || '').toUpperCase() === 'JUGADOR';
+    const myPlayerRoute = isPlayerSelfRole && ownPlayerId ? `player360/${ownPlayerId}` : 'family';
+    const myPlayerKey = isPlayerSelfRole ? 'player360' : 'family';
 
     const navGroups = [
       {
@@ -275,7 +281,7 @@ export class LayoutView {
         titleKey: "welfare",
         defaultTitle: "BIENESTAR",
         items: [
-          { key: "family", labelKey: "family_workspace", fallback: "Mi jugador", route: "family", svg: '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 5l2 2 3-3"></path>' },
+          { key: myPlayerKey, labelKey: "family_workspace", fallback: "Mi jugador", route: myPlayerRoute, svg: '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 5l2 2 3-3"></path>' },
           { key: "family-advisor", labelKey: "family_advisor", fallback: "Familias & Bienestar", route: "family-advisor", svg: '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>' }
         ]
       },
@@ -435,7 +441,7 @@ export class LayoutView {
             <span class="mobile-label">${LayoutView.t("games", "Partidos")}</span>
           </a>
           ${isFamilyCentricRole ? `
-          <a href="#/family" class="mobile-nav-item ${currentActiveKey === 'family' ? 'active' : ''}" data-route-key="family">
+          <a href="#/${myPlayerRoute}" class="mobile-nav-item ${currentActiveKey === myPlayerKey ? 'active' : ''}" data-route-key="${myPlayerKey}">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
             <span class="mobile-label">${LayoutView.t("family_workspace", "Mi jugador")}</span>
           </a>` : `

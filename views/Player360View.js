@@ -21,7 +21,7 @@ import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPan
 import { WellnessService } from "../services/player360/WellnessService.js";
 import { WellnessSupportPanel } from "./player360/WellnessSupportPanel.js";
 import { ObjectiveGapCalculator } from "../domain/player360/ObjectiveGapCalculator.js";
-import { Permission } from "../security/PermissionService.js";
+import { Permission, UserRole } from "../security/PermissionService.js";
 import {
   PLAYER360_EVALUATION_DOMAIN_LABELS
 } from "../config/player360.config.js";
@@ -133,6 +133,13 @@ export class Player360View {
       playerId: this.playerId,
       playerTeamId: this.teamId
     };
+  }
+
+  _viewPermission() {
+    const role = this.auth?.getAuthenticatedRole?.();
+    if (role === UserRole.JUGADOR) return Permission.VIEW_OWN_PLAYER_360;
+    if (role === UserRole.FAMILIA_TUTOR) return Permission.VIEW_LINKED_PLAYER_360;
+    return Permission.VIEW_PLAYER_360;
   }
 
   _can(permission) {
@@ -1337,7 +1344,7 @@ export class Player360View {
       return;
     }
 
-    if (!this._can(Permission.VIEW_PLAYER_360)) {
+    if (!this._can(this._viewPermission())) {
       container.innerHTML = `
         <div class="p360c-error">
           Tu perfil no tiene permiso para consultar Player 360 de este jugador.
