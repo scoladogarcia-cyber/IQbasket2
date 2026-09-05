@@ -45,6 +45,16 @@ assert.match(statusUi, /Pendiente de sincronizar/);
 assert.match(statusUi, /Sincronizado/);
 assert.doesNotMatch(statusUi, /DataStore|supabase|saveGameAndStats/);
 
+// The DOM observer may only enhance newly rendered capture roots. It must not
+// call the full render path after every childList mutation or it can react to its
+// own badge.innerHTML updates indefinitely during a long live match.
+assert.match(statusUi, /function enhanceNewRoots\(/);
+assert.match(statusUi, /if \(!root\.querySelector\(`\[\$\{BADGE_ATTR\}\]`\)\) syncBadge\(root, detail\)/);
+assert.match(statusUi, /new MutationObserver\(scheduleEnhanceNewRoots\)/);
+assert.match(statusUi, /requestAnimationFrame/);
+assert.match(statusUi, /dataset\.renderSignature/);
+assert.doesNotMatch(statusUi, /new MutationObserver\([^)]*=>[\s\S]{0,180}render\(connectivityDetail\(\)\)/);
+
 assert.match(html, /features\/offline\/OfflineFirstBootstrap\.js/);
 assert.match(html, /features\/offline\/OfflineSyncStatusEnhancer\.js/);
 assert.match(html, /styles\/offline-sync-v1\.css/);
