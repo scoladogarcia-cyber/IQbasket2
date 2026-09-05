@@ -18,7 +18,7 @@ assert.equal(PLAYER_JOURNEY_SAFETY.wellnessTriggersAllowed, false);
 assert.equal(PLAYER_JOURNEY_SAFETY.healthTriggersAllowed, false);
 assert(PLAYER_MICRO_CHALLENGE_CATALOG.length >= 6);
 
-// Backend is RPC-only, self-scoped and rate-limited to one challenge per week.
+// Backend is RPC-only, self-scoped and rate-limited to one challenge per player/week.
 assert.match(sql, /create table public\.player_micro_challenge_catalog/i);
 assert.match(sql, /create table public\.player_micro_challenges/i);
 assert.match(sql, /enable row level security/gi);
@@ -26,8 +26,12 @@ assert.match(sql, /revoke all on table public\.player_micro_challenges from publ
 assert.match(sql, /player_journey_is_self/);
 assert.match(sql, /upper\(coalesce\(up\.global_role,up\.role,''\)\)='JUGADOR'/);
 assert.match(sql, /up\.linked_player_id=p_player_id/);
-assert.match(sql, /player_micro_challenge_one_week_uq/);
+assert.match(sql, /player_micro_challenge_one_week_uq[\s\S]*on public\.player_micro_challenges\(player_id,week_start\)/);
+assert.match(sql, /player_micro_challenge_one_active_uq[\s\S]*on public\.player_micro_challenges\(player_id\)/);
+assert.doesNotMatch(sql, /player_micro_challenge_one_week_uq[\s\S]{0,120}\(team_season_id,player_id,week_start\)/);
 assert.match(sql, /PLAYER_JOURNEY_WEEK_ALREADY_USED/);
+assert.match(sql, /where mc\.player_id=p_player_id[\s\S]{0,160}mc\.week_start=v_week_start/);
+assert.match(sql, /where mc\.player_id=p_player_id[\s\S]{0,160}mc\.status='ACTIVE'/);
 assert.match(sql, /iq_v12_player_journey_snapshot/);
 assert.match(sql, /iq_v12_player_journey_start/);
 assert.match(sql, /iq_v12_player_journey_complete/);
