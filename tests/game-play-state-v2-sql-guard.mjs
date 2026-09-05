@@ -27,6 +27,13 @@ const backfillExcerpt = sql.slice(backfill, enable);
 assert.match(backfillExcerpt, /play_state_changed_at=coalesce\(play_state_changed_at,created_at,now\(\)\)/);
 assert.doesNotMatch(backfillExcerpt, /\bupdated_at\b/);
 
+// Historical production rows use both localized labels and the English
+// COMPLETED token. Both the one-time backfill and legacy INSERT bridge must map
+// completed games to FINISHED rather than silently falling back to SCHEDULED.
+assert.match(backfillExcerpt, /like '%complet%'[\s\S]{0,40}then 'FINISHED'/i);
+const legacyInsertBridge = sql.slice(sql.indexOf("function iq_private.sync_game_play_state_legacy_status_v2"), sql.indexOf("-- -----------------------------------------------------------------------------\n-- 2. Immutable transition audit"));
+assert.match(legacyInsertBridge, /like '%complet%'[\s\S]{0,40}then new\.play_state:='FINISHED'/i);
+
 assert.doesNotMatch(sql, /grant\s+(?:all|select|insert|update|delete)[\s\S]{0,80}game_play_state_transitions[\s\S]{0,40}authenticated/i);
 assert.match(sql, /revoke all on table public\.game_play_state_transitions from public,anon,authenticated/i);
 
