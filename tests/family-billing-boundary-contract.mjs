@@ -89,7 +89,12 @@ assert.match(edgeSource, /IQB_FAMILY_PROCESSOR_CONTRACTS_APPROVED/);
 assert.match(edgeSource, /IQB_FAMILY_DPIA_REVIEWED/);
 assert.match(edgeSource, /IQB_FAMILY_POLICY_VERSIONING_READY/);
 
-// Server validates identity, billing authority, plan publication and safe return URL.
+// Server validates request origin, identity, billing authority, plan and safe return URL.
+assert.match(edgeSource, /IQB_APP_ALLOWED_REQUEST_ORIGINS/);
+assert.match(edgeSource, /BILLING_REQUEST_ORIGIN_REQUIRED/);
+assert.match(edgeSource, /BILLING_REQUEST_ORIGIN_DENIED/);
+assert.match(edgeSource, /"Vary": "Origin"/);
+assert.doesNotMatch(edgeSource, /"Access-Control-Allow-Origin": "\*"/);
 assert.match(edgeSource, /callerClient\.auth\.getUser\(\)/);
 assert.match(edgeSource, /saas_billing_account_members/);
 assert.match(edgeSource, /BILLING_ROLES/);
