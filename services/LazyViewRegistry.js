@@ -45,6 +45,10 @@ const SINGLETON_LOADERS = Object.freeze({
     const { FamilyWorkspaceView } = await import("../views/family/FamilyWorkspaceView.js");
     return new FamilyWorkspaceView(supabase, authController);
   },
+  business: async ({ supabase }) => {
+    const { BusinessMetricsView } = await import("../views/admin/BusinessMetricsView.js");
+    return new BusinessMetricsView(supabase);
+  },
   familyadvisor: async ({ authController }) => {
     const { FamilyAdvisorView } = await import("../views/FamilyAdvisorView.js");
     return new FamilyAdvisorView(authController);

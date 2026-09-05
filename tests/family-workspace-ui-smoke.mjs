@@ -13,6 +13,9 @@ const result = await page.evaluate(async () => {
   const PLAYER = "11111111-1111-4111-8111-111111111111";
   const view = new FamilyWorkspaceView({ rpc: async () => ({ data: null, error: null }) }, null);
   let claimed = false;
+  const analyticsEvents = [];
+  view.analytics.trackSafely = async event => { analyticsEvents.push(event); return "event"; };
+  view.analytics.trackOncePerSession = async event => { analyticsEvents.push(event); return "event"; };
   view.service.listPlayers = async () => [{ player_id: PLAYER, first_name: "Alex", last_name: "Demo" }];
   view.service.bootstrapFree = async () => ({ plan_code: "FAMILY_FREE" });
   view.service.getProductSnapshot = async () => ({ plan_code: "FAMILY_FREE", subject_covered: true });
@@ -34,6 +37,10 @@ const result = await page.evaluate(async () => {
   const strip = [...host.querySelectorAll(".family-value-strip span")].map(node => node.textContent.trim());
   const locked = host.querySelector(".family-locked")?.textContent || "";
   const career = host.querySelector(".family-career-row")?.textContent || "";
+  const dashboard = host.querySelector(".family-dashboard")?.textContent || "";
+  const offer = host.querySelector(".family-conversion")?.textContent || "";
+  host.querySelector("[data-family-interest]")?.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
   const form = host.querySelector("[data-family-claim-form]");
   form.querySelector('[name="claimCode"]').value = "12345678-1234-4123-8123-123456789abc";
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -44,6 +51,9 @@ const result = await page.evaluate(async () => {
     strip,
     locked,
     career,
+    dashboard,
+    offer,
+    analyticsEvents: analyticsEvents.map(event => event.eventCode),
     claimed,
     title: host.querySelector("#family-title")?.textContent || ""
   };
@@ -53,6 +63,9 @@ if (result.overflowX) throw new Error(`Family workspace desborda en móvil: ${JS
 if (result.strip.length !== 4) throw new Error(`Debe mostrar las 4 etapas de valor: ${JSON.stringify(result)}`);
 if (!result.locked.includes("Disponible en Family")) throw new Error(`Family Free debe mantener Player360 bloqueado: ${JSON.stringify(result)}`);
 if (!result.career.includes("Demo U16")) throw new Error(`El pasaporte debe mostrar trayectoria: ${JSON.stringify(result)}`);
+if (!result.dashboard.includes("Lo importante, de un vistazo")) throw new Error(`Debe renderizar dashboard familiar: ${JSON.stringify(result)}`);
+if (!result.offer.includes("Desbloquea la evolución completa")) throw new Error(`Debe mostrar oferta contextual con evidencia suficiente: ${JSON.stringify(result)}`);
+if (!result.analyticsEvents.includes("FAMILY_PLAN_INTEREST_CLICKED")) throw new Error(`Debe medir interés sin iniciar cobro: ${JSON.stringify(result)}`);
 if (!result.claimed) throw new Error(`El formulario de vinculación debe invocar el servicio: ${JSON.stringify(result)}`);
 if (!result.title.includes("Alex Demo")) throw new Error(`Debe presentar el jugador: ${JSON.stringify(result)}`);
 

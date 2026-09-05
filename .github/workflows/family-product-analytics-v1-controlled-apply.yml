@@ -1,0 +1,81 @@
+name: Family Product Analytics V1 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feature/family-product-priority2-v1
+    paths:
+      - ".github/workflows/family-product-analytics-v1-controlled-apply.yml"
+      - "supabase/ready/20260905_*family_product_analytics_v1*.sql"
+      - "supabase/drafts/20260905_smoke_family_product_analytics_v1_rollback.sql"
+      - "tests/family-growth-priority2-contract.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Static growth contract
+        run: node tests/family-growth-priority2-contract.mjs
+      - name: Read-only preflight
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260905_preflight_family_product_analytics_v1_readonly.sql
+      - name: Capture telemetry baseline
+        id: baseline
+        run: |
+          set -euo pipefail
+          EVENTS=$(psql "$SUPABASE_DB_URL" -Atc "select case when to_regclass('public.product_analytics_events') is null then 0 else (select count(*) from public.product_analytics_events) end")
+          echo "events=$EVENTS" >> "$GITHUB_OUTPUT"
+      - name: Apply Product Analytics V1
+        id: apply
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260905_apply_family_product_analytics_v1.sql
+      - name: Verify installed boundary
+        id: verify
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260905_verify_family_product_analytics_v1_readonly.sql
+      - name: Functional analytics smoke with rollback
+        id: smoke
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260905_smoke_family_product_analytics_v1_rollback.sql)
+          echo "$OUT"
+          test "$(printf '%s\n' "$OUT" | grep '^PRODUCT_ANALYTICS_SMOKE,' | tail -n 1)" = "PRODUCT_ANALYTICS_SMOKE,true,true"
+          test "$(printf '%s\n' "$OUT" | grep '^PRODUCT_ANALYTICS_SMOKE_ROLLBACK_OK' | tail -n 1)" = "PRODUCT_ANALYTICS_SMOKE_ROLLBACK_OK"
+      - name: Confirm smoke left no telemetry
+        run: |
+          set -euo pipefail
+          EVENTS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.product_analytics_events")
+          test "$EVENTS" = "${{ steps.baseline.outputs.events }}"
+      - name: Emergency rollback Product Analytics V1
+        if: failure() && steps.apply.outcome == 'success'
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260905_rollback_family_product_analytics_v1.sql
+      - name: Confirm emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        run: |
+          set -euo pipefail
+          test "$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('public.product_analytics_events') is null")" = "t"

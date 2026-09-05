@@ -6,6 +6,9 @@
 import { FamilyWorkspaceService } from "../../services/family/FamilyWorkspaceService.js";
 import { presentFamilyPlayer360 } from "../../domain/family/FamilyPlayer360Presenter.js";
 import { FAMILY_PLAN_PRESENTATION } from "../../config/family.config.js";
+import { FAMILY_GROWTH_CONFIG } from "../../config/family-growth.config.js";
+import { buildFamilyGrowthState } from "../../domain/family/FamilyGrowthEngine.js";
+import { ProductAnalyticsService } from "../../services/analytics/ProductAnalyticsService.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -17,8 +20,9 @@ export class FamilyWorkspaceView {
   constructor(supabaseClient = null, authController = null) {
     this.service = new FamilyWorkspaceService(supabaseClient);
     this.auth = authController;
+    this.analytics = new ProductAnalyticsService(supabaseClient);
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, player360: null, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, growth: null, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -54,8 +58,11 @@ export class FamilyWorkspaceView {
       this.state.product = product || {};
       this.state.passport = passport || {};
       this.state.player360 = player360 || {};
+      const story = this.state.player360.allowed ? presentFamilyPlayer360(this.state.player360) : null;
+      this.state.growth = buildFamilyGrowthState({ product, passport, player360, story });
       this.state.error = null;
       container.innerHTML = this._workspace();
+      void this._trackWorkspaceValue();
     } catch (error) {
       console.error("[FamilyWorkspaceView]", error);
       this.state.error = error;
@@ -70,7 +77,8 @@ export class FamilyWorkspaceView {
     const plan = FAMILY_PLAN_PRESENTATION[product.plan_code] || FAMILY_PLAN_PRESENTATION.FAMILY_FREE;
     const totals = passport.career_totals || {};
     const player360 = this.state.player360 || {};
-    const story = player360.allowed ? presentFamilyPlayer360(player360) : null;
+    const growth = this.state.growth || buildFamilyGrowthState({ product, passport, player360 });
+    const story = growth.story || (player360.allowed ? presentFamilyPlayer360(player360) : null);
 
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
@@ -87,6 +95,8 @@ export class FamilyWorkspaceView {
         <span>3 · Qué significa</span><span>4 · Qué hacemos ahora</span>
       </div>
       ${this._summary(totals, passport)}
+      ${this._familyDashboard(growth)}
+      ${this._conversionCard(growth)}
       ${this._career(passport.career || [])}
       ${this._player360(player360, story)}
       ${this._claimPanel()}
@@ -116,6 +126,60 @@ export class FamilyWorkspaceView {
 
   _kpi(label, value) {
     return `<article class="family-kpi"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`;
+  }
+
+  _familyDashboard(growth = {}) {
+    const latest = growth.latestGame || null;
+    const objective = growth.objective || null;
+    const primary = objective?.primaryTarget || null;
+    const evolution = growth.story?.evolution?.[0] || growth.body || "Seguimos acumulando evidencia.";
+    const next = growth.story?.next?.[0]
+      || (primary?.metric_name ? `Mantener el foco compartido: ${primary.metric_name}.` : "Seguir registrando partidos y sesiones para observar la evolución.");
+    const gameText = latest
+      ? `${latest.opponent ? `vs ${escapeHtml(latest.opponent)} · ` : ""}${number(latest.points)} pts · ${number(latest.minutes)} min`
+      : "Aún no hay un partido reciente registrado.";
+    return `<section class="family-card family-dashboard">
+      <div class="family-card-head"><div><p class="family-eyebrow">Ahora mismo</p><h2>Lo importante, de un vistazo</h2></div></div>
+      <div class="family-dashboard-grid">
+        <article><span>Último partido</span><p>${gameText}</p></article>
+        <article><span>Evolución</span><p>${escapeHtml(evolution)}</p></article>
+        <article><span>Objetivo actual</span><p>${escapeHtml(objective?.title || primary?.metric_name || "Aún no hay un objetivo compartido por el staff.")}</p></article>
+        <article><span>Esta semana</span><p>${escapeHtml(next)}</p></article>
+      </div>
+    </section>`;
+  }
+
+  _conversionCard(growth = {}) {
+    const conversion = growth.conversion || {};
+    if (!conversion.visible) return "";
+    const availability = FAMILY_GROWTH_CONFIG.checkoutEnabled
+      ? "Continuar"
+      : conversion.actionLabel || "Me interesa";
+    return `<section class="family-card family-conversion" data-family-offer="${escapeHtml(conversion.placement || "VALUE")}">
+      <div><p class="family-eyebrow">Siguiente nivel</p><h2>${escapeHtml(conversion.title)}</h2>
+        <p>${escapeHtml(conversion.body)}</p></div>
+      <div class="family-conversion-action">
+        <button type="button" data-family-interest data-target-plan="${escapeHtml(conversion.targetPlanCode || "FAMILY")}">${escapeHtml(availability)}</button>
+        <small data-family-interest-status aria-live="polite">Sin cargos ni contratación en este paso.</small>
+      </div>
+    </section>`;
+  }
+
+  async _trackWorkspaceValue() {
+    if (!this.playerId || !this.state.growth) return;
+    const base = { playerId: this.playerId, surface: FAMILY_GROWTH_CONFIG.analyticsSurface, evidenceCount: this.state.growth.games };
+    await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_WORKSPACE_VIEWED", placement: "DASHBOARD" });
+    await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_PASSPORT_VIEWED", placement: "PASSPORT" });
+    if (this.state.player360?.allowed) {
+      await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_PLAYER360_OPENED", surface: "PLAYER360_FAMILY", placement: "STORY" });
+    }
+    if (this.state.growth.objective) {
+      await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_OBJECTIVE_VIEWED", placement: "CURRENT_OBJECTIVE" });
+    }
+    const conversion = this.state.growth.conversion || {};
+    if (conversion.visible) {
+      await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_INSIGHT_OFFER_VIEWED", placement: conversion.placement, targetPlanCode: conversion.targetPlanCode, experimentKey: FAMILY_GROWTH_CONFIG.experimentKey });
+    }
   }
 
   _career(rows) {
@@ -181,19 +245,40 @@ export class FamilyWorkspaceView {
     container.querySelector("[data-family-retry]")?.addEventListener("click", () => this.render(container));
     container.querySelector("[data-family-player]")?.addEventListener("change", event => {
       const id = event.target.value;
-      if (id) window.location.hash = `#/family/${id}`;
+      if (!id) return;
+      void this.analytics.trackSafely({ eventCode: "FAMILY_PLAYER_SWITCHED", playerId: id, surface: "FAMILY_WORKSPACE", placement: "PLAYER_SWITCHER" });
+      window.location.hash = `#/family/${id}`;
     });
+    container.querySelector("[data-family-interest]")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      const targetPlanCode = button.dataset.targetPlan || "FAMILY";
+      const status = container.querySelector("[data-family-interest-status]");
+      button.disabled = true;
+      await this.analytics.trackSafely({
+        eventCode: "FAMILY_PLAN_INTEREST_CLICKED", playerId: this.playerId, surface: "FAMILY_WORKSPACE",
+        placement: this.state.growth?.conversion?.placement || "VALUE", targetPlanCode,
+        experimentKey: FAMILY_GROWTH_CONFIG.experimentKey, evidenceCount: this.state.growth?.games
+      });
+      if (status) status.textContent = FAMILY_GROWTH_CONFIG.checkoutEnabled
+        ? "Preparando contratación…"
+        : "Interés registrado. No se ha realizado ningún cargo.";
+    });
+
     const form = container.querySelector("[data-family-claim-form]");
     form?.addEventListener("submit", async event => {
       event.preventDefault();
       const status = form.querySelector("[data-family-claim-status]");
       const code = new FormData(form).get("claimCode");
       if (status) status.textContent = "Verificando…";
+      void this.analytics.trackSafely({ eventCode: "FAMILY_CLAIM_STARTED", surface: "FAMILY_ONBOARDING", placement: "CLAIM_CODE" });
       try {
-        await this.service.claimLink(code);
+        const claimed = await this.service.claimLink(code);
+        const claimedPlayerId = claimed?.player_id || claimed?.product?.player_id || null;
+        void this.analytics.trackSafely({ eventCode: "FAMILY_CLAIM_SUCCEEDED", playerId: claimedPlayerId, surface: "FAMILY_ONBOARDING", placement: "CLAIM_CODE" });
         if (status) status.textContent = "Jugador vinculado correctamente.";
         await this.render(container);
       } catch (error) {
+        void this.analytics.trackSafely({ eventCode: "FAMILY_CLAIM_FAILED", surface: "FAMILY_ONBOARDING", placement: "CLAIM_CODE" });
         if (status) status.textContent = "No se ha podido validar la invitación.";
         console.error("[FamilyWorkspaceView] claim", error);
       }
@@ -216,7 +301,9 @@ export class FamilyWorkspaceView {
       .family-career-row{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid #f1f5f9}.family-career-row span{display:block;color:#64748b;font-size:13px}.family-career-numbers{display:grid;grid-template-columns:auto auto;gap:1px 8px;text-align:right}.family-career-numbers small{color:#64748b}
       .family-story-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.family-story-grid article{padding:15px;border-radius:14px;background:#f8fafc}.family-story-grid span{font-weight:900;font-size:13px}.family-story-grid p,.family-story-grid li{font-size:14px;color:#334155}.family-story-grid ul{margin:8px 0 0;padding-left:18px}.family-disclaimer{font-size:12px;color:#64748b;margin:12px 0 0}
       .family-locked{display:flex;justify-content:space-between;gap:18px;align-items:center;background:#fff7ed}.family-locked button{border:0;border-radius:12px;padding:10px 14px;font-weight:800}.family-link-card summary{font-weight:900;cursor:pointer}.family-link-card form{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}.family-link-card label{display:grid;gap:5px}.family-link-card button,.family-error button{min-height:44px;border:0;border-radius:10px;padding:8px 14px;background:#1d4ed8;color:#fff;font-weight:900}.family-loading{padding:40px;text-align:center;color:#64748b}
-      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
+      .family-dashboard-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.family-dashboard-grid article{padding:15px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}.family-dashboard-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#64748b}.family-dashboard-grid p{margin:7px 0 0;font-size:14px;color:#1e293b}
+      .family-conversion{display:flex;justify-content:space-between;align-items:center;gap:18px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);border-color:#bfdbfe}.family-conversion p{margin:6px 0;color:#334155}.family-conversion-action{display:grid;gap:7px;min-width:190px}.family-conversion-action button{min-height:44px;border:0;border-radius:12px;padding:9px 14px;background:#1d4ed8;color:#fff;font-weight:900;cursor:pointer}.family-conversion-action button:disabled{opacity:.65}.family-conversion-action small{font-size:11px;color:#64748b}
+      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-dashboard-grid{grid-template-columns:1fr 1fr}.family-conversion{display:grid}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
     `;
     document.head.appendChild(style);
   }
