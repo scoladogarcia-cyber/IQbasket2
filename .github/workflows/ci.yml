@@ -151,6 +151,9 @@ jobs:
       - name: Family growth Priority 2 contract
         run: node tests/family-growth-priority2-contract.mjs
 
+      - name: Family development Priority 2 contract
+        run: node tests/family-development-priority2-contract.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 

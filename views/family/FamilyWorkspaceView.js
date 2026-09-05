@@ -9,6 +9,8 @@ import { FAMILY_PLAN_PRESENTATION } from "../../config/family.config.js";
 import { FAMILY_GROWTH_CONFIG } from "../../config/family-growth.config.js";
 import { buildFamilyGrowthState } from "../../domain/family/FamilyGrowthEngine.js";
 import { ProductAnalyticsService } from "../../services/analytics/ProductAnalyticsService.js";
+import { buildFamilyWeeklyPlan } from "../../domain/family/FamilyDevelopmentPlanEngine.js";
+import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/family-ai-products.config.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -22,7 +24,7 @@ export class FamilyWorkspaceView {
     this.auth = authController;
     this.analytics = new ProductAnalyticsService(supabaseClient);
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, player360: null, growth: null, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, weeklyPlan: null, growth: null, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -44,20 +46,25 @@ export class FamilyWorkspaceView {
         this.state.product = null;
         this.state.passport = null;
         this.state.player360 = null;
+        this.state.developmentContext = null;
+        this.state.weeklyPlan = null;
         container.innerHTML = this._emptyWorkspace();
         this._bind(container);
         return;
       }
 
       await this.service.bootstrapFree(this.playerId);
-      const [product, passport, player360] = await Promise.all([
+      const [product, passport, player360, developmentContext] = await Promise.all([
         this.service.getProductSnapshot(this.playerId),
         this.service.getPassport(this.playerId),
-        this.service.getPlayer360Snapshot(this.playerId)
+        this.service.getPlayer360Snapshot(this.playerId),
+        this.service.getDevelopmentContext(this.playerId)
       ]);
       this.state.product = product || {};
       this.state.passport = passport || {};
       this.state.player360 = player360 || {};
+      this.state.developmentContext = developmentContext || {};
+      this.state.weeklyPlan = buildFamilyWeeklyPlan(this.state.developmentContext);
       const story = this.state.player360.allowed ? presentFamilyPlayer360(this.state.player360) : null;
       this.state.growth = buildFamilyGrowthState({ product, passport, player360, story });
       this.state.error = null;
@@ -79,6 +86,7 @@ export class FamilyWorkspaceView {
     const player360 = this.state.player360 || {};
     const growth = this.state.growth || buildFamilyGrowthState({ product, passport, player360 });
     const story = growth.story || (player360.allowed ? presentFamilyPlayer360(player360) : null);
+    const weeklyPlan = this.state.weeklyPlan || buildFamilyWeeklyPlan(this.state.developmentContext || {});
 
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
@@ -95,10 +103,12 @@ export class FamilyWorkspaceView {
         <span>3 · Qué significa</span><span>4 · Qué hacemos ahora</span>
       </div>
       ${this._summary(totals, passport)}
-      ${this._familyDashboard(growth)}
+      ${this._familyDashboard(growth, weeklyPlan)}
       ${this._conversionCard(growth)}
       ${this._career(passport.career || [])}
       ${this._player360(player360, story)}
+      ${this._developmentPlan(weeklyPlan)}
+      ${this._aiProductPreview(product)}
       ${this._claimPanel()}
     </section>`;
   }
@@ -128,13 +138,15 @@ export class FamilyWorkspaceView {
     return `<article class="family-kpi"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`;
   }
 
-  _familyDashboard(growth = {}) {
+  _familyDashboard(growth = {}, weeklyPlan = {}) {
     const latest = growth.latestGame || null;
     const objective = growth.objective || null;
     const primary = objective?.primaryTarget || null;
     const evolution = growth.story?.evolution?.[0] || growth.body || "Seguimos acumulando evidencia.";
-    const next = growth.story?.next?.[0]
-      || (primary?.metric_name ? `Mantener el foco compartido: ${primary.metric_name}.` : "Seguir registrando partidos y sesiones para observar la evolución.");
+    const next = weeklyPlan?.allowed && weeklyPlan?.actions?.[0]
+      ? weeklyPlan.actions[0]
+      : growth.story?.next?.[0]
+        || (primary?.metric_name ? `Mantener el foco compartido: ${primary.metric_name}.` : "Seguir registrando partidos y sesiones para observar la evolución.");
     const gameText = latest
       ? `${latest.opponent ? `vs ${escapeHtml(latest.opponent)} · ` : ""}${number(latest.points)} pts · ${number(latest.minutes)} min`
       : "Aún no hay un partido reciente registrado.";
@@ -176,6 +188,15 @@ export class FamilyWorkspaceView {
     if (this.state.growth.objective) {
       await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_OBJECTIVE_VIEWED", placement: "CURRENT_OBJECTIVE" });
     }
+    if (this.state.weeklyPlan?.allowed) {
+      await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_WEEKLY_PLAN_VIEWED", placement: "WEEKLY_PLAN" });
+      if ((this.state.developmentContext?.recent_training || []).length) {
+        await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_TRAINING_VALUE_VIEWED", placement: "WEEKLY_PLAN" });
+      }
+      if ((this.state.developmentContext?.recent_external_development || []).length) {
+        await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_TECHNIFICATION_VALUE_VIEWED", placement: "WEEKLY_PLAN" });
+      }
+    }
     const conversion = this.state.growth.conversion || {};
     if (conversion.visible) {
       await this.analytics.trackOncePerSession({ ...base, eventCode: "FAMILY_INSIGHT_OFFER_VIEWED", placement: conversion.placement, targetPlanCode: conversion.targetPlanCode, experimentKey: FAMILY_GROWTH_CONFIG.experimentKey });
@@ -212,6 +233,42 @@ export class FamilyWorkspaceView {
         <article><span>Qué hacemos ahora</span><ul>${next}</ul></article>
       </div>
       <p class="family-disclaimer">Interpretación descriptiva: no atribuye causas ni sustituye al entrenador o a profesionales sanitarios.</p>
+    </section>`;
+  }
+
+  _developmentPlan(plan = {}) {
+    if (!plan?.allowed) {
+      return `<section class="family-card family-locked family-development-locked">
+        <div><p class="family-eyebrow">Family · Desarrollo</p><h2>Qué hacemos esta semana</h2>
+          <p>El plan semanal conecta el objetivo compartido con entrenamientos, tecnificación y competición registrados.</p></div>
+        <button type="button" disabled aria-disabled="true">Disponible en Family</button>
+      </section>`;
+    }
+    const actions = (plan.actions || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    const limitations = (plan.limitations || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    const focus = plan.primaryFocus || "Pendiente de objetivo compartido";
+    return `<section class="family-card family-development" data-family-weekly-plan>
+      <div class="family-card-head"><div><p class="family-eyebrow">Plan de desarrollo</p><h2>Esta semana: ${escapeHtml(focus)}</h2></div></div>
+      <div class="family-development-grid">
+        <article><span>Foco compartido</span><p>${escapeHtml(plan.objectiveTitle || focus)}</p></article>
+        <article><span>Evidencia conectada</span><p>${number(plan.evidence?.trainingSessions)} entrenos · ${number(plan.evidence?.technificationSessions)} tecnificaciones · ${number(plan.evidence?.recentGames)} partidos</p></article>
+      </div>
+      <ol class="family-plan-actions">${actions}</ol>
+      ${limitations ? `<details class="family-limitations"><summary>Límites de la evidencia</summary><ul>${limitations}</ul></details>` : ""}
+      <p class="family-disclaimer">${escapeHtml(plan.disclaimer || "")}</p>
+    </section>`;
+  }
+
+  _aiProductPreview(product = {}) {
+    const planCode = String(product?.plan_code || "FAMILY_FREE").toUpperCase();
+    if (!['FAMILY','FAMILY_PRO'].includes(planCode)) return "";
+    const cards = Object.values(FAMILY_AI_PRODUCTS_EXTENDED).map(item => `
+      <article><strong>${escapeHtml(item.label)}</strong><p>${escapeHtml(item.description)}</p><span>En preparación</span></article>`).join("");
+    return `<section class="family-card family-ai-preview">
+      <div class="family-card-head"><div><p class="family-eyebrow">Family Pro · IA</p><h2>Productos inteligentes, todavía no activados</h2></div></div>
+      <p>No se contratarán ni consumirán unidades hasta que el piloto valide calidad, coste y privacidad.</p>
+      <div class="family-ai-grid">${cards}</div>
+      <p class="family-disclaimer">${escapeHtml(FAMILY_AI_POLICY.disclaimer)}</p>
     </section>`;
   }
 
@@ -303,7 +360,9 @@ export class FamilyWorkspaceView {
       .family-locked{display:flex;justify-content:space-between;gap:18px;align-items:center;background:#fff7ed}.family-locked button{border:0;border-radius:12px;padding:10px 14px;font-weight:800}.family-link-card summary{font-weight:900;cursor:pointer}.family-link-card form{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end}.family-link-card label{display:grid;gap:5px}.family-link-card button,.family-error button{min-height:44px;border:0;border-radius:10px;padding:8px 14px;background:#1d4ed8;color:#fff;font-weight:900}.family-loading{padding:40px;text-align:center;color:#64748b}
       .family-dashboard-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.family-dashboard-grid article{padding:15px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}.family-dashboard-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#64748b}.family-dashboard-grid p{margin:7px 0 0;font-size:14px;color:#1e293b}
       .family-conversion{display:flex;justify-content:space-between;align-items:center;gap:18px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);border-color:#bfdbfe}.family-conversion p{margin:6px 0;color:#334155}.family-conversion-action{display:grid;gap:7px;min-width:190px}.family-conversion-action button{min-height:44px;border:0;border-radius:12px;padding:9px 14px;background:#1d4ed8;color:#fff;font-weight:900;cursor:pointer}.family-conversion-action button:disabled{opacity:.65}.family-conversion-action small{font-size:11px;color:#64748b}
-      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-dashboard-grid{grid-template-columns:1fr 1fr}.family-conversion{display:grid}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
+      .family-development{background:linear-gradient(135deg,#f8fafc,#f0fdf4);border-color:#bbf7d0}.family-development-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.family-development-grid article{padding:14px;border:1px solid #dcfce7;border-radius:13px;background:#fff}.family-development-grid span,.family-ai-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#64748b}.family-development-grid p{margin:6px 0 0}.family-plan-actions{margin:15px 0 0;padding-left:22px}.family-plan-actions li{margin:7px 0;color:#1e293b}.family-limitations{margin-top:12px}.family-limitations summary{font-weight:800;cursor:pointer}.family-limitations li{font-size:13px;color:#64748b}
+      .family-ai-preview{background:#f8fafc}.family-ai-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-ai-grid article{padding:14px;border:1px solid #e2e8f0;border-radius:13px;background:#fff}.family-ai-grid strong{display:block}.family-ai-grid p{font-size:13px;color:#475569;margin:6px 0}.family-ai-grid span{color:#7c3aed}
+      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-dashboard-grid{grid-template-columns:1fr 1fr}.family-conversion{display:grid}.family-development-grid,.family-ai-grid{grid-template-columns:1fr}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
     `;
     document.head.appendChild(style);
   }
