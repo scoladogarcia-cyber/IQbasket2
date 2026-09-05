@@ -36,7 +36,10 @@ assert.match(view, /Qué hacemos ahora/);
 assert.match(permissions, /VIEW_FAMILY_WORKSPACE/);
 assert.match(permissions, /INVITE_FAMILY_LINK/);
 assert.match(router, /lazyViews\.get\("familyworkspace"\)/);
-assert.match(layout, /route: "family"/);
+assert.match(layout, /const myPlayerRoute = .*player360.*ownPlayerId.*: 'family'/);
+assert.match(layout, /FAMILIA_TUTOR.*JUGADOR.*INVITADO/);
+assert.match(router, /case "family"/);
+assert.match(permissions, /family: Permission\.VIEW_FAMILY_WORKSPACE/);
 
 const games = Array.from({ length: 10 }, (_, index) => ({
   points: index < 5 ? 12 : 8,
