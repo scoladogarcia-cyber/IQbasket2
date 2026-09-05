@@ -6,8 +6,8 @@
 create or replace function public.iq_v7_assign_user_role_context(
   p_user_id uuid,
   p_role text,
-  p_linked_player_id uuid default null,
-  p_team_season_id uuid default null
+  p_linked_player_id uuid,
+  p_team_season_id uuid
 )
 returns jsonb
 language plpgsql

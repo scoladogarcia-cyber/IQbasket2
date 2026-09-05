@@ -8,9 +8,11 @@ on:
       - "views/TranslationsView.js"
       - "supabase/functions/admin-users/**"
       - "supabase/ready/20260905_apply_v7_player_role_link_integrity.sql"
+      - "supabase/ready/20260905_apply_v7_player_role_scope_hotfix.sql"
       - "tests/admin-user-provisioning-ui-contract.mjs"
       - "tests/admin-users-v7-edge-contract.mjs"
       - "tests/player-role-link-integrity-contract.mjs"
+      - "tests/player-role-scope-v2-contract.mjs"
       - ".github/workflows/player-role-link-integrity.yml"
   workflow_dispatch:
 
@@ -36,3 +38,4 @@ jobs:
           node tests/admin-users-v7-edge-contract.mjs
           node tests/admin-user-provisioning-ui-contract.mjs
           node tests/player-role-link-integrity-contract.mjs
+          node tests/player-role-scope-v2-contract.mjs
