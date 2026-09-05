@@ -1,0 +1,1 @@
+Game Play State V2 is intentionally additive. It does not replace V5 game locking or V6 season freeze. Its public write path is the V13 transition RPC; direct audit-table access remains closed.
