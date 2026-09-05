@@ -58,10 +58,14 @@ end
 $backfill_disable_guards$;
 
 -- One-time compatibility mapping from the legacy free-text status column.
+-- Production historically used both localized labels and the English COMPLETED
+-- token, so completion recognition must preserve both contracts.
 update public.games
 set play_state=case
   when lower(coalesce(status,'')) like '%cancel%' then 'CANCELLED'
-  when lower(coalesce(status,'')) like '%final%' or lower(coalesce(status,'')) like '%finish%' then 'FINISHED'
+  when lower(coalesce(status,'')) like '%final%'
+    or lower(coalesce(status,'')) like '%finish%'
+    or lower(coalesce(status,'')) like '%complet%' then 'FINISHED'
   when lower(coalesce(status,'')) like '%curso%' or lower(coalesce(status,'')) like '%live%' or lower(coalesce(status,'')) like '%progress%' then 'LIVE'
   when lower(coalesce(status,'')) like '%prepar%' or lower(coalesce(status,'')) like '%ready%' then 'READY'
   when lower(coalesce(status,'')) like '%program%' or lower(coalesce(status,'')) like '%schedul%' then 'SCHEDULED'
@@ -148,7 +152,7 @@ begin
     -- create semantics by interpreting a recognized legacy status once on INSERT.
     if new.play_state='SCHEDULED' then
       if v_legacy like '%cancel%' then new.play_state:='CANCELLED';
-      elsif v_legacy like '%final%' or v_legacy like '%finish%' then new.play_state:='FINISHED';
+      elsif v_legacy like '%final%' or v_legacy like '%finish%' or v_legacy like '%complet%' then new.play_state:='FINISHED';
       elsif v_legacy like '%curso%' or v_legacy like '%live%' or v_legacy like '%progress%' then new.play_state:='LIVE';
       elsif v_legacy like '%prepar%' or v_legacy like '%ready%' then new.play_state:='READY';
       end if;
