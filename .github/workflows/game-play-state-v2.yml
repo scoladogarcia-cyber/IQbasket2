@@ -1,0 +1,36 @@
+name: Game Play State V2
+
+on:
+  pull_request:
+    paths:
+      - "domain/games/GamePlayStatePolicy.js"
+      - "services/games/GamePlayStateService.js"
+      - "features/game-state/**"
+      - "styles/game-play-state-v2.css"
+      - "security/permissions.js"
+      - "supabase/ready/20260905_apply_game_play_state_v2.sql"
+      - "supabase/ready/20260905_rollback_game_play_state_v2.sql"
+      - "tests/game-play-state-v2-contract.mjs"
+      - "index.html"
+      - ".github/workflows/game-play-state-v2.yml"
+  push:
+    branches:
+      - feature/game-play-state-v2
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Game Play State V2 contract
+        run: node tests/game-play-state-v2-contract.mjs
+      - name: Existing game locking SQL regression
+        run: node tests/game-locking-sql.mjs
+      - name: Existing game locking UI/RBAC regression
+        run: node tests/game-locking-ui-rbac.mjs
+      - name: Existing team-season freeze SQL regression
+        run: node tests/team-season-freeze-sql.mjs
