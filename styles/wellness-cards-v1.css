@@ -1,0 +1,121 @@
+/* IQBasket · Wellness Cards V1
+ * Progressive tactile layer for the existing ABAC-protected check-in form.
+ * No data or authorization semantics live in CSS.
+ */
+
+.wellness-cards-v1 .wellness-checkin-progress {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:0 0 12px;
+  padding:10px 12px;
+  border:1px solid #bae6fd;
+  border-radius:11px;
+  background:#f0f9ff;
+  color:#0c4a6e;
+  font-size:11px;
+  line-height:1.4;
+}
+.wellness-cards-v1 .wellness-checkin-progress strong { font-size:12px; }
+.wellness-cards-v1 .wellness-checkin-time { color:#475569; text-align:right; }
+.wellness-cards-v1 .wellness-checkin-progress[data-complete="true"] {
+  border-color:#bbf7d0;
+  background:#f0fdf4;
+  color:#166534;
+}
+
+.wellness-cards-v1 .wellness-card-metric {
+  padding:12px;
+  background:#fff;
+  border-color:#dbe3ee;
+}
+
+.wellness-cards-v1 .wellness-card-source {
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  padding:0 !important;
+  margin:-1px !important;
+  overflow:hidden !important;
+  clip:rect(0,0,0,0) !important;
+  white-space:nowrap !important;
+  border:0 !important;
+}
+
+.wellness-cards-v1 .wellness-card-options,
+.wellness-cards-v1 .wellness-card-quick-values {
+  display:grid;
+  gap:7px;
+  margin-top:3px;
+}
+.wellness-cards-v1 .wellness-card-options-scale {
+  grid-template-columns:repeat(5,minmax(48px,1fr));
+}
+.wellness-cards-v1 .wellness-card-options-boolean {
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.wellness-cards-v1 .wellness-card-options-choice {
+  grid-template-columns:repeat(auto-fit,minmax(92px,1fr));
+}
+.wellness-cards-v1 .wellness-card-quick-values {
+  grid-template-columns:repeat(4,minmax(54px,1fr));
+}
+
+.wellness-cards-v1 .wellness-card-option,
+.wellness-cards-v1 .wellness-card-quick-value {
+  min-height:52px;
+  border:1px solid #cbd5e1;
+  border-radius:11px;
+  background:#f8fafc;
+  color:#334155;
+  padding:8px 6px;
+  font:inherit;
+  font-size:13px;
+  font-weight:800;
+  cursor:pointer;
+  touch-action:manipulation;
+  transition:transform .12s ease,border-color .12s ease,background .12s ease,box-shadow .12s ease;
+}
+.wellness-cards-v1 .wellness-card-option:hover,
+.wellness-cards-v1 .wellness-card-quick-value:hover {
+  border-color:#94a3b8;
+  background:#fff;
+}
+.wellness-cards-v1 .wellness-card-option:focus-visible,
+.wellness-cards-v1 .wellness-card-quick-value:focus-visible {
+  outline:3px solid rgba(14,116,144,.24);
+  outline-offset:2px;
+}
+.wellness-cards-v1 .wellness-card-option-selected {
+  border-color:#0f766e !important;
+  background:#ecfdf5 !important;
+  color:#065f46 !important;
+  box-shadow:0 0 0 1px #0f766e inset;
+}
+.wellness-cards-v1 .wellness-card-option:active,
+.wellness-cards-v1 .wellness-card-quick-value:active {
+  transform:scale(.98);
+}
+
+@media (max-width:640px) {
+  .wellness-cards-v1 .wellness-checkin-progress { display:grid; }
+  .wellness-cards-v1 .wellness-checkin-time { text-align:left; }
+  .wellness-cards-v1 .wellness-card-options-scale { gap:5px; }
+  .wellness-cards-v1 .wellness-card-option,
+  .wellness-cards-v1 .wellness-card-quick-value { min-height:50px; padding:7px 4px; }
+}
+
+@media (max-width:340px) {
+  .wellness-cards-v1 .wellness-card-options-scale {
+    grid-template-columns:repeat(5,minmax(44px,1fr));
+  }
+  .wellness-cards-v1 .wellness-card-quick-values {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .wellness-cards-v1 .wellness-card-option,
+  .wellness-cards-v1 .wellness-card-quick-value { transition:none; }
+}
