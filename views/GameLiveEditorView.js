@@ -47,7 +47,7 @@ export class GameLiveEditorView {
   }
 
   _canEditFullBoxScore() {
-    return Boolean(this.auth?.canPreview?.(Permission.EDIT_GAME));
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_BOXSCORE, this._gameContext(this.currentGame)));
   }
 
   _isGameLocked(game = null) {
@@ -723,6 +723,7 @@ async _openEditForm(gameId, container) {
       try { starters = JSON.parse(starters); } catch { starters = []; }
     }
     const canManageTable = this._canEditFullBoxScore();
+    if (!canManageTable && this.entrySubMode === "classic") this.entrySubMode = "fast";
 
     let qTeamSum = 0;
     let qOppSum = 0;

@@ -42,8 +42,22 @@ export class EasyStatsEntryView {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
-  _canAccess() {
-    return Boolean(this.authController?.canPreview?.(Permission.EDIT_GAME));
+  _canAccess(game = null) {
+    const teamId = game?.team_id || game?.teamId || DataStore.getActiveTeamId?.() || null;
+    const teamSeasonId = game?.team_season_id || game?.teamSeasonId || DataStore.getActiveTeamSeasonId?.(teamId) || null;
+    return Boolean(this.authController?.canPreview?.(Permission.RECORD_LIVE_GAME, { teamId, teamSeasonId }));
+  }
+
+  _canEditBoxScore(game = null) {
+    const teamId = game?.team_id || game?.teamId || DataStore.getActiveTeamId?.() || null;
+    const teamSeasonId = game?.team_season_id || game?.teamSeasonId || DataStore.getActiveTeamSeasonId?.(teamId) || null;
+    return Boolean(this.authController?.canPreview?.(Permission.EDIT_BOXSCORE, { teamId, teamSeasonId }));
+  }
+
+  _isTeamSeasonFrozen(teamId = null) {
+    const targetTeamId = teamId || this.game?.team_id || this.game?.teamId || DataStore.getActiveTeamId?.();
+    const context = DataStore.getActiveSeasonContext?.(targetTeamId) || null;
+    return String(context?.data_status || context?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN";
   }
 
   async render(containerId = "dashboard-content-area", gameId = null) {
@@ -52,13 +66,26 @@ export class EasyStatsEntryView {
     this.container = container;
     if (gameId) this.gameId = gameId;
 
-    if (!this._canAccess()) {
+    const allGames = DataStore.getGames() || [];
+    this.game = (this.gameId ? allGames.find(g => String(g.id) === String(this.gameId)) : null) || allGames[0] || {};
+
+    if (!this._canAccess(this.game)) {
       this.renderAccessDenied();
       return;
     }
 
-    const allGames = DataStore.getGames() || [];
-    this.game = (this.gameId ? allGames.find(g => String(g.id) === String(this.gameId)) : null) || allGames[0] || {};
+    if (this._isTeamSeasonFrozen()) {
+      container.innerHTML = `
+        <div style="padding:24px;background:#ffffff;border:1px solid #fecdd3;border-radius:12px;color:#9f1239;">
+          <h3 style="margin-top:0;">🔒 Temporada cerrada</h3>
+          <p style="margin-bottom:12px;">La temporada está congelada. Este partido sigue disponible en consulta, pero no admite registro ni edición.</p>
+          <button type="button" id="btn-back-frozen-season" style="min-height:44px;border:0;border-radius:8px;padding:9px 14px;background:#0f172a;color:#ffffff;font-weight:800;cursor:pointer;">Volver a Partidos</button>
+        </div>`;
+      container.querySelector("#btn-back-frozen-season")?.addEventListener("click", () => {
+        window.location.hash = "#/games";
+      });
+      return;
+    }
 
     if (String(this.game.edit_state || this.game.editState || "OPEN").toUpperCase() === "LOCKED") {
       container.innerHTML = `
@@ -71,6 +98,10 @@ export class EasyStatsEntryView {
         window.location.hash = "#/games";
       });
       return;
+    }
+
+    if (this.activeMode === "acta" && !this._canEditBoxScore(this.game)) {
+      this.activeMode = "rapido";
     }
 
     this.players = DataStore.getPlayersEligibleOnDate?.(
@@ -113,6 +144,7 @@ export class EasyStatsEntryView {
     const awayName = isHome ? opponentName : teamName;
     const homeScore = Number(this.game.team_score ?? this.game.teamScore ?? 0);
     const awayScore = Number(this.game.opponent_score ?? this.game.opponentScore ?? 0);
+    const canEditBoxScore = this._canEditBoxScore(this.game);
 
     const allGames = DataStore.getGames() || [];
     const gameOptionsMarkup = allGames.map(g => `
@@ -150,21 +182,23 @@ export class EasyStatsEntryView {
         </header>
 
         <!-- SELECTOR DE MODOS -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div style="display: grid; grid-template-columns: repeat(${canEditBoxScore ? 3 : 2}, 1fr); gap: 12px;">
           <button class="mode-selector-btn ${this.activeMode === 'pista' ? 'active-mode' : ''}" data-mode="pista" style="padding: 12px; font-size: 0.9rem; font-weight: 800; border-radius: 10px; border: 1px solid #cbd5e1; cursor: pointer; min-height: 48px; background: ${this.activeMode === 'pista' ? '#0f172a' : '#ffffff'}; color: ${this.activeMode === 'pista' ? '#ffffff' : '#334155'};">
             🏀 Modo Pista (Visual)
           </button>
           <button class="mode-selector-btn ${this.activeMode === 'rapido' ? 'active-mode' : ''}" data-mode="rapido" style="padding: 12px; font-size: 0.9rem; font-weight: 800; border-radius: 10px; border: 1px solid #cbd5e1; cursor: pointer; min-height: 48px; background: ${this.activeMode === 'rapido' ? '#0f172a' : '#ffffff'}; color: ${this.activeMode === 'rapido' ? '#ffffff' : '#334155'};">
             ⚡ Modo Rápido (Botones)
           </button>
+          ${canEditBoxScore ? `
           <button class="mode-selector-btn ${this.activeMode === 'acta' ? 'active-mode' : ''}" data-mode="acta" style="padding: 12px; font-size: 0.9rem; font-weight: 800; border-radius: 10px; border: 1px solid #cbd5e1; cursor: pointer; min-height: 48px; background: ${this.activeMode === 'acta' ? '#0f172a' : '#ffffff'}; color: ${this.activeMode === 'acta' ? '#ffffff' : '#334155'};">
             📋 Acta Oficial (Tabla & Cuadre)
           </button>
+          ` : ''}
         </div>
 
         <!-- CONTENEDOR ACTIVO -->
         <main id="entry-main-content">
-          ${this.activeMode === 'acta' ? this.renderActaMode() : (this.activeMode === 'pista' ? this.renderCourtMode() : this.renderFastMode())}
+          ${this.activeMode === 'acta' && canEditBoxScore ? this.renderActaMode() : (this.activeMode === 'pista' ? this.renderCourtMode() : this.renderFastMode())}
         </main>
 
         <!-- FEEDBACK FOOTER -->
@@ -479,7 +513,9 @@ export class EasyStatsEntryView {
   bindEvents() {
     this.container.querySelectorAll(".mode-selector-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        this.activeMode = btn.getAttribute("data-mode");
+        const requestedMode = btn.getAttribute("data-mode");
+        if (requestedMode === "acta" && !this._canEditBoxScore(this.game)) return;
+        this.activeMode = requestedMode;
         this.renderLayout();
         this.bindEvents();
       });
@@ -595,6 +631,7 @@ export class EasyStatsEntryView {
   }
 
   bindActaEvents() {
+    if (!this._canEditBoxScore(this.game)) return;
     this.container.querySelectorAll("#acta-table-body tr").forEach(tr => {
       const getVal = (field) => Number(tr.querySelector(`.acta-input[data-field="${field}"]`)?.value || 0);
 
@@ -634,6 +671,7 @@ export class EasyStatsEntryView {
     });
 
     this.container.querySelector("#btn-save-acta")?.addEventListener("click", async () => {
+      if (!this._canEditBoxScore(this.game)) return;
       const rows = this.container.querySelectorAll("#acta-table-body tr[data-player-id]");
       const statsList = [];
 
