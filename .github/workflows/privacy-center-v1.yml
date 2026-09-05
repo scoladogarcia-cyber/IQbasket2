@@ -8,9 +8,13 @@ on:
       - "views/PrivacyCenterView.js"
       - "services/player360/PrivacyGovernanceService.js"
       - "security/permissions.js"
+      - "domain/privacy/**"
       - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
       - "tests/privacy-center-*.mjs"
+      - "tests/privacy-readiness-policy.mjs"
+      - "tests/privacy-permission-separation.mjs"
       - "docs/architecture/PRIVACY_CENTER_V1.md"
+      - "docs/architecture/FAMILY_MINOR_AI_PRIVACY_READINESS.md"
       - ".github/workflows/privacy-center-v1.yml"
   pull_request:
     branches:
@@ -19,9 +23,13 @@ on:
       - "views/PrivacyCenterView.js"
       - "services/player360/PrivacyGovernanceService.js"
       - "security/permissions.js"
+      - "domain/privacy/**"
       - "supabase/ready/20260904_*phase4f_privacy_center*.sql"
       - "tests/privacy-center-*.mjs"
+      - "tests/privacy-readiness-policy.mjs"
+      - "tests/privacy-permission-separation.mjs"
       - "docs/architecture/PRIVACY_CENTER_V1.md"
+      - "docs/architecture/FAMILY_MINOR_AI_PRIVACY_READINESS.md"
       - ".github/workflows/privacy-center-v1.yml"
   workflow_dispatch:
 
@@ -51,6 +59,12 @@ jobs:
 
       - name: Static Privacy Center SQL guard
         run: node tests/privacy-center-phase4f-sql-structure.mjs
+
+      - name: Family privacy readiness policy
+        run: node tests/privacy-readiness-policy.mjs
+
+      - name: Privacy permission separation
+        run: node tests/privacy-permission-separation.mjs
 
       - name: Install Playwright without modifying lockfile
         run: |

@@ -21,6 +21,9 @@ async function installFixture(page) {
 
     DataStore.getActiveTeamId = () => TEAM_ID;
     DataStore.getActiveTeamSeasonId = () => TEAM_SEASON_ID;
+    DataStore.getPlayerById = id => String(id) === String(PLAYER_ID)
+      ? { id: PLAYER_ID, first_name: "Anna", last_name: "Cordero", birth_date: "2012-04-15" }
+      : null;
 
     const calls = [];
     const now = new Date().toISOString();
@@ -61,7 +64,8 @@ async function installFixture(page) {
             player: { first_name: "Anna", last_name: "Cordero", jersey: 5 },
             modules: ["nutrition", "recovery"],
             purposes: ["SPORT_PERFORMANCE"],
-            authorization_type: "DIRECT_CONSENT",
+            authorization_type: "GUARDIAN_CONSENT",
+            representative_user_id: "40000000-0000-4000-8000-000000000001",
             legal_basis_code: "POLICY-01",
             special_category_condition_code: "SPECIAL-01",
             ai_processing_allowed: false,
@@ -155,6 +159,17 @@ async function runViewport(browser, viewportName, viewport) {
     "iq_v4f_list_privacy_audit"
   ]) assertCondition(initial.calls.includes(rpc), viewportName, `No se consumió ${rpc}`);
 
+  await page.click("[data-open-family-invite]");
+  await page.waitForSelector('[data-family-invite-form]', { state: "visible" });
+  const inviteModal = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    closeButtons: document.querySelectorAll('[data-modal-close]').length
+  }));
+  assertCondition(!inviteModal.overflow, viewportName, "Modal familiar genera overflow", inviteModal);
+  assertCondition(inviteModal.closeButtons >= 1, viewportName, "Modal familiar no expone cierre accesible", inviteModal);
+  await page.click('[data-modal-close]');
+  await page.waitForFunction(() => !document.querySelector('[data-family-invite-form]'));
+
   await page.click('[data-privacy-tab="authorizations"]');
   await page.waitForSelector(".privacy-data-card", { state: "visible" });
   await page.click("[data-open-authorization]");
@@ -166,6 +181,19 @@ async function runViewport(browser, viewportName, viewport) {
   });
   assertCondition(modalGeometry.top >= -1 && modalGeometry.bottom <= modalGeometry.innerHeight + 1, viewportName, "Modal de autorización fuera del viewport", modalGeometry);
   assertCondition(modalGeometry.width <= modalGeometry.innerWidth + 1, viewportName, "Modal de autorización demasiado ancho", modalGeometry);
+  const readiness = await page.evaluate(() => ({
+    ageBand: document.querySelector('[data-privacy-age-readiness]')?.dataset.ageBand || null,
+    types: [...document.querySelectorAll('select[name="authorizationType"] option')].map(option => option.value),
+    aiChecked: Boolean(document.querySelector('input[name="aiProcessingAllowed"]')?.checked)
+  }));
+  assertCondition(readiness.ageBand === "MINOR", viewportName, "No se informa la minoría de edad", readiness);
+  assertCondition(JSON.stringify(readiness.types) === JSON.stringify(["", "CONSENT", "GUARDIAN_CONSENT", "OTHER_DOCUMENTED_BASIS"]), viewportName, "Tipos de autorización no coinciden con backend", readiness);
+  assertCondition(!readiness.aiChecked, viewportName, "IA no puede venir preautorizada", readiness);
+  await page.selectOption('select[name="authorizationType"]', "GUARDIAN_CONSENT");
+  await page.waitForFunction(() => !document.querySelector('[data-guardian-representative]').hidden);
+  const guardianOption = await page.locator('select[name="representativeUserId"] option[value="40000000-0000-4000-8000-000000000001"]').count();
+  assertCondition(guardianOption === 1, viewportName, "Tutor activo no disponible como representante");
+  await page.selectOption('select[name="representativeUserId"]', "40000000-0000-4000-8000-000000000001");
 
   await page.fill('input[name="legalBasisCode"]', "POLICY-QA");
   await page.fill('input[name="specialCategoryConditionCode"]', "SPECIAL-QA");
@@ -176,6 +204,9 @@ async function runViewport(browser, viewportName, viewport) {
   assertCondition(Boolean(authorizationCall), viewportName, "Guardar autorización no llama al RPC controlado");
   assertCondition(authorizationCall.params.p_player_id === PLAYER_ID, viewportName, "Autorización pierde player scope", authorizationCall);
   assertCondition(authorizationCall.params.p_modules.includes("nutrition"), viewportName, "Autorización pierde módulos", authorizationCall);
+  assertCondition(authorizationCall.params.p_authorization_type === "GUARDIAN_CONSENT", viewportName, "Tipo de autorización inválido", authorizationCall);
+  assertCondition(authorizationCall.params.p_representative_user_id === "40000000-0000-4000-8000-000000000001", viewportName, "Consentimiento de tutor pierde representante", authorizationCall);
+  assertCondition(authorizationCall.params.p_ai_processing_allowed === false, viewportName, "IA se autorizó sin opt-in", authorizationCall);
 
   await page.click('[data-privacy-tab="access"]');
   await page.waitForSelector(`[data-grant-request="${REQUEST_ID}"]`, { state: "visible" });
@@ -200,7 +231,9 @@ async function runViewport(browser, viewportName, viewport) {
 const browser = await chromium.launch({ headless: true });
 try {
   await runViewport(browser, "desktop-1440x900", { width: 1440, height: 900 });
+  await runViewport(browser, "compact-320x568", { width: 320, height: 568 });
   await runViewport(browser, "iphone-390x844", { width: 390, height: 844 });
+  await runViewport(browser, "landscape-844x390", { width: 844, height: 390 });
   console.log("PRIVACY_CENTER_UI_OK");
 } finally {
   await browser.close();

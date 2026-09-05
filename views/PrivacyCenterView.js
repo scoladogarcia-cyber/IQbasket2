@@ -9,6 +9,12 @@ import { DataStore } from "../services/DataStore.js";
 import { PrivacyGovernanceService } from "../services/player360/PrivacyGovernanceService.js";
 import { FamilyWorkspaceService } from "../services/family/FamilyWorkspaceService.js";
 import { Permission } from "../security/PermissionService.js";
+import {
+  PrivacyAgeBand,
+  describePrivacyAgeReadiness,
+  getActiveGuardians,
+  requiresGuardianRepresentative
+} from "../domain/privacy/PrivacyReadinessPolicy.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 
 const TABS = Object.freeze([
@@ -85,6 +91,33 @@ export class PrivacyCenterView {
     const name = [player.first_name, player.last_name].filter(Boolean).join(" ").trim();
     const jersey = player.jersey !== null && player.jersey !== undefined ? `#${player.jersey} · ` : "";
     return `${jersey}${name || "Jugador"}`;
+  }
+
+  _playerRecord(playerId) {
+    return DataStore.getPlayerById?.(playerId) || null;
+  }
+
+  _ageReadinessMarkup(playerId) {
+    const player = this._playerRecord(playerId) || {};
+    const birthDate = player.birth_date || player.birthDate || null;
+    const readiness = describePrivacyAgeReadiness(birthDate);
+    const cls = readiness.band === PrivacyAgeBand.MINOR ? "minor"
+      : readiness.band === PrivacyAgeBand.ADULT ? "adult" : "unknown";
+    return `<div class="privacy-age-readiness ${cls}" data-privacy-age-readiness data-age-band="${readiness.band}">
+      <strong>${this._escape(readiness.label)}</strong>
+      <span>${this._escape(readiness.guidance)}</span>
+    </div>`;
+  }
+
+  _guardianRows(playerId) {
+    return getActiveGuardians(this.state.snapshot.relationships || [], playerId);
+  }
+
+  _guardianOptionsMarkup(playerId) {
+    const guardians = this._guardianRows(playerId);
+    return `<option value="">Selecciona un tutor verificado</option>${guardians.map(row =>
+      `<option value="${this._escape(row.user_id)}">${this._escape(this._personName(row.user, "Tutor"))}</option>`
+    ).join("")}`;
   }
 
   async render(containerId = "dashboard-content-area") {
@@ -322,7 +355,7 @@ export class PrivacyCenterView {
               <div><dt>Vigencia</dt><dd>${this._formatDate(row.valid_until)}</dd></div>
               <div><dt>Evidencia</dt><dd>${this._escape(row.evidence_reference || "—")}</dd></div>
             </dl>
-            ${this._can(Permission.REVOKE_FAMILY_LINK) && row.status === "ACTIVE"
+            ${this._can(Permission.REVOKE_PRIVACY_AUTHORIZATION) && row.status === "ACTIVE"
               ? `<div class="privacy-card-actions"><button class="privacy-btn privacy-btn-danger" type="button" data-revoke-authorization="${this._escape(row.id)}">Revocar autorización</button></div>`
               : ""}
           </article>
@@ -516,26 +549,56 @@ export class PrivacyCenterView {
     const players = this.state.snapshot.players || [];
     const defaultPlayer = this.playerId || players[0]?.player_id || "";
     const root = document.getElementById("privacy-modal-root");
-    if (!root) return;
+    if (!root || !defaultPlayer) return;
     root.innerHTML = `
       <div class="privacy-modal-overlay" role="presentation">
-        <form class="privacy-modal" id="privacy-authorization-form" aria-labelledby="privacy-auth-modal-title">
-          <div class="privacy-modal-head"><div><span>NUEVA AUTORIZACIÓN</span><h2 id="privacy-auth-modal-title">Autorizar tratamiento</h2></div><button type="button" data-close-privacy-modal aria-label="Cerrar">×</button></div>
+        <form class="privacy-modal" id="privacy-authorization-form" role="dialog" aria-modal="true" aria-labelledby="privacy-auth-modal-title" aria-describedby="privacy-auth-modal-desc">
+          <div class="privacy-modal-head"><div><span>NUEVA AUTORIZACIÓN</span><h2 id="privacy-auth-modal-title">Autorizar tratamiento</h2><p id="privacy-auth-modal-desc">Documenta alcance, base, representación y uso de IA de forma explícita.</p></div><button type="button" data-close-privacy-modal aria-label="Cerrar">×</button></div>
           <label>Jugador<select name="playerId" required>${players.map(player => `<option value="${this._escape(player.player_id)}" ${String(defaultPlayer) === String(player.player_id) ? "selected" : ""}>${this._escape(this._playerName(player))}</option>`).join("")}</select></label>
+          <div data-privacy-age-readiness-host>${this._ageReadinessMarkup(defaultPlayer)}</div>
           <fieldset><legend>Módulos</legend><label class="privacy-check"><input type="checkbox" name="modules" value="nutrition" checked> Nutrición</label><label class="privacy-check"><input type="checkbox" name="modules" value="recovery" checked> Recuperación</label><label class="privacy-check"><input type="checkbox" name="modules" value="neuro_cognitive"> Neuro-cognitivo</label></fieldset>
           <fieldset><legend>Finalidades</legend><label class="privacy-check"><input type="checkbox" name="purposes" value="SPORT_PERFORMANCE" checked> Rendimiento deportivo</label><label class="privacy-check"><input type="checkbox" name="purposes" value="OPERATIONS"> Operaciones</label><label class="privacy-check"><input type="checkbox" name="purposes" value="PLAYER_SELF_SERVICE"> Autoservicio jugador</label><label class="privacy-check"><input type="checkbox" name="purposes" value="FAMILY_SUPPORT"> Apoyo familiar</label></fieldset>
-          <div class="privacy-form-grid"><label>Tipo de autorización<input name="authorizationType" value="DIRECT_CONSENT" required></label><label>Válida hasta<input type="date" name="validUntil"></label></div>
+          <div class="privacy-form-grid"><label>Tipo de autorización<select name="authorizationType" required><option value="">Selecciona una opción</option><option value="CONSENT">Consentimiento documentado</option><option value="GUARDIAN_CONSENT">Consentimiento de padre/madre/tutor</option><option value="OTHER_DOCUMENTED_BASIS">Otra base documentada</option></select></label><label>Válida hasta<input type="date" name="validUntil"></label></div>
+          <label data-guardian-representative hidden>Representante verificado<select name="representativeUserId">${this._guardianOptionsMarkup(defaultPlayer)}</select></label>
+          <div class="privacy-form-note privacy-guardian-note" data-guardian-warning hidden>Para GUARDIAN_CONSENT debe existir un vínculo GUARDIAN activo y seleccionarse ese representante. Si no aparece, verifica primero la relación familiar.</div>
           <label>Base legal documentada (código interno)<input name="legalBasisCode" required placeholder="Ej. código de la política aprobada"></label>
           <label>Condición de categoría especial (código interno)<input name="specialCategoryConditionCode" required placeholder="Referencia interna validada por el club"></label>
           <label>Referencia de evidencia<input name="evidenceReference" placeholder="Documento, consentimiento o expediente"></label>
-          <label class="privacy-check privacy-ai-check"><input type="checkbox" name="aiProcessingAllowed"> Permitir tratamiento por IA para las finalidades autorizadas</label>
-          <div class="privacy-form-note">IQBasket registra el código y la evidencia aportados; no decide automáticamente la base jurídica aplicable.</div>
+          <label class="privacy-check privacy-ai-check"><input type="checkbox" name="aiProcessingAllowed"> Autorizar tratamiento por IA dentro de este alcance</label>
+          <div class="privacy-form-note">La autorización de IA es explícita y no activa por sí sola Family Pro, generación automática ni acceso a módulos no seleccionados.</div>
+          <div class="privacy-form-note">IQBasket registra la decisión y su evidencia; no determina automáticamente la base jurídica aplicable por edad, rol o relación familiar.</div>
           <div class="privacy-modal-actions"><button type="button" class="privacy-btn privacy-btn-secondary" data-close-privacy-modal>Cancelar</button><button type="submit" class="privacy-btn privacy-btn-primary">Guardar autorización</button></div>
         </form>
       </div>
     `;
     this._bindModalClose(root);
+    this._bindAuthorizationReadiness(root);
     root.querySelector("#privacy-authorization-form")?.addEventListener("submit", event => this._submitAuthorization(event));
+  }
+
+  _bindAuthorizationReadiness(root) {
+    const form = root.querySelector("#privacy-authorization-form");
+    if (!form) return;
+    const playerSelect = form.querySelector('[name="playerId"]');
+    const typeSelect = form.querySelector('[name="authorizationType"]');
+    const representativeBlock = form.querySelector("[data-guardian-representative]");
+    const representativeSelect = form.querySelector('[name="representativeUserId"]');
+    const warning = form.querySelector("[data-guardian-warning]");
+    const ageHost = form.querySelector("[data-privacy-age-readiness-host]");
+
+    const refresh = () => {
+      const playerId = playerSelect?.value || "";
+      const guardians = this._guardianRows(playerId);
+      if (ageHost) ageHost.innerHTML = this._ageReadinessMarkup(playerId);
+      if (representativeSelect) representativeSelect.innerHTML = this._guardianOptionsMarkup(playerId);
+      const guardianRequired = requiresGuardianRepresentative(typeSelect?.value);
+      if (representativeBlock) representativeBlock.hidden = !guardianRequired;
+      if (representativeSelect) representativeSelect.required = guardianRequired;
+      if (warning) warning.hidden = !(guardianRequired && guardians.length === 0);
+    };
+    playerSelect?.addEventListener("change", refresh);
+    typeSelect?.addEventListener("change", refresh);
+    refresh();
   }
 
   async _submitAuthorization(event) {
@@ -545,15 +608,21 @@ export class PrivacyCenterView {
     const teamSeasonId = DataStore.getActiveTeamSeasonId?.();
     try {
       this._setFormBusy(form, true);
+      const authorizationType = String(data.get("authorizationType") || "").toUpperCase();
+      const representativeUserId = data.get("representativeUserId") || null;
+      if (requiresGuardianRepresentative(authorizationType) && !representativeUserId) {
+        throw new Error("Selecciona un padre/madre/tutor con relación GUARDIAN activa.");
+      }
       await this.service.recordAuthorization({
         teamSeasonId,
         playerId: data.get("playerId"),
         modules: data.getAll("modules"),
         purposes: data.getAll("purposes"),
-        authorizationType: data.get("authorizationType"),
+        authorizationType,
         legalBasisCode: data.get("legalBasisCode"),
         specialCategoryConditionCode: data.get("specialCategoryConditionCode"),
         aiProcessingAllowed: data.get("aiProcessingAllowed") === "on",
+        representativeUserId,
         validUntil: data.get("validUntil") ? `${data.get("validUntil")}T23:59:59Z` : null,
         evidenceReference: data.get("evidenceReference") || null
       });
@@ -611,7 +680,7 @@ export class PrivacyCenterView {
   }
 
   _bindModalClose(root) {
-    root.querySelectorAll("[data-close-privacy-modal]").forEach(button => button.addEventListener("click", () => { root.innerHTML = ""; }));
+    root.querySelectorAll("[data-close-privacy-modal], [data-modal-close]").forEach(button => button.addEventListener("click", () => { root.innerHTML = ""; }));
     root.querySelector(".privacy-modal-overlay")?.addEventListener("click", event => {
       if (event.target.classList.contains("privacy-modal-overlay")) root.innerHTML = "";
     });
@@ -654,7 +723,7 @@ export class PrivacyCenterView {
   }
 
   async _revokeRelationship(id) {
-    if (!this._can(Permission.REVOKE_PRIVACY_AUTHORIZATION)) return;
+    if (!this._can(Permission.REVOKE_FAMILY_LINK)) return;
     const reason = window.prompt("Motivo de revocación de la relación:");
     if (!reason?.trim()) return;
     if (!window.confirm("¿Revocar esta relación jugador/tutor?")) return;
@@ -664,7 +733,7 @@ export class PrivacyCenterView {
 
   _styles() {
     return `<style>
-      .privacy-center{max-width:1200px;margin:0 auto;padding:4px 0 88px;color:#0f172a}.privacy-center *{box-sizing:border-box}.privacy-hero{display:flex;justify-content:space-between;gap:20px;padding:24px;border-radius:18px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;margin-bottom:16px}.privacy-hero h1{color:#fff!important;margin:3px 0 8px;font-size:clamp(24px,4vw,34px)}.privacy-hero p,.privacy-hero span,.privacy-hero small{color:#dbeafe!important}.privacy-eyebrow{font-size:11px!important;font-weight:900;letter-spacing:.08em}.privacy-secure-badge{min-width:145px;align-self:center;text-align:center;border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:13px;background:rgba(255,255,255,.08)}.privacy-secure-badge>span{display:block;font-size:24px!important}.privacy-secure-badge strong,.privacy-secure-badge small{display:block}.privacy-secure-badge small{font-size:10px!important;margin-top:3px}.privacy-toolbar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:14px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:12px}.privacy-filter{display:grid;gap:5px;min-width:min(100%,260px);flex:1}.privacy-filter>span{font-size:11px!important;font-weight:800;color:#475569!important}.privacy-filter select{min-height:44px}.privacy-btn{min-height:44px;border-radius:10px;padding:9px 14px;font-weight:800;font-size:13px}.privacy-btn-primary{background:#1d4ed8;color:#fff}.privacy-btn-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}.privacy-btn-danger{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.privacy-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}.privacy-tab{min-height:44px;white-space:nowrap;padding:9px 14px;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:10px;font-weight:800}.privacy-tab span{color:inherit!important;font-size:inherit!important}.privacy-tab.active{background:#1e40af;color:#fff;border-color:#1e40af}.privacy-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px}.privacy-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.privacy-kpi{display:flex;gap:11px;align-items:center;padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.privacy-kpi.alert{border-color:#fed7aa;background:#fff7ed}.privacy-kpi>span{font-size:23px!important}.privacy-kpi strong{display:block;font-size:22px}.privacy-kpi small{display:block;color:#64748b!important}.privacy-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 10px}.privacy-section-head h2{font-size:18px;margin:0 0 3px}.privacy-section-head p{margin:0;color:#64748b}.privacy-section-gap{margin-top:28px}.privacy-table-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:12px}.privacy-table{min-width:620px}.privacy-table th,.privacy-table td{padding:12px;border-bottom:1px solid #e2e8f0;font-size:13px}.privacy-table th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;background:#f8fafc}.privacy-table tr:last-child td{border-bottom:0}.privacy-link-btn,.privacy-danger-link{min-height:36px;padding:4px 8px;color:#1d4ed8;font-weight:800}.privacy-danger-link{color:#be123c}.privacy-card-list{display:grid;gap:10px}.privacy-row-card,.privacy-data-card,.privacy-request-card{border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff}.privacy-row-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px}.privacy-row-card strong,.privacy-row-card span{display:block}.privacy-row-card span,.privacy-row-meta small{color:#64748b!important}.privacy-row-meta{text-align:right}.privacy-data-card-head{display:flex;justify-content:space-between;gap:10px}.privacy-data-card-head strong,.privacy-data-card-head span{display:block}.privacy-data-card-head span{color:#64748b!important;margin-top:2px}.privacy-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.privacy-chip{display:inline-flex!important;border-radius:999px;padding:4px 8px;background:#ecfdf5;color:#047857!important;font-size:10px!important;font-weight:900}.privacy-chip-blue{background:#eff6ff;color:#1d4ed8!important}.privacy-chip-purple{background:#f5f3ff;color:#6d28d9!important}.privacy-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.privacy-details div{padding:9px;background:#f8fafc;border-radius:9px}.privacy-details dt{font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800}.privacy-details dd{margin:3px 0 0;font-size:12px;overflow-wrap:anywhere}.privacy-card-actions{display:flex;justify-content:flex-end;margin-top:12px}.privacy-status{display:inline-flex!important;align-items:center;padding:4px 8px;border-radius:999px;font-size:10px!important;font-weight:900}.privacy-status.ok{background:#dcfce7;color:#166534!important}.privacy-status.pending{background:#fef3c7;color:#92400e!important}.privacy-status.danger{background:#fee2e2;color:#991b1b!important}.privacy-status.neutral{background:#f1f5f9;color:#475569!important}.privacy-request-card p,.privacy-reason{margin:7px 0;color:#475569}.privacy-validity{font-size:12px;color:#64748b}.privacy-count-badge{display:inline-flex!important;padding:5px 9px;border-radius:999px;background:#f1f5f9;color:#475569!important;font-size:11px!important;font-weight:800}.privacy-history{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:12px}.privacy-history summary{cursor:pointer;font-weight:800;color:#475569}.privacy-history-list{display:grid;gap:7px;margin-top:10px}.privacy-history-list>div{display:flex;justify-content:space-between;gap:10px;padding:8px;background:#f8fafc;border-radius:8px}.privacy-history-list span{color:#64748b!important}.privacy-audit-list{display:grid;gap:7px}.privacy-audit-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:10px}.privacy-audit-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#f8fafc}.privacy-audit-row strong,.privacy-audit-row span,.privacy-audit-row small{display:block}.privacy-audit-row span,.privacy-audit-row small{color:#64748b!important}.privacy-empty{text-align:center;padding:28px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b}.privacy-empty>span{font-size:28px!important;color:#94a3b8!important}.privacy-message,.privacy-loading{max-width:800px;margin:20px auto;padding:24px;border:1px solid #e2e8f0;background:#fff;border-radius:16px;text-align:center}.privacy-message-danger{border-color:#fecaca;background:#fff7f7}.privacy-loading{display:grid;place-items:center;gap:7px}.privacy-loading>span{color:#64748b!important}.privacy-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:privacy-spin .8s linear infinite}@keyframes privacy-spin{to{transform:rotate(360deg)}}.privacy-modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}.privacy-modal{width:min(680px,100%);max-height:calc(100svh - 32px);overflow-y:auto;background:#fff;border-radius:16px;padding:18px;display:grid;gap:12px}.privacy-modal label{display:grid;gap:5px;font-weight:700;color:#334155}.privacy-modal input,.privacy-modal select,.privacy-modal textarea{min-height:44px}.privacy-modal fieldset{border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:flex;gap:10px;flex-wrap:wrap}.privacy-modal legend{padding:0 5px;font-size:12px;font-weight:900}.privacy-modal .privacy-check{display:flex;align-items:center;gap:6px;font-weight:600}.privacy-check input{min-height:auto;width:auto}.privacy-ai-check{padding:10px;border-radius:9px;background:#f8fafc}.privacy-modal-head{display:flex;justify-content:space-between;align-items:start;gap:10px}.privacy-modal-head span{font-size:10px!important;color:#64748b!important;font-weight:900;letter-spacing:.06em}.privacy-modal-head h2{margin:2px 0 0;font-size:20px}.privacy-modal-head button{font-size:24px;min-width:44px;min-height:44px}.privacy-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.privacy-form-note{padding:10px;border-radius:9px;background:#eff6ff;color:#1e40af;font-size:12px}.privacy-modal-actions{display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-18px;background:#fff;padding:10px 0 0}.privacy-request-summary{padding:12px;background:#f8fafc;border-radius:10px}.privacy-request-summary strong,.privacy-request-summary span{display:block}.privacy-request-summary span{color:#64748b!important}.privacy-request-summary p{margin:6px 0 0}
+      .privacy-center{max-width:1200px;margin:0 auto;padding:4px 0 88px;color:#0f172a}.privacy-center *{box-sizing:border-box}.privacy-hero{display:flex;justify-content:space-between;gap:20px;padding:24px;border-radius:18px;background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;margin-bottom:16px}.privacy-hero h1{color:#fff!important;margin:3px 0 8px;font-size:clamp(24px,4vw,34px)}.privacy-hero p,.privacy-hero span,.privacy-hero small{color:#dbeafe!important}.privacy-eyebrow{font-size:11px!important;font-weight:900;letter-spacing:.08em}.privacy-secure-badge{min-width:145px;align-self:center;text-align:center;border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:13px;background:rgba(255,255,255,.08)}.privacy-secure-badge>span{display:block;font-size:24px!important}.privacy-secure-badge strong,.privacy-secure-badge small{display:block}.privacy-secure-badge small{font-size:10px!important;margin-top:3px}.privacy-toolbar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:14px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:12px}.privacy-filter{display:grid;gap:5px;min-width:min(100%,260px);flex:1}.privacy-filter>span{font-size:11px!important;font-weight:800;color:#475569!important}.privacy-filter select{min-height:44px}.privacy-btn{min-height:44px;border-radius:10px;padding:9px 14px;font-weight:800;font-size:13px}.privacy-btn-primary{background:#1d4ed8;color:#fff}.privacy-btn-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}.privacy-btn-danger{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.privacy-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}.privacy-tab{min-height:44px;white-space:nowrap;padding:9px 14px;border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:10px;font-weight:800}.privacy-tab span{color:inherit!important;font-size:inherit!important}.privacy-tab.active{background:#1e40af;color:#fff;border-color:#1e40af}.privacy-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px}.privacy-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.privacy-kpi{display:flex;gap:11px;align-items:center;padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.privacy-kpi.alert{border-color:#fed7aa;background:#fff7ed}.privacy-kpi>span{font-size:23px!important}.privacy-kpi strong{display:block;font-size:22px}.privacy-kpi small{display:block;color:#64748b!important}.privacy-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 10px}.privacy-section-head h2{font-size:18px;margin:0 0 3px}.privacy-section-head p{margin:0;color:#64748b}.privacy-section-gap{margin-top:28px}.privacy-table-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:12px}.privacy-table{min-width:620px}.privacy-table th,.privacy-table td{padding:12px;border-bottom:1px solid #e2e8f0;font-size:13px}.privacy-table th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;background:#f8fafc}.privacy-table tr:last-child td{border-bottom:0}.privacy-link-btn,.privacy-danger-link{min-height:36px;padding:4px 8px;color:#1d4ed8;font-weight:800}.privacy-danger-link{color:#be123c}.privacy-card-list{display:grid;gap:10px}.privacy-row-card,.privacy-data-card,.privacy-request-card{border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff}.privacy-row-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px}.privacy-row-card strong,.privacy-row-card span{display:block}.privacy-row-card span,.privacy-row-meta small{color:#64748b!important}.privacy-row-meta{text-align:right}.privacy-data-card-head{display:flex;justify-content:space-between;gap:10px}.privacy-data-card-head strong,.privacy-data-card-head span{display:block}.privacy-data-card-head span{color:#64748b!important;margin-top:2px}.privacy-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.privacy-chip{display:inline-flex!important;border-radius:999px;padding:4px 8px;background:#ecfdf5;color:#047857!important;font-size:10px!important;font-weight:900}.privacy-chip-blue{background:#eff6ff;color:#1d4ed8!important}.privacy-chip-purple{background:#f5f3ff;color:#6d28d9!important}.privacy-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.privacy-details div{padding:9px;background:#f8fafc;border-radius:9px}.privacy-details dt{font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800}.privacy-details dd{margin:3px 0 0;font-size:12px;overflow-wrap:anywhere}.privacy-card-actions{display:flex;justify-content:flex-end;margin-top:12px}.privacy-status{display:inline-flex!important;align-items:center;padding:4px 8px;border-radius:999px;font-size:10px!important;font-weight:900}.privacy-status.ok{background:#dcfce7;color:#166534!important}.privacy-status.pending{background:#fef3c7;color:#92400e!important}.privacy-status.danger{background:#fee2e2;color:#991b1b!important}.privacy-status.neutral{background:#f1f5f9;color:#475569!important}.privacy-request-card p,.privacy-reason{margin:7px 0;color:#475569}.privacy-validity{font-size:12px;color:#64748b}.privacy-count-badge{display:inline-flex!important;padding:5px 9px;border-radius:999px;background:#f1f5f9;color:#475569!important;font-size:11px!important;font-weight:800}.privacy-history{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:12px}.privacy-history summary{cursor:pointer;font-weight:800;color:#475569}.privacy-history-list{display:grid;gap:7px;margin-top:10px}.privacy-history-list>div{display:flex;justify-content:space-between;gap:10px;padding:8px;background:#f8fafc;border-radius:8px}.privacy-history-list span{color:#64748b!important}.privacy-audit-list{display:grid;gap:7px}.privacy-audit-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:10px}.privacy-audit-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#f8fafc}.privacy-audit-row strong,.privacy-audit-row span,.privacy-audit-row small{display:block}.privacy-audit-row span,.privacy-audit-row small{color:#64748b!important}.privacy-empty{text-align:center;padding:28px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b}.privacy-empty>span{font-size:28px!important;color:#94a3b8!important}.privacy-message,.privacy-loading{max-width:800px;margin:20px auto;padding:24px;border:1px solid #e2e8f0;background:#fff;border-radius:16px;text-align:center}.privacy-message-danger{border-color:#fecaca;background:#fff7f7}.privacy-loading{display:grid;place-items:center;gap:7px}.privacy-loading>span{color:#64748b!important}.privacy-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:privacy-spin .8s linear infinite}@keyframes privacy-spin{to{transform:rotate(360deg)}}.privacy-modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}.privacy-modal{width:min(680px,100%);max-height:calc(100svh - 32px);overflow-y:auto;background:#fff;border-radius:16px;padding:18px;display:grid;gap:12px}.privacy-modal label{display:grid;gap:5px;font-weight:700;color:#334155}.privacy-modal input,.privacy-modal select,.privacy-modal textarea{min-height:44px}.privacy-modal fieldset{border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:flex;gap:10px;flex-wrap:wrap}.privacy-modal legend{padding:0 5px;font-size:12px;font-weight:900}.privacy-modal .privacy-check{display:flex;align-items:center;gap:6px;font-weight:600}.privacy-check input{min-height:auto;width:auto}.privacy-ai-check{padding:10px;border-radius:9px;background:#f8fafc}.privacy-modal-head{display:flex;justify-content:space-between;align-items:start;gap:10px}.privacy-modal-head span{font-size:10px!important;color:#64748b!important;font-weight:900;letter-spacing:.06em}.privacy-modal-head h2{margin:2px 0 0;font-size:20px}.privacy-modal-head button{font-size:24px;min-width:44px;min-height:44px}.privacy-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.privacy-form-note{padding:10px;border-radius:9px;background:#eff6ff;color:#1e40af;font-size:12px}.privacy-age-readiness{display:grid;gap:4px;padding:10px;border-radius:10px;border:1px solid #cbd5e1;background:#f8fafc}.privacy-age-readiness strong{font-size:12px}.privacy-age-readiness span{font-size:11px!important;color:#475569!important}.privacy-age-readiness.minor{border-color:#fed7aa;background:#fff7ed}.privacy-age-readiness.unknown{border-color:#fde68a;background:#fffbeb}.privacy-guardian-note{background:#fff7ed;color:#9a3412}.privacy-modal{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.privacy-modal-actions{display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-18px;background:#fff;padding:10px 0 0}.privacy-request-summary{padding:12px;background:#f8fafc;border-radius:10px}.privacy-request-summary strong,.privacy-request-summary span{display:block}.privacy-request-summary span{color:#64748b!important}.privacy-request-summary p{margin:6px 0 0}
       @media(max-width:767px){.privacy-hero{padding:18px;display:block}.privacy-secure-badge{margin-top:14px;width:100%}.privacy-toolbar>*{width:100%}.privacy-panel{padding:12px}.privacy-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.privacy-row-card{grid-template-columns:1fr}.privacy-row-meta{text-align:left}.privacy-details{grid-template-columns:1fr}.privacy-data-card-head{align-items:start}.privacy-form-grid{grid-template-columns:1fr}.privacy-modal-overlay{align-items:flex-end;padding:0}.privacy-modal{max-height:calc(100svh - 12px);border-radius:16px 16px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}}
     </style>`;
   }

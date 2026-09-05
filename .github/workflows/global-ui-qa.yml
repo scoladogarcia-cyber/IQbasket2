@@ -98,6 +98,9 @@ jobs:
       - name: Family development mobile smoke
         run: node tests/family-development-ui-smoke.mjs
 
+      - name: Family mobile readiness smoke
+        run: node tests/family-mobile-readiness-ui-smoke.mjs
+
       - name: Business metrics mobile smoke
         run: node tests/business-metrics-ui-smoke.mjs
 
