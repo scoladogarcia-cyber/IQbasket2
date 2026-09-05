@@ -1,0 +1,29 @@
+name: Offline-first Game Outbox
+
+on:
+  pull_request:
+    paths:
+      - "services/offline/**"
+      - "features/offline/**"
+      - "styles/offline-sync-v1.css"
+      - "tests/offline-first-game-outbox-contract.mjs"
+      - "services/DataStore.js"
+      - "index.html"
+      - ".github/workflows/offline-first-game-outbox.yml"
+  push:
+    branches:
+      - feature/offline-outbox-v1
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Offline-first outbox contract
+        run: node tests/offline-first-game-outbox-contract.mjs
+      - name: Existing game locking RBAC regression
+        run: node tests/game-locking-ui-rbac.mjs

@@ -1,0 +1,37 @@
+name: Wellness Cards UX
+
+on:
+  pull_request:
+    paths:
+      - "features/wellness/**"
+      - "styles/wellness-cards-v1.css"
+      - "tests/wellness-cards-contract.mjs"
+      - "views/player360/WellnessSupportPanel.js"
+      - "config/player360-wellness.config.js"
+      - "index.html"
+      - ".github/workflows/wellness-cards.yml"
+  push:
+    branches:
+      - feature/player-wellness-challenge-v1
+    paths:
+      - "features/wellness/**"
+      - "styles/wellness-cards-v1.css"
+      - "tests/wellness-cards-contract.mjs"
+      - "views/player360/WellnessSupportPanel.js"
+      - "config/player360-wellness.config.js"
+      - "index.html"
+      - ".github/workflows/wellness-cards.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Wellness cards architecture contract
+        run: node tests/wellness-cards-contract.mjs
+      - name: Existing wellness service/route regression
+        run: node tests/player360-phase4e2-service-route.mjs

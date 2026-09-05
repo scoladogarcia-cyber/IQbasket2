@@ -1,0 +1,226 @@
+/*
+ * IQBasket Match Capture UX V2
+ * Progressive styling only. Persistence, permissions and calculations remain
+ * owned by EasyStatsEntryView and the existing backend/security layers.
+ */
+
+.match-capture-v2 {
+  position: relative;
+  isolation: isolate;
+}
+
+.match-capture-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  box-sizing: border-box;
+}
+
+.match-capture-status strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.match-capture-status span {
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.match-capture-status[data-step="player"] {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.match-capture-status[data-step="action"] {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.match-capture-v2 .player-card-btn {
+  min-height: 56px !important;
+  touch-action: manipulation;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.match-capture-v2 .player-card-btn:active,
+.match-capture-v2 .action-btn:active,
+.match-capture-floating-undo:active {
+  transform: scale(0.98);
+}
+
+.match-capture-v2 .player-card-btn.match-capture-player-selected,
+.match-capture-v2 .player-card-btn[aria-pressed="true"] {
+  border-color: #f97316 !important;
+  background: #fff7ed !important;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.13);
+}
+
+.match-capture-v2 .action-btn {
+  min-height: 52px !important;
+  touch-action: manipulation;
+  transition: opacity 120ms ease, transform 120ms ease, filter 120ms ease;
+}
+
+.match-capture-v2 .action-btn:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.42 !important;
+  filter: saturate(0.55);
+}
+
+.match-capture-v2 .action-btn:focus-visible,
+.match-capture-v2 .player-card-btn:focus-visible,
+.match-capture-v2 .mode-selector-btn:focus-visible,
+.match-capture-floating-undo:focus-visible {
+  outline: 3px solid #0ea5e9 !important;
+  outline-offset: 2px;
+}
+
+.match-capture-floating-undo {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: #b91c1c;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.match-capture-floating-undo:disabled {
+  opacity: 0.38;
+  cursor: default;
+  box-shadow: none;
+}
+
+@media (min-width: 769px) {
+  .match-capture-floating-undo {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .match-capture-v2 {
+    padding-inline: 6px !important;
+    gap: 10px !important;
+  }
+
+  .match-capture-v2 > header {
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .match-capture-v2 > header > div {
+    min-width: 0;
+  }
+
+  .match-capture-v2 #select-change-game {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .match-capture-v2 #btn-undo {
+    min-height: 48px !important;
+    padding-inline: 14px !important;
+  }
+
+  .match-capture-mode-switcher {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .match-capture-mode-switcher .mode-selector-btn {
+    min-height: 54px !important;
+    padding: 9px !important;
+    font-size: 0.82rem !important;
+  }
+
+  .match-capture-mode-switcher .mode-selector-btn[data-mode="acta"] {
+    grid-column: 1 / -1;
+  }
+
+  .match-capture-status {
+    position: sticky;
+    top: max(6px, env(safe-area-inset-top, 0px));
+    z-index: 35;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  }
+
+  .match-capture-status span {
+    text-align: left;
+  }
+
+  .match-capture-player-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .match-capture-player-panel,
+  .match-capture-action-panel {
+    padding: 11px !important;
+  }
+
+  .match-capture-action-grid[data-action-count="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .match-capture-action-grid[data-action-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .match-capture-v2 .action-btn {
+    min-height: 56px !important;
+    padding: 10px 6px !important;
+    font-size: 0.85rem !important;
+    line-height: 1.15 !important;
+  }
+
+  .match-capture-v2 footer {
+    padding-right: 96px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .match-capture-player-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .match-capture-action-grid[data-action-count="3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .match-capture-action-grid[data-action-count="3"] > .action-btn:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-capture-v2 .player-card-btn,
+  .match-capture-v2 .action-btn,
+  .match-capture-floating-undo {
+    transition: none;
+  }
+}
