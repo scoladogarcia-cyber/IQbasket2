@@ -21,7 +21,9 @@ assert.match(outbox, /indexedDB\.open/);
 assert.match(outbox, /game_sync_outbox/);
 assert.match(outbox, /MAX_ATTEMPTS_BEFORE_FAILED\s*=\s*5/);
 assert.match(outbox, /game:\$\{String\(gameId/);
-assert.match(outbox, /status:\s*GAME_SYNC_STATUS\.FAILED/);
+assert.match(outbox, /const failed\s*=\s*!transient\s*\|\|\s*attempts\s*>=\s*MAX_ATTEMPTS_BEFORE_FAILED/);
+assert.match(outbox, /status:\s*failed\s*\?\s*GAME_SYNC_STATUS\.FAILED\s*:\s*GAME_SYNC_STATUS\.PENDING/);
+assert.match(outbox, /if\s*\(!transient\)\s*break/);
 assert.match(outbox, /iqbasket:game-sync-status/);
 
 // Existing DataStore remains authoritative: permission/eligibility then local
