@@ -940,11 +940,15 @@ export class IQBasketApp {
         break;
       }
 
-      // NUEVO MÓDULO FAMILIAS & BIENESTAR
-      case "family-advisor":
       case "family":
       case "familia":
-      case "familias":
+      case "familias": {
+        const view = await this.lazyViews.get("familyworkspace");
+        await view.render(contentArea, this.routeParams);
+        break;
+      }
+
+      case "family-advisor":
       case "bienestar":
       case "advisor": {
         const view = await this.lazyViews.get("familyadvisor");

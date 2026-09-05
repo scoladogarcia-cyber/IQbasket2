@@ -1,0 +1,89 @@
+name: Family Workspace Priority 1 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feature/family-workspace-priority1-v1
+    paths:
+      - ".github/workflows/family-workspace-priority1-controlled-apply.yml"
+      - "supabase/ready/20260904_*family_workspace_priority1_v1*.sql"
+      - "supabase/drafts/20260904_smoke_family_workspace_priority1_v1_rollback.sql"
+      - "tests/family-workspace-priority1-contract.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Static family contract
+        run: node tests/family-workspace-priority1-contract.mjs
+      - name: Read-only preflight
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_preflight_family_workspace_priority1_v1_readonly.sql
+      - name: Capture baselines
+        id: baseline
+        run: |
+          set -euo pipefail
+          USERS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.user_profiles")
+          RELS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.player360_subject_relationships")
+          ACCOUNTS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.saas_billing_accounts")
+          echo "users=$USERS" >> "$GITHUB_OUTPUT"
+          echo "rels=$RELS" >> "$GITHUB_OUTPUT"
+          echo "accounts=$ACCOUNTS" >> "$GITHUB_OUTPUT"
+      - name: Apply Family Workspace V1
+        id: apply
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_apply_family_workspace_priority1_v1.sql
+      - name: Verify installed boundary
+        id: verify
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_verify_family_workspace_priority1_v1_readonly.sql
+      - name: Functional family smoke with rollback
+        id: smoke
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260904_smoke_family_workspace_priority1_v1_rollback.sql)
+          echo "$OUT"
+          test "$(printf '%s\n' "$OUT" | grep '^FAMILY_WORKSPACE_SMOKE,' | tail -n 1)" = "FAMILY_WORKSPACE_SMOKE,true,FAMILY_FREE,false,true"
+          test "$(printf '%s\n' "$OUT" | grep '^FAMILY_WORKSPACE_SMOKE_ROLLBACK_OK' | tail -n 1)" = "FAMILY_WORKSPACE_SMOKE_ROLLBACK_OK"
+      - name: Confirm no product rows changed
+        run: |
+          set -euo pipefail
+          USERS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.user_profiles")
+          RELS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.player360_subject_relationships")
+          ACCOUNTS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.saas_billing_accounts")
+          test "$USERS" = "${{ steps.baseline.outputs.users }}"
+          test "$RELS" = "${{ steps.baseline.outputs.rels }}"
+          test "$ACCOUNTS" = "${{ steps.baseline.outputs.accounts }}"
+      - name: Emergency rollback Family Workspace V1
+        if: failure() && steps.apply.outcome == 'success'
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260904_rollback_family_workspace_priority1_v1.sql
+      - name: Confirm emergency rollback
+        if: failure() && steps.apply.outcome == 'success'
+        run: |
+          set -euo pipefail
+          test "$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('public.family_player_link_invitations') is null")" = "t"

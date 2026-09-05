@@ -38,7 +38,8 @@ export class LayoutView {
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
     if (['reports', 'informes', 'informe'].includes(r)) return 'reports';
-    if (['family-advisor', 'family', 'familia', 'familias', 'bienestar', 'advisor'].includes(r)) return 'family-advisor';
+    if (['family', 'familia', 'familias', 'mi-jugador'].includes(r)) return 'family';
+    if (['family-advisor', 'bienestar', 'advisor'].includes(r)) return 'family-advisor';
     if (['ask', 'pregunta', 'preguntale', 'ai', 'ia', 'ask-ai'].includes(r)) return 'ask';
     if (['profile', 'perfil'].includes(r)) return 'profile';
     return r || 'dashboard';
@@ -213,6 +214,7 @@ export class LayoutView {
     const isTrainingRestricted = !hasRolePermission(Permission.VIEW_TRAINING);
     const isNutritionRestricted = !hasRolePermission(Permission.VIEW_NUTRITION);
     const canViewPrivacy = hasRolePermission(Permission.VIEW_PRIVACY_AUTHORIZATIONS);
+    const isFamilyCentricRole = ['FAMILIA_TUTOR','JUGADOR','INVITADO'].includes(String(userRole || '').toUpperCase());
 
     const navGroups = [
       {
@@ -270,6 +272,7 @@ export class LayoutView {
         titleKey: "welfare",
         defaultTitle: "BIENESTAR",
         items: [
+          { key: "family", labelKey: "family_workspace", fallback: "Mi jugador", route: "family", svg: '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 5l2 2 3-3"></path>' },
           { key: "family-advisor", labelKey: "family_advisor", fallback: "Familias & Bienestar", route: "family-advisor", svg: '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>' }
         ]
       },
@@ -428,10 +431,15 @@ export class LayoutView {
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line></svg>
             <span class="mobile-label">${LayoutView.t("games", "Partidos")}</span>
           </a>
+          ${isFamilyCentricRole ? `
+          <a href="#/family" class="mobile-nav-item ${currentActiveKey === 'family' ? 'active' : ''}" data-route-key="family">
+            <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
+            <span class="mobile-label">${LayoutView.t("family_workspace", "Mi jugador")}</span>
+          </a>` : `
           <a href="#/heatmap" class="mobile-nav-item ${currentActiveKey === 'heatmap' ? 'active' : ''}" data-route-key="heatmap">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
             <span class="mobile-label">${LayoutView.t("heatmap_analysis", "Calor")}</span>
-          </a>
+          </a>`}
           <button type="button" id="btn-mobile-more-toggle" class="mobile-nav-item" aria-expanded="false">
             <svg class="mobile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
             <span class="mobile-label">${LayoutView.t("navigation.more", "Más")}</span>

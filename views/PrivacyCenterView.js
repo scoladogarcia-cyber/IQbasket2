@@ -7,6 +7,7 @@
 
 import { DataStore } from "../services/DataStore.js";
 import { PrivacyGovernanceService } from "../services/player360/PrivacyGovernanceService.js";
+import { FamilyWorkspaceService } from "../services/family/FamilyWorkspaceService.js";
 import { Permission } from "../security/PermissionService.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 
@@ -22,6 +23,7 @@ export class PrivacyCenterView {
     this.supabase = supabase || null;
     this.auth = authController || null;
     this.service = new PrivacyGovernanceService(this.supabase);
+    this.familyService = new FamilyWorkspaceService(this.supabase);
     this.container = null;
     this.activeTab = "overview";
     this.playerId = null;
@@ -270,6 +272,7 @@ export class PrivacyCenterView {
 
       <div class="privacy-section-head privacy-section-gap">
         <div><h2>Relaciones jugador / tutor</h2><p>Relaciones verificadas que pueden sustentar autoservicio o representación.</p></div>
+        ${this._can(Permission.INVITE_FAMILY_LINK) ? `<button class="privacy-btn privacy-btn-primary" type="button" data-open-family-invite>+ Invitar familia</button>` : ""}
       </div>
       ${relationships.length ? `
         <div class="privacy-card-list">
@@ -283,7 +286,7 @@ export class PrivacyCenterView {
                 <span>Hasta ${this._formatDate(row.valid_until)}</span>
                 ${row.verification_source ? `<small>${this._escape(row.verification_source)}</small>` : ""}
               </div>
-              ${this._can(Permission.REVOKE_PRIVACY_AUTHORIZATION) && row.status === "ACTIVE"
+              ${this._can(Permission.REVOKE_FAMILY_LINK) && row.status === "ACTIVE"
                 ? `<button class="privacy-danger-link" type="button" data-revoke-relationship="${this._escape(row.id)}">Revocar</button>`
                 : ""}
             </article>
@@ -319,7 +322,7 @@ export class PrivacyCenterView {
               <div><dt>Vigencia</dt><dd>${this._formatDate(row.valid_until)}</dd></div>
               <div><dt>Evidencia</dt><dd>${this._escape(row.evidence_reference || "—")}</dd></div>
             </dl>
-            ${this._can(Permission.REVOKE_PRIVACY_AUTHORIZATION) && row.status === "ACTIVE"
+            ${this._can(Permission.REVOKE_FAMILY_LINK) && row.status === "ACTIVE"
               ? `<div class="privacy-card-actions"><button class="privacy-btn privacy-btn-danger" type="button" data-revoke-authorization="${this._escape(row.id)}">Revocar autorización</button></div>`
               : ""}
           </article>
@@ -453,6 +456,7 @@ export class PrivacyCenterView {
       await this._load();
     });
     this.container.querySelector("#privacy-refresh")?.addEventListener("click", () => this._load());
+    this.container.querySelector("[data-open-family-invite]")?.addEventListener("click", () => this._openFamilyInviteModal());
     this.container.querySelector("#privacy-new-authorization")?.addEventListener("click", () => this._openAuthorizationModal());
     this.container.querySelectorAll("[data-open-authorization]").forEach(button => button.addEventListener("click", () => this._openAuthorizationModal()));
     this.container.querySelectorAll("[data-player-focus]").forEach(button => button.addEventListener("click", async () => {
@@ -466,6 +470,45 @@ export class PrivacyCenterView {
     this.container.querySelectorAll("[data-revoke-relationship]").forEach(button => button.addEventListener("click", () => this._revokeRelationship(button.dataset.revokeRelationship)));
     this.container.querySelectorAll("[data-grant-request]").forEach(button => button.addEventListener("click", () => this._openGrantModal(button.dataset.grantRequest)));
     this.container.querySelectorAll("[data-reject-request]").forEach(button => button.addEventListener("click", () => this._rejectRequest(button.dataset.rejectRequest)));
+  }
+
+  _openFamilyInviteModal() {
+    if (!this._can(Permission.INVITE_FAMILY_LINK)) return;
+    const root = document.getElementById("privacy-modal-root");
+    const players = this.state.snapshot.players || [];
+    const defaultPlayer = this.playerId || players[0]?.player_id || "";
+    if (!root || !defaultPlayer) return;
+    root.innerHTML = `
+      <div class="privacy-modal-overlay"><div class="privacy-modal" role="dialog" aria-modal="true" aria-labelledby="family-invite-title">
+        <div class="privacy-modal-head"><div><h2 id="family-invite-title">Invitar a un familiar</h2><p>El vínculo se activa sólo cuando la persona reclama el código con el mismo email.</p></div><button type="button" data-modal-close aria-label="Cerrar">×</button></div>
+        <form data-family-invite-form>
+          <label>Jugador<select name="playerId" required>${players.map(row => `<option value="${this._escape(row.player_id)}" ${row.player_id === defaultPlayer ? "selected" : ""}>${this._escape(this._playerName(row))}</option>`).join("")}</select></label>
+          <label>Email del padre/madre/tutor<input name="email" type="email" autocomplete="email" required></label>
+          <label>Caducidad<select name="expiresHours"><option value="72">3 días</option><option value="168" selected>7 días</option><option value="336">14 días</option></select></label>
+          <div data-family-invite-result aria-live="polite"></div>
+          <div class="privacy-modal-actions"><button type="button" class="privacy-btn privacy-btn-secondary" data-modal-close>Cancelar</button><button type="submit" class="privacy-btn privacy-btn-primary">Crear invitación</button></div>
+        </form>
+      </div></div>`;
+    this._bindModalClose(root);
+    root.querySelector("[data-family-invite-form]")?.addEventListener("submit", event => this._submitFamilyInvite(event));
+  }
+
+  async _submitFamilyInvite(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const teamSeasonId = this._context().teamSeasonId;
+    const resultBox = form.querySelector("[data-family-invite-result]");
+    try {
+      this._setFormBusy(form, true);
+      const result = await this.familyService.createInvitation({ teamSeasonId, playerId: data.get("playerId"), email: data.get("email"), expiresHours: data.get("expiresHours") });
+      const code = String(result?.claim_code || "");
+      resultBox.innerHTML = `<div class="privacy-data-card"><strong>Invitación creada</strong><p>Comparte este código sólo con ${this._escape(result?.invite_email || data.get("email"))}.</p><code data-family-code>${this._escape(code)}</code><button type="button" class="privacy-btn privacy-btn-secondary" data-copy-family-code>Copiar código</button></div>`;
+      resultBox.querySelector("[data-copy-family-code]")?.addEventListener("click", async () => { await navigator.clipboard?.writeText(code); });
+    } catch (error) {
+      resultBox.textContent = "No se ha podido crear la invitación.";
+      console.error("[PrivacyCenterView] family invite", error);
+    } finally { this._setFormBusy(form, false); }
   }
 
   _openAuthorizationModal() {
