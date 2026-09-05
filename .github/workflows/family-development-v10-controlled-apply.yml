@@ -24,7 +24,8 @@ jobs:
       - name: Require database secret
         run: test -n "$SUPABASE_DB_URL"
       - name: Checkout
-        uses: actions/checkout@v4      - name: Install PostgreSQL client
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
@@ -44,7 +45,8 @@ jobs:
           SUBS=$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.saas_subscriptions")
           echo "events=$EVENTS" >> "$GITHUB_OUTPUT"
           echo "rels=$RELS" >> "$GITHUB_OUTPUT"
-          echo "subs=$SUBS" >> "$GITHUB_OUTPUT"      - name: Apply Family Development V10
+          echo "subs=$SUBS" >> "$GITHUB_OUTPUT"
+      - name: Apply Family Development V10
         id: apply
         run: |
           set -euo pipefail
@@ -64,7 +66,8 @@ jobs:
             --file=supabase/drafts/20260905_smoke_family_development_context_v1_rollback.sql)
           echo "$OUT"
           test "$(printf '%s\n' "$OUT" | grep '^FAMILY_DEVELOPMENT_SMOKE,' | tail -n 1)" = "FAMILY_DEVELOPMENT_SMOKE,f,t,ENTITLED"
-          test "$(printf '%s\n' "$OUT" | grep '^FAMILY_DEVELOPMENT_SMOKE_ROLLBACK_OK' | tail -n 1)" = "FAMILY_DEVELOPMENT_SMOKE_ROLLBACK_OK"      - name: Confirm smoke left mutable data unchanged
+          test "$(printf '%s\n' "$OUT" | grep '^FAMILY_DEVELOPMENT_SMOKE_ROLLBACK_OK' | tail -n 1)" = "FAMILY_DEVELOPMENT_SMOKE_ROLLBACK_OK"
+      - name: Confirm smoke left mutable data unchanged
         run: |
           set -euo pipefail
           test "$(psql "$SUPABASE_DB_URL" -Atc "select count(*) from public.product_analytics_events")" = "${{ steps.baseline.outputs.events }}"
