@@ -14,7 +14,6 @@ const service = fs.readFileSync("services/games/GamePlayStateService.js", "utf8"
 const ui = fs.readFileSync("features/game-state/GamePlayStateEnhancer.js", "utf8");
 const html = fs.readFileSync("index.html", "utf8");
 
-// Sporting lifecycle is independent from edit locking.
 assert.equal(canTransitionGamePlayState(GamePlayState.SCHEDULED, GamePlayState.READY), true);
 assert.equal(canTransitionGamePlayState(GamePlayState.READY, GamePlayState.LIVE), true);
 assert.equal(canTransitionGamePlayState(GamePlayState.LIVE, GamePlayState.FINISHED), true);
@@ -23,25 +22,18 @@ assert.equal(gameLifecycleComposite({ playState:"FINISHED", editState:"OPEN" }).
 assert.equal(gameLifecycleComposite({ playState:"FINISHED", editState:"LOCKED" }).historical, true);
 assert.equal(gameLifecycleComposite({ playState:"LIVE", editState:"OPEN" }).canCapture, true);
 
-// Independent action permissions: cancellation is more privileged than live capture.
-for (const permission of [
-  Permission.PREPARE_GAME,
-  Permission.START_GAME,
-  Permission.FINISH_GAME,
-  Permission.CANCEL_GAME
-]) assert(permission);
-for (const role of [UserRole.ADMIN, UserRole.ENTRENADOR]) {
-  for (const permission of [Permission.PREPARE_GAME, Permission.START_GAME, Permission.FINISH_GAME, Permission.CANCEL_GAME]) {
+for (const permission of [Permission.PREPARE_GAME,Permission.START_GAME,Permission.FINISH_GAME,Permission.CANCEL_GAME]) assert(permission);
+for (const role of [UserRole.ADMIN,UserRole.ENTRENADOR]) {
+  for (const permission of [Permission.PREPARE_GAME,Permission.START_GAME,Permission.FINISH_GAME,Permission.CANCEL_GAME]) {
     assert(ROLE_PERMISSIONS[role].includes(permission), `${role} missing ${permission}`);
   }
 }
-for (const permission of [Permission.PREPARE_GAME, Permission.START_GAME, Permission.FINISH_GAME]) {
+for (const permission of [Permission.PREPARE_GAME,Permission.START_GAME,Permission.FINISH_GAME]) {
   assert(ROLE_PERMISSIONS[UserRole.ANALISTA].includes(permission));
 }
 assert(!ROLE_PERMISSIONS[UserRole.ANALISTA].includes(Permission.CANCEL_GAME));
 assert(!ROLE_PERMISSIONS[UserRole.JUGADOR].includes(Permission.START_GAME));
 
-// Additive schema, immutable audit and RPC-only write boundary.
 assert.match(sql, /add column if not exists play_state text/i);
 assert.match(sql, /create table public\.game_play_state_transitions/i);
 assert.match(sql, /enable row level security/i);
@@ -55,32 +47,27 @@ assert.match(sql, /START_GAME/);
 assert.match(sql, /FINISH_GAME/);
 assert.match(sql, /CANCEL_GAME/);
 
-// Legacy status remains a projection while old readers migrate.
 assert.match(sql, /game_legacy_status_for_play_state/);
 assert.match(sql, /when 'SCHEDULED' then 'Programado'/);
 assert.match(sql, /when 'LIVE' then 'En curso'/);
 assert.match(sql, /when 'FINISHED' then 'Finalizado'/);
 assert.match(sql, /GAME_PLAY_STATE_LEGACY_PROJECTION_MISMATCH/);
 
-// Backfill must not break pre-existing locked/frozen history and must restore guards.
 assert.match(sql, /disable trigger %I/);
 assert.match(sql, /trg_iq_v5_guard_game_lock_transition/);
 assert.match(sql, /trg_iq_v6_guard_frozen_team_season_game/);
 assert.match(sql, /enable trigger %I/);
 assert.match(sql, /GAME_PLAY_STATE_PREEXISTING_GUARD_LEFT_DISABLED/);
 
-// Operational READY/LIVE games cannot be frozen individually as historical actas.
 assert.match(sql, /new\.play_state in \('READY','LIVE'\)/);
 assert.match(sql, /GAME_MUST_BE_FINISHED_BEFORE_LOCK/);
 
-// Client snapshot deliberately excludes raw actor UUIDs from its audit projection.
 const snapshotStart = sql.indexOf("create or replace function public.iq_v13_game_play_state_snapshot");
 const snapshotEnd = sql.indexOf("-- 6. Lock compatibility", snapshotStart);
 const snapshotSql = sql.slice(snapshotStart, snapshotEnd);
 assert(snapshotStart >= 0 && snapshotEnd > snapshotStart);
 assert.doesNotMatch(snapshotSql, /'changed_by'/);
 
-// Thin client and action-specific UI gates.
 assert.match(service, /\.rpc\("iq_v13_set_game_play_state"/);
 assert.match(service, /\.rpc\("iq_v13_game_play_state_snapshot"/);
 assert.doesNotMatch(service, /\.from\(/);
@@ -88,10 +75,9 @@ assert.match(ui, /Permission\.PREPARE_GAME/);
 assert.match(ui, /Permission\.START_GAME/);
 assert.match(ui, /Permission\.FINISH_GAME/);
 assert.match(ui, /Permission\.CANCEL_GAME/);
-assert.match(ui, /data\.renderSignature/);
+assert.match(ui, /dataset\.renderSignature/);
 assert.match(ui, /requestAnimationFrame/);
 
-// Rollback refuses to discard a real audit trail.
 assert.match(rollback, /GAME_PLAY_STATE_V2_ROLLBACK_REFUSED_AUDIT_EXISTS/);
 assert.match(rollback, /drop trigger if exists trg_iq_v13_guard_lock_live_game/);
 
