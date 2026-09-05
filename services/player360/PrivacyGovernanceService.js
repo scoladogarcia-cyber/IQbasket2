@@ -5,6 +5,11 @@
  * validación contextual en backend.
  */
 
+import {
+  isSupportedAuthorizationType,
+  requiresGuardianRepresentative
+} from "../../domain/privacy/PrivacyReadinessPolicy.js";
+
 function assertClient(client) {
   if (!client || typeof client.rpc !== "function") {
     throw new Error("PrivacyGovernanceService: cliente de datos no disponible.");
@@ -150,6 +155,14 @@ export class PrivacyGovernanceService {
     required(legalBasisCode, "legalBasisCode");
     required(specialCategoryConditionCode, "specialCategoryConditionCode");
 
+    const normalizedAuthorizationType = String(authorizationType).trim().toUpperCase();
+    if (!isSupportedAuthorizationType(normalizedAuthorizationType)) {
+      throw new Error("PrivacyGovernanceService: tipo de autorización no soportado.");
+    }
+    if (requiresGuardianRepresentative(normalizedAuthorizationType) && !representativeUserId) {
+      throw new Error("PrivacyGovernanceService: representativeUserId es obligatorio para GUARDIAN_CONSENT.");
+    }
+
     const normalizedModules = normalizeStringArray(modules, value => value.toLowerCase());
     const normalizedPurposes = normalizeStringArray(purposes, value => value.toUpperCase());
     if (!normalizedModules.length) throw new Error("PrivacyGovernanceService: indica al menos un módulo.");
@@ -160,7 +173,7 @@ export class PrivacyGovernanceService {
       p_player_id: playerId,
       p_modules: normalizedModules,
       p_purposes: normalizedPurposes,
-      p_authorization_type: String(authorizationType).toUpperCase(),
+      p_authorization_type: normalizedAuthorizationType,
       p_legal_basis_code: String(legalBasisCode).trim(),
       p_special_category_condition_code: String(specialCategoryConditionCode).trim(),
       p_ai_processing_allowed: Boolean(aiProcessingAllowed),

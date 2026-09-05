@@ -154,6 +154,12 @@ jobs:
       - name: Family development Priority 2 contract
         run: node tests/family-development-priority2-contract.mjs
 
+      - name: Family privacy readiness policy
+        run: node tests/privacy-readiness-policy.mjs
+
+      - name: Privacy permission separation
+        run: node tests/privacy-permission-separation.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
