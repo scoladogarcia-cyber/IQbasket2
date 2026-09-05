@@ -8,6 +8,7 @@ on:
       - "features/player-journey/**"
       - "styles/player-journey-v1.css"
       - "supabase/ready/20260905_apply_player_journey_v1.sql"
+      - "supabase/ready/20260905_apply_player_journey_fk_indexes_v1.sql"
       - "supabase/ready/20260905_rollback_player_journey_v1.sql"
       - "tests/player-journey-contract.mjs"
       - "index.html"
