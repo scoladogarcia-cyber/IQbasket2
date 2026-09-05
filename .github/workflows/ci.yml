@@ -160,6 +160,9 @@ jobs:
       - name: Privacy permission separation
         run: node tests/privacy-permission-separation.mjs
 
+      - name: Family commercial readiness contract
+        run: node tests/family-commercial-readiness-contract.mjs
+
       - name: Session switch regression
         run: node tests/session-switch-regression.mjs
 
