@@ -135,6 +135,8 @@ begin
 end
 $smoke$;
 
+update public.saas_plans set status='ACTIVE' where code='FAMILY';
+
 update public.saas_subscriptions s
 set plan_id=(select p.id from public.saas_plans p where p.code='FAMILY'),
     updated_at=now()
