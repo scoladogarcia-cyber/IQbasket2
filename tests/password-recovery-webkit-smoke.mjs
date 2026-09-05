@@ -12,9 +12,12 @@ const context = await browser.newContext({
 const page = await context.newPage();
 
 const pageErrors = [];
+const recoveryRequestFailures = [];
 page.on("pageerror", error => pageErrors.push(error.message));
-page.on("console", message => {
-  if (message.type() === "error") pageErrors.push(message.text());
+page.on("requestfailed", request => {
+  if (/PasswordRecovery(Bootstrap|Coordinator|Service)/.test(request.url())) {
+    recoveryRequestFailures.push(`${request.url()} :: ${request.failure()?.errorText || "failed"}`);
+  }
 });
 
 await page.goto(BASE_URL, { waitUntil: "networkidle" });
@@ -32,7 +35,10 @@ const overflow = await page.evaluate(() => (
 ));
 
 if (pageErrors.length) {
-  throw new Error(`PASSWORD_RECOVERY_WEBKIT_ERRORS:${JSON.stringify(pageErrors)}`);
+  throw new Error(`PASSWORD_RECOVERY_WEBKIT_PAGE_ERRORS:${JSON.stringify(pageErrors)}`);
+}
+if (recoveryRequestFailures.length) {
+  throw new Error(`PASSWORD_RECOVERY_WEBKIT_LOAD_ERRORS:${JSON.stringify(recoveryRequestFailures)}`);
 }
 if (overflow) {
   throw new Error("PASSWORD_RECOVERY_WEBKIT_OVERFLOW");
