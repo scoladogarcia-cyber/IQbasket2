@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="./styles/layout.css">
   <link rel="stylesheet" href="./styles/components.css">
   <link rel="stylesheet" href="./styles/responsive.css">
+  <link rel="stylesheet" href="./styles/game-play-state-v2.css">
 </head>
 <body>
 
@@ -30,6 +31,8 @@
 
   <!-- Punto de entrada principal como módulo ES6 -->
   <script type="module" src="./index.js"></script>
+  <!-- Capa progresiva: el backend V13 sigue siendo la autoridad de cada transición. -->
+  <script type="module" src="./features/game-state/GamePlayStateEnhancer.js"></script>
 
 </body>
 </html>
