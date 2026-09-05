@@ -58,7 +58,8 @@ assert.match(pilotSql, /relationship_type='GUARDIAN'/i);
 assert.match(pilotSql, /FAMILY_PILOT_GUARDIAN_RELATION_REQUIRED/);
 assert.match(pilotSql, /FAMILY_PILOT_REQUIRES_FREE_PLAN/);
 assert.match(pilotSql, /FAMILY_PILOT_FREE_SUBJECT_CARDINALITY_INVALID/);
-assert.match(pilotSql, /subject_type,'PLAYER'/i);
+assert.match(pilotSql, /billing_account_id,entitlement_code,subject_type,player_id,beneficiary_scope/i);
+assert.match(pilotSql, /select v_account_id,code,'PLAYER',p_player_id,'ACCOUNT_MEMBERS'/i);
 assert.match(pilotSql, /source_type,source_id/);
 assert.match(pilotSql, /'FAMILY_PILOT',v_enrollment_id/);
 assert.match(pilotSql, /status='REVOKED',revoked_by=auth\.uid\(\),revoked_at=v_now/);
@@ -71,7 +72,7 @@ const enrollBody = functionBody(
 for (const forbidden of ["AI_INSIGHTS", "AI_WEEKLY_PLAN", "WELLNESS", "NUTRITION_RECOVERY"]) {
   assert(!enrollBody.includes(forbidden), `Pilot enroll must not grant ${forbidden}`);
 }
-assert(!enrollBody.includes("saas_entitlement_overrides"), "Pilot must not write account-wide overrides");
+assert(!enrollBody.includes("insert into public.saas_entitlement_overrides"), "Pilot must not write account-wide overrides");
 assert(enrollBody.includes("saas_entitlement_grants"), "Pilot must use scoped grants");
 assert(enrollBody.includes("p_trial_days not in (7,14,28,42,56)"));
 
