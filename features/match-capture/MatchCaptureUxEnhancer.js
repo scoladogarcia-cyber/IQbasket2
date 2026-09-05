@@ -23,8 +23,10 @@ function vibrate(pattern = 12) {
 }
 
 function selectedPlayerButton(root) {
-  return [...root.querySelectorAll(".player-card-btn")]
-    .find(button => button.classList.contains("active-player") || button.getAttribute("aria-pressed") === "true") || null;
+  const buttons = [...root.querySelectorAll(".player-card-btn")];
+  return buttons.find(button => button.getAttribute("aria-pressed") === "true")
+    || buttons.find(button => button.classList.contains("active-player"))
+    || null;
 }
 
 function selectedPlayerName(root) {
@@ -206,6 +208,9 @@ function bindInteractions(root) {
   root.addEventListener("click", event => {
     const player = event.target.closest?.(".player-card-btn");
     if (player && root.contains(player)) {
+      root.querySelectorAll(".player-card-btn").forEach(button => {
+        button.setAttribute("aria-pressed", String(button === player));
+      });
       vibrate(10);
       queueMicrotask(() => syncPlayerSelection(root));
       return;
