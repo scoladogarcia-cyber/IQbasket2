@@ -1,0 +1,33 @@
+name: Match Capture UX
+
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "features/match-capture/**"
+      - "styles/match-capture-v2.css"
+      - "tests/match-capture-ux-contract.mjs"
+      - ".github/workflows/match-capture-ux.yml"
+  push:
+    branches:
+      - feature/match-capture-ux-v2
+    paths:
+      - "index.html"
+      - "features/match-capture/**"
+      - "styles/match-capture-v2.css"
+      - "tests/match-capture-ux-contract.mjs"
+      - ".github/workflows/match-capture-ux.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Match Capture UX contract
+        run: node tests/match-capture-ux-contract.mjs
