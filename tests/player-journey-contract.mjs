@@ -56,8 +56,23 @@ assert.match(ui, /getAuthenticatedRole\?\.\(\) !== UserRole\.JUGADOR/);
 assert.match(ui, /String\(user\.playerId/);
 assert.match(ui, /Progreso personal/);
 assert.match(ui, /Sin puntos ni clasificación/);
+assert.match(ui, /Sin rankings/);
 assert.match(ui, /no significa que una habilidad esté dominada/);
-assert.doesNotMatch(ui, /leaderboard|ranking|racha diaria|streak/i);
+
+// Safety copy is allowed to name prohibited mechanics. What must not exist are
+// implementation hooks/state for competitive or compulsive reward systems.
+for (const forbiddenMechanic of [
+  /leaderboard[_A-Za-z0-9]*\s*[=:]/i,
+  /ranking[_A-Za-z0-9]*\s*[=:]/i,
+  /streak[_A-Za-z0-9]*\s*[=:]/i,
+  /\bxp\b\s*[+:=]/i,
+  /experiencePoints/i,
+  /dailyLogin/i,
+  /variableReward/i
+]) {
+  assert.doesNotMatch(ui, forbiddenMechanic);
+}
+
 assert.match(css, /min-height:48px/);
 assert.match(html, /styles\/player-journey-v1\.css/);
 assert.match(html, /features\/player-journey\/PlayerJourneyEnhancer\.js/);
