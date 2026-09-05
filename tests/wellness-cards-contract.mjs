@@ -7,6 +7,14 @@ const html = fs.readFileSync("index.html", "utf8");
 const panel = fs.readFileSync("views/player360/WellnessSupportPanel.js", "utf8");
 const config = fs.readFileSync("config/player360-wellness.config.js", "utf8");
 
+function withoutComments(source = "") {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|\s)\/\/.*$/gm, "$1");
+}
+
+const executableEnhancer = withoutComments(enhancer);
+
 // Progressive enhancement: existing panel contract stays the data source.
 assert.match(enhancer, /\.p360w-editor/);
 assert.match(enhancer, /\.p360w-metric/);
@@ -19,6 +27,8 @@ assert.match(enhancer, /MutationObserver/);
 assert.match(enhancer, /navigator\.vibrate/);
 
 // The enhancer must never become an authorization or persistence layer.
+// Comments/documentation may name the authoritative services, so the guard checks
+// executable source rather than raw text.
 for (const forbidden of [
   "DataStore",
   "WellnessService",
@@ -27,8 +37,9 @@ for (const forbidden of [
   ".from(",
   ".rpc("
 ]) {
-  assert(!enhancer.includes(forbidden), `Wellness cards UI must not depend on ${forbidden}`);
+  assert(!executableEnhancer.includes(forbidden), `Wellness cards UI must not depend on ${forbidden}`);
 }
+assert(!/^\s*import\s/m.test(executableEnhancer), "Wellness cards enhancer must stay dependency-free");
 
 // Original form inputs remain present and authoritative for form collection.
 assert.match(panel, /class=\"p360w-input\"/);
