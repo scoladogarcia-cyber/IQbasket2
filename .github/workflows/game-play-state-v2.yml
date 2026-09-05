@@ -11,6 +11,7 @@ on:
       - "supabase/ready/20260905_apply_game_play_state_v2.sql"
       - "supabase/ready/20260905_rollback_game_play_state_v2.sql"
       - "tests/game-play-state-v2-contract.mjs"
+      - "tests/game-play-state-v2-sql-guard.mjs"
       - "index.html"
       - ".github/workflows/game-play-state-v2.yml"
   push:
@@ -28,6 +29,8 @@ jobs:
       - run: npm ci
       - name: Game Play State V2 contract
         run: node tests/game-play-state-v2-contract.mjs
+      - name: Game Play State V2 SQL safety guard
+        run: node tests/game-play-state-v2-sql-guard.mjs
       - name: Existing game locking SQL regression
         run: node tests/game-locking-sql.mjs
       - name: Existing game locking UI/RBAC regression
