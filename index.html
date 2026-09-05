@@ -31,7 +31,7 @@
   <div id="app"></div>
 
   <!-- Offline-first decora la persistencia antes de arrancar la aplicación. -->
-  <!-- Guard m?nimo fuera del bundle: evita mezclar una pesta?a antigua con un backend m?s nuevo. -->
+  <!-- Guard minimo fuera del bundle: evita mezclar una pestana antigua con un backend mas nuevo. -->
   <script>
     (() => {
       let loadedRelease = null;
@@ -49,7 +49,7 @@
           const overlay = document.createElement('div');
           overlay.id = 'iq-release-stale-overlay';
           overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.88)';
-          overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px"><strong style="font-size:20px">Nueva versi?n disponible</strong><p>IQBasket se ha actualizado. Actualiza antes de seguir editando.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar ahora</button></div>';
+          overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px"><strong style="font-size:20px">Nueva versi&oacute;n disponible</strong><p>IQBasket se ha actualizado. Actualiza antes de seguir editando.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar ahora</button></div>';
           document.body.appendChild(overlay);
           document.getElementById('iq-release-reload')?.addEventListener('click', () => location.reload());
         } catch (_) {}

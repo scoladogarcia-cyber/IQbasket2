@@ -14,7 +14,7 @@ assert.match(html, /cache:\s*'no-store'/);
 assert.match(html, /visibilitychange/);
 assert.match(html, /addEventListener\('focus'/);
 assert.match(html, /__IQBASKET_RELEASE_STALE__/);
-assert.match(html, /Nueva versión disponible/);
+assert.match(html, /Nueva versi&oacute;n disponible/);
 assert.match(users, /PLAYER_LINK_REQUIRED/);
 assert.match(users, /seleccionar primero el jugador vinculado/i);
 

@@ -1,57 +1,0 @@
-<!DOCTYPE html>
-<html lang="es" dir="ltr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#f97316">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="IQ Basket - Plataforma de analítica avanzada, estadísticas y gestión para baloncesto">
-
-  <title>IQ Basket - Basketball Stats Studio Pro</title>
-
-  <script>
-    window.process = window.process || { env: { NODE_ENV: 'development' } };
-  </script>
-
-  <script type="module" crossorigin src="./assets/index-Co3VTdK8.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CmNhSWvX.css">
-</head>
-<body>
-
-  <div id="app"></div>
-
-  <!-- Offline-first decora la persistencia antes de arrancar la aplicación. -->
-  <!-- Guard m?nimo fuera del bundle: evita mezclar una pesta?a antigua con un backend m?s nuevo. -->
-  <script>
-    (() => {
-      let loadedRelease = null;
-      let stale = false;
-      const check = async () => {
-        if (stale) return;
-        try {
-          const response = await fetch(`./release.json?t=${Date.now()}`, { cache: 'no-store' });
-          if (!response.ok) return;
-          const release = String((await response.json())?.release || '').trim();
-          if (!release) return;
-          if (!loadedRelease) { loadedRelease = release; window.__IQBASKET_RELEASE__ = release; return; }
-          if (release === loadedRelease) return;
-          stale = true; window.__IQBASKET_RELEASE_STALE__ = true;
-          const overlay = document.createElement('div');
-          overlay.id = 'iq-release-stale-overlay';
-          overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.88)';
-          overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px"><strong style="font-size:20px">Nueva versi?n disponible</strong><p>IQBasket se ha actualizado. Actualiza antes de seguir editando.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar ahora</button></div>';
-          document.body.appendChild(overlay);
-          document.getElementById('iq-release-reload')?.addEventListener('click', () => location.reload());
-        } catch (_) {}
-      };
-      addEventListener('focus', check); addEventListener('online', check);
-      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
-      setInterval(check, 60000); check();
-    })();
-  </script>
-  <!-- Mejoras progresivas: el backend continúa siendo autoritativo. -->
-
-</body>
-</html>
