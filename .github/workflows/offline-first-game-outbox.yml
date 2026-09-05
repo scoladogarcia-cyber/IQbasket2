@@ -25,5 +25,5 @@ jobs:
       - run: npm ci
       - name: Offline-first outbox contract
         run: node tests/offline-first-game-outbox-contract.mjs
-      - name: Existing game lifecycle service contract
-        run: node tests/game-lifecycle-contract.mjs
+      - name: Existing game locking RBAC regression
+        run: node tests/game-locking-ui-rbac.mjs
