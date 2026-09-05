@@ -11,6 +11,7 @@ on:
       - "index.html"
       - "index.js"
       - "app.js"
+      - "release.json"
       - "components/**"
       - "config/**"
       - "controllers/**"
@@ -60,9 +61,13 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify Pages-safe relative asset paths
+      - name: Add release metadata to artifact
+        run: cp release.json dist/release.json
+
+      - name: Verify Pages artifact
         run: |
           test -f dist/index.html
+          test -f dist/release.json
           if grep -Eq '(src|href)="/assets/' dist/index.html; then
             echo "Absolute /assets paths would break the GitHub Pages project path."
             exit 1
