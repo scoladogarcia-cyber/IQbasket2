@@ -1,12 +1,14 @@
 /**
  * @fileoverview Non-blocking connectivity/sync status for live game capture.
  * @description Listens to the offline outbox event contract; it never changes
- * persistence or permissions.
+ * persistence or permissions. DOM observation only enhances newly rendered
+ * capture roots and never re-renders an already-enhanced badge in a loop.
  */
 
 const BADGE_ATTR = "data-game-sync-badge";
 let hideTimer = null;
 let lastDetail = null;
+let observerScheduled = false;
 
 function label(detail = {}) {
   switch (detail.status) {
@@ -33,15 +35,23 @@ function ensureBadge(root) {
   return badge;
 }
 
-function render(detail = lastDetail) {
-  if (!detail) return;
-  document.querySelectorAll(".easy-entry-wrapper").forEach(root => {
-    const badge = ensureBadge(root);
-    const state = label(detail);
+function syncBadge(root, detail) {
+  const badge = ensureBadge(root);
+  const state = label(detail);
+  const signature = `${state.tone}|${state.icon}|${state.text}`;
+
+  if (badge.dataset.renderSignature !== signature) {
+    badge.dataset.renderSignature = signature;
     badge.dataset.tone = state.tone;
     badge.innerHTML = `<span aria-hidden="true">${state.icon}</span><strong>${state.text}</strong>`;
-    badge.hidden = !state.text;
-  });
+  }
+  badge.hidden = !state.text;
+  return badge;
+}
+
+function render(detail = lastDetail) {
+  if (!detail) return;
+  document.querySelectorAll(".easy-entry-wrapper").forEach(root => syncBadge(root, detail));
 
   clearTimeout(hideTimer);
   if (detail.status === "SYNCED") {
@@ -58,6 +68,25 @@ function connectivityDetail() {
   return lastDetail;
 }
 
+function enhanceNewRoots() {
+  const detail = connectivityDetail();
+  if (!detail) return;
+  document.querySelectorAll(".easy-entry-wrapper").forEach(root => {
+    if (!root.querySelector(`[${BADGE_ATTR}]`)) syncBadge(root, detail);
+  });
+}
+
+function scheduleEnhanceNewRoots() {
+  if (observerScheduled) return;
+  observerScheduled = true;
+  const run = () => {
+    observerScheduled = false;
+    enhanceNewRoots();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  else setTimeout(run, 0);
+}
+
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   window.addEventListener("iqbasket:game-sync-status", event => {
     lastDetail = event.detail || null;
@@ -70,14 +99,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   window.addEventListener("online", () => render(lastDetail || { status:"PENDING", pending:true }));
 
   const start = () => {
-    if (connectivityDetail()) render(connectivityDetail());
-    const observer = new MutationObserver(() => {
-      if (connectivityDetail()) render(connectivityDetail());
-    });
+    enhanceNewRoots();
+    const observer = new MutationObserver(scheduleEnhanceNewRoots);
     observer.observe(document.documentElement, { childList:true, subtree:true });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once:true });
   else start();
 }
 
-export { render as renderOfflineSyncStatus };
+export { render as renderOfflineSyncStatus, enhanceNewRoots };
