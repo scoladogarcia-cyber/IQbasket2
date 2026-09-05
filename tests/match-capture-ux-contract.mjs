@@ -6,13 +6,10 @@ const enhancer = fs.readFileSync("features/match-capture/MatchCaptureUxEnhancer.
 const css = fs.readFileSync("styles/match-capture-v2.css", "utf8");
 const existingView = fs.readFileSync("views/EasyStatsEntryView.js", "utf8");
 
-// Assets must be wired without replacing the existing runtime entry point.
 assert.match(index, /<script type="module" src="\.\/index\.js"><\/script>/);
 assert.match(index, /styles\/match-capture-v2\.css/);
 assert.match(index, /features\/match-capture\/MatchCaptureUxEnhancer\.js/);
 
-// Progressive enhancer is deliberately UI-only. It must never become a second
-// persistence/security layer or calculate statistics independently.
 for (const forbidden of [
   "DataStore",
   "StatsEngine",
@@ -35,8 +32,14 @@ assert.match(enhancer, /navigator\.vibrate/);
 assert.match(enhancer, /source\.click\(\)/);
 assert.match(enhancer, /button\.disabled = !name/);
 
-// The enhancement relies only on stable DOM hooks already provided by the
-// existing capture view; it does not require rewriting game behavior.
+// DOM observers must not keep the capture thread alive by observing their own
+// status renders. Rendering is signature-idempotent and mutation bursts coalesce.
+assert.match(enhancer, /dataset\.renderSignature/);
+assert.match(enhancer, /if \(status\.dataset\.renderSignature === signature\) return/);
+assert.match(enhancer, /observerScheduled/);
+assert.match(enhancer, /requestAnimationFrame\(run\)/);
+assert.match(enhancer, /new MutationObserver\(scheduleEnhanceAll\)/);
+
 for (const hook of [
   "easy-entry-wrapper",
   "player-card-btn",
@@ -48,7 +51,6 @@ for (const hook of [
   assert(existingView.includes(hook), `Existing capture hook missing: ${hook}`);
 }
 
-// Mobile ergonomics and accessibility are explicit acceptance criteria.
 assert.match(css, /\.match-capture-v2 \.player-card-btn[\s\S]*min-height: 56px !important/);
 assert.match(css, /\.match-capture-v2 \.action-btn[\s\S]*min-height: 52px !important/);
 assert.match(css, /\.match-capture-floating-undo[\s\S]*position: fixed/);
