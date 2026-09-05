@@ -44,9 +44,15 @@ assert.match(grantsSql, /iq_private\.saas_subscription_effective/i);
 assert.match(grantsSql, /iq_private\.saas_subject_covers/i);
 assert.match(grantsSql, /ACCOUNT_OVERRIDE/);
 assert.match(grantsSql, /SCOPED_GRANT/);
-assert.match(grantsSql, /grant\.player_id=p_subject_id/);
-assert.match(grantsSql, /grant\.team_id=p_subject_id/);
-assert.match(grantsSql, /grant\.club_id=p_subject_id/);
+
+// PostgreSQL reserves GRANT as a keyword. Keep the lateral table alias explicit
+// and safe so static contracts catch this production-blocking parser regression.
+assert.doesNotMatch(grantsSql, /from\s+public\.saas_entitlement_grants\s+grant\b/i);
+assert.match(grantsSql, /from\s+public\.saas_entitlement_grants\s+sg\b/i);
+assert.match(grantsSql, /sg\.player_id=p_subject_id/);
+assert.match(grantsSql, /sg\.team_id=p_subject_id/);
+assert.match(grantsSql, /sg\.club_id=p_subject_id/);
+
 assert.match(grantsSql, /SAAS_SCOPED_GRANTS_DIRECT_CLIENT_ACCESS_OPEN/);
 assert.match(grantsSql, /SAAS_SCOPED_GRANTS_RESOLVER_EXPOSED/);
 
