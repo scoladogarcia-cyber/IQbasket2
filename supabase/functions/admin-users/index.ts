@@ -1,5 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+/**
+ * Administrative user provisioning boundary.
+ *
+ * Security invariants:
+ * - the caller must present a valid JWT and have an ACTIVE account;
+ * - authorization comes from server-side profile/RBAC state, never user metadata;
+ * - only the unique global SUPERADMIN may create ADMIN users;
+ * - ADMIN callers may provision only standard roles and only inside their team scope;
+ * - Auth creation is performed exclusively with the service-role client;
+ * - current V7 identity fields are the only profile fields written;
+ * - optional player identity is represented in both the compatibility field and
+ *   the canonical user_player_links relation.
+ */
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,6 +38,19 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function normalizeUuidList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(
+    values
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )];
+}
+
+function isPlausibleEmail(value: string): boolean {
+  return value.length >= 5 && value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -42,7 +69,7 @@ Deno.serve(async (req) => {
 
   const callerClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authorization } },
-    auth: { persistSession: false }
+    auth: { persistSession: false, autoRefreshToken: false }
   });
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
@@ -50,18 +77,38 @@ Deno.serve(async (req) => {
 
   const { data: userData, error: userError } = await callerClient.auth.getUser();
   const caller = userData?.user;
-  if (userError || !caller?.email) return json({ error: "Sesión no válida." }, 401);
+  if (userError || !caller?.id || !caller?.email) {
+    return json({ error: "Sesión no válida." }, 401);
+  }
 
-  const callerEmail = caller.email.toLowerCase();
-  const { data: callerProfile } = await adminClient
-    .from("user_profiles")
-    .select("*")
-    .eq("email", callerEmail)
-    .maybeSingle();
+  const callerEmail = caller.email.trim().toLowerCase();
+  const [{ data: callerProfile, error: profileError }, { data: accountControl, error: accountError }] = await Promise.all([
+    adminClient
+      .from("user_profiles")
+      .select("id,email,role,global_role,status,assigned_team_ids")
+      .eq("id", caller.id)
+      .maybeSingle(),
+    adminClient
+      .from("user_account_controls")
+      .select("account_status")
+      .eq("user_id", caller.id)
+      .maybeSingle()
+  ]);
 
-  const callerRole = callerEmail === UNIQUE_SUPERADMIN_EMAIL
+  if (profileError || !callerProfile || accountError || accountControl?.account_status !== "ACTIVE") {
+    return json({ error: "Cuenta no activa o perfil no disponible." }, 403);
+  }
+
+  const { data: isGlobalSuperadmin, error: superError } = await callerClient.rpc(
+    "iq_v3_is_global_superadmin"
+  );
+  if (superError) {
+    return json({ error: "No se pudo validar la autorización administrativa." }, 403);
+  }
+
+  const callerRole = isGlobalSuperadmin
     ? "SUPERADMIN"
-    : String(callerProfile?.role || "INVITADO").toUpperCase();
+    : String(callerProfile.global_role || callerProfile.role || "USER").toUpperCase();
 
   if (!["SUPERADMIN", "ADMIN"].includes(callerRole)) {
     return json({ error: "No tienes permiso para administrar usuarios." }, 403);
@@ -76,19 +123,19 @@ Deno.serve(async (req) => {
   const password = String(payload.password || "");
   const firstName = String(payload.firstName || "").trim();
   const lastName = String(payload.lastName || "").trim();
-  const requestedRole = String(payload.role || "INVITADO").toUpperCase();
-  const requestedTeamIds = Array.isArray(payload.teamIds) ? payload.teamIds : [];
+  const requestedRole = String(payload.role || "INVITADO").trim().toUpperCase();
+  const requestedTeamIds = normalizeUuidList(payload.teamIds);
+  const requestedTeamSeasonIds = normalizeUuidList(payload.teamSeasonIds);
+  const linkedPlayerId = payload.linkedPlayerId
+    ? String(payload.linkedPlayerId).trim()
+    : null;
 
-  if (!email || !password || !firstName) {
-    return json({ error: "Faltan datos obligatorios." }, 400);
+  if (!isPlausibleEmail(email) || !firstName || password.length < 8) {
+    return json({ error: "Email, nombre y contraseña temporal de al menos 8 caracteres son obligatorios." }, 400);
   }
 
-  if (email === UNIQUE_SUPERADMIN_EMAIL) {
-    return json({ error: "La cuenta Superadmin única ya está reservada." }, 409);
-  }
-
-  if (requestedRole === "SUPERADMIN") {
-    return json({ error: "No se puede crear otro Superadmin." }, 403);
+  if (email === UNIQUE_SUPERADMIN_EMAIL || requestedRole === "SUPERADMIN") {
+    return json({ error: "La identidad Superadmin única está protegida." }, 403);
   }
 
   if (requestedRole === "ADMIN" && callerRole !== "SUPERADMIN") {
@@ -99,27 +146,86 @@ Deno.serve(async (req) => {
     return json({ error: "Rol no válido." }, 400);
   }
 
-  const targetClubId = callerRole === "SUPERADMIN"
-    ? (payload.clubId || null)
-    : (callerProfile?.club_id || null);
+  const actorTeamIds = new Set(
+    normalizeUuidList(callerProfile.assigned_team_ids)
+  );
 
-  if (callerRole === "ADMIN" && requestedTeamIds.length > 0) {
-    const { data: requestedTeams, error: teamsError } = await adminClient
+  let requestedTeams: Array<{ id: string }> = [];
+  if (requestedTeamIds.length > 0) {
+    const { data, error } = await adminClient
       .from("teams")
-      .select("id, club_id")
+      .select("id")
       .in("id", requestedTeamIds);
-
-    if (teamsError) return json({ error: teamsError.message }, 400);
-
-    const validIds = new Set((requestedTeams || []).map((t) => String(t.id)));
-    const containsForeignTeam = (requestedTeams || []).some(
-      (t) => String(t.club_id || "") !== String(callerProfile?.club_id || "")
-    );
-
-    if (validIds.size !== requestedTeamIds.length || containsForeignTeam) {
-      return json({ error: "Un administrador solo puede asignar equipos de su propio club." }, 403);
+    if (error) return json({ error: "No se pudo validar el ámbito de equipos." }, 400);
+    requestedTeams = data || [];
+    if (requestedTeams.length !== requestedTeamIds.length) {
+      return json({ error: "Existe algún equipo solicitado que no es válido." }, 400);
     }
   }
+
+  if (callerRole === "ADMIN") {
+    if (requestedTeamIds.some((teamId) => !actorTeamIds.has(teamId))) {
+      return json({ error: "Un administrador solo puede asignar equipos de su propio ámbito." }, 403);
+    }
+  }
+
+  let linkedPlayer: { id: string; team_id: string | null } | null = null;
+  if (linkedPlayerId) {
+    if (requestedRole !== "JUGADOR") {
+      return json({ error: "El vínculo SELF con jugador solo puede asignarse a una cuenta JUGADOR." }, 400);
+    }
+
+    const { data, error } = await adminClient
+      .from("players")
+      .select("id,team_id")
+      .eq("id", linkedPlayerId)
+      .maybeSingle();
+    if (error || !data) return json({ error: "Jugador no válido." }, 400);
+    linkedPlayer = data;
+
+    if (requestedTeamIds.length > 0 && data.team_id && !requestedTeamIds.includes(String(data.team_id))) {
+      return json({ error: "El jugador no pertenece al ámbito de equipos asignado." }, 403);
+    }
+    if (callerRole === "ADMIN" && data.team_id && !actorTeamIds.has(String(data.team_id))) {
+      return json({ error: "El jugador está fuera del ámbito del administrador." }, 403);
+    }
+  }
+
+  let teamSeasonRows: Array<{ id: string; team_id: string }> = [];
+  if (requestedTeamSeasonIds.length > 0) {
+    const { data, error } = await adminClient
+      .from("team_seasons")
+      .select("id,team_id")
+      .in("id", requestedTeamSeasonIds);
+    if (error) return json({ error: "No se pudo validar el ámbito equipo-temporada." }, 400);
+    teamSeasonRows = data || [];
+    if (teamSeasonRows.length !== requestedTeamSeasonIds.length) {
+      return json({ error: "Existe algún ámbito equipo-temporada no válido." }, 400);
+    }
+    if (teamSeasonRows.some((row) => requestedTeamIds.length > 0 && !requestedTeamIds.includes(String(row.team_id)))) {
+      return json({ error: "El ámbito equipo-temporada no coincide con los equipos asignados." }, 403);
+    }
+    if (callerRole === "ADMIN" && teamSeasonRows.some((row) => !actorTeamIds.has(String(row.team_id)))) {
+      return json({ error: "El ámbito equipo-temporada está fuera del alcance del administrador." }, 403);
+    }
+  }
+
+  const { data: existingProfile } = await adminClient
+    .from("user_profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (existingProfile?.id) {
+    return json({ error: "Ya existe un perfil con ese email." }, 409);
+  }
+
+  const cleanupProvisioning = async (userId: string) => {
+    await adminClient.from("user_player_links").delete().eq("user_id", userId);
+    await adminClient.from("team_season_memberships").delete().eq("user_id", userId);
+    await adminClient.from("user_account_controls").delete().eq("user_id", userId);
+    await adminClient.from("user_profiles").delete().eq("id", userId);
+    await adminClient.auth.admin.deleteUser(userId);
+  };
 
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
@@ -127,8 +233,7 @@ Deno.serve(async (req) => {
     email_confirm: true,
     user_metadata: {
       first_name: firstName,
-      last_name: lastName,
-      role: "INVITADO"
+      last_name: lastName
     }
   });
 
@@ -140,46 +245,59 @@ Deno.serve(async (req) => {
     id: created.user.id,
     email,
     first_name: firstName,
-    last_name: lastName,
-    role: "INVITADO",
-    club_id: targetClubId,
-    allowed_team_ids: requestedTeamIds,
-    team_id: requestedTeamIds[0] || null,
-    status: "Activo"
+    last_name: lastName || null,
+    role: requestedRole,
+    global_role: requestedRole === "ADMIN" ? "ADMIN" : null,
+    status: "approved",
+    assigned_team_ids: requestedTeamIds,
+    linked_player_id: linkedPlayer?.id || null
   };
 
-  let { error: profileError } = await adminClient
+  const { error: provisionProfileError } = await adminClient
     .from("user_profiles")
-    .upsert(profilePayload, { onConflict: "email" });
+    .upsert(profilePayload, { onConflict: "id" });
 
-  // Compatibilidad con esquema anterior a allowed_team_ids.
-  if (profileError) {
-    const fallback = { ...profilePayload };
-    delete fallback.allowed_team_ids;
-    const result = await adminClient
-      .from("user_profiles")
-      .upsert(fallback, { onConflict: "email" });
-    profileError = result.error;
+  if (provisionProfileError) {
+    await cleanupProvisioning(created.user.id);
+    return json({ error: provisionProfileError.message }, 400);
   }
 
-  if (profileError) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
-    return json({ error: profileError.message }, 400);
+  if (linkedPlayer) {
+    const { error: playerLinkError } = await adminClient
+      .from("user_player_links")
+      .upsert({
+        user_id: created.user.id,
+        player_id: linkedPlayer.id,
+        relation_type: "SELF",
+        status: "ACTIVE",
+        valid_from: new Date().toISOString(),
+        valid_until: null
+      }, { onConflict: "user_id,player_id,relation_type" });
+
+    if (playerLinkError) {
+      await cleanupProvisioning(created.user.id);
+      return json({ error: playerLinkError.message }, 400);
+    }
   }
 
-  const { error: roleUpdateError } = await adminClient
-    .from("user_profiles")
-    .update({
-      role: requestedRole,
-      club_id: targetClubId,
-      allowed_team_ids: requestedTeamIds,
-      team_id: requestedTeamIds[0] || null
-    })
-    .eq("email", email);
+  if (teamSeasonRows.length > 0) {
+    const membershipRows = teamSeasonRows.map((row) => ({
+      user_id: created.user.id,
+      team_season_id: row.id,
+      function_role: requestedRole,
+      status: "ACTIVE",
+      valid_from: new Date().toISOString(),
+      valid_until: null
+    }));
 
-  if (roleUpdateError) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
-    return json({ error: roleUpdateError.message }, 400);
+    const { error: membershipError } = await adminClient
+      .from("team_season_memberships")
+      .upsert(membershipRows, { onConflict: "user_id,team_season_id,function_role" });
+
+    if (membershipError) {
+      await cleanupProvisioning(created.user.id);
+      return json({ error: membershipError.message }, 400);
+    }
   }
 
   return json({
@@ -188,8 +306,11 @@ Deno.serve(async (req) => {
       id: created.user.id,
       email,
       role: requestedRole,
-      club_id: targetClubId,
-      allowed_team_ids: requestedTeamIds
+      global_role: profilePayload.global_role,
+      assigned_team_ids: requestedTeamIds,
+      linked_player_id: linkedPlayer?.id || null,
+      team_season_ids: requestedTeamSeasonIds,
+      needs_player_link: requestedRole === "JUGADOR" && !linkedPlayer
     }
   });
 });
