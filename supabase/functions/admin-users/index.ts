@@ -146,6 +146,10 @@ Deno.serve(async (req) => {
     return json({ error: "Rol no válido." }, 400);
   }
 
+  if (requestedRole === "JUGADOR" && !linkedPlayerId) {
+    return json({ error: "Para crear una cuenta JUGADOR debes seleccionar el jugador que representa." }, 400);
+  }
+
   const actorTeamIds = new Set(
     normalizeUuidList(callerProfile.assigned_team_ids)
   );
@@ -309,8 +313,7 @@ Deno.serve(async (req) => {
       global_role: profilePayload.global_role,
       assigned_team_ids: requestedTeamIds,
       linked_player_id: linkedPlayer?.id || null,
-      team_season_ids: requestedTeamSeasonIds,
-      needs_player_link: requestedRole === "JUGADOR" && !linkedPlayer
+      team_season_ids: requestedTeamSeasonIds
     }
   });
 });

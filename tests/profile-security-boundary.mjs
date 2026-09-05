@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const [sql, settingsView, profileView] = await Promise.all([
@@ -18,7 +18,7 @@ assert.match(sql, /MASTER_IDENTITY_PROTECTED/);
 assert.match(sql, /PROFILE_SECURITY_FIELDS_READ_ONLY/);
 assert.match(sql, /TEAM_ASSIGNMENT_SCOPE_DENIED/);
 
-assert.match(settingsView, /rpc\("iq_v7_assign_user_role"/);
+assert.match(settingsView, /rpc\("iq_v7_assign_user_role_context"/);
 assert.match(settingsView, /rpc\("iq_v7_set_user_team_assignments"/);
 assert.doesNotMatch(
   settingsView,
@@ -49,3 +49,4 @@ console.log(JSON.stringify({
   result: "PASS"
 }));
 console.log("PROFILE_SECURITY_BOUNDARY_OK");
+

@@ -28,11 +28,12 @@ assert.match(source, /requestedRole === "ADMIN" && callerRole !== "SUPERADMIN"/)
 assert.match(source, /requestedTeamIds\.some\(\(teamId\) => !actorTeamIds\.has\(teamId\)\)/);
 assert.match(source, /teamSeasonRows\.some\(\(row\) => !actorTeamIds\.has\(String\(row\.team_id\)\)\)/);
 
-// Player identity is explicit and SELF is relational as well as compatibility-safe.
+// Player identity is mandatory, relational and compatibility-safe.
 assert.match(source, /requestedRole !== "JUGADOR"/);
+assert.match(source, /requestedRole === "JUGADOR" && !linkedPlayerId/);
 assert.match(source, /relation_type:\s*"SELF"/);
 assert.match(source, /user_player_links/);
-assert.match(source, /needs_player_link/);
+assert.doesNotMatch(source, /needs_player_link/);
 
 // Auth creation stays behind service_role and is compensated on DB failure.
 assert.match(source, /adminClient\.auth\.admin\.createUser/);
