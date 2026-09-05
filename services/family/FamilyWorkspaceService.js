@@ -68,6 +68,14 @@ export class FamilyWorkspaceService {
     });
   }
 
+  getDevelopmentContext(playerId, teamSeasonId = null) {
+    requireValue(playerId, "playerId");
+    return rpc(this.supabase, "iq_v10_family_development_context", {
+      p_player_id: playerId,
+      p_team_season_id: teamSeasonId || null
+    });
+  }
+
   createInvitation({ teamSeasonId, playerId, email, expiresHours = 168 } = {}) {
     requireValue(teamSeasonId, "teamSeasonId");
     requireValue(playerId, "playerId");

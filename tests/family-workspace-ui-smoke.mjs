@@ -26,6 +26,7 @@ const result = await page.evaluate(async () => {
     career: [{ season_name: "2025/2026", team_name: "Demo U16", club_name: "IQ Club", games: 18, points: 132 }]
   });
   view.service.getPlayer360Snapshot = async () => ({ allowed: false, reason_code: "ENTITLEMENT_NOT_INCLUDED" });
+  view.service.getDevelopmentContext = async () => ({ allowed: false, reason_code: "ENTITLEMENT_NOT_INCLUDED" });
   view.service.claimLink = async () => { claimed = true; return { claimed: true }; };
   const host = document.createElement("div");
   host.id = "family-smoke-host";
