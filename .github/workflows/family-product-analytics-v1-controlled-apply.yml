@@ -1,4 +1,4 @@
-name: Family Product Analytics V1 Controlled Apply
+﻿name: Family Product Analytics V1 Controlled Apply
 
 on:
   push:
@@ -61,7 +61,7 @@ jobs:
           OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
             --file=supabase/drafts/20260905_smoke_family_product_analytics_v1_rollback.sql)
           echo "$OUT"
-          test "$(printf '%s\n' "$OUT" | grep '^PRODUCT_ANALYTICS_SMOKE,' | tail -n 1)" = "PRODUCT_ANALYTICS_SMOKE,true,true"
+          test "$(printf '%s\n' "$OUT" | grep '^PRODUCT_ANALYTICS_SMOKE,' | tail -n 1)" = "PRODUCT_ANALYTICS_SMOKE,t,t"
           test "$(printf '%s\n' "$OUT" | grep '^PRODUCT_ANALYTICS_SMOKE_ROLLBACK_OK' | tail -n 1)" = "PRODUCT_ANALYTICS_SMOKE_ROLLBACK_OK"
       - name: Confirm smoke left no telemetry
         run: |
@@ -79,3 +79,4 @@ jobs:
         run: |
           set -euo pipefail
           test "$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('public.product_analytics_events') is null")" = "t"
+
