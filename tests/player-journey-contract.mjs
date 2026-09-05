@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { PLAYER_JOURNEY_SAFETY, PLAYER_MICRO_CHALLENGE_CATALOG } from "../config/player-journey.config.js";
 
 const sql = fs.readFileSync("supabase/ready/20260905_apply_player_journey_v1.sql", "utf8");
+const indexPatch = fs.readFileSync("supabase/ready/20260905_apply_player_journey_fk_indexes_v1.sql", "utf8");
 const service = fs.readFileSync("services/player360/PlayerJourneyService.js", "utf8");
 const ui = fs.readFileSync("features/player-journey/PlayerJourneyEnhancer.js", "utf8");
 const css = fs.readFileSync("styles/player-journey-v1.css", "utf8");
@@ -36,6 +37,12 @@ assert.match(sql, /iq_v12_player_journey_snapshot/);
 assert.match(sql, /iq_v12_player_journey_start/);
 assert.match(sql, /iq_v12_player_journey_complete/);
 assert.match(sql, /mastery_claimed',false/);
+
+// Advisor hardening: team_season_id FK has its own leading index. The patch is
+// additive/idempotent because production already has the base V1 migration.
+assert.match(indexPatch, /create index if not exists player_micro_challenge_team_season_fk_idx/);
+assert.match(indexPatch, /on public\.player_micro_challenges\(team_season_id\)/);
+assert.match(indexPatch, /PLAYER_JOURNEY_TEAM_SEASON_FK_INDEX_MISSING/);
 
 // V1 must never build challenges from hidden objectives or wellness/health data.
 for (const forbidden of [
