@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="./styles/layout.css">
   <link rel="stylesheet" href="./styles/components.css">
   <link rel="stylesheet" href="./styles/responsive.css">
+  <link rel="stylesheet" href="./styles/match-capture-v2.css">
   <link rel="stylesheet" href="./styles/wellness-cards-v1.css">
 </head>
 <body>
@@ -31,6 +32,8 @@
 
   <!-- Punto de entrada principal como módulo ES6 -->
   <script type="module" src="./index.js"></script>
+  <!-- Mejora progresiva: no posee permisos, persistencia ni cálculos de partido -->
+  <script type="module" src="./features/match-capture/MatchCaptureUxEnhancer.js"></script>
   <script type="module" src="./features/wellness/WellnessCardsEnhancer.js"></script>
 
 </body>
