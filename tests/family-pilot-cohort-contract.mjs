@@ -6,6 +6,7 @@ import { UserRole } from "../security/roles.js";
 
 const grantsSql = fs.readFileSync("supabase/ready/20260905_apply_saas_scoped_entitlement_grants_v1.sql", "utf8");
 const pilotSql = fs.readFileSync("supabase/ready/20260905_apply_family_pilot_cohort_v1.sql", "utf8");
+const indexSql = fs.readFileSync("supabase/ready/20260905_apply_family_pilot_fk_indexes_v1.sql", "utf8");
 const rollbackSql = fs.readFileSync("supabase/ready/20260905_rollback_family_pilot_cohort_v1.sql", "utf8");
 const service = fs.readFileSync("services/family/FamilyPilotService.js", "utf8");
 const view = fs.readFileSync("views/admin/BusinessMetricsView.js", "utf8");
@@ -48,6 +49,26 @@ assert.match(grantsSql, /grant\.team_id=p_subject_id/);
 assert.match(grantsSql, /grant\.club_id=p_subject_id/);
 assert.match(grantsSql, /SAAS_SCOPED_GRANTS_DIRECT_CLIENT_ACCESS_OPEN/);
 assert.match(grantsSql, /SAAS_SCOPED_GRANTS_RESOLVER_EXPOSED/);
+
+// Foreign-key coverage is explicit so the new SaaS primitives do not add fresh
+// unindexed-FK findings to the production performance baseline.
+for (const indexName of [
+  "saas_entitlement_grants_entitlement_code_fk_idx",
+  "saas_entitlement_grants_player_id_fk_idx",
+  "saas_entitlement_grants_team_id_fk_idx",
+  "saas_entitlement_grants_club_id_fk_idx",
+  "saas_entitlement_grants_created_by_fk_idx",
+  "saas_entitlement_grants_revoked_by_fk_idx",
+  "saas_family_pilot_billing_account_fk_idx",
+  "saas_family_pilot_created_by_fk_idx",
+  "saas_family_pilot_revoked_by_fk_idx"
+]) {
+  assert(indexSql.includes(indexName), `Missing FK coverage index: ${indexName}`);
+}
+assert.match(indexSql, /FAMILY_PILOT_FK_INDEX_PREREQUISITES_MISSING/);
+assert.doesNotMatch(indexSql, /drop\s+(table|index)/i);
+assert.doesNotMatch(indexSql, /insert\s+into/i);
+assert.doesNotMatch(indexSql, /delete\s+from/i);
 
 // Pilot lifecycle: explicit server-side VIEW/ENROLL/REVOKE, verified guardian
 // relationship, Family Free only and PLAYER-scoped grants.

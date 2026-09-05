@@ -130,12 +130,17 @@ Orden de despliegue de base de datos:
 
 1. `20260905_apply_saas_scoped_entitlement_grants_v1.sql`
 2. `20260905_apply_family_pilot_cohort_v1.sql`
+3. `20260905_apply_family_pilot_fk_indexes_v1.sql`
+
+El tercer paso cubre las claves foráneas de recurso y auditoría desde el primer despliegue para no añadir nuevos avisos de rendimiento al baseline de Supabase.
 
 Después se despliega la aplicación. No se crea ninguna inscripción automáticamente; la cohorte empieza en cero y cada alta requiere una acción explícita autorizada.
 
 ## Rollback
 
 `20260905_rollback_family_pilot_cohort_v1.sql` elimina únicamente la cohorte y los grants `FAMILY_PILOT`. No elimina la infraestructura genérica `saas_entitlement_grants`, no modifica `FAMILY_FREE` y no activa/desactiva planes de pago.
+
+Los índices específicos de `saas_family_pilot_enrollments` desaparecen al eliminar esa tabla. Los índices de `saas_entitlement_grants` permanecen porque pertenecen a la infraestructura SaaS reutilizable, no al experimento.
 
 ## Siguiente gate
 
