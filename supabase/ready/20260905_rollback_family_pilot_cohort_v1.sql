@@ -1,7 +1,8 @@
 -- =============================================================================
 -- IQBasket V11 - Family Pilot Cohort V1 rollback
--- WARNING: removes V11 pilot enrollment history and only the entitlement
--- overrides created by this pilot. It does not alter FAMILY_FREE or paid plans.
+-- WARNING: removes V11 pilot enrollment history and only commercial grants /
+-- legacy overrides created by this pilot. FAMILY_FREE, paid-plan hypotheses and
+-- the reusable resource-scoped entitlement-grant infrastructure remain intact.
 -- =============================================================================
 
 begin;
@@ -14,8 +15,13 @@ drop function if exists public.iq_v11_family_pilot_revoke(uuid,text);
 drop function if exists public.iq_v11_family_pilot_enroll(uuid,uuid,integer);
 drop function if exists public.iq_v11_family_pilot_snapshot();
 
--- Delete only overrides owned by this feature. Manual, billing and unrelated
--- promotion overrides remain untouched.
+-- Delete only resource-scoped grants owned by this pilot. The grant table is a
+-- reusable SaaS primitive and deliberately survives this feature rollback.
+delete from public.saas_entitlement_grants
+where source_type='FAMILY_PILOT';
+
+-- Defensive cleanup for deployments that briefly ran V11 before V11.1 migrated
+-- the account-wide pilot overrides into player-scoped grants.
 delete from public.saas_entitlement_overrides
 where source='PROMOTION'
   and coalesce(reason,'') like 'FAMILY_PILOT_V1:%';
