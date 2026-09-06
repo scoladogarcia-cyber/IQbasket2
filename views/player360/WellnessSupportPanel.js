@@ -3,6 +3,8 @@
  *
  * Manual check-ins only. No external imports, AI processing or clinical fields.
  * Every personal read/write is delegated to WellnessService -> backend ABAC.
+ * Submitted player/family check-ins are reviewed through PlayerDataSubmissionService,
+ * keeping review rights separate from access to the canonical private history.
  * Trend summaries are derived locally only after an authorized read succeeds.
  */
 
@@ -91,6 +93,11 @@ function sortEntries(rows) {
   );
 }
 
+function toTimestamp(value) {
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 export class WellnessSupportPanel {
   constructor({ service, submissionService = null, can, requiresSubmissionReview = null, isSelfPlayer = null, modules = null } = {}) {
     this.service = service;
@@ -105,6 +112,8 @@ export class WellnessSupportPanel {
     this.context = null;
     this.backendAvailable = false;
     this.lastError = null;
+    this.reviewLoadError = null;
+    this.pendingReviews = [];
     this.activeModule = "recovery";
     this.editorOpen = false;
     this.editingEntryId = null;
@@ -120,6 +129,19 @@ export class WellnessSupportPanel {
 
   _baseCanEdit(module) {
     return Boolean(this.can(MODULES[module]?.editPermission));
+  }
+
+  _canReviewSubmissions() {
+    return Boolean(
+      !this.requiresSubmissionReview()
+      && this.submissionService
+      && this.can(Permission.VIEW_PLAYER_SUBMISSIONS)
+      && (
+        this.can(Permission.APPROVE_PLAYER_SUBMISSION)
+        || this.can(Permission.RETURN_PLAYER_SUBMISSION)
+        || this.can(Permission.REJECT_PLAYER_SUBMISSION)
+      )
+    );
   }
 
   _visibleModules() {
@@ -141,9 +163,37 @@ export class WellnessSupportPanel {
     return today;
   }
 
+  async _loadPendingReviews(context = {}) {
+    this.pendingReviews = [];
+    this.reviewLoadError = null;
+    if (!this._canReviewSubmissions()) return;
+
+    try {
+      const rows = await this.submissionService.listForReview({
+        teamSeasonId: context.teamSeasonId,
+        includeResolved: false,
+        limit: 100
+      });
+      const playerId = String(context.playerId || "");
+      this.pendingReviews = normalizeArray(rows)
+        .filter(row =>
+          String(row.player_id || "") === playerId
+          && String(row.status || "").toUpperCase() === "SUBMITTED"
+          && String(row.submission_type || "").toUpperCase() === "WELLNESS_CHECKIN"
+          && MODULES[String(row.payload?.module || "").toLowerCase()]
+        )
+        .sort((a,b) => toTimestamp(b.submitted_at) - toTimestamp(a.submitted_at));
+    } catch (error) {
+      console.error("[WellnessSupportPanel] Error cargando aportaciones pendientes:",error);
+      this.reviewLoadError = error;
+    }
+  }
+
   async load(context = {}) {
     this.context = { ...context };
     this.lastError = null;
+    this.reviewLoadError = null;
+    this.pendingReviews = [];
     this.backendAvailable = false;
 
     if (!this.service?.supabase) return;
@@ -188,6 +238,7 @@ export class WellnessSupportPanel {
       if (!modules.includes(this.activeModule)) {
         this.activeModule = modules[0];
       }
+      await this._loadPendingReviews(context);
     } catch (error) {
       console.error("[WellnessSupportPanel] Error cargando Nutrition/Recovery:",error);
       this.lastError = error;
@@ -224,6 +275,109 @@ export class WellnessSupportPanel {
         metric
       ])
     );
+  }
+
+  _reviewRows(module = this.activeModule) {
+    return this.pendingReviews.filter(row =>
+      String(row.payload?.module || "").toLowerCase() === String(module || "").toLowerCase()
+    );
+  }
+
+  _reviewValueLabel(module, item = {}) {
+    const code = normalizeCode(item.metric_code);
+    const metric = this._metricMap(module).get(code);
+    const raw = item.value;
+    const value = raw === true ? "Sí" : raw === false ? "No" : raw;
+    return `${metric?.name || code.replaceAll("_"," ")}: ${value ?? "—"}`;
+  }
+
+  _renderPendingReviews() {
+    if (!this._canReviewSubmissions()) return "";
+    const module = this.activeModule;
+    const rows = this._reviewRows(module);
+
+    if (this.reviewLoadError) {
+      return `
+        <div class="p360w-review-error">
+          No se han podido cargar las aportaciones pendientes. Puedes revisarlas desde
+          <a href="#/approvals">Solicitudes</a>.
+        </div>
+      `;
+    }
+
+    if (!rows.length) return "";
+
+    return `
+      <section class="p360w-review-queue" aria-label="Aportaciones pendientes de revisión">
+        <div class="p360w-review-head">
+          <div>
+            <h3>📝 Aportaciones pendientes de validar</h3>
+            <p>
+              Estas respuestas han sido enviadas expresamente por el jugador o su familia.
+              Puedes revisarlas sin abrir el histórico privado de ${MODULES[module].label.toLowerCase()}.
+            </p>
+          </div>
+          <a href="#/approvals" class="p360w-review-link">Ver todas las solicitudes</a>
+        </div>
+
+        <div class="p360w-review-list">
+          ${rows.map(row => {
+            const payload = row.payload || {};
+            const actor = String(row.actor_relation || "SELF").toUpperCase() === "GUARDIAN"
+              ? "Familia / Tutor"
+              : "Jugador";
+            const values = normalizeArray(payload.values);
+            const canApprove = this.can(Permission.APPROVE_PLAYER_SUBMISSION);
+            const canReturn = this.can(Permission.RETURN_PLAYER_SUBMISSION);
+            const canReject = this.can(Permission.REJECT_PLAYER_SUBMISSION);
+            return `
+              <article class="p360w-review-card" data-review-id="${escapeHtml(row.id)}">
+                <div class="p360w-review-card-head">
+                  <div>
+                    <strong>${escapeHtml(actor)} · ${escapeHtml(payload.entry_date || "Sin fecha")}</strong>
+                    <span>Enviada para validación</span>
+                  </div>
+                  <span class="p360w-review-badge">Pendiente</span>
+                </div>
+                <div class="p360w-review-values">
+                  ${values.map(item => `<span>${escapeHtml(this._reviewValueLabel(module,item))}</span>`).join("")
+                    || '<span>Sin valores estructurados</span>'}
+                </div>
+                <label class="p360w-review-note">
+                  <span>Comentario para el jugador</span>
+                  <input
+                    type="text"
+                    maxlength="240"
+                    data-review-note="${escapeHtml(row.id)}"
+                    placeholder="Obligatorio para devolver o rechazar"
+                  />
+                </label>
+                <div class="p360w-review-actions">
+                  ${canApprove ? `
+                    <button type="button" class="p360w-review-action p360w-review-approve"
+                            data-review-id="${escapeHtml(row.id)}" data-decision="APPROVED">
+                      ✓ Validar
+                    </button>
+                  ` : ""}
+                  ${canReturn ? `
+                    <button type="button" class="p360w-review-action p360w-review-return"
+                            data-review-id="${escapeHtml(row.id)}" data-decision="RETURNED">
+                      ↩ Devolver
+                    </button>
+                  ` : ""}
+                  ${canReject ? `
+                    <button type="button" class="p360w-review-action p360w-review-reject"
+                            data-review-id="${escapeHtml(row.id)}" data-decision="REJECTED">
+                      × Rechazar
+                    </button>
+                  ` : ""}
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
   }
 
   _renderMetricInput(metric, existingValue) {
@@ -518,6 +672,7 @@ export class WellnessSupportPanel {
         .p360w-badge{display:inline-flex;width:max-content;border-radius:999px;padding:4px 8px;background:#ecfdf5;color:#047857;font-size:10px;font-weight:900;white-space:nowrap}
         .p360w-note{background:#f0fdfa;border:1px solid #99f6e4;color:#115e59;border-radius:10px;padding:12px;font-size:12px;line-height:1.5}
         .p360w-locked{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:12px;font-size:12px;line-height:1.5}
+        .p360w-locked a{color:#9a3412;font-weight:900}
         .p360w-empty{background:#f8fafc;border:1px dashed #cbd5e1;color:#64748b;border-radius:10px;padding:13px;text-align:center;font-size:12px;line-height:1.5}
         .p360w-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
         .p360w-primary,.p360w-secondary{min-height:44px;border-radius:9px;padding:9px 13px;font-weight:800;cursor:pointer}
@@ -534,6 +689,17 @@ export class WellnessSupportPanel {
         .p360w-link{border:0;background:transparent;color:#0f766e;font-weight:800;cursor:pointer;padding:6px}
         .p360w-values{display:flex;flex-wrap:wrap;gap:7px}.p360w-values span{display:inline-flex;gap:6px;align-items:center;border-radius:999px;background:#f1f5f9;padding:5px 8px;font-size:10px;color:#475569}
         .p360w-values b{font-size:9px;color:#0f172a}
+        .p360w-review-queue{display:grid;gap:10px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;padding:13px}
+        .p360w-review-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.p360w-review-head h3{margin:0;color:#1e3a8a;font-size:14px}.p360w-review-head p{margin:4px 0 0;color:#475569;font-size:11px;line-height:1.5}
+        .p360w-review-link{min-height:44px;display:inline-flex;align-items:center;padding:8px 10px;border:1px solid #93c5fd;border-radius:9px;background:#fff;color:#1d4ed8;text-decoration:none;font-size:11px;font-weight:900;white-space:nowrap}
+        .p360w-review-list{display:grid;gap:9px}.p360w-review-card{display:grid;gap:10px;border:1px solid #dbeafe;border-radius:11px;background:#fff;padding:11px}
+        .p360w-review-card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.p360w-review-card-head>div{display:grid;gap:2px}.p360w-review-card-head strong{font-size:12px;color:#0f172a}.p360w-review-card-head span{font-size:10px;color:#64748b;font-weight:800}
+        .p360w-review-badge{display:inline-flex;width:max-content;border-radius:999px;padding:4px 8px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:900;white-space:nowrap}
+        .p360w-review-values{display:flex;flex-wrap:wrap;gap:6px}.p360w-review-values span{display:inline-flex;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;padding:5px 8px;color:#334155;font-size:10px;overflow-wrap:anywhere}
+        .p360w-review-note{display:grid;gap:5px;color:#475569;font-size:11px;font-weight:800}.p360w-review-note input{width:100%;min-height:44px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:#0f172a;font:inherit;box-sizing:border-box}
+        .p360w-review-actions{display:flex;gap:8px;flex-wrap:wrap}.p360w-review-action{min-height:44px;flex:1 1 120px;border-radius:9px;padding:9px 12px;font-weight:900;cursor:pointer}
+        .p360w-review-approve{border:1px solid #166534;background:#166534;color:#fff}.p360w-review-return{border:1px solid #fdba74;background:#fff7ed;color:#9a3412}.p360w-review-reject{border:1px solid #fca5a5;background:#fff1f2;color:#be123c}
+        .p360w-review-error{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:10px;padding:12px;font-size:12px;line-height:1.5}.p360w-review-error a{color:#991b1b;font-weight:900}
         .p360w-trend-section{display:grid;gap:10px;margin:12px 0 16px;padding:13px;border:1px solid #ccfbf1;background:#f0fdfa;border-radius:12px}
         .p360w-trend-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.p360w-trend-head h3{margin:0;font-size:14px}.p360w-trend-head p{margin:4px 0 0;color:#475569;font-size:11px;line-height:1.45}
         .p360w-trends{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.p360w-trend{display:grid;gap:9px;border:1px solid #d1fae5;background:#fff;border-radius:10px;padding:10px;min-width:0}
@@ -547,11 +713,12 @@ export class WellnessSupportPanel {
         .p360w-recommendation>span{font-size:10px;font-weight:900;text-transform:uppercase;color:#047857;white-space:nowrap}
         .p360w-priority-review{background:#fffbeb;border-color:#fde68a}.p360w-priority-review>span{color:#b45309}
         @media(max-width:640px){
-          .p360w-head,.p360w-history-top,.p360w-recommendation,.p360w-trend-head{display:grid}
+          .p360w-head,.p360w-history-top,.p360w-recommendation,.p360w-trend-head,.p360w-review-head,.p360w-review-card-head{display:grid}
           .p360w-metrics,.p360w-trends{grid-template-columns:1fr}.p360w-date{max-width:none}
-          .p360w-actions{display:grid}.p360w-actions button{width:100%}
+          .p360w-actions,.p360w-review-actions{display:grid}.p360w-actions button,.p360w-review-actions button{width:100%}
           .p360w-toolbar .p360w-primary{width:100%}.p360w-inline-actions{justify-content:flex-start}
           .p360w-trend-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+          .p360w-review-link{width:100%;justify-content:center;white-space:normal;text-align:center}
         }
       </style>
     `;
@@ -565,6 +732,7 @@ export class WellnessSupportPanel {
     const moduleData=this.data[module] || { access:null,metrics:[],entries:[] };
     const access=moduleData.access || {};
     const canCreate=this._baseCanEdit(module) && access.can_create && access.purpose;
+    const reviewerMode=this._canReviewSubmissions();
 
     return `
       <section class="p360w-panel">
@@ -586,10 +754,16 @@ export class WellnessSupportPanel {
           `).join("")}
         </div>
 
+        ${this._renderPendingReviews()}
+
         ${!access.purpose ? `
           <div class="p360w-locked">
-            El módulo está disponible, pero este usuario todavía no dispone de una autorización
-            ABAC válida para este jugador y esta temporada. No se muestra ni se guarda ningún dato.
+            <strong>Histórico privado protegido.</strong> Este perfil no dispone de una autorización ABAC
+            válida para consultar el histórico de ${MODULES[module].label.toLowerCase()} de este jugador.
+            ${reviewerMode
+              ? "Esto no impide revisar las aportaciones enviadas expresamente por el jugador o su familia: aparecen arriba y solo se incorporan al histórico tras validarlas."
+              : "No se muestra el histórico ni se permite modificarlo sin una autorización válida."}
+            ${reviewerMode ? ' <a href="#/approvals">Abrir Bandeja de Solicitudes</a>.' : ""}
           </div>
         ` : `
           <article class="p360w-card">
@@ -636,6 +810,57 @@ export class WellnessSupportPanel {
       .filter(Boolean);
   }
 
+  async _handleReviewAction(button, refresh) {
+    if (!button || !this.submissionService) return;
+    const submissionId = button.dataset.reviewId;
+    const decision = String(button.dataset.decision || "").toUpperCase();
+    const noteInput = button.closest(".p360w-review-card")?.querySelector(
+      `[data-review-note="${submissionId}"]`
+    );
+    const note = String(noteInput?.value || "").trim();
+
+    if (["RETURNED","REJECTED"].includes(decision) && !note) {
+      alert(decision === "RETURNED"
+        ? "Indica qué debe corregir el jugador antes de devolver la aportación."
+        : "Indica el motivo del rechazo para que el jugador pueda entenderlo.");
+      noteInput?.focus();
+      return;
+    }
+
+    if (decision === "APPROVED" && !confirm(
+      "¿Validar esta aportación e incorporarla al histórico oficial del jugador?"
+    )) return;
+
+    const card = button.closest(".p360w-review-card");
+    const actions = card ? [...card.querySelectorAll(".p360w-review-action")] : [button];
+    actions.forEach(action => {
+      action.disabled = true;
+      action.style.opacity = "0.65";
+    });
+
+    try {
+      await this.submissionService.review({
+        submissionId,
+        decision,
+        note: note || null
+      });
+      await this.load(this.context);
+      await refresh();
+      alert(decision === "APPROVED"
+        ? "✅ Aportación validada. Se ha incorporado al histórico autorizado del jugador."
+        : decision === "RETURNED"
+          ? "↩ Aportación devuelta al jugador para corregir."
+          : "Aportación rechazada.");
+    } catch(error) {
+      console.error("[WellnessSupportPanel] Error revisando aportación:",error);
+      alert(`❌ ${error.message || error}`);
+      actions.forEach(action => {
+        action.disabled = false;
+        action.style.opacity = "1";
+      });
+    }
+  }
+
   async bind(container,{ onChanged }={}) {
     if (!container || !this.isAvailable()) return;
     const refresh=typeof onChanged === "function" ? onChanged : () => {};
@@ -646,6 +871,12 @@ export class WellnessSupportPanel {
         this.editorOpen=false;
         this.editingEntryId=null;
         await refresh();
+      });
+    });
+
+    container.querySelectorAll(".p360w-review-action").forEach(button => {
+      button.addEventListener("click",async event => {
+        await this._handleReviewAction(event.currentTarget,refresh);
       });
     });
 
