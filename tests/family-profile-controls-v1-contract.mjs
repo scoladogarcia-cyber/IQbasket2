@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { DataStore } from "../services/DataStore.js";
-import { PermissionService } from "../security/PermissionService.js";
-import { UserRole } from "../security/roles.js";
 import { FamilyProfileControls } from "../components/admin/FamilyProfileControls.js";
+import {
+  buildFamilyIdentityPolicy,
+  applyFamilyIdentityPolicy,
+  applyFamilyIdentityPolicyList
+} from "../services/family/FamilyIdentityPolicy.js";
 
 const migration = fs.readFileSync("supabase/migrations/20260906202000_family_profile_controls_v1.sql", "utf8");
 const service = fs.readFileSync("services/family/FamilyProfileAdminService.js", "utf8");
 const component = fs.readFileSync("components/admin/FamilyProfileControls.js", "utf8");
 const settings = fs.readFileSync("views/TranslationsView.js", "utf8");
 const datastore = fs.readFileSync("services/DataStore.js", "utf8");
+const identityPolicy = fs.readFileSync("services/family/FamilyIdentityPolicy.js", "utf8");
 const release = JSON.parse(fs.readFileSync("release.json", "utf8"));
 
 assert.match(migration, /family_show_other_player_names boolean not null default true/i);
@@ -41,45 +44,66 @@ assert.match(component, /family-show-other-jerseys/);
 assert.match(settings, /FamilyProfileControls/);
 assert.match(settings, /userProf\.role === UserRole\.FAMILIA_TUTOR/);
 assert.match(settings, /players: teamPlayers/);
-assert.match(datastore, /_familyIdentityPolicy\(\)/);
-assert.match(datastore, /familyAuthorizationScope/);
-assert.match(datastore, /linkedPlayerIds/);
+assert.match(datastore, /FamilyIdentityPolicy\.js/);
+assert.match(datastore, /buildFamilyIdentityPolicy/);
+assert.match(datastore, /applyFamilyIdentityPolicyList/);
+assert.match(identityPolicy, /no browser, Supabase or global-state dependency/i);
 
-// Presentation contract: linked children always keep identity; non-linked players
-// follow the two independently configurable Family preferences.
-const previousPlayers = DataStore.players;
-const previousPermissionService = DataStore.permissionService;
-try {
-  DataStore.players = [
-    { id: "linked", team_id: "team", first_name: "Lukas", last_name: "Danzic", jersey: 7 },
-    { id: "other", team_id: "team", first_name: "Mario", last_name: "Test", jersey: 8 }
-  ];
-  const permissionService = new PermissionService({
-    id: "family-user",
-    email: "family@example.com",
-    role: UserRole.FAMILIA_TUTOR,
-    accountStatus: "ACTIVE",
-    linkedPlayerIds: ["linked"],
-    allowedTeamIds: ["team"],
-    familyAuthorizationScope: {
-      show_other_player_names: false,
-      show_other_player_jerseys: false
-    }
-  });
-  DataStore.setPermissionService(permissionService);
-  const rows = DataStore.getTeamPlayers("team");
-  const linked = rows.find(row => row.id === "linked");
-  const other = rows.find(row => row.id === "other");
-  assert.equal(linked.first_name, "Lukas");
-  assert.equal(linked.jersey, 7);
-  assert.equal(other.first_name, "Jugador");
-  assert.equal(other.last_name, "");
-  assert.equal(other.jersey, null);
-  assert.equal(other.number, null);
-} finally {
-  DataStore.players = previousPlayers;
-  DataStore.setPermissionService(previousPermissionService);
-}
+// Pure presentation contract: linked children always keep identity; non-linked
+// players follow the two independently configurable Family preferences.
+const familyUser = {
+  id: "family-user",
+  role: "FAMILIA_TUTOR",
+  linkedPlayerIds: ["linked"],
+  familyAuthorizationScope: {
+    show_other_player_names: false,
+    show_other_player_jerseys: false
+  }
+};
+const policy = buildFamilyIdentityPolicy(familyUser);
+assert.ok(policy);
+assert.equal(policy.showOtherPlayerNames, false);
+assert.equal(policy.showOtherPlayerJerseys, false);
+assert.equal(policy.linkedPlayerIds.has("linked"), true);
+
+const linkedPlayer = {
+  id: "linked",
+  first_name: "Lukas",
+  last_name: "Danzic",
+  jersey: 7,
+  number: 7
+};
+const otherPlayer = {
+  id: "other",
+  first_name: "Mario",
+  last_name: "Test",
+  jersey: 8,
+  number: 8
+};
+const linkedMasked = applyFamilyIdentityPolicy(linkedPlayer, policy);
+const otherMasked = applyFamilyIdentityPolicy(otherPlayer, policy);
+assert.equal(linkedMasked.first_name, "Lukas");
+assert.equal(linkedMasked.jersey, 7);
+assert.equal(otherMasked.first_name, "Jugador");
+assert.equal(otherMasked.last_name, "");
+assert.equal(otherMasked.jersey, null);
+assert.equal(otherMasked.number, null);
+
+const maskedList = applyFamilyIdentityPolicyList([linkedPlayer, otherPlayer], policy);
+assert.equal(maskedList.length, 2);
+assert.equal(maskedList[0].first_name, "Lukas");
+assert.equal(maskedList[1].first_name, "Jugador");
+
+// Backward-compatible defaults: absence of V26 preferences does not hide data.
+const defaultPolicy = buildFamilyIdentityPolicy({
+  role: "FAMILIA_TUTOR",
+  linkedPlayerIds: ["linked"],
+  familyAuthorizationScope: {}
+});
+assert.equal(defaultPolicy.showOtherPlayerNames, true);
+assert.equal(defaultPolicy.showOtherPlayerJerseys, true);
+assert.equal(applyFamilyIdentityPolicy(otherPlayer, defaultPolicy), otherPlayer);
+assert.equal(buildFamilyIdentityPolicy({ role: "ENTRENADOR" }), null);
 
 const controls = new FamilyProfileControls(null);
 controls.userId = "family-user";
