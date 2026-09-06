@@ -718,11 +718,18 @@ export class IQBasketApp {
     ].includes(targetRoute)
       ? parts[1] || null
       : null;
+    const routeGameId = [
+      "live", "hud", "live-hud", "easy-entry", "easy", "entrada-facil", "live-entry",
+      "boxscore", "registro"
+    ].includes(targetRoute)
+      ? parts[1] || null
+      : null;
     const routeContext = {
       teamId: this.teamId || DataStore.getActiveTeamId?.() || null,
       teamSeasonId: DataStore.getActiveTeamSeasonId?.() || null,
       playerId: routePlayerId,
-      playerTeamId: this.teamId || DataStore.getActiveTeamId?.() || null
+      playerTeamId: this.teamId || DataStore.getActiveTeamId?.() || null,
+      gameId: routeGameId
     };
     if (requiredPermission && this.isAuthenticated) {
       let canNavigate = this.permissionService.canPreview(requiredPermission, routeContext);

@@ -11,6 +11,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { Permission } from "../security/PermissionService.js";
 import { GameLockService } from "../services/games/GameLockService.js";
+import { GameCaptureDelegationService } from "../services/games/GameCaptureDelegationService.js";
 
 export class GameBoxScoreView {
   /**
@@ -21,10 +22,13 @@ export class GameBoxScoreView {
   constructor(supabaseClient, authController) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
+    this.captureService = new GameCaptureDelegationService(this.supabase);
     this.games = [];
     this.players = [];
     this.selectedGameId = null;
     this.gameStats = [];
+    this.gameScopedSnapshot = null;
+    this.isGameScopedOnly = false;
   }
 
   t(key, fallback = "") {
@@ -46,9 +50,22 @@ export class GameBoxScoreView {
   }
 
   _isTeamSeasonFrozen(game = {}) {
+    const embeddedStatus = game.team_season_data_status || game.teamSeasonDataStatus;
+    if (embeddedStatus) return String(embeddedStatus).toUpperCase() === "FROZEN";
     const { teamId } = this._gameContext(game);
     const context = DataStore.getActiveSeasonContext?.(teamId) || null;
     return String(context?.data_status || context?.dataStatus || "ACTIVE").toUpperCase() === "FROZEN";
+  }
+
+  async _loadGameScopedSnapshot(gameId) {
+    const snapshot = await this.captureService.getSnapshot(gameId);
+    if (!snapshot?.game?.id) throw new Error("No se pudo cargar el partido solicitado.");
+    this.gameScopedSnapshot = snapshot;
+    this.isGameScopedOnly = true;
+    this.games = [snapshot.game];
+    this.players = Array.isArray(snapshot.players) ? snapshot.players : [];
+    this.gameStats = Array.isArray(snapshot.stats) ? snapshot.stats : [];
+    return snapshot;
   }
 
   /**
@@ -84,6 +101,21 @@ export class GameBoxScoreView {
     this.players = DataStore.getSeasonParticipantPlayers?.(DataStore.getActiveTeamId?.())
       || DataStore.getPlayers()
       || [];
+    this.gameScopedSnapshot = null;
+    this.isGameScopedOnly = false;
+
+    if (targetGameId && !this.games.some(game => String(game.id) === String(targetGameId))) {
+      try {
+        await this._loadGameScopedSnapshot(targetGameId);
+      } catch (error) {
+        container.innerHTML = `
+          <div style="padding:24px;color:#991b1b;background:white;border:1px solid #fecaca;border-radius:12px;text-align:center;">
+            <strong>No se pudo abrir este BoxScore.</strong>
+            <div style="margin-top:6px;font-size:13px;">${String(error?.message || error)}</div>
+          </div>`;
+        return;
+      }
+    }
 
     if (this.games.length === 0) {
       container.innerHTML = `
@@ -232,7 +264,9 @@ export class GameBoxScoreView {
   // =========================================================================
   _renderGameBoxScoreDetail(container, containerId) {
     const currentGame = this.games.find(g => String(g.id) === String(this.selectedGameId)) || this.games[0];
-    this.gameStats = DataStore.getPlayerGameStats(null, currentGame.id) || [];
+    this.gameStats = this.isGameScopedOnly
+      ? (this.gameScopedSnapshot?.stats || [])
+      : (DataStore.getPlayerGameStats(null, currentGame.id) || []);
 
     let starters = currentGame.starter_ids || currentGame.starterIds || [];
     if (typeof starters === "string") {
@@ -341,6 +375,7 @@ export class GameBoxScoreView {
     const teamEfg = totalFga > 0 ? (((totalFgm + 0.5 * totFg3m) / totalFga) * 100).toFixed(1) : "0.0";
     const teamAstTo = totPer > 0 ? (totAst / totPer).toFixed(1) : totAst.toFixed(1);
 
+    const backHref = this.isGameScopedOnly ? "#/dashboard" : "#/boxscore";
     const optionsMarkup = this.games.map(g => `
       <option value="${g.id}" ${String(g.id) === String(currentGame.id) ? 'selected' : ''}>
         ${g.date || ''} vs ${g.opponent || g.opponentName || this.t("opponent", "Rival")} (${g.team_score ?? g.teamScore ?? 0} - ${g.opponent_score ?? g.opponentScore ?? 0})
@@ -352,7 +387,7 @@ export class GameBoxScoreView {
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <a href="#/boxscore" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
+            <a href="${backHref}" style="background: #f1f5f9; color: #475569; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
               ← ${this.t("back_to_register", "Volver a Registro Estadístico")}
             </a>
             <div>
@@ -373,12 +408,18 @@ export class GameBoxScoreView {
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 280px;">
             <span style="font-size: 18px;">🏆</span>
-            <div style="flex: 1; max-width: 500px;">
-              <label style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">${this.t("change_game", "CAMBIAR DE PARTIDO")}:</label>
-              <select id="select-game-bs" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; min-height: 44px;">
-                ${optionsMarkup}
-              </select>
-            </div>
+            ${this.isGameScopedOnly ? `
+              <div style="font-size:13px;font-weight:800;color:#334155;">
+                Acceso delegado · ${currentGame.date || ''} vs ${currentGame.opponent || this.t("opponent", "Rival")}
+              </div>
+            ` : `
+              <div style="flex: 1; max-width: 500px;">
+                <label style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;">${this.t("change_game", "CAMBIAR DE PARTIDO")}:</label>
+                <select id="select-game-bs" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: white; min-height: 44px;">
+                  ${optionsMarkup}
+                </select>
+              </div>
+            `}
           </div>
 
           <span style="background: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px;">
@@ -570,15 +611,42 @@ export class GameBoxScoreView {
           });
         }
 
-        const gameData = {
-          ...currentGame,
-          starter_ids: starterIds
-        };
+        if (starterIds.length > 5) {
+          alert("Solo puede haber un máximo de 5 titulares.");
+          return;
+        }
 
-        await DataStore.saveGameAndStats(gameData, statsList);
+        const saveButton = container.querySelector("#btn-save-boxscore");
+        if (saveButton) saveButton.disabled = true;
+        try {
+          if (this.isGameScopedOnly) {
+            const snapshot = await this.captureService.saveCapture({
+              gameId: currentGame.id,
+              starterIds,
+              stats: statsList
+            });
+            this.gameScopedSnapshot = snapshot || this.gameScopedSnapshot;
+            this.games = [this.gameScopedSnapshot.game];
+            this.players = this.gameScopedSnapshot.players || this.players;
+            this.gameStats = this.gameScopedSnapshot.stats || statsList;
+          } else {
+            // Preserve the established team-scoped save path for normal staff.
+            // The V21 RPC is reserved for users whose only authorization is the
+            // explicit per-game delegation, avoiding a regression in existing
+            // trainer/admin workflows and keeping DataStore as their boundary.
+            const gameData = {
+              ...currentGame,
+              starter_ids: starterIds
+            };
+            await DataStore.saveGameAndStats(gameData, statsList);
+          }
 
-        alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
-        this.render(containerId, currentGame.id);
+          alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
+          await this.render(containerId, currentGame.id);
+        } catch (error) {
+          alert(`❌ No se pudo guardar el BoxScore: ${error.message || error}`);
+          if (saveButton) saveButton.disabled = false;
+        }
       });
     }
   }

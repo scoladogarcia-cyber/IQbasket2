@@ -9,6 +9,8 @@
  * - no cambia todavía el rol funcional usado por ROLE_PERMISSIONS.
  */
 
+import { GameCaptureDelegationService } from "../games/GameCaptureDelegationService.js";
+
 function uniqueStrings(values = []) {
   return [...new Set(
     (values || [])
@@ -46,6 +48,7 @@ function isMissingFamilyScopeRpc(error) {
 export class AuthorizationContextService {
   constructor(supabaseClient) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
+    this.gameCaptureDelegationService = new GameCaptureDelegationService(this.supabase);
   }
 
   async enrichProfile(profile = {}) {
@@ -137,6 +140,13 @@ export class AuthorizationContextService {
       ...arrayish(profile.allowed_season_ids)
     ];
 
+    let gameDelegations = [];
+    try {
+      gameDelegations = await this.gameCaptureDelegationService.getMyDelegations();
+    } catch (error) {
+      console.warn("[AuthorizationContext] No se pudieron cargar delegaciones V21:", error.message);
+    }
+
     return {
       ...profile,
       allowedTeamIds: uniqueStrings([...legacyTeamIds, ...v3TeamIds, ...familyTeamIds]),
@@ -145,6 +155,7 @@ export class AuthorizationContextService {
       allowedGlobalSeasonIds: uniqueStrings([...globalSeasonIds, ...familyGlobalSeasonIds]),
       linkedPlayerIds: uniqueStrings([...legacyLinkedPlayerIds, ...linkedPlayerIds, ...familyLinkedPlayerIds]),
       contextualMemberships,
+      gameDelegations,
       familyAuthorizationScope: familyScope,
       authorizationModel: familyScope
         ? "V17_FAMILY_SCOPED"

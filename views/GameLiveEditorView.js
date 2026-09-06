@@ -14,6 +14,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
 import { Permission } from "../security/PermissionService.js";
 import { GameLockService } from "../services/games/GameLockService.js";
+import { GameCaptureDelegationPanel } from "../components/games/GameCaptureDelegationPanel.js";
 
 export class GameLiveEditorView {
   constructor(gameController, authController) {
@@ -40,6 +41,7 @@ export class GameLiveEditorView {
     this.continuationDialog = null;
     this.pendingLockRequests = [];
     this.gameLockService = new GameLockService(this.supabase, this.auth);
+    this.gameCaptureDelegationPanel = new GameCaptureDelegationPanel(this.supabase, this.auth);
   }
 
   t(key, fallback = "") {
@@ -64,7 +66,8 @@ export class GameLiveEditorView {
     return {
       teamId: game?.team_id || game?.teamId || this.teamId || DataStore.getActiveTeamId(),
       seasonId: game?.season_id || game?.seasonId || null,
-      teamSeasonId: game?.team_season_id || game?.teamSeasonId || DataStore.getActiveTeamSeasonId?.()
+      teamSeasonId: game?.team_season_id || game?.teamSeasonId || DataStore.getActiveTeamSeasonId?.(),
+      gameId: game?.id || null
     };
   }
 
@@ -370,6 +373,11 @@ export class GameLiveEditorView {
       const canReopen = !seasonFrozen && locked && this.gameLockService.canReopen(game);
       const canRequestLock = !seasonFrozen && !locked && this.gameLockService.canRequestLock(game);
       const canDelete = this._canDeleteGame(game);
+      const canCaptureGame = !seasonFrozen && !locked
+        && Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, this._gameContext(game)));
+      const delegationAction = this.gameCaptureDelegationPanel.buttonMarkup(game, {
+        disabled: seasonFrozen || locked
+      });
 
       const lifecycleBadge = locked
         ? '<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔒 Cerrado</span>'
@@ -413,8 +421,10 @@ export class GameLiveEditorView {
             <button class="btn-open-court-direct" data-id="${game.id}" aria-disabled="${!editable}" style="background:${editable ? "#0284c7" : "#e2e8f0"};color:${editable ? "#ffffff" : "#64748b"};border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:${editable ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:4px;">
               🏀 Pista / Edición${editable ? "" : " 🔒"}
             </button>
+            <button type="button" class="btn-live-existing-game" data-id="${game.id}" ${canCaptureGame ? "" : "disabled"} style="background:${canCaptureGame ? "#0f766e" : "#f1f5f9"};color:${canCaptureGame ? "#ffffff" : "#94a3b8"};border:1px solid ${canCaptureGame ? "#0f766e" : "#cbd5e1"};padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:${canCaptureGame ? "pointer" : "not-allowed"};min-height:44px;">⚡ Captura</button>
             <button onclick="window.location.hash='#/boxscore/${game.id}'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📋 Boxscore</button>
             <button onclick="window.location.hash='#/reports'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📊 Informe</button>
+            ${delegationAction}
             ${lifecycleAction}
             <button class="btn-delete-game-direct" data-id="${game.id}" ${!canDelete ? "disabled" : ""} style="background:${canDelete ? "#fee2e2" : "#f1f5f9"};border:1px solid ${canDelete ? "#fca5a5" : "#cbd5e1"};font-size:18px;cursor:${canDelete ? "pointer" : "not-allowed"};color:${canDelete ? "#dc2626" : "#94a3b8"};min-height:44px;min-width:44px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;" title="${canDelete ? "Eliminar partido" : locked ? "Reabre el partido antes de eliminarlo" : "Tu rol no puede eliminar partidos"}">🗑️</button>
           </div>
@@ -467,6 +477,17 @@ export class GameLiveEditorView {
     `;
 
     this._bindGameLockEvents(container, teamId);
+    this.gameCaptureDelegationPanel.bind(container, this.games);
+
+    container.querySelectorAll(".btn-live-existing-game").forEach(button => {
+      button.addEventListener("click", event => {
+        const gameId = event.currentTarget.dataset.id;
+        const game = this.games.find(item => String(item.id) === String(gameId));
+        if (!game || this._isGameLocked(game) || this._isTeamSeasonFrozen(teamId)) return;
+        if (!this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, this._gameContext(game))) return;
+        window.location.hash = `#/live/${gameId}`;
+      });
+    });
 
     container.querySelector("#btn-create-game-hud")?.addEventListener("click", () => {
       if (this._isTeamSeasonFrozen(teamId)) {

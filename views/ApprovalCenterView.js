@@ -409,7 +409,7 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
     const targetLink = item.type === RequestType.GAME_LOCK
       ? `#/games`
       : item.type === RequestType.PLAYER_DATA_SUBMISSION
-        ? `#/player/${item.playerId || ""}`
+        ? `#/player360/${item.playerId || ""}`
         : `#/settings`;
 
     if (item.type === RequestType.TRANSFER) {

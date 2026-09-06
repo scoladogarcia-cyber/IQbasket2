@@ -169,6 +169,9 @@ jobs:
       - name: Early adopter feedback triage V1
         run: node tests/early-adopter-feedback-triage-v1-contract.mjs
 
+      - name: Game capture delegation V1
+        run: node tests/game-capture-delegation-v1-contract.mjs
+
       - name: Family growth Priority 2 contract
         run: node tests/family-growth-priority2-contract.mjs
 

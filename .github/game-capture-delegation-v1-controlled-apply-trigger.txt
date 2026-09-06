@@ -1,0 +1,1 @@
+trigger V21 production apply after clean PR gate a48a99e; CI, Core User Flows and Global UI QA green
