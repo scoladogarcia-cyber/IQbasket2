@@ -1,0 +1,38 @@
+name: V21 BoxScore Patch
+
+on:
+  push:
+    branches:
+      - feat/game-capture-delegation-v1
+    paths:
+      - ".github/v21-boxscore-patch-trigger.txt"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/game-capture-delegation-v1
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply asserted BoxScore patch
+        run: python scripts/v21_apply_boxscore_patch.py
+      - name: Validate BoxScore syntax and diff
+        run: |
+          node --check views/GameBoxScoreView.js
+          git diff --check
+      - name: Commit patched BoxScore
+        run: |
+          test -n "$(git status --porcelain views/GameBoxScoreView.js)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add views/GameBoxScoreView.js
+          git commit -m "feat: make BoxScore game-scoped in V21"
+          git push origin HEAD:feat/game-capture-delegation-v1
