@@ -224,7 +224,11 @@ export class ApprovalCenterService {
   _normalizePlayerSubmission(row = {}) {
     const status = normalizeStatus(row.status);
     const payload = row.payload || {};
-    const context = { teamSeasonId: row.team_season_id, playerId: row.player_id };
+    // Review permission is scoped to the team-season. The exact disclosed row
+    // and player relationship are validated again by the V22 backend RPC.
+    // Passing playerId here incorrectly invokes the generic player-access guard,
+    // which is intentionally false for staff unless a team id is also supplied.
+    const context = { teamSeasonId: row.team_season_id };
     const pending = status === "PENDING";
     const canApprove = pending && Boolean(this.auth?.canPreview?.(Permission.APPROVE_PLAYER_SUBMISSION, context));
     const canReturn = pending && Boolean(this.auth?.canPreview?.(Permission.RETURN_PLAYER_SUBMISSION, context));
