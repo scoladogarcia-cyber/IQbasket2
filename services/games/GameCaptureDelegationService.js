@@ -1,10 +1,12 @@
 /**
  * @fileoverview RPC boundary for per-game capture delegation.
  * @description Keeps delegation, minimal game snapshots and scoped capture writes
- * behind V21 RPCs. The browser never reads delegation/audit tables directly.
+ * behind V21/V28 RPCs. V28 adds the live single-writer lease without changing
+ * the underlying delegation model.
  */
 
 import { Permission } from "../../security/permissions.js";
+import { GameLiveSessionService } from "./GameLiveSessionService.js";
 
 export const DELEGATABLE_GAME_PERMISSIONS = Object.freeze([
   Permission.RECORD_LIVE_GAME,
@@ -36,12 +38,27 @@ function normalizeCapabilities(capabilities = []) {
 }
 
 function rpcError(error, fallback) {
-  return new Error(error?.message || fallback);
+  const raw = String(error?.message || "");
+  if (raw.includes("GAME_LIVE_LEASE_REQUIRED") || raw.includes("GAME_LIVE_LEASE_INVALID")) {
+    return new Error("Necesitas poseer el turno de escritura de este partido en vivo para guardar cambios.");
+  }
+  return new Error(raw || fallback);
+}
+
+function isMissingRpc(error, rpcName) {
+  return Boolean(
+    error
+    && (
+      error.code === "PGRST202"
+      || String(error.message || "").includes(rpcName)
+    )
+  );
 }
 
 export class GameCaptureDelegationService {
   constructor(supabaseClient = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
+    this.liveSessionService = new GameLiveSessionService(this.supabase);
   }
 
   _requireClient() {
@@ -112,6 +129,13 @@ export class GameCaptureDelegationService {
     return Array.isArray(data) ? data : [];
   }
 
+  /**
+   * Save sporting capture data through the authoritative V28 boundary.
+   *
+   * During the controlled rollout, installations where V28 has not yet been
+   * applied receive PGRST202 and safely fall back to V21. Once V28 exists, no
+   * permission/lease error ever falls back to V21.
+   */
   async saveCapture({
     gameId,
     teamScore = null,
@@ -119,18 +143,41 @@ export class GameCaptureDelegationService {
     starterIds = null,
     stats = null,
     periods = null,
-    events = null
+    events = null,
+    leaseToken = null
   }) {
     this._requireClient();
-    const { data, error } = await this.supabase.rpc("iq_v21_save_game_capture", {
-      p_game_id: requireUuid(gameId, "gameId"),
+    const id = requireUuid(gameId, "gameId");
+    const normalizedStarters = Array.isArray(starterIds)
+      ? starterIds.map(playerId => requireUuid(playerId, "starterId"))
+      : null;
+    const baseArgs = {
+      p_game_id: id,
       p_team_score: teamScore,
       p_opponent_score: opponentScore,
-      p_starter_ids: Array.isArray(starterIds) ? starterIds.map(id => requireUuid(id, "starterId")) : null,
+      p_starter_ids: normalizedStarters,
       p_stats: Array.isArray(stats) ? stats : null,
       p_periods: Array.isArray(periods) ? periods : null,
       p_events: Array.isArray(events) ? events : null
+    };
+    const token = String(
+      leaseToken || this.liveSessionService.getStoredToken(id) || ""
+    ).trim() || null;
+
+    const v28Rpc = "iq_v28_save_game_capture";
+    const v28Result = await this.supabase.rpc(v28Rpc, {
+      ...baseArgs,
+      p_lease_token: token
     });
+
+    if (!v28Result.error) return v28Result.data || null;
+    if (!isMissingRpc(v28Result.error, v28Rpc)) {
+      throw rpcError(v28Result.error, "No se pudo guardar la captura del partido.");
+    }
+
+    // Deployment compatibility only: this path disappears naturally after the
+    // V28 migration is installed and its RPC is visible to PostgREST.
+    const { data, error } = await this.supabase.rpc("iq_v21_save_game_capture", baseArgs);
     if (error) throw rpcError(error, "No se pudo guardar la captura del partido.");
     return data || null;
   }
