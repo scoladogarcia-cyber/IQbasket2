@@ -6,20 +6,11 @@
 
 import { UserRole } from "../security/roles.js";
 
-function esc(value = "") {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 export class PlayerNutritionRouterView {
-  constructor(supabaseClient = null, authController = null) {
+  constructor(supabaseClient = null, authController = null, staffView = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
-    this.staffView = null;
+    this.staffView = staffView;
   }
 
   _ownPlayerId() {
