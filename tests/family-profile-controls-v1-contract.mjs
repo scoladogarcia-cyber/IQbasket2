@@ -25,6 +25,7 @@ assert.match(migration, /iq_v26_save_family_profile_config/i);
 assert.match(migration, /FAMILY_PROFILE_PLAYER_OUT_OF_SCOPE/i);
 assert.match(migration, /relationship_type='GUARDIAN'/i);
 assert.match(migration, /FAMILY_PROFILE_ADMIN_V26/i);
+assert.match(migration, /greatest\(now\(\),r\.valid_from \+ interval '1 microsecond'\)/i);
 assert.match(migration, /show_other_player_names/i);
 assert.match(migration, /show_other_player_jerseys/i);
 assert.match(migration, /revoke all on function iq_private\.v26_can_manage_family_profile\(uuid\)/i);
