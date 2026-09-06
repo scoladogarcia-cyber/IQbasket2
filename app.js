@@ -33,6 +33,7 @@ import { TrainingView } from "./views/TrainingView.js";
 import { NutritionView } from "./views/NutritionView.js";
 import { Player360View } from "./views/Player360View.js";
 import { PrivacyCenterView } from "./views/PrivacyCenterView.js";
+import { FeedbackView } from "./views/FeedbackView.js";
 
 class App {
   constructor() {
@@ -232,6 +233,11 @@ class App {
       case "privacy-center":
       case "privacidad":
         this.currentView = new PrivacyCenterView(this.supabase, this.authController);
+        await this.currentView.render(contentAreaId);
+        break;
+
+      case "feedback":
+        this.currentView = new FeedbackView(this.supabase, this.authController);
         await this.currentView.render(contentAreaId);
         break;
 

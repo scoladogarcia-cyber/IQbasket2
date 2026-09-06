@@ -1,0 +1,1 @@
+Controlled production apply retry after safe absent-table baseline fix. PR #70.

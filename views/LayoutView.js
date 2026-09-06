@@ -35,6 +35,7 @@ export class LayoutView {
     if (['nutrition', 'nutricion'].includes(r)) return 'nutrition';
     if (['player360', 'player-360', 'desarrollo-jugador'].includes(r)) return 'player360';
     if (['privacy', 'privacy-center', 'privacidad', 'autorizaciones'].includes(r)) return 'privacy';
+    if (['feedback', 'beta-feedback', 'tester-feedback'].includes(r)) return 'feedback';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
     if (['lineups', 'quintetos'].includes(r)) return 'lineups';
     if (['comparator', 'comparador'].includes(r)) return 'comparator';
@@ -294,6 +295,7 @@ export class LayoutView {
         items: [
           { key: "profile", labelKey: "profile", fallback: "Mi Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
           ...(canViewPrivacy ? [{ key: "privacy", labelKey: "privacy_center", fallback: "Privacidad y accesos", route: "privacy", svg: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path>' }] : []),
+          { key: "feedback", labelKey: "feedback", fallback: "Enviar feedback", route: "feedback", svg: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M8 9h8"></path><path d="M8 13h5"></path>' },
           { key: "settings", labelKey: "settings", fallback: "Configuración", route: "settings", svg: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>' }
         ]
       }
@@ -403,6 +405,7 @@ export class LayoutView {
             </nav>
 
             <div class="sidebar-footer">
+              <div class="early-access-badge" title="Versión de prueba para early adopters">EARLY ACCESS</div>
               <div class="lang-row">
                 <span class="lang-label">🌐 ${LayoutView.t("language", "IDIOMA")}</span>
                 <select id="select-lang-toggle" class="lang-select">
@@ -515,6 +518,10 @@ export class LayoutView {
                 <span class="drawer-icon">👤</span>
                 <span>${LayoutView.t("profile", "Perfil")}</span>
               </a>
+              <a href="#/feedback" class="drawer-item" data-route-key="feedback">
+                <span class="drawer-icon">ðŸ’¬</span>
+                <span>Enviar feedback</span>
+              </a>
               <a href="#/settings" class="drawer-item">
                 <span class="drawer-icon">⚙️</span>
                 <span>${LayoutView.t("settings", "Configuración")}</span>
@@ -556,6 +563,19 @@ export class LayoutView {
 
         .desktop-only { display: flex; }
         .mobile-only { display: none; }
+
+        .early-access-badge {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          padding: 5px 9px;
+          border-radius: 999px;
+          background: rgba(249,115,22,.16);
+          color: #fdba74 !important;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: .08em;
+        }
 
         .disabled-link {
           opacity: 0.45 !important;
