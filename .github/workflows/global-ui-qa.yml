@@ -110,6 +110,9 @@ jobs:
       - name: Early adopter feedback smoke
         run: node tests/early-adopter-feedback-v1-ui-smoke.mjs
 
+      - name: Early adopter feedback triage smoke
+        run: node tests/early-adopter-feedback-triage-v1-ui-smoke.mjs
+
       - name: Contextual RBAC browser smoke
         run: node tests/phase3f-rbac-ui-smoke.mjs
 

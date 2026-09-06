@@ -166,6 +166,9 @@ jobs:
       - name: Early adopter feedback V1
         run: node tests/early-adopter-feedback-v1-contract.mjs
 
+      - name: Early adopter feedback triage V1
+        run: node tests/early-adopter-feedback-triage-v1-contract.mjs
+
       - name: Family growth Priority 2 contract
         run: node tests/family-growth-priority2-contract.mjs
 
