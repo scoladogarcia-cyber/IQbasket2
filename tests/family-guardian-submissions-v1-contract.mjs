@@ -53,7 +53,7 @@ assert.match(files.wellness,/histórico del jugador/);
 assert.match(files.panel,/data-psub-actor-relation/);
 assert.match(files.panel,/GUARDIAN_REPORTED/);
 assert.match(files.panel,/Aportaciones de familia/);
-assert.match(files.panel,/playerId:context\.playerId/);
+assert.match(files.panel,/playerId:\s*context\.playerId/);
 assert.match(files.player360,/CREATE_LINKED_PLAYER_SUBMISSION/);
 assert.match(files.player360,/actorRelation: this\._isFamilyGuardian\(\) \? "GUARDIAN" : "SELF"/);
 assert.match(files.player360,/Aportaciones de familia/);
