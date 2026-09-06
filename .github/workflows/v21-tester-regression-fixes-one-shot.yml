@@ -1,4 +1,4 @@
-name: V21 Tester Regression Fixes One Shot
+name: V21 Temporary Tooling Cleanup One Shot
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  patch:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,19 +20,29 @@ jobs:
           fetch-depth: 0
       - name: Assert branch
         run: test "$(git branch --show-current)" = "feat/game-capture-delegation-v1"
-      - name: Apply asserted patch
-        run: python3 scripts/v21_apply_tester_regression_fixes.py
-      - name: Syntax and diff checks
+      - name: Remove temporary V21 patch machinery
         run: |
-          node --check services/ApprovalCenterService.js
-          node --check views/ApprovalCenterView.js
-          node --check views/GameBoxScoreView.js
+          git rm \
+            .github/v21-boxscore-patch-trigger.txt \
+            .github/v21-core-authorization-patch-trigger.txt \
+            .github/v21-game-manager-patch-trigger.txt \
+            .github/v21-hud-patch-trigger.txt \
+            .github/v21-tester-regression-fixes-trigger.txt \
+            .github/workflows/v21-boxscore-patch.yml \
+            .github/workflows/v21-core-authorization-patch.yml \
+            .github/workflows/v21-game-manager-patch.yml \
+            .github/workflows/v21-hud-patch.yml \
+            .github/workflows/v21-tester-regression-fixes-one-shot.yml \
+            scripts/v21_apply_boxscore_patch.py \
+            scripts/v21_apply_frontend_patch.py \
+            scripts/v21_apply_game_manager_patch.py \
+            scripts/v21_apply_hud_patch.py \
+            scripts/v21_apply_tester_regression_fixes.py
           git diff --check
-      - name: Commit patched application files
+      - name: Commit cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/ApprovalCenterService.js views/ApprovalCenterView.js views/GameBoxScoreView.js
-          git diff --cached --quiet && { echo "No patch changes produced"; exit 1; }
-          git commit -m "fix: close tester regressions in approvals and BoxScore"
+          git diff --cached --quiet && { echo "No cleanup changes produced"; exit 1; }
+          git commit -m "chore: remove temporary V21 patch tooling"
           git push origin HEAD:feat/game-capture-delegation-v1
