@@ -1,0 +1,1 @@
+apply asserted V22 UAT frontend patch
