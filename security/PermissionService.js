@@ -122,6 +122,14 @@ export class PermissionService {
             status: String(membership.status || "ACTIVE").trim().toUpperCase()
           }))
         : [],
+      gameDelegations: Array.isArray(user.gameDelegations)
+        ? user.gameDelegations.map((delegation) => ({
+            ...delegation,
+            gameId: delegation.gameId ?? delegation.game_id ?? null,
+            capabilities: parseArray(delegation.capabilities),
+            validUntil: delegation.validUntil ?? delegation.valid_until ?? null
+          }))
+        : [],
       playerId: user.playerId ?? user.player_id ?? user.linked_player_id ?? null,
       linkedPlayerIds: parseArray(
         user.linkedPlayerIds
@@ -240,9 +248,26 @@ export class PermissionService {
     return targets.some(role => canonicalRoleName(role) === currentRole);
   }
 
+  _hasGameDelegatedPermission(permissionKey, context = {}) {
+    const gameId = context?.gameId ? String(context.gameId) : "";
+    if (!gameId || !Array.isArray(this.currentUser?.gameDelegations)) return false;
+
+    const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
+    const now = Date.now();
+    return this.currentUser.gameDelegations.some((delegation) => {
+      if (String(delegation.gameId || "") !== gameId) return false;
+      if (delegation.validUntil && Date.parse(delegation.validUntil) <= now) return false;
+      const capabilities = parseArray(delegation.capabilities).map(value => String(value).toUpperCase());
+      if (capabilities.includes(normalizedPermission)) return true;
+      return normalizedPermission === Permission.VIEW_BOXSCORE
+        && capabilities.includes(Permission.EDIT_BOXSCORE);
+    });
+  }
+
   can(permissionKey, context = {}) {
     if (!this.isAccountActive()) return false;
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
+    if (this._hasGameDelegatedPermission(normalizedPermission, context)) return true;
     const role = this.getRoleForContext(context);
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
@@ -252,6 +277,7 @@ export class PermissionService {
   canPreview(permissionKey, context = {}) {
     if (!this.isAccountActive()) return false;
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
+    if (this._hasGameDelegatedPermission(normalizedPermission, context)) return true;
     const role = this.getRoleForContext(context, { preview: true });
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
