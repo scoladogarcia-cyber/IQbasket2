@@ -195,7 +195,7 @@ begin
      set status='REVOKED',
          revoked_at=now(),
          revoked_by=auth.uid(),
-         valid_until=coalesce(r.valid_until,now()),
+         valid_until=coalesce(r.valid_until,greatest(now(),r.valid_from + interval '1 microsecond')),
          revocation_reason='FAMILY_PROFILE_ADMIN_UPDATE_V26',
          updated_at=now()
    where r.user_id=p_user_id
