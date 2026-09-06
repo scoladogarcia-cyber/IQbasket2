@@ -1,0 +1,92 @@
+name: V22 UAT Submission + Game Create Hotfix
+
+on:
+  push:
+    branches:
+      - fix/uat-submissions-game-create-v22
+    paths:
+      - "supabase/migrations/20260906160000_uat_submission_review_game_create_hotfix_v22.sql"
+      - "supabase/ready/20260906_preflight_uat_submission_review_game_create_hotfix_v22_readonly.sql"
+      - "supabase/ready/20260906_verify_uat_submission_review_game_create_hotfix_v22_readonly.sql"
+      - "supabase/drafts/20260906_smoke_uat_submission_review_game_create_v22_installed_rollback.sql"
+      - "services/ApprovalCenterService.js"
+      - "views/Player360View.js"
+      - "tests/uat-submissions-game-create-v22-contract.mjs"
+      - "release.json"
+      - ".github/workflows/uat-submissions-game-create-v22.yml"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract:
+    name: Static contract + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: V22 contract
+        run: node tests/uat-submissions-game-create-v22-contract.mjs
+      - name: Existing player-submission contract
+        run: node tests/player-data-submissions-v1-contract.mjs
+      - name: V21 delegation regression contract
+        run: node tests/game-capture-delegation-v1-contract.mjs
+      - name: Build
+        run: npm run build
+
+  production-rollback-rehearsal:
+    name: Production transactional rehearsal
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/ready/20260906_preflight_uat_submission_review_game_create_hotfix_v22_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^UAT_HOTFIX_V22_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+      - name: Build rollback-only migration rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed 's/^commit;$/-- V22 rehearsal keeps the migration transaction open/' \
+            supabase/migrations/20260906160000_uat_submission_review_game_create_hotfix_v22.sql \
+            > /tmp/v22-rehearsal.sql
+          sed '0,/^begin;$/s/^begin;$/-- reuse the open migration transaction/' \
+            supabase/drafts/20260906_smoke_uat_submission_review_game_create_v22_installed_rollback.sql \
+            >> /tmp/v22-rehearsal.sql
+          grep -q '^rollback;' /tmp/v22-rehearsal.sql
+      - name: Rehearse migration + authenticated functional smoke + rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=/tmp/v22-rehearsal.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^UAT_HOTFIX_V22_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true),(t|true),(t|true),(t|true),(t|true),(t|true)$'
+      - name: Confirm V22 was not persisted by rehearsal
+        run: |
+          test "$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('iq_private.iq_v22_submission_materialization_allowed(uuid,uuid,text,text,text)') is null)::int;" | tr -d '[:space:]')" = "1"

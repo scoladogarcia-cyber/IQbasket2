@@ -39,6 +39,11 @@ function toTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function isPlayerSubmissionRequest(item = {}) {
+  return item?.type === RequestType.PLAYER_DATA_SUBMISSION
+    || Boolean(item?.raw?.submission_type);
+}
+
 export class ApprovalCenterService {
   constructor(supabase, authController, dataStore = DataStore) {
     this.supabase = supabase || null;
@@ -361,7 +366,7 @@ export class ApprovalCenterService {
       return this.gameLockService.resolveRequest(item.id, "APPROVED", note || "Aprobado desde Bandeja de Solicitudes");
     }
 
-    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) {
+    if (isPlayerSubmissionRequest(item)) {
       return this.playerSubmissionService.review({ submissionId:item.id, decision:"APPROVED", note });
     }
 
@@ -406,7 +411,7 @@ export class ApprovalCenterService {
   }
 
   async returnSubmission(item, note = null) {
-    if (!item?.id || item.type !== RequestType.PLAYER_DATA_SUBMISSION || !item.canReturn) {
+    if (!item?.id || !isPlayerSubmissionRequest(item) || !item.canReturn) {
       throw new Error("No tienes permiso para devolver esta aportación.");
     }
     if (!String(note || "").trim()) {
@@ -432,7 +437,7 @@ export class ApprovalCenterService {
       return this.gameLockService.resolveRequest(item.id, "REJECTED", note || null);
     }
 
-    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) {
+    if (isPlayerSubmissionRequest(item)) {
       const rejectionNote = String(note || "").trim();
       if (!rejectionNote) {
         throw new Error("Indica el motivo del rechazo.");

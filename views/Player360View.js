@@ -629,6 +629,24 @@ export class Player360View {
     `;
   }
 
+  _returnedSubmissionCount() {
+    return (this.submissionPanel?.items || []).filter(item =>
+      String(item?.status || "").toUpperCase() === "RETURNED"
+    ).length;
+  }
+
+  _renderSubmissionAttention() {
+    if (!this._usesSubmissionWorkflow()) return "";
+    const count = this._returnedSubmissionCount();
+    if (!count) return "";
+    const noun = count === 1 ? "aportación devuelta" : "aportaciones devueltas";
+    return `
+      <aside class="p360c-note" style="border:1px solid #fdba74;background:#fff7ed;color:#9a3412;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div><strong>↩ Tienes ${count} ${noun}.</strong><br><span>Revisa el comentario del staff, corrige los datos y vuelve a enviarlos.</span></div>
+        <button type="button" id="p360c-open-returned-submissions" style="min-height:44px;border:1px solid #c2410c;border-radius:9px;background:#fff;color:#9a3412;font-weight:900;padding:9px 13px;cursor:pointer;">Revisar y corregir</button>
+      </aside>`;
+  }
+
   _renderTabs() {
     const tabs = [];
     if (this._can(Permission.VIEW_PLAYER_EVALUATION)) {
@@ -647,9 +665,11 @@ export class Player360View {
       tabs.push({ id: "wellness", label: "🥤 Nutrición + recuperación" });
     }
     if (this._usesSubmissionWorkflow()) {
+      const returnedCount = this._returnedSubmissionCount();
+      const correctionLabel = returnedCount ? ` · ${returnedCount} por corregir` : "";
       tabs.push({
         id: "submissions",
-        label: this._isFamilyGuardian() ? "📨 Aportaciones de familia" : "📨 Mis aportaciones"
+        label: `${this._isFamilyGuardian() ? "📨 Aportaciones de familia" : "📨 Mis aportaciones"}${correctionLabel}`
       });
     }
 
@@ -1361,12 +1381,17 @@ export class Player360View {
           </div>
         ` : ""}
 
+        ${this._renderSubmissionAttention()}
         ${this._renderTabs()}
         ${this._renderBody()}
       </section>
     `;
 
     this._bindTabs(container);
+    container.querySelector("#p360c-open-returned-submissions")?.addEventListener("click", () => {
+      this.activeTab = "submissions";
+      this._renderLoaded(container);
+    });
     this._bindEvaluationEvents(container);
     this._bindObjectiveEvents(container);
     void this.developmentPanel.bind(container, async () => {
