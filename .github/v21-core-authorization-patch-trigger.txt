@@ -1,1 +1,0 @@
-trigger asserted V21 core authorization patch

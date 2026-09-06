@@ -1,1 +1,0 @@
-cleanup temporary V21 patch machinery after tester regression fixes
