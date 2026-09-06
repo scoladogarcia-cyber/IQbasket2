@@ -145,6 +145,32 @@ const fakeSupabase = {
     if (name === "iq_v4_create_training_session") {
       return { data: "created-session-id", error: null };
     }
+    if (name === "iq_v15_update_training_session") {
+      const session = tables.training_sessions.find(row => row.id === args.p_training_session_id);
+      const previousDuration = Number(session?.duration_minutes);
+      const [startHour, startMinute] = String(args.p_start_time || "0:0").split(":").map(Number);
+      const [endHour, endMinute] = String(args.p_end_time || "0:0").split(":").map(Number);
+      const derivedDuration = args.p_start_time && args.p_end_time
+        ? ((endHour * 60 + endMinute) - (startHour * 60 + startMinute))
+        : args.p_duration_minutes;
+      Object.assign(session, {
+        session_date: args.p_session_date,
+        title: args.p_title,
+        objective: args.p_objective,
+        start_time: args.p_start_time,
+        end_time: args.p_end_time,
+        duration_minutes: derivedDuration,
+        intensity: args.p_intensity
+      });
+      for (const participant of tables.training_participants) {
+        if (
+          participant.training_session_id === args.p_training_session_id
+          && participant.attendance_status === "PRESENT"
+          && Number(participant.participated_minutes) === previousDuration
+        ) participant.participated_minutes = derivedDuration;
+      }
+      return { data: args.p_training_session_id, error: null };
+    }
     if (name === "iq_v4_set_training_participant") {
       return { data: "participant-id", error: null };
     }
@@ -220,13 +246,15 @@ const corrected = await service.updateSession({
 });
 assert.equal(corrected.title, "Técnica corregida");
 assert.equal(corrected.duration_minutes, 75);
-assert.ok(
-  calls.some(call =>
-    call.op === "update"
-    && call.table === "training_participants"
-    && call.payload.participated_minutes === 75
-  ),
-  "Cambiar la duración debe mantener coherentes los PRESENT que tenían la duración completa anterior."
+const updateCall = calls.find(call => call.name === "iq_v15_update_training_session");
+assert.ok(updateCall, "La correcci?n debe cruzar la frontera RPC de edici?n.");
+assert.equal(updateCall.args.p_team_season_id, "ts-1");
+assert.equal(updateCall.args.p_duration_minutes, null, "Con inicio/fin la duraci?n la deriva el servidor.");
+assert.equal(tables.training_participants[0].participated_minutes, 75);
+assert.equal(
+  calls.some(call => call.op === "update" && call.table === "training_sessions"),
+  false,
+  "El servicio no debe escribir directamente training_sessions."
 );
 
 const correctedBlock = await service.saveBlock({
