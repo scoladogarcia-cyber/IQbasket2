@@ -1,0 +1,39 @@
+name: V21 Game Manager Patch
+
+on:
+  push:
+    branches:
+      - feat/game-capture-delegation-v1
+    paths:
+      - ".github/v21-game-manager-patch-trigger.txt"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/game-capture-delegation-v1
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply asserted game-manager patch
+        run: python scripts/v21_apply_game_manager_patch.py
+      - name: Validate syntax and diff
+        run: |
+          node --check components/games/GameCaptureDelegationPanel.js
+          node --check views/GameLiveEditorView.js
+          git diff --check
+      - name: Commit patched game manager
+        run: |
+          test -n "$(git status --porcelain views/GameLiveEditorView.js)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add views/GameLiveEditorView.js
+          git commit -m "feat: add V21 delegation controls to games"
+          git push origin HEAD:feat/game-capture-delegation-v1
