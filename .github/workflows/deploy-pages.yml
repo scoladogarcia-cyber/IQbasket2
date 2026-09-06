@@ -84,7 +84,10 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # GitHub Pages CDN propagation can occasionally exceed the action default
+    # of 10 minutes. Keep the job deadline above the action deadline so the
+    # action can finish cleanly instead of being cancelled by the runner.
+    timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -93,3 +96,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1200000
