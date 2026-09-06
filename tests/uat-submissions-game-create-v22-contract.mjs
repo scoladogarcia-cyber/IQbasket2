@@ -67,8 +67,20 @@ assert.match(player360, /p360c-open-returned-submissions/);
 assert.match(player360, /por corregir/);
 assert.match(player360, /Revisar y corregir/);
 
+function releaseAtLeast(value, baseline) {
+  const left = String(value || "").split(".").map(Number);
+  const right = String(baseline || "").split(".").map(Number);
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const a = Number.isFinite(left[index]) ? left[index] : 0;
+    const b = Number.isFinite(right[index]) ? right[index] : 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+
 const release = JSON.parse(releaseRaw);
-assert.ok(release.release.localeCompare("2026.09.06.8") >= 0, "La release V22 debe ser 2026.09.06.8 o posterior");
+assert.ok(releaseAtLeast(release.release, "2026.09.06.8"), "La release V22 debe ser 2026.09.06.8 o posterior");
 if (release.release === "2026.09.06.8") {
   assert.equal(release.label, "uat-submissions-game-create-hotfix-v22");
 }
