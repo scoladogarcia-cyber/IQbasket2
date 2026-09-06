@@ -25,7 +25,8 @@ export function buildFamilySupportGuide({
   developmentContext = null,
   developmentCycle = null,
   weeklyPlan = null
-} = {}) {  const cycle = developmentCycle?.current_cycle || null;
+} = {}) {
+  const cycle = developmentCycle?.current_cycle || null;
   const action = activeCycleAction(developmentCycle || {});
   const objectiveTitle = firstUseful([
     cycle?.objective_title,

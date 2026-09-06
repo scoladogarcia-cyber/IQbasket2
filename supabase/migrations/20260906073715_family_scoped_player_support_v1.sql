@@ -26,7 +26,8 @@ declare
   v_player_ids uuid[] := '{}'::uuid[];
   v_team_ids uuid[] := '{}'::uuid[];
   v_team_season_ids uuid[] := '{}'::uuid[];
-  v_season_ids uuid[] := '{}'::uuid[];  v_relationships jsonb := '[]'::jsonb;
+  v_season_ids uuid[] := '{}'::uuid[];
+  v_relationships jsonb := '[]'::jsonb;
 begin
   if auth.uid() is null or not public.iq_account_is_active() then
     raise exception 'ACCOUNT_ACTIVE_AUTH_REQUIRED' using errcode='42501';
@@ -52,7 +53,8 @@ begin
   where r.user_id=(select auth.uid())
     and r.relationship_type='GUARDIAN'
     and r.status='ACTIVE'
-    and r.valid_from<=now()    and (r.valid_until is null or r.valid_until>now())
+    and r.valid_from<=now()
+    and (r.valid_until is null or r.valid_until>now())
     and upper(coalesce(rm.status,'ACTIVE')) in ('ACTIVE','ACTIVO')
     and (rm.joined_at is null or rm.joined_at<=current_date)
     and (rm.left_at is null or rm.left_at>current_date)
