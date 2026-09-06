@@ -9,6 +9,11 @@ import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapte
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
+import {
+  buildFamilyIdentityPolicy,
+  applyFamilyIdentityPolicy,
+  applyFamilyIdentityPolicyList
+} from "./family/FamilyIdentityPolicy.js";
 
 class DataStoreService {
   constructor() {
@@ -1012,35 +1017,17 @@ class DataStoreService {
   }
 
   _familyIdentityPolicy() {
-    const user = this.permissionService?.getCurrentUser?.() || null;
-    if (String(user?.role || "").toUpperCase() !== UserRole.FAMILIA_TUTOR) return null;
-    const scope = user.familyAuthorizationScope || {};
-    return {
-      linkedPlayerIds: new Set((user.linkedPlayerIds || []).map(String)),
-      showOtherPlayerNames: scope.show_other_player_names !== false,
-      showOtherPlayerJerseys: scope.show_other_player_jerseys !== false
-    };
+    return buildFamilyIdentityPolicy(
+      this.permissionService?.getCurrentUser?.() || null
+    );
   }
 
   _applyFamilyIdentityPolicy(player) {
-    if (!player) return player;
-    const policy = this._familyIdentityPolicy();
-    if (!policy || policy.linkedPlayerIds.has(String(player.id))) return player;
-    if (policy.showOtherPlayerNames && policy.showOtherPlayerJerseys) return player;
-    return {
-      ...player,
-      ...(policy.showOtherPlayerNames ? {} : {
-        first_name: "Jugador", last_name: "", firstName: "Jugador", lastName: "",
-        name: "Jugador", full_name: "Jugador", fullName: "Jugador"
-      }),
-      ...(policy.showOtherPlayerJerseys ? {} : {
-        jersey: null, number: null, jersey_number: null, jerseyNumber: null
-      })
-    };
+    return applyFamilyIdentityPolicy(player, this._familyIdentityPolicy());
   }
 
   _applyFamilyIdentityPolicyList(players = []) {
-    return (players || []).map(player => this._applyFamilyIdentityPolicy(player));
+    return applyFamilyIdentityPolicyList(players, this._familyIdentityPolicy());
   }
 
   getPlayerDirectory() {
