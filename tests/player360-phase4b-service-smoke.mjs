@@ -247,9 +247,9 @@ const corrected = await service.updateSession({
 assert.equal(corrected.title, "Técnica corregida");
 assert.equal(corrected.duration_minutes, 75);
 const updateCall = calls.find(call => call.name === "iq_v15_update_training_session");
-assert.ok(updateCall, "La correcciA3n debe cruzar la frontera RPC de ediciA3n.");
+assert.ok(updateCall, "La correcci?n debe cruzar la frontera RPC de edici?n.");
 assert.equal(updateCall.args.p_team_season_id, "ts-1");
-assert.equal(updateCall.args.p_duration_minutes, null, "Con inicio/fin la duraciA3n la deriva el servidor.");
+assert.equal(updateCall.args.p_duration_minutes, null, "Con inicio/fin la duraci?n la deriva el servidor.");
 assert.equal(tables.training_participants[0].participated_minutes, 75);
 assert.equal(
   calls.some(call => call.op === "update" && call.table === "training_sessions"),
