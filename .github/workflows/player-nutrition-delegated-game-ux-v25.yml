@@ -1,0 +1,47 @@
+name: Player Nutrition + Delegated Game UX V25
+
+on:
+  pull_request:
+    paths:
+      - "views/player360/PlayerSubmissionPanel.js"
+      - "components/games/GameCaptureDelegationPanel.js"
+      - "views/games/**"
+      - "views/PlayerNutritionRouterView.js"
+      - "services/LazyViewRegistry.js"
+      - "security/PermissionService.js"
+      - "tests/player-nutrition-delegated-game-ux-v25-contract.mjs"
+      - "release.json"
+      - ".github/workflows/player-nutrition-delegated-game-ux-v25.yml"
+  push:
+    branches: [main]
+    paths:
+      - "views/player360/PlayerSubmissionPanel.js"
+      - "components/games/GameCaptureDelegationPanel.js"
+      - "views/games/**"
+      - "views/PlayerNutritionRouterView.js"
+      - "services/LazyViewRegistry.js"
+      - "security/PermissionService.js"
+      - "tests/player-nutrition-delegated-game-ux-v25-contract.mjs"
+      - "release.json"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V25 contract
+        run: node tests/player-nutrition-delegated-game-ux-v25-contract.mjs
+      - name: Build
+        run: npm run build
