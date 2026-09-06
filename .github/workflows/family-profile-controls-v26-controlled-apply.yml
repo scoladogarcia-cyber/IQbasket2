@@ -69,10 +69,10 @@ jobs:
           import re
           migration = Path('supabase/migrations/20260906202000_family_profile_controls_v1.sql').read_text()
           smoke = Path('supabase/drafts/20260906_smoke_family_profile_controls_v1_installed_rollback.sql').read_text()
-          migration, n1 = re.subn(r'^\s*begin;\s*', '', migration, count=1, flags=re.I)
-          migration, n2 = re.subn(r'\s*commit;\s*$', '', migration, count=1, flags=re.I)
-          smoke, n3 = re.subn(r'^\s*begin;\s*', '', smoke, count=1, flags=re.I)
-          smoke, n4 = re.subn(r'\s*rollback;\s*$', '', smoke, count=1, flags=re.I)
+          migration, n1 = re.subn(r'(?im)^begin;\s*', '', migration, count=1)
+          migration, n2 = re.subn(r'(?im)^commit;\s*$', '', migration, count=1)
+          smoke, n3 = re.subn(r'(?im)^begin;\s*', '', smoke, count=1)
+          smoke, n4 = re.subn(r'(?im)^rollback;\s*$', '', smoke, count=1)
           if (n1,n2,n3,n4) != (1,1,1,1):
               raise SystemExit(f'V26_REHEARSAL_BOUNDARY_ERROR {(n1,n2,n3,n4)}')
           Path('/tmp/v26-rehearsal.sql').write_text('begin;\n' + migration + '\n' + smoke + '\nrollback;\n')
