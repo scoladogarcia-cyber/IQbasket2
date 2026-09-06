@@ -55,8 +55,15 @@ assert.match(files.wellness,/submissionService\.saveAndSubmit/);
 assert.match(files.panel,/Guardar borrador/);
 assert.match(files.panel,/Enviar al staff/);
 assert.match(files.panel,/Pendiente de validaci/);
+assert.match(files.panel,/Corregir y reenviar/);
+assert.match(files.panel,/submissionId:\s*editing\.id/);
+assert.match(files.panel,/data-psub-edit/);
 assert.match(files.center,/PLAYER_DATA_SUBMISSION/);
+assert.match(files.center,/decision:\s*"RETURNED"/);
+assert.match(files.center,/decision:\s*"REJECTED"/);
+assert.match(files.center,/Indica el motivo del rechazo/);
 assert.match(files.centerView,/btn-approval-return/);
+assert.match(files.centerView,/#\/player360\//);
 assert.match(files.player360,/Mis aportaciones/);
 
 console.log("PLAYER_DATA_SUBMISSIONS_V1_CONTRACT_OK");
