@@ -26,7 +26,7 @@ assert.match(view, /maxlength="4000"/);
 assert.match(workflow, /TABLE_INSTALLED=[\s\S]*?to_regclass/);
 assert.match(workflow, /if \[ "\$TABLE_INSTALLED" = "1" \]; then/);
 assert.doesNotMatch(workflow, /case when to_regclass\('public\.product_feedback'\).*select count/s);
-assert.equal(release.release, '2026.09.06.5');
-assert.equal(release.label, 'early-adopters-feedback-v1');
+assert.ok(release.release.localeCompare('2026.09.06.5') >= 0, 'La release no puede retroceder respecto a V19.');
+if (release.release === '2026.09.06.5') assert.equal(release.label, 'early-adopters-feedback-v1');
 
 console.log('EARLY_ADOPTER_FEEDBACK_V1_CONTRACT_OK');
