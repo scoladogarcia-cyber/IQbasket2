@@ -37,8 +37,17 @@ begin
 
   if v_coach is null then raise exception 'V22_SMOKE_NO_ACTIVE_COACH'; end if;
 
-  select ts.team_id,ts.season_id into v_team,v_season
-  from public.team_seasons ts where ts.id=v_source.team_season_id;
+  -- games.season_id still points to the legacy seasons table. Use an existing
+  -- game in the same canonical team-season as the compatibility reference.
+  select g.team_id,g.season_id into v_team,v_season
+  from public.games g
+  where g.team_season_id=v_source.team_season_id
+  order by g.date desc,g.created_at desc
+  limit 1;
+
+  if v_team is null or v_season is null then
+    raise exception 'V22_SMOKE_NO_LEGACY_GAME_CONTEXT';
+  end if;
 
   insert into public.player_data_submissions(
     id,submitted_by,player_id,team_season_id,submission_type,status,payload,
