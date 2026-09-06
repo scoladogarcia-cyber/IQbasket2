@@ -13,18 +13,21 @@ import { TeamAccessRequestService } from "./TeamAccessRequestService.js";
 import { GameLockService } from "./games/GameLockService.js";
 import { TransferRequestService } from "./transfers/TransferRequestService.js";
 import { SeasonFreezeService } from "./seasons/SeasonFreezeService.js";
+import { PlayerDataSubmissionService } from "./player360/PlayerDataSubmissionService.js";
 import { Permission } from "../security/PermissionService.js";
 
 const RequestType = Object.freeze({
   TEAM_ACCESS: "TEAM_ACCESS",
   GAME_LOCK: "GAME_LOCK",
   TRANSFER: "TRANSFER",
-  TEAM_SEASON_FREEZE: "TEAM_SEASON_FREEZE"
+  TEAM_SEASON_FREEZE: "TEAM_SEASON_FREEZE",
+  PLAYER_DATA_SUBMISSION: "PLAYER_DATA_SUBMISSION"
 });
 
 function normalizeStatus(value = "") {
   const status = String(value || "").trim().toUpperCase();
-  if (["PENDING", "PENDIENTE"].includes(status)) return "PENDING";
+  if (["PENDING", "PENDIENTE", "SUBMITTED"].includes(status)) return "PENDING";
+  if (status === "RETURNED") return "RETURNED";
   if (["APPROVED", "APROBADO", "APROBADA"].includes(status)) return "APPROVED";
   if (["REJECTED", "RECHAZADO", "RECHAZADA"].includes(status)) return "REJECTED";
   if (["CANCELLED", "CANCELED", "CANCELADO", "CANCELADA"].includes(status)) return "CANCELLED";
@@ -45,6 +48,7 @@ export class ApprovalCenterService {
     this.gameLockService = new GameLockService(this.supabase, this.auth);
     this.transferRequestService = new TransferRequestService(this.supabase);
     this.seasonFreezeService = new SeasonFreezeService(this.supabase, this.auth);
+    this.playerSubmissionService = new PlayerDataSubmissionService(this.supabase);
   }
 
   _activeGames() {
@@ -212,6 +216,41 @@ export class ApprovalCenterService {
     };
   }
 
+  _normalizePlayerSubmission(row = {}) {
+    const status = normalizeStatus(row.status);
+    const payload = row.payload || {};
+    const context = { teamSeasonId: row.team_season_id, playerId: row.player_id };
+    const pending = status === "PENDING";
+    const canApprove = pending && Boolean(this.auth?.canPreview?.(Permission.APPROVE_PLAYER_SUBMISSION, context));
+    const canReturn = pending && Boolean(this.auth?.canPreview?.(Permission.RETURN_PLAYER_SUBMISSION, context));
+    const canReject = pending && Boolean(this.auth?.canPreview?.(Permission.REJECT_PLAYER_SUBMISSION, context));
+    const wellness = row.submission_type === "WELLNESS_CHECKIN";
+    const values = Array.isArray(payload.values) ? payload.values : [];
+    const detail = wellness
+      ? values.map(value => `${String(value.metric_code || "").replaceAll("_", " ")}: ${value.value}`).join(" · ")
+      : [payload.title, payload.duration_minutes ? `${payload.duration_minutes} min` : null,
+          payload.rpe !== null && payload.rpe !== undefined ? `RPE ${payload.rpe}` : null,
+          payload.objective, payload.notes].filter(Boolean).join(" · ");
+    return {
+      id: row.id,
+      type: RequestType.PLAYER_DATA_SUBMISSION,
+      status,
+      createdAt: row.submitted_at || null,
+      resolvedAt: row.reviewed_at || null,
+      title: `${row.player_name || "Jugador"} · ${wellness ? "Check-in" : "Entrenamiento externo"}`,
+      subtitle: wellness
+        ? `${payload.module === "nutrition" ? "Nutrición" : "Recuperación"} · ${payload.entry_date || ""}`
+        : `${payload.activity_date || ""}`,
+      detail,
+      teamSeasonId: row.team_season_id,
+      playerId: row.player_id,
+      canApprove,
+      canReturn,
+      canReject,
+      raw: row
+    };
+  }
+
   async load() {
     const games = this._activeGames();
     const gameMap = new Map(games.map(game => [String(game.id), game]));
@@ -224,7 +263,7 @@ export class ApprovalCenterService {
       || activeScope?.teamSeasonId
       || null;
 
-    const [accessResult, lockResult, transferResult, seasonFreezeResult] = await Promise.allSettled([
+    const [accessResult, lockResult, transferResult, seasonFreezeResult, playerSubmissionResult] = await Promise.allSettled([
       this.teamAccessService.listRequests(),
       gameIds.length > 0
         ? this.gameLockService.listRequests(gameIds)
@@ -234,6 +273,13 @@ export class ApprovalCenterService {
         : Promise.resolve([]),
       activeTeamSeasonId
         ? this.seasonFreezeService.listRequests([activeTeamSeasonId])
+        : Promise.resolve([]),
+      activeTeamSeasonId
+        ? this.playerSubmissionService.listForReview({
+            teamSeasonId: activeTeamSeasonId,
+            includeResolved: true,
+            limit: 100
+          })
         : Promise.resolve([])
     ]);
 
@@ -280,6 +326,17 @@ export class ApprovalCenterService {
       });
     }
 
+    if (playerSubmissionResult.status === "fulfilled") {
+      items.push(...(playerSubmissionResult.value || []).map(row => this._normalizePlayerSubmission(row)));
+    } else {
+      errors.push({
+        source: RequestType.PLAYER_DATA_SUBMISSION,
+        message: playerSubmissionResult.reason?.message || String(
+          playerSubmissionResult.reason || "Error cargando aportaciones del jugador"
+        )
+      });
+    }
+
     items.sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt));
 
     return {
@@ -301,6 +358,10 @@ export class ApprovalCenterService {
 
     if (item.type === RequestType.GAME_LOCK) {
       return this.gameLockService.resolveRequest(item.id, "APPROVED", note || "Aprobado desde Bandeja de Solicitudes");
+    }
+
+    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) {
+      return this.playerSubmissionService.review({ submissionId:item.id, decision:"APPROVED", note });
     }
 
     if (item.type === RequestType.TEAM_SEASON_FREEZE) {
@@ -341,6 +402,20 @@ export class ApprovalCenterService {
       throw new Error("El traspaso no está listo o no tienes permiso para finalizarlo.");
     }
     return this.transferRequestService.finalizeTransfer({ requestId: item.id });
+  }
+
+  async returnSubmission(item, note = null) {
+    if (!item?.id || item.type !== RequestType.PLAYER_DATA_SUBMISSION || !item.canReturn) {
+      throw new Error("No tienes permiso para devolver esta aportación.");
+    }
+    if (!String(note || "").trim()) {
+      throw new Error("Indica qué debe corregir el jugador.");
+    }
+    return this.playerSubmissionService.review({
+      submissionId:item.id,
+      decision:"RETURNED",
+      note:String(note).trim()
+    });
   }
 
   async reject(item, note = null) {

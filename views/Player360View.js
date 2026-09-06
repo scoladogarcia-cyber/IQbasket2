@@ -20,6 +20,8 @@ import { LongitudinalAnalyticsOrchestrator } from "../services/player360/Longitu
 import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPanel.js";
 import { WellnessService } from "../services/player360/WellnessService.js";
 import { WellnessSupportPanel } from "./player360/WellnessSupportPanel.js";
+import { PlayerDataSubmissionService } from "../services/player360/PlayerDataSubmissionService.js";
+import { PlayerSubmissionPanel } from "./player360/PlayerSubmissionPanel.js";
 import { ObjectiveGapCalculator } from "../domain/player360/ObjectiveGapCalculator.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 import {
@@ -103,10 +105,14 @@ export class Player360View {
       can: permission => this._can(permission)
     });
     this.wellnessService = new WellnessService(this.supabase);
+    this.submissionService = new PlayerDataSubmissionService(this.supabase);
     this.wellnessPanel = new WellnessSupportPanel({
       service: this.wellnessService,
-      can: permission => this._can(permission)
+      submissionService: this.submissionService,
+      can: permission => this._can(permission),
+      isSelfPlayer: () => this.auth?.getAuthenticatedRole?.() === UserRole.JUGADOR
     });
+    this.submissionPanel = new PlayerSubmissionPanel({ service: this.submissionService });
 
     this.containerId = "dashboard-content-area";
     this.teamId = null;
@@ -124,6 +130,10 @@ export class Player360View {
 
     this.activeTab = "evaluation";
     this.editingEvaluationId = null;
+  }
+
+  _isPlayerSelf() {
+    return this.auth?.getAuthenticatedRole?.() === UserRole.JUGADOR;
   }
 
   _context() {
@@ -198,12 +208,17 @@ export class Player360View {
         this.evaluations = [];
         this.objectiveProfile = null;
         this.gaps = [];
-        await this.wellnessPanel.load({
-          teamId: this.teamId,
-          teamSeasonId: this.teamSeasonId,
-          playerId: this.playerId,
-          dateBounds: this._dateBounds()
-        });
+        await Promise.all([
+          this.wellnessPanel.load({
+            teamId: this.teamId,
+            teamSeasonId: this.teamSeasonId,
+            playerId: this.playerId,
+            dateBounds: this._dateBounds()
+          }),
+          this._isPlayerSelf()
+            ? this.submissionPanel.load(this._context())
+            : Promise.resolve()
+        ]);
         return;
       }
 
@@ -250,7 +265,10 @@ export class Player360View {
           teamSeasonId: this.teamSeasonId,
           playerId: this.playerId,
           dateBounds: this._dateBounds()
-        })
+        }),
+        this._isPlayerSelf()
+          ? this.submissionPanel.load(this._context())
+          : Promise.resolve()
       ]);
     } catch (error) {
       console.error("[Player360View] Error cargando Phase 4C:", error);
@@ -594,6 +612,9 @@ export class Player360View {
     }
     if (this.wellnessPanel.isAvailable()) {
       tabs.push({ id: "wellness", label: "🥤 Nutrición + recuperación" });
+    }
+    if (this._isPlayerSelf()) {
+      tabs.push({ id: "submissions", label: "📨 Mis aportaciones" });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1089,6 +1110,7 @@ export class Player360View {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
     if (this.activeTab === "analytics") return this.analyticsPanel.render();
     if (this.activeTab === "wellness") return this.wellnessPanel.render();
+    if (this.activeTab === "submissions") return this.submissionPanel.render();
     return this._renderEvaluationPanel();
   }
 
@@ -1096,7 +1118,7 @@ export class Player360View {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
         const requested = button.dataset.p360cTab;
-        this.activeTab = ["evaluation", "objective", "analytics", "wellness"].includes(requested)
+        this.activeTab = ["evaluation", "objective", "analytics", "wellness", "submissions"].includes(requested)
           ? requested
           : "evaluation";
         this._renderLoaded(container);
@@ -1319,9 +1341,18 @@ export class Player360View {
     void this.wellnessPanel.bind(container, {
       onChanged: async () => {
         this.activeTab = "wellness";
+        if (this._isPlayerSelf()) await this.submissionPanel.load(this._context());
         this._renderLoaded(container);
       }
     });
+    if (this._isPlayerSelf()) {
+      void this.submissionPanel.bind(container, {
+        onChanged: async () => {
+          this.activeTab = "submissions";
+          this._renderLoaded(container);
+        }
+      });
+    }
   }
 
   async render(containerId = "dashboard-content-area", playerId = null, teamId = null) {

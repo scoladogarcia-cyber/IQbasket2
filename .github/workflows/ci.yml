@@ -181,5 +181,8 @@ jobs:
       - name: Player 360 AI Gate B atomic usage ledger
         run: node tests/player360-ai-gate-b-sql.mjs
 
+      - name: Player data submissions V1 contract
+        run: node tests/player-data-submissions-v1-contract.mjs
+
       - name: Build
         run: npm run build

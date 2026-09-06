@@ -1,0 +1,45 @@
+name: Player Data Submissions V1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "security/permissions.js"
+      - "services/ApprovalCenterService.js"
+      - "services/player360/PlayerDataSubmissionService.js"
+      - "views/ApprovalCenterView.js"
+      - "views/Player360View.js"
+      - "views/player360/WellnessSupportPanel.js"
+      - "views/player360/PlayerSubmissionPanel.js"
+      - "supabase/ready/20260905_apply_player_data_submissions_v1.sql"
+      - "tests/player-data-submissions-v1-contract.mjs"
+      - ".github/workflows/player-data-submissions-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Player submission architecture contract
+        run: node tests/player-data-submissions-v1-contract.mjs
+
+      - name: Approval Center regression
+        run: node tests/approval-center-foundation.mjs
+
+      - name: Wellness route regression
+        run: node tests/player360-phase4e2-service-route.mjs
+
+      - name: Initial bundle budget
+        run: node tests/initial-bundle-budget.mjs

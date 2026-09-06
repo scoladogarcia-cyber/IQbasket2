@@ -50,6 +50,9 @@ export class ApprovalCenterView {
     if (normalized === "APPROVED") {
       return { label: this.t("approvals.status_approved", "Aprobada"), icon: "✓", bg: "#dcfce7", fg: "#166534", border: "#86efac" };
     }
+    if (normalized === "RETURNED") {
+      return { label: "Necesita cambios", icon: "↩", bg: "#ffedd5", fg: "#9a3412", border: "#fdba74" };
+    }
     if (normalized === "REJECTED") {
       return { label: this.t("approvals.status_rejected", "Rechazada"), icon: "×", bg: "#fee2e2", fg: "#991b1b", border: "#fca5a5" };
     }
@@ -65,6 +68,9 @@ export class ApprovalCenterView {
     }
     if (type === RequestType.TRANSFER) {
       return { label: this.t("approvals.type_transfer", "Traspaso"), icon: "🔄", bg: "#f5f3ff", fg: "#6d28d9" };
+    }
+    if (type === RequestType.PLAYER_DATA_SUBMISSION) {
+      return { label: "Aportación del jugador", icon: "📝", bg: "#eff6ff", fg: "#1d4ed8" };
     }
     if (type === RequestType.TEAM_SEASON_FREEZE) {
       return { label: this.t("approvals.type_season_freeze", "Cierre de temporada"), icon: "🗄️", bg: "#fff1f2", fg: "#9f1239" };
@@ -83,6 +89,7 @@ export class ApprovalCenterView {
         opponent: item.opponent || item.title || "Rival"
       });
     }
+    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) return item.title || "Aportación del jugador";
     if (item.type === RequestType.TEAM_SEASON_FREEZE) {
       return this.t("approvals.season_freeze_title", "Cerrar temporada · {team}", {
         team: item.teamName || item.title || "Equipo"
@@ -101,6 +108,7 @@ export class ApprovalCenterView {
     if (item.type === RequestType.GAME_LOCK) {
       return [item.gameDate || "", item.requestedRole || ""].filter(Boolean).join(" · ");
     }
+    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) return item.subtitle || "";
     if (item.type === RequestType.TEAM_SEASON_FREEZE) {
       return [item.seasonName || "", item.requestedRole || ""].filter(Boolean).join(" · ");
     }
@@ -396,11 +404,13 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
     const type = this._typeMeta(item.type);
     const created = this._formatDate(item.createdAt);
     const detail = item.detail ? this._escape(item.detail) : "";
-    const actions = item.status === "PENDING" && (item.canApprove || item.canReject);
+    const actions = item.status === "PENDING" && (item.canApprove || item.canReturn || item.canReject);
 
     const targetLink = item.type === RequestType.GAME_LOCK
       ? `#/games`
-      : `#/settings`;
+      : item.type === RequestType.PLAYER_DATA_SUBMISSION
+        ? `#/player/${item.playerId || ""}`
+        : `#/settings`;
 
     if (item.type === RequestType.TRANSFER) {
       return this._renderTransferItem(item, status, type, created, detail);
@@ -424,12 +434,13 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
             <a href="${targetLink}" style="min-height:44px;display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;text-decoration:none;font-size:12px;font-weight:800;">${this.t("approvals.view_context", "Ver contexto")}</a>
             ${actions && item.canApprove ? `<button type="button" class="btn-approval-approve" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:#166534;color:#ffffff;font-size:12px;font-weight:900;cursor:pointer;">✓ ${this.t("approvals.approve", "Aprobar")}</button>` : ""}
+            ${actions && item.canReturn ? `<button type="button" class="btn-approval-return" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:1px solid #fdba74;border-radius:8px;background:#fff7ed;color:#9a3412;font-size:12px;font-weight:900;cursor:pointer;">↩ Devolver</button>` : ""}
             ${actions && item.canReject ? `<button type="button" class="btn-approval-reject" data-request-id="${this._escape(item.id)}" style="min-height:44px;padding:8px 12px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:900;cursor:pointer;">${this.t("approvals.reject", "Rechazar")}</button>` : ""}
           </div>
         </div>
-        ${actions && [RequestType.GAME_LOCK, RequestType.TEAM_SEASON_FREEZE].includes(item.type) ? `
+        ${actions && [RequestType.GAME_LOCK, RequestType.TEAM_SEASON_FREEZE, RequestType.PLAYER_DATA_SUBMISSION].includes(item.type) ? `
           <label style="display:grid;gap:4px;margin-top:12px;font-size:11px;font-weight:800;color:#475569;">
-            ${this.t("approvals.resolution_note", "Nota de resolución (opcional)")}
+            ${item.type === RequestType.PLAYER_DATA_SUBMISSION ? "Comentario para el jugador" : this.t("approvals.resolution_note", "Nota de resolución (opcional)")}
             <input type="text"
                    class="approval-resolution-note"
                    data-request-id="${this._escape(item.id)}"
@@ -517,7 +528,9 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
       button.addEventListener("click", async event => {
         const item = this._findItem(event.currentTarget.dataset.requestId);
         if (!item) return;
-        const confirmation = item.type === RequestType.GAME_LOCK
+        const confirmation = item.type === RequestType.PLAYER_DATA_SUBMISSION
+          ? "¿Validar esta aportación e incorporarla al histórico oficial del jugador?"
+          : item.type === RequestType.GAME_LOCK
           ? this.t("approvals.approve_lock_confirm", "¿Aprobar y cerrar este partido? Quedará bloqueado hasta que un Admin/Superadmin lo reabra.")
           : item.type === RequestType.TEAM_SEASON_FREEZE
             ? this.t(
@@ -543,6 +556,21 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
       });
     });
 
+    this.container?.querySelectorAll(".btn-approval-return").forEach(button => {
+      button.addEventListener("click", async event => {
+        const item = this._findItem(event.currentTarget.dataset.requestId);
+        if (!item || item.type !== RequestType.PLAYER_DATA_SUBMISSION) return;
+        const note = String(
+          this.container?.querySelector(`.approval-resolution-note[data-request-id="${item.id}"]`)?.value || ""
+        ).trim();
+        if (!note) {
+          alert("Indica qué debe corregir el jugador antes de devolver la aportación.");
+          return;
+        }
+        await this._runAction(event.currentTarget, () => this.service.returnSubmission(item, note));
+      });
+    });
+
     this.container?.querySelectorAll(".btn-approval-reject").forEach(button => {
       button.addEventListener("click", async event => {
         const item = this._findItem(event.currentTarget.dataset.requestId);
@@ -552,6 +580,10 @@ ${this.t("approvals.subtitle", "Centraliza accesos, cierres y traspasos, mostran
             `.approval-resolution-note[data-request-id="${item.id}"]`
           )?.value || ""
         ).trim() || null;
+        if (item.type === RequestType.PLAYER_DATA_SUBMISSION && !note) {
+          alert("Indica el motivo del rechazo para que el jugador pueda entenderlo.");
+          return;
+        }
 
         await this._runAction(event.currentTarget, () => this.service.reject(item, note));
       });
