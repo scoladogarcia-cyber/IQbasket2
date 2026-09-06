@@ -1,0 +1,41 @@
+name: V26 Family Profile Controls Autopatch
+on:
+  push:
+    branches:
+      - feat/family-profile-controls-v1
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/family-profile-controls-v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply exact V26 patch
+        run: python .github/v26_patch.py
+      - name: Syntax checks
+        run: |
+          node --check views/TranslationsView.js
+          node --check services/DataStore.js
+          node --check services/family/FamilyProfileAdminService.js
+          node --check components/admin/FamilyProfileControls.js
+      - name: Focused existing contracts
+        run: |
+          npm ci --ignore-scripts
+          node tests/family-scoped-player-support-v1-contract.mjs
+          node tests/player-self-access-contract.mjs
+      - name: Commit integration and remove temporary patch machinery
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/v26_patch.py .github/workflows/v26-autopatch.yml
+          git add views services components
+          git diff --cached --check
+          git commit -m 'feat: integrate Family profile controls V26'
+          git push
