@@ -5,6 +5,7 @@ import { UserRole } from "../security/roles.js";
 
 const files = Object.fromEntries(await Promise.all([
   ["sql","../supabase/ready/20260905_apply_player_data_submissions_v1.sql"],
+  ["indexes","../supabase/ready/20260906_apply_player_data_submissions_fk_indexes_v1.sql"],
   ["service","../services/player360/PlayerDataSubmissionService.js"],
   ["wellness","../views/player360/WellnessSupportPanel.js"],
   ["panel","../views/player360/PlayerSubmissionPanel.js"],
@@ -29,6 +30,9 @@ assert.match(files.sql,/captured_by=v_row\.submitted_by/);
 assert.match(files.sql,/validated_by/);
 assert.match(files.sql,/materialized_resource_id/);
 
+assert.match(files.indexes,/create index if not exists player_data_submissions_reviewed_by_fk_idx[\s\S]*reviewed_by/i);
+assert.doesNotMatch(files.indexes,/\b(?:insert|update|delete|drop\s+table|alter\s+table)\b/i);
+
 const has=(role,permission)=>(ROLE_PERMISSIONS[role]||[]).includes(permission);
 
 assert.equal(has(UserRole.JUGADOR,Permission.CREATE_OWN_PLAYER_SUBMISSION),true);
@@ -52,4 +56,3 @@ assert.match(files.centerView,/btn-approval-return/);
 assert.match(files.player360,/Mis aportaciones/);
 
 console.log("PLAYER_DATA_SUBMISSIONS_V1_CONTRACT_OK");
-
