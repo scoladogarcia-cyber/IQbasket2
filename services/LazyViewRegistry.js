@@ -9,9 +9,9 @@ const SINGLETON_LOADERS = Object.freeze({
     const { TeamStatsView } = await import("../views/TeamStatsView.js");
     return new TeamStatsView(supabase, authController);
   },
-  liveeditor: async ({ gameController, authController }) => {
-    const { GameLiveEditorView } = await import("../views/GameLiveEditorView.js");
-    return new GameLiveEditorView(gameController, authController);
+  liveeditor: async ({ supabase, gameController, authController }) => {
+    const { GameAccessView } = await import("../views/games/GameAccessView.js");
+    return new GameAccessView(gameController, authController, supabase);
   },
   heatmap: async ({ supabase, authController }) => {
     const { HeatmapAnalysisView } = await import("../views/HeatmapAnalysisView.js");
@@ -58,8 +58,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new TrainingView(supabase, authController);
   },
   nutrition: async ({ supabase, authController }) => {
-    const { NutritionView } = await import("../views/NutritionView.js");
-    return new NutritionView(supabase, authController);
+    const { PlayerNutritionRouterView } = await import("../views/PlayerNutritionRouterView.js");
+    return new PlayerNutritionRouterView(supabase, authController);
   },
   player360: async ({ supabase, authController }) => {
     const { Player360View } = await import("../views/Player360View.js");
