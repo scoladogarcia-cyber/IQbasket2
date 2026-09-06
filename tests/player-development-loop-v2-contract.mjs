@@ -14,6 +14,9 @@ const preflight = readFileSync(new URL("../supabase/ready/20260906_preflight_pla
 const verify = readFileSync(new URL("../supabase/ready/20260906_verify_player_development_loop_v2_readonly.sql", import.meta.url), "utf8");
 const installedSmoke = readFileSync(new URL("../supabase/drafts/20260906_smoke_player_development_loop_v2_installed_rollback.sql", import.meta.url), "utf8");
 const controlledApply = readFileSync(new URL("../.github/workflows/player-development-loop-v2-controlled-apply.yml", import.meta.url), "utf8");
+const fkIndexes = readFileSync(new URL("../supabase/ready/20260906_apply_player_development_loop_v2_fk_indexes.sql", import.meta.url), "utf8");
+const fkIndexesRollback = readFileSync(new URL("../supabase/ready/20260906_rollback_player_development_loop_v2_fk_indexes.sql", import.meta.url), "utf8");
+const fkIndexWorkflow = readFileSync(new URL("../.github/workflows/player-development-loop-v2-fk-index-hardening.yml", import.meta.url), "utf8");
 
 for (const table of ["player_development_cycles", "player_development_actions", "player_development_action_evidence"]) {
   assert.match(apply, new RegExp(`create table public\\.${table}`, "i"));
@@ -34,6 +37,15 @@ assert.match(apply, /tp\.player_id=v_action\.player_id/i);
 assert.match(apply, /pgs\.game_id=g\.id and pgs\.player_id=v_action\.player_id/i);
 assert.match(apply, /DEVELOPMENT_CYCLE_ACTIONS_NOT_FINISHED/i);
 assert.match(apply, /iq_saas_entitlement_check\([\s\S]*'DEVELOPMENT_PLAN'/i);
+assert.match(apply, /player_development_action_cycle_scope_fk_idx[\s\S]*cycle_id,team_season_id,player_id/i);
+assert.match(apply, /player_development_evidence_action_scope_fk_idx[\s\S]*action_id,cycle_id,team_season_id,player_id/i);
+assert.match(fkIndexes, /create index if not exists player_development_action_cycle_scope_fk_idx/i);
+assert.match(fkIndexes, /create index if not exists player_development_evidence_action_scope_fk_idx/i);
+assert.doesNotMatch(fkIndexes, /\b(insert|update|delete|alter table|drop table|truncate)\b/i, "El hardening FK V2 no puede mutar datos ni destruir tablas.");
+assert.match(fkIndexesRollback, /drop index if exists public\.player_development_action_cycle_scope_fk_idx/i);
+assert.match(fkIndexesRollback, /drop index if exists public\.player_development_evidence_action_scope_fk_idx/i);
+assert.match(fkIndexWorkflow, /20260906_apply_player_development_loop_v2_fk_indexes\.sql/);
+assert.match(fkIndexWorkflow, /20260906_rollback_player_development_loop_v2_fk_indexes\.sql/);
 assert.doesNotMatch(preflight, /\b(create|alter|drop|insert|update|delete|grant|revoke)\b/i, "El preflight V2 debe ser estrictamente read-only.");
 assert.equal((installedSmoke.match(/^\s*begin;\s*$/gmi) || []).length, 1, "El smoke V2 debe abrir una sola transacción.");
 assert.equal((installedSmoke.match(/^\s*rollback;\s*$/gmi) || []).length, 1, "El smoke V2 debe terminar en ROLLBACK.");

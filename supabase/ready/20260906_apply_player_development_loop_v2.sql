@@ -125,6 +125,8 @@ create table public.player_development_actions (
 
 create index player_development_action_cycle_idx
   on public.player_development_actions(cycle_id,action_order);
+create index player_development_action_cycle_scope_fk_idx
+  on public.player_development_actions(cycle_id,team_season_id,player_id);
 create index player_development_action_player_idx
   on public.player_development_actions(player_id,team_season_id);
 create index player_development_action_completed_by_fk_idx
@@ -175,6 +177,8 @@ create unique index player_development_evidence_game_uq
   where game_id is not null;
 create index player_development_evidence_cycle_idx
   on public.player_development_action_evidence(cycle_id,created_at);
+create index player_development_evidence_action_scope_fk_idx
+  on public.player_development_action_evidence(action_id,cycle_id,team_season_id,player_id);
 create index player_development_evidence_training_fk_idx
   on public.player_development_action_evidence(training_session_id);
 create index player_development_evidence_external_fk_idx
