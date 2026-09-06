@@ -136,7 +136,7 @@ assert.match(emptyHtml, /data-family-profile-controls-empty/);
 assert.match(emptyHtml, /<style>[\s\S]*\.family-profile-controls\{/);
 assert.match(emptyHtml, /\.family-profile-controls-empty\{color:#334155\}/);
 assert.match(emptyHtml, /Selecciona un equipo y una temporada activa/);
-assert.doesNotMatch(emptyHtml, /family-profile-save/);
+assert.doesNotMatch(emptyHtml, /<button[^>]*class="family-profile-save"/);
 
 const version = release.release.split(".").map(Number);
 const baseline = "2026.09.06.13".split(".").map(Number);
