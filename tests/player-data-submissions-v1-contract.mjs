@@ -78,6 +78,11 @@ assert.match(files.center,/isPlayerSubmissionRequest/);
 assert.match(files.center,/decision:\s*"RETURNED"/);
 assert.match(files.center,/decision:\s*"REJECTED"/);
 assert.match(files.center,/Indica el motivo del rechazo/);
+const submissionNormalizer = files.center.match(
+  /_normalizePlayerSubmission\(row = \{\}\) \{[\s\S]*?\n  \}\n\n  async load/
+)?.[0] || "";
+assert.match(submissionNormalizer,/const context = \{ teamSeasonId: row\.team_season_id \};/);
+assert.doesNotMatch(submissionNormalizer,/const context = \{[^}]*playerId/);
 assert.match(files.centerView,/btn-approval-return/);
 assert.match(files.centerView,/#\/player360\//);
 assert.match(files.player360,/Mis aportaciones/);
