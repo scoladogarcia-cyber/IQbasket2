@@ -17,6 +17,32 @@ function uniqueStrings(values = []) {
   )];
 }
 
+function arrayish(value) {
+  if (value === null || value === undefined || value === "") return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [value];
+  const raw = value.trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {}
+  const unwrapped = raw.startsWith("{") && raw.endsWith("}")
+    ? raw.slice(1, -1)
+    : raw;
+  return unwrapped.split(",").map(item => item.trim()).filter(Boolean);
+}
+
+function isFamilyProfile(profile = {}) {
+  const role = String(profile.global_role ?? profile.role ?? "").trim().toUpperCase();
+  return ["FAMILIA_TUTOR", "FAMILY", "FAMILIA", "TUTOR"].includes(role);
+}
+
+function isMissingFamilyScopeRpc(error) {
+  const message = String(error?.message || "");
+  return error?.code === "PGRST202" || message.includes("iq_v17_family_authorization_scope");
+}
+
 export class AuthorizationContextService {
   constructor(supabaseClient) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
@@ -25,14 +51,16 @@ export class AuthorizationContextService {
   async enrichProfile(profile = {}) {
     if (!this.supabase || !profile?.id) return profile;
 
-    const legacyTeamIds = Array.isArray(profile.assigned_team_ids)
-      ? profile.assigned_team_ids
-      : [];
+    const legacyTeamIds = arrayish(profile.assigned_team_ids ?? profile.allowedTeamIds);
     const legacyLinkedPlayerIds = profile.linked_player_id
       ? [profile.linked_player_id]
       : [];
 
-    const [membershipRes, playerLinksRes] = await Promise.all([
+    const familyScopePromise = isFamilyProfile(profile)
+      ? this.supabase.rpc("iq_v17_family_authorization_scope")
+      : Promise.resolve({ data: null, error: null });
+
+    const [membershipRes, playerLinksRes, familyScopeRes] = await Promise.all([
       this.supabase
         .from("team_season_memberships")
         .select("team_season_id,function_role,status,valid_from,valid_until")
@@ -42,7 +70,8 @@ export class AuthorizationContextService {
         .from("user_player_links")
         .select("player_id,relation_type,status,valid_from,valid_until")
         .eq("user_id", profile.id)
-        .eq("status", "ACTIVE")
+        .eq("status", "ACTIVE"),
+      familyScopePromise
     ]);
 
     if (membershipRes.error) {
@@ -51,7 +80,11 @@ export class AuthorizationContextService {
     if (playerLinksRes.error) {
       console.warn("[AuthorizationContext] No se pudieron cargar vínculos usuario-jugador:", playerLinksRes.error.message);
     }
+    if (familyScopeRes.error && !isMissingFamilyScopeRpc(familyScopeRes.error)) {
+      console.warn("[AuthorizationContext] No se pudo cargar el scope Family V17:", familyScopeRes.error.message);
+    }
 
+    const familyScope = familyScopeRes.error ? null : (familyScopeRes.data || null);
     const memberships = membershipRes.error ? [] : (membershipRes.data || []);
     const teamSeasonIds = uniqueStrings(memberships.map(m => m.team_season_id));
 
@@ -95,15 +128,27 @@ export class AuthorizationContextService {
     const linkedPlayerIds = (playerLinksRes.error ? [] : (playerLinksRes.data || []))
       .map(link => link.player_id)
       .filter(Boolean);
+    const familyLinkedPlayerIds = Array.isArray(familyScope?.linked_player_ids) ? familyScope.linked_player_ids : [];
+    const familyTeamIds = Array.isArray(familyScope?.allowed_team_ids) ? familyScope.allowed_team_ids : [];
+    const familyTeamSeasonIds = Array.isArray(familyScope?.allowed_team_season_ids) ? familyScope.allowed_team_season_ids : [];
+    const familyGlobalSeasonIds = Array.isArray(familyScope?.allowed_global_season_ids) ? familyScope.allowed_global_season_ids : [];
+    const legacyAllowedSeasonIds = [
+      ...arrayish(profile.allowedSeasonIds),
+      ...arrayish(profile.allowed_season_ids)
+    ];
 
     return {
       ...profile,
-      allowedTeamIds: uniqueStrings([...legacyTeamIds, ...v3TeamIds]),
-      allowedTeamSeasonIds: uniqueStrings(teamSeasonIds),
-      allowedGlobalSeasonIds: uniqueStrings(globalSeasonIds),
-      linkedPlayerIds: uniqueStrings([...legacyLinkedPlayerIds, ...linkedPlayerIds]),
+      allowedTeamIds: uniqueStrings([...legacyTeamIds, ...v3TeamIds, ...familyTeamIds]),
+      allowedSeasonIds: uniqueStrings([...legacyAllowedSeasonIds, ...familyGlobalSeasonIds]),
+      allowedTeamSeasonIds: uniqueStrings([...teamSeasonIds, ...familyTeamSeasonIds]),
+      allowedGlobalSeasonIds: uniqueStrings([...globalSeasonIds, ...familyGlobalSeasonIds]),
+      linkedPlayerIds: uniqueStrings([...legacyLinkedPlayerIds, ...linkedPlayerIds, ...familyLinkedPlayerIds]),
       contextualMemberships,
-      authorizationModel: memberships.length > 0 ? "V3_HYBRID" : "LEGACY_COMPAT"
+      familyAuthorizationScope: familyScope,
+      authorizationModel: familyScope
+        ? "V17_FAMILY_SCOPED"
+        : memberships.length > 0 ? "V3_HYBRID" : "LEGACY_COMPAT"
     };
   }
 }

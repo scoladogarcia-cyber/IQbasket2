@@ -10,6 +10,7 @@ import { FAMILY_GROWTH_CONFIG } from "../../config/family-growth.config.js";
 import { buildFamilyGrowthState } from "../../domain/family/FamilyGrowthEngine.js";
 import { ProductAnalyticsService } from "../../services/analytics/ProductAnalyticsService.js";
 import { buildFamilyWeeklyPlan } from "../../domain/family/FamilyDevelopmentPlanEngine.js";
+import { buildFamilySupportGuide } from "../../domain/family/FamilySupportGuide.js";
 import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/family-ai-products.config.js";
 
 const escapeHtml = (value = "") => String(value)
@@ -24,7 +25,7 @@ export class FamilyWorkspaceView {
     this.auth = authController;
     this.analytics = new ProductAnalyticsService(supabaseClient);
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, growth: null, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, support: null, growth: null, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -49,6 +50,7 @@ export class FamilyWorkspaceView {
         this.state.developmentContext = null;
         this.state.developmentCycle = null;
         this.state.weeklyPlan = null;
+        this.state.support = null;
         container.innerHTML = this._emptyWorkspace();
         this._bind(container);
         return;
@@ -69,6 +71,12 @@ export class FamilyWorkspaceView {
       this.state.developmentCycle = developmentCycle || {};
       this.state.weeklyPlan = buildFamilyWeeklyPlan(this.state.developmentContext);
       const story = this.state.player360.allowed ? presentFamilyPlayer360(this.state.player360) : null;
+      this.state.support = buildFamilySupportGuide({
+        story,
+        developmentContext: this.state.developmentContext,
+        developmentCycle: this.state.developmentCycle,
+        weeklyPlan: this.state.weeklyPlan
+      });
       this.state.growth = buildFamilyGrowthState({ product, passport, player360, story });
       this.state.error = null;
       container.innerHTML = this._workspace();
@@ -91,51 +99,84 @@ export class FamilyWorkspaceView {
     const story = growth.story || (player360.allowed ? presentFamilyPlayer360(player360) : null);
     const weeklyPlan = this.state.weeklyPlan || buildFamilyWeeklyPlan(this.state.developmentContext || {});
     const developmentCycle = this.state.developmentCycle || {};
+    const support = this.state.support || buildFamilySupportGuide({
+      story, developmentContext: this.state.developmentContext, developmentCycle, weeklyPlan
+    });
 
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
         <div><p class="family-eyebrow">IQBasket Family</p>
           <h1 id="family-title">${escapeHtml(player.first_name)} ${escapeHtml(player.last_name)}</h1>
-          <p>Su trayectoria deportiva permanece unida aunque cambie de equipo o temporada.</p>
+          <p>Entiende su progresión, acompaña su proceso y céntrate en lo que puede ayudarle esta semana.</p>
         </div>
         <div class="family-plan"><span>${escapeHtml(plan?.label || product.plan_code || "Family Free")}</span>
           <small>${product.subject_covered ? "Jugador cubierto" : "Cobertura pendiente"}</small></div>
       </header>
       ${this._playerSwitcher()}
+      ${this._supportGuide(support)}
       <div class="family-value-strip" aria-label="Recorrido de valor">
-        <span>1 · Qué ha pasado</span><span>2 · Cómo evoluciona</span>
-        <span>3 · Qué significa</span><span>4 · Qué hacemos ahora</span>
+        <span>1 · Qué está pasando</span><span>2 · Cómo evoluciona</span>
+        <span>3 · Qué necesita ahora</span><span>4 · Cómo puedo ayudar</span>
       </div>
-      ${this._summary(totals, passport)}
       ${this._familyDashboard(growth, weeklyPlan, developmentCycle)}
-      ${this._conversionCard(growth)}
-      ${this._career(passport.career || [])}
       ${this._player360(player360, story)}
       ${this._developmentPlan(weeklyPlan, developmentCycle)}
+      ${this._summary(totals, passport)}
+      ${this._career(passport.career || [])}
+      ${this._conversionCard(growth)}
       ${this._aiProductPreview(product)}
       ${this._claimPanel()}
     </section>`;
   }
   _playerSwitcher() {
-    if (this.state.players.length <= 1) return "";
-    const options = this.state.players.map(row => {
+    const cards = this.state.players.map(row => {
       const label = `${row.first_name || ""} ${row.last_name || ""}`.trim() || "Jugador";
-      return `<option value="${escapeHtml(row.player_id)}" ${String(row.player_id) === this.playerId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      const context = [row.team_name, row.season_name].filter(Boolean).join(" · ");
+      const active = String(row.player_id) === String(this.playerId);
+      return `<a href="#/family/${escapeHtml(row.player_id)}"
+        class="family-player-chip ${active ? "active" : ""}"
+        data-family-player-link="${escapeHtml(row.player_id)}"
+        aria-current="${active ? "true" : "false"}">
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(context || "Jugador vinculado")}</span>
+      </a>`;
     }).join("");
-    return `<label class="family-player-select">Jugador vinculado
-      <select data-family-player>${options}</select>
-    </label>`;
+    return `<section class="family-player-scope" aria-label="Mis jugadores">
+      <div><p class="family-eyebrow">Tu ámbito familiar</p><h2>Mis jugadores</h2>
+        <p>Todo el análisis y las recomendaciones de esta pantalla pertenecen únicamente al jugador seleccionado.</p></div>
+      <div class="family-player-chips">${cards}</div>
+    </section>`;
+  }
+
+  _supportGuide(guide = {}) {
+    const observe = (guide.observe || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    const support = (guide.supportActions || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    const avoid = (guide.avoid || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+    return `<section class="family-card family-support" data-family-support-guide>
+      <div class="family-card-head"><div><p class="family-eyebrow">Cómo puedo ayudar</p><h2>${escapeHtml(guide.focus || "Acompañar su proceso")}</h2></div></div>
+      <div class="family-support-grid">
+        <article><span>Qué observar</span><ul>${observe}</ul></article>
+        <article><span>Cómo ayudar</span><ol>${support}</ol></article>
+        <article class="family-support-question"><span>Una buena pregunta</span><p>${escapeHtml(guide.conversationStarter || "¿Cómo te has sentido esta semana?")}</p></article>
+        <article><span>Qué evitar</span><ul>${avoid}</ul></article>
+      </div>
+      <p class="family-disclaimer">${escapeHtml(guide.evidenceNote || "")}</p>
+    </section>`;
   }
 
   _summary(totals, passport) {
     const recent = Array.isArray(passport.recent_games) ? passport.recent_games : [];
     const seasons = Array.isArray(passport.career) ? passport.career.length : 0;
-    return `<div class="family-kpis">
-      ${this._kpi("Temporadas", seasons)}
-      ${this._kpi("Partidos", number(totals.games))}
-      ${this._kpi("Minutos", number(totals.minutes))}
-      ${this._kpi("Últimos registros", recent.length)}
-    </div>`;
+    return `<section class="family-evidence-summary">
+      <div class="family-card-head"><div><p class="family-eyebrow">Evidencia numérica</p><h2>Datos para contextualizar, no para juzgar</h2>
+        <p>Las cifras quedan en segundo plano: sirven para apoyar la lectura de progresión de este jugador.</p></div></div>
+      <div class="family-kpis">
+        ${this._kpi("Temporadas", seasons)}
+        ${this._kpi("Partidos", number(totals.games))}
+        ${this._kpi("Minutos", number(totals.minutes))}
+        ${this._kpi("Últimos registros", recent.length)}
+      </div>
+    </section>`;
   }
 
   _kpi(label, value) {
@@ -216,7 +257,7 @@ export class FamilyWorkspaceView {
         <span>${escapeHtml(row.team_name || "Equipo")}${row.club_name ? ` · ${escapeHtml(row.club_name)}` : ""}</span></div>
       <div class="family-career-numbers"><b>${number(row.games)}</b><small>partidos</small><b>${number(row.points)}</b><small>puntos</small></div>
     </article>`).join("");
-    return `<section class="family-card"><div class="family-card-head"><div><p class="family-eyebrow">Pasaporte deportivo</p><h2>Trayectoria</h2></div></div>${items}</section>`;
+    return `<details class="family-card family-career-card"><summary><div><p class="family-eyebrow">Pasaporte deportivo</p><strong>Ver trayectoria y cifras históricas</strong></div></summary><div class="family-career-content">${items}</div></details>`;
   }
   _player360(snapshot, story) {
     if (!snapshot?.allowed) {
@@ -316,11 +357,12 @@ export class FamilyWorkspaceView {
 
   _bind(container) {
     container.querySelector("[data-family-retry]")?.addEventListener("click", () => this.render(container));
-    container.querySelector("[data-family-player]")?.addEventListener("change", event => {
-      const id = event.target.value;
-      if (!id) return;
-      void this.analytics.trackSafely({ eventCode: "FAMILY_PLAYER_SWITCHED", playerId: id, surface: "FAMILY_WORKSPACE", placement: "PLAYER_SWITCHER" });
-      window.location.hash = `#/family/${id}`;
+    container.querySelectorAll("[data-family-player-link]").forEach(link => {
+      link.addEventListener("click", () => {
+        const id = link.dataset.familyPlayerLink;
+        if (!id || String(id) === String(this.playerId)) return;
+        void this.analytics.trackSafely({ eventCode: "FAMILY_PLAYER_SWITCHED", playerId: id, surface: "FAMILY_WORKSPACE", placement: "PLAYER_SWITCHER" });
+      });
     });
     container.querySelector("[data-family-interest]")?.addEventListener("click", async event => {
       const button = event.currentTarget;
@@ -367,7 +409,8 @@ export class FamilyWorkspaceView {
       .family-hero h1{margin:3px 0 8px;font-size:clamp(25px,5vw,38px)}.family-hero p{margin:0;color:#475569;max-width:720px}
       .family-eyebrow{margin:0!important;font-size:11px!important;font-weight:900;color:#2563eb!important;text-transform:uppercase;letter-spacing:.12em}
       .family-plan{display:grid;gap:2px;padding:10px 14px;border-radius:14px;background:#fff;border:1px solid #bfdbfe;white-space:nowrap}.family-plan span{font-weight:900}.family-plan small{color:#64748b}
-      .family-player-select{display:grid;gap:6px;font-weight:800;margin:12px 0}.family-player-select select,.family-link-card input{min-height:44px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;background:#fff}
+      .family-player-scope{display:grid;gap:12px;margin:14px 0;padding:18px;border:1px solid #dbeafe;border-radius:18px;background:#f8fbff}.family-player-scope h2{margin:3px 0 5px}.family-player-scope p{margin:0;color:#64748b;font-size:13px}.family-player-chips{display:flex;gap:9px;overflow-x:auto;padding:2px 0}.family-player-chip{display:grid;gap:3px;min-width:180px;padding:11px 13px;border:1px solid #cbd5e1;border-radius:13px;background:#fff;color:#0f172a;text-decoration:none}.family-player-chip span{font-size:11px;color:#64748b}.family-player-chip.active{border-color:#2563eb;box-shadow:0 0 0 2px #dbeafe}.family-link-card input{min-height:44px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;background:#fff}
+      .family-support{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-color:#bfdbfe}.family-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-support-grid article{padding:15px;border:1px solid #dbeafe;border-radius:14px;background:#fff}.family-support-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#2563eb}.family-support-grid ul,.family-support-grid ol{margin:8px 0 0;padding-left:20px}.family-support-grid li{margin:7px 0;color:#334155;font-size:14px}.family-support-question p{font-size:17px;font-weight:800;color:#0f172a}.family-evidence-summary{margin:20px 0}.family-evidence-summary h2{margin:3px 0}.family-evidence-summary p{margin:4px 0;color:#64748b;font-size:13px}.family-career-card summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center}.family-career-card summary::-webkit-details-marker{display:none}.family-career-content{margin-top:10px}
       .family-value-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.family-value-strip span{padding:10px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;font-size:12px;font-weight:800;text-align:center}
       .family-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.family-kpi{padding:16px;border-radius:16px;background:#0f172a;color:#fff;display:grid}.family-kpi strong{font-size:24px}.family-kpi span{font-size:12px;color:#cbd5e1}
       .family-card{padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;margin:14px 0}.family-card h2{margin:3px 0 10px}.family-card-head{display:flex;justify-content:space-between;align-items:flex-start}
@@ -378,7 +421,7 @@ export class FamilyWorkspaceView {
       .family-conversion{display:flex;justify-content:space-between;align-items:center;gap:18px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);border-color:#bfdbfe}.family-conversion p{margin:6px 0;color:#334155}.family-conversion-action{display:grid;gap:7px;min-width:190px}.family-conversion-action button{min-height:44px;border:0;border-radius:12px;padding:9px 14px;background:#1d4ed8;color:#fff;font-weight:900;cursor:pointer}.family-conversion-action button:disabled{opacity:.65}.family-conversion-action small{font-size:11px;color:#64748b}
       .family-development{background:linear-gradient(135deg,#f8fafc,#f0fdf4);border-color:#bbf7d0}.family-development-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.family-development-grid article{padding:14px;border:1px solid #dcfce7;border-radius:13px;background:#fff}.family-development-grid span,.family-ai-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#64748b}.family-development-grid p{margin:6px 0 0}.family-plan-actions{margin:15px 0 0;padding-left:22px}.family-plan-actions li{margin:7px 0;color:#1e293b}.family-limitations{margin-top:12px}.family-limitations summary{font-weight:800;cursor:pointer}.family-limitations li{font-size:13px;color:#64748b}
       .family-ai-preview{background:#f8fafc}.family-ai-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-ai-grid article{padding:14px;border:1px solid #e2e8f0;border-radius:13px;background:#fff}.family-ai-grid strong{display:block}.family-ai-grid p{font-size:13px;color:#475569;margin:6px 0}.family-ai-grid span{color:#7c3aed}
-      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-dashboard-grid{grid-template-columns:1fr 1fr}.family-conversion{display:grid}.family-development-grid,.family-ai-grid{grid-template-columns:1fr}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
+      @media(max-width:700px){.family-hero,.family-locked{display:grid}.family-support-grid{grid-template-columns:1fr}.family-player-chip{min-width:155px}.family-plan{width:max-content}.family-value-strip{grid-template-columns:repeat(2,1fr)}.family-kpis{grid-template-columns:repeat(2,1fr)}.family-story-grid{grid-template-columns:1fr}.family-dashboard-grid{grid-template-columns:1fr 1fr}.family-conversion{display:grid}.family-development-grid,.family-ai-grid{grid-template-columns:1fr}.family-link-card form{grid-template-columns:1fr}.family-career-row{align-items:flex-start}.family-workspace{padding-inline:2px}}
     `;
     document.head.appendChild(style);
   }
