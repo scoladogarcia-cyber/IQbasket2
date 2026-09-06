@@ -1,6 +1,8 @@
 /**
  * @fileoverview Resource-scoped delegation manager for one game.
  * @description UI only; all authorization, user lookup and audit writes remain in V21 RPCs.
+ * The backend deliberately stores one row per capability. This panel groups rows
+ * belonging to the same logical grant so the operator sees one access card per user/window.
  */
 
 import { Permission } from "../../security/permissions.js";
@@ -17,6 +19,10 @@ const LABELS = Object.freeze({
   [Permission.FINISH_GAME]: "Finalizar partido"
 });
 
+const CAPABILITY_ORDER = new Map(
+  DELEGATABLE_GAME_PERMISSIONS.map((capability, index) => [capability, index])
+);
+
 function escapeHtml(value = "") {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -29,6 +35,15 @@ function escapeHtml(value = "") {
 function localDateTimeValue(date = new Date()) {
   const pad = value => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function logicalGrantKey(row = {}) {
+  return [
+    row.delegate_user_id || row.delegateUserId || row.email || "",
+    row.valid_from || row.validFrom || "",
+    row.valid_until || row.validUntil || "",
+    row.grant_note || row.grantNote || ""
+  ].map(value => String(value ?? "")).join("|");
 }
 
 export class GameCaptureDelegationPanel {
@@ -106,6 +121,45 @@ export class GameCaptureDelegationPanel {
     return this.rows.filter(row => !activeIds.has(String(row.id)));
   }
 
+  /**
+   * V21 stores one row for every independent capability. Grouping is a presentation
+   * concern only: granular rows and auditability remain untouched in the database.
+   */
+  _groupRows(rows = []) {
+    const groups = new Map();
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const key = logicalGrantKey(row);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          ids: [],
+          delegateUserId: row.delegate_user_id || row.delegateUserId || null,
+          email: row.email || "",
+          name: row.name || "",
+          validFrom: row.valid_from || row.validFrom || null,
+          validUntil: row.valid_until || row.validUntil || null,
+          grantNote: row.grant_note || row.grantNote || null,
+          revokeReason: row.revoke_reason || row.revokeReason || null,
+          capabilities: []
+        });
+      }
+      const group = groups.get(key);
+      if (row.id) group.ids.push(String(row.id));
+      const capability = String(row.capability || "").toUpperCase();
+      if (capability && !group.capabilities.includes(capability)) group.capabilities.push(capability);
+      if (!group.revokeReason && (row.revoke_reason || row.revokeReason)) {
+        group.revokeReason = row.revoke_reason || row.revokeReason;
+      }
+    });
+
+    return [...groups.values()].map(group => ({
+      ...group,
+      capabilities: [...group.capabilities].sort((a, b) =>
+        (CAPABILITY_ORDER.get(a) ?? 999) - (CAPABILITY_ORDER.get(b) ?? 999)
+      )
+    }));
+  }
+
   _capabilityOptions() {
     const defaults = new Set([
       Permission.RECORD_LIVE_GAME,
@@ -122,19 +176,22 @@ export class GameCaptureDelegationPanel {
     `).join("");
   }
 
-  _rowMarkup(row, active) {
-    const name = escapeHtml(row.name || row.email || "Usuario");
-    const email = escapeHtml(row.email || "");
-    const label = escapeHtml(LABELS[row.capability] || row.capability || "Capacidad");
-    const until = row.valid_until ? new Date(row.valid_until).toLocaleString() : "-";
+  _groupMarkup(group, active) {
+    const name = escapeHtml(group.name || group.email || "Usuario");
+    const email = escapeHtml(group.email || "");
+    const until = group.validUntil ? new Date(group.validUntil).toLocaleString() : "-";
+    const capabilityBadges = group.capabilities.map(capability => `
+      <span style="display:inline-flex;align-items:center;border-radius:999px;background:#eef2ff;color:#3730a3;padding:4px 7px;font-size:10px;font-weight:800;">${escapeHtml(LABELS[capability] || capability)}</span>
+    `).join("");
     return `
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1px solid ${active ? "#bbf7d0" : "#e2e8f0"};border-radius:10px;background:${active ? "#f0fdf4" : "#f8fafc"};">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:11px 12px;border:1px solid ${active ? "#bbf7d0" : "#e2e8f0"};border-radius:10px;background:${active ? "#f0fdf4" : "#f8fafc"};">
         <div style="min-width:220px;flex:1;">
           <strong style="display:block;font-size:12px;color:#0f172a;">${name}${email && email !== name ? ` · ${email}` : ""}</strong>
-          <span style="display:block;font-size:11px;color:#475569;margin-top:2px;">${label} · hasta ${escapeHtml(until)}</span>
-          ${row.revoke_reason ? `<span style="display:block;font-size:10px;color:#991b1b;margin-top:2px;">${escapeHtml(row.revoke_reason)}</span>` : ""}
+          <span style="display:block;font-size:11px;color:#475569;margin-top:2px;">Acceso temporal · hasta ${escapeHtml(until)}</span>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;">${capabilityBadges}</div>
+          ${group.revokeReason ? `<span style="display:block;font-size:10px;color:#991b1b;margin-top:5px;">${escapeHtml(group.revokeReason)}</span>` : ""}
         </div>
-        ${active ? `<button type="button" class="btn-revoke-game-delegation" data-id="${escapeHtml(row.id)}" style="min-height:40px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;padding:8px 10px;font-size:11px;font-weight:800;cursor:pointer;">Revocar</button>` : '<span style="font-size:10px;font-weight:800;color:#64748b;">Finalizada</span>'}
+        ${active ? `<button type="button" class="btn-revoke-game-delegation" data-ids="${escapeHtml(group.ids.join(","))}" style="min-height:44px;border:1px solid #fca5a5;border-radius:8px;background:#fff1f2;color:#be123c;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer;">Revocar acceso</button>` : '<span style="font-size:10px;font-weight:800;color:#64748b;">Finalizado</span>'}
       </div>
     `;
   }
@@ -143,8 +200,8 @@ export class GameCaptureDelegationPanel {
     this.portal?.remove();
     if (!this.activeGame) return;
 
-    const active = this._activeRows();
-    const history = this._historyRows();
+    const activeGroups = this._groupRows(this._activeRows());
+    const historyGroups = this._groupRows(this._historyRows());
     const defaultUntil = new Date(Date.now() + 6 * 60 * 60 * 1000);
     const portal = document.createElement("div");
     portal.id = "game-capture-delegation-portal";
@@ -156,7 +213,7 @@ export class GameCaptureDelegationPanel {
               <h2 id="delegation-title" style="margin:0;font-size:18px;font-weight:900;color:#0f172a;">Delegar captura de partido</h2>
               <p style="margin:4px 0 0;font-size:12px;color:#64748b;">vs ${escapeHtml(this.activeGame.opponent || "Rival")} · acceso temporal sólo a este partido.</p>
             </div>
-            <button type="button" id="btn-close-game-delegation" aria-label="Cerrar" style="border:0;background:#f1f5f9;border-radius:8px;min-width:40px;min-height:40px;font-size:18px;cursor:pointer;">✕</button>
+            <button type="button" id="btn-close-game-delegation" aria-label="Cerrar" style="border:0;background:#f1f5f9;border-radius:8px;min-width:44px;min-height:44px;font-size:18px;cursor:pointer;">✕</button>
           </div>
 
           <form id="game-delegation-form" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:16px;">
@@ -181,10 +238,10 @@ export class GameCaptureDelegationPanel {
           </form>
 
           <div>
-            <h3 style="margin:0 0 8px;font-size:13px;font-weight:900;color:#166534;">Activas (${active.length})</h3>
-            <div style="display:grid;gap:7px;">${active.length ? active.map(row => this._rowMarkup(row, true)).join("") : '<div style="padding:10px;color:#64748b;font-size:12px;border:1px dashed #cbd5e1;border-radius:9px;">No hay accesos delegados activos.</div>'}</div>
+            <h3 style="margin:0 0 8px;font-size:13px;font-weight:900;color:#166534;">Activas (${activeGroups.length})</h3>
+            <div style="display:grid;gap:7px;">${activeGroups.length ? activeGroups.map(group => this._groupMarkup(group, true)).join("") : '<div style="padding:10px;color:#64748b;font-size:12px;border:1px dashed #cbd5e1;border-radius:9px;">No hay accesos delegados activos.</div>'}</div>
           </div>
-          ${history.length ? `<details style="margin-top:14px;"><summary style="font-size:12px;font-weight:800;color:#64748b;cursor:pointer;">Historial (${history.length})</summary><div style="display:grid;gap:7px;margin-top:8px;">${history.map(row => this._rowMarkup(row, false)).join("")}</div></details>` : ""}
+          ${historyGroups.length ? `<details style="margin-top:14px;"><summary style="font-size:12px;font-weight:800;color:#64748b;cursor:pointer;">Historial (${historyGroups.length})</summary><div style="display:grid;gap:7px;margin-top:8px;">${historyGroups.map(group => this._groupMarkup(group, false)).join("")}</div></details>` : ""}
         </section>
       </div>`;
     document.body.appendChild(portal);
@@ -229,13 +286,17 @@ export class GameCaptureDelegationPanel {
 
     this.portal?.querySelectorAll(".btn-revoke-game-delegation").forEach(button => {
       button.addEventListener("click", async event => {
-        const delegationId = event.currentTarget.dataset.id;
-        if (!confirm("¿Revocar esta capacidad delegada?")) return;
+        const delegationIds = String(event.currentTarget.dataset.ids || "").split(",").filter(Boolean);
+        if (!delegationIds.length) return;
+        if (!confirm("¿Revocar este acceso temporal y todas sus capacidades?")) return;
         const reason = prompt("Motivo de revocación (opcional):", "Acceso ya no necesario");
         if (reason === null) return;
         try {
           event.currentTarget.disabled = true;
-          this.rows = await this.service.revoke({ delegationId, reason });
+          for (const delegationId of delegationIds) {
+            await this.service.revoke({ delegationId, reason });
+          }
+          this.rows = await this.service.list(this.activeGame.id);
           this._renderPortal();
         } catch (error) {
           alert(`No se pudo revocar: ${error.message || error}`);
