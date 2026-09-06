@@ -37,9 +37,9 @@ const reviewRpcMatch = migration.match(/create or replace function public\.iq_v1
 assert.ok(reviewRpcMatch, "Falta parchear el RPC de revisión V18");
 assert.match(reviewRpcMatch[0], /set_config\('iqbasket\.player_submission_review_id',v_row\.id::text,true\)/);
 assert.match(reviewRpcMatch[0], /set_config\('iqbasket\.player_submission_review_id','',true\)/);
-assert.match(reviewRpcMatch[0], /decision='APPROVED'/i);
-assert.match(reviewRpcMatch[0], /decision='REJECTED'/i);
-assert.match(reviewRpcMatch[0], /decision='RETURNED'/i);
+assert.match(reviewRpcMatch[0], /\('APPROVED','RETURNED','REJECTED'\)/);
+assert.match(reviewRpcMatch[0], /v_decision='APPROVED'/i);
+assert.match(reviewRpcMatch[0], /v_decision in \('RETURNED','REJECTED'\)/i);
 
 const triggerMatch = migration.match(/create or replace function iq_private\.sync_game_play_state_legacy_status_v2\(\)[\s\S]*?\$function\$;/i);
 assert.ok(triggerMatch, "Falta parchear el trigger de games");
