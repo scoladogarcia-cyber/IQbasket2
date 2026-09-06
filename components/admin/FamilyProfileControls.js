@@ -26,6 +26,27 @@ function playerLabel(player = {}) {
   return `#${jersey} · ${name}`;
 }
 
+/**
+ * Shared component styles.
+ * Keeping them outside the conditional render branches guarantees that both the
+ * configured and empty states remain readable inside desktop and mobile modals.
+ */
+function renderStyles() {
+  return `<style>
+    .family-profile-controls{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:14px;display:grid;gap:12px;color:#334155}
+    .family-profile-controls h5{margin:0;font-size:13px;color:#1e3a8a}.family-profile-controls p{margin:3px 0 0;color:#64748b;font-size:11px;line-height:1.45}
+    .family-profile-player-list{display:grid;gap:7px;max-height:230px;overflow:auto;padding:2px}
+    .family-profile-player-option{display:flex;align-items:center;gap:9px;padding:9px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;font-size:12px;font-weight:700;color:#334155;min-height:44px}
+    .family-profile-player-option input,.family-profile-toggle input{width:19px;height:19px;flex:0 0 auto}
+    .family-profile-privacy{border-top:1px solid #e2e8f0;padding-top:10px;display:grid;gap:8px}.family-profile-toggle{display:flex;align-items:flex-start;gap:9px;font-size:12px;font-weight:700;color:#334155}
+    .family-profile-toggle small{display:block;color:#64748b;font-weight:500;margin-top:2px;line-height:1.35}.family-profile-actions{display:flex;justify-content:flex-end}
+    .family-profile-save{min-height:44px;border:0;border-radius:9px;background:#1e3a8a;color:#fff;font-weight:900;padding:9px 14px;cursor:pointer}.family-profile-save:disabled{opacity:.55;cursor:wait}
+    .family-profile-status{font-size:11px;min-height:16px}.family-profile-status.ok{color:#166534}.family-profile-status.error{color:#991b1b}
+    .family-profile-controls-empty{color:#334155}.family-profile-controls-empty strong{color:#1e3a8a}.family-profile-empty-list{padding:12px;border:1px dashed #cbd5e1;border-radius:9px;color:#64748b;font-size:11px}
+    @media(max-width:640px){.family-profile-actions{display:grid}.family-profile-save{width:100%}.family-profile-player-list{max-height:280px}}
+  </style>`;
+}
+
 export class FamilyProfileControls {
   constructor(supabaseClient = null) {
     this.service = new FamilyProfileAdminService(supabaseClient);
@@ -46,8 +67,11 @@ export class FamilyProfileControls {
   }
 
   render() {
+    const styles = renderStyles();
+
     if (!this.teamSeasonId) {
-      return `<section class="family-profile-controls family-profile-controls-empty">
+      return `<section class="family-profile-controls family-profile-controls-empty" data-family-profile-controls-empty>
+        ${styles}
         <strong>👪 Perfil Family</strong>
         <p>Selecciona un equipo y una temporada activa para asignar jugadores a esta familia.</p>
       </section>`;
@@ -63,19 +87,7 @@ export class FamilyProfileControls {
       : `<div class="family-profile-empty-list">No hay jugadores disponibles en la plantilla activa.</div>`;
 
     return `<section class="family-profile-controls" data-family-profile-controls>
-      <style>
-        .family-profile-controls{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:14px;display:grid;gap:12px}
-        .family-profile-controls h5{margin:0;font-size:13px;color:#1e3a8a}.family-profile-controls p{margin:3px 0 0;color:#64748b;font-size:11px;line-height:1.45}
-        .family-profile-player-list{display:grid;gap:7px;max-height:230px;overflow:auto;padding:2px}
-        .family-profile-player-option{display:flex;align-items:center;gap:9px;padding:9px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;font-size:12px;font-weight:700;color:#334155;min-height:44px}
-        .family-profile-player-option input,.family-profile-toggle input{width:19px;height:19px;flex:0 0 auto}
-        .family-profile-privacy{border-top:1px solid #e2e8f0;padding-top:10px;display:grid;gap:8px}.family-profile-toggle{display:flex;align-items:flex-start;gap:9px;font-size:12px;font-weight:700;color:#334155}
-        .family-profile-toggle small{display:block;color:#64748b;font-weight:500;margin-top:2px;line-height:1.35}.family-profile-actions{display:flex;justify-content:flex-end}
-        .family-profile-save{min-height:44px;border:0;border-radius:9px;background:#1e3a8a;color:#fff;font-weight:900;padding:9px 14px;cursor:pointer}.family-profile-save:disabled{opacity:.55;cursor:wait}
-        .family-profile-status{font-size:11px;min-height:16px}.family-profile-status.ok{color:#166534}.family-profile-status.error{color:#991b1b}
-        .family-profile-controls-empty{color:#64748b}.family-profile-empty-list{padding:12px;border:1px dashed #cbd5e1;border-radius:9px;color:#64748b;font-size:11px}
-        @media(max-width:640px){.family-profile-actions{display:grid}.family-profile-save{width:100%}.family-profile-player-list{max-height:280px}}
-      </style>
+      ${styles}
       <div>
         <h5>👪 JUGADORES VINCULADOS · FAMILIA</h5>
         <p>Puedes vincular uno o varios jugadores de esta plantilla. El vínculo se valida y audita en backend.</p>

@@ -43,6 +43,7 @@ assert.match(service, /iq_v26_save_family_profile_config/);
 assert.match(component, /family-profile-player/);
 assert.match(component, /family-show-other-names/);
 assert.match(component, /family-show-other-jerseys/);
+assert.match(component, /function renderStyles\(\)/);
 assert.match(settings, /FamilyProfileControls/);
 assert.match(settings, /userProf\.role === UserRole\.FAMILIA_TUTOR/);
 assert.match(settings, /players: teamPlayers/);
@@ -125,8 +126,20 @@ assert.match(html, /value="p2" checked/);
 assert.doesNotMatch(html, /id="family-show-other-names" checked/);
 assert.match(html, /id="family-show-other-jerseys" checked/);
 
+// Empty-state regression: styles must also be present when no team-season is
+// selected, otherwise the modal can inherit unreadable text/background styles.
+const emptyControls = new FamilyProfileControls(null);
+emptyControls.userId = "family-user";
+emptyControls.teamSeasonId = null;
+const emptyHtml = emptyControls.render();
+assert.match(emptyHtml, /data-family-profile-controls-empty/);
+assert.match(emptyHtml, /<style>[\s\S]*\.family-profile-controls\{/);
+assert.match(emptyHtml, /\.family-profile-controls-empty\{color:#334155\}/);
+assert.match(emptyHtml, /Selecciona un equipo y una temporada activa/);
+assert.doesNotMatch(emptyHtml, /<button[^>]*class="family-profile-save"/);
+
 const version = release.release.split(".").map(Number);
-const baseline = "2026.09.06.12".split(".").map(Number);
+const baseline = "2026.09.06.13".split(".").map(Number);
 const compare = (a, b) => {
   const length = Math.max(a.length, b.length);
   for (let index = 0; index < length; index += 1) {
@@ -135,9 +148,9 @@ const compare = (a, b) => {
   }
   return 0;
 };
-assert.ok(compare(version, baseline) >= 0, "La release V26 no puede retroceder.");
-if (release.release === "2026.09.06.12") {
-  assert.equal(release.label, "family-profile-controls-v1-v26");
+assert.ok(compare(version, baseline) >= 0, "La release del hotfix Family no puede retroceder.");
+if (release.release === "2026.09.06.13") {
+  assert.equal(release.label, "family-profile-empty-state-ui-hotfix-v27");
 }
 
 console.log("FAMILY_PROFILE_CONTROLS_V1_V26_OK");
