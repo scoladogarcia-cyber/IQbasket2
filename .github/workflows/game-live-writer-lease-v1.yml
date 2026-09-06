@@ -1,0 +1,41 @@
+name: Game Live Writer Lease V28
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "services/games/GameLiveSessionService.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "features/game-live/**"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20260906215500_game_live_writer_lease_v1.sql"
+      - "supabase/ready/20260906_*game_live_writer_lease_v1*.sql"
+      - "tests/game-live-writer-lease-v1-contract.mjs"
+      - "docs/architecture/GAME_LIVE_WRITER_LEASE_V1.md"
+      - "release.json"
+      - ".github/workflows/game-live-writer-lease-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: V28 contract
+        run: node tests/game-live-writer-lease-v1-contract.mjs
+      - name: Existing delegated capture contract
+        run: node tests/game-capture-delegation-v1-contract.mjs
+      - name: Existing game-state contract
+        run: node tests/game-play-state-v2-contract.mjs
+      - name: Build
+        run: npm run build

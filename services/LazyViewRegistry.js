@@ -92,9 +92,13 @@ const ALIASES = Object.freeze({
 });
 
 const FACTORY_LOADERS = Object.freeze({
-  livehud: async ({ authController }, { gameId = null } = {}) => {
-    const { LiveScoreHUDView } = await import("../views/LiveScoreHUDView.js");
-    return new LiveScoreHUDView(authController, gameId);
+  livehud: async ({ supabase, authController }, { gameId = null } = {}) => {
+    const [{ LiveScoreHUDView }, { attachLiveWriterLease }] = await Promise.all([
+      import("../views/LiveScoreHUDView.js"),
+      import("../features/game-live/LiveWriterLeaseController.js")
+    ]);
+    const view = new LiveScoreHUDView(authController, gameId);
+    return attachLiveWriterLease(view, supabase || authController?.supabase || null, gameId);
   },
   easyentry: async ({ gameController, authController, i18n }, { gameId = null } = {}) => {
     const { EasyStatsEntryView } = await import("../views/EasyStatsEntryView.js");

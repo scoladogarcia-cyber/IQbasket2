@@ -1,0 +1,22 @@
+-- IQBasket V28 · read-only post-apply verification
+select
+  to_regclass('public.game_live_sessions') is not null as sessions_ok,
+  to_regclass('public.game_live_session_events') is not null as events_ok,
+  to_regclass('public.game_live_handoffs') is not null as handoffs_ok,
+  to_regprocedure('public.iq_v28_game_live_session_status(uuid)') is not null as status_rpc_ok,
+  to_regprocedure('public.iq_v28_acquire_game_live_session(uuid,boolean)') is not null as acquire_rpc_ok,
+  to_regprocedure('public.iq_v28_heartbeat_game_live_session(uuid,text)') is not null as heartbeat_rpc_ok,
+  to_regprocedure('public.iq_v28_release_game_live_session(uuid,text,text)') is not null as release_rpc_ok,
+  to_regprocedure('public.iq_v28_create_game_live_handoff(uuid,text)') is not null as handoff_create_rpc_ok,
+  to_regprocedure('public.iq_v28_accept_game_live_handoff(uuid,text)') is not null as handoff_accept_rpc_ok,
+  to_regprocedure('public.iq_v28_save_game_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb,text)') is not null as capture_rpc_ok,
+  has_function_privilege('authenticated','public.iq_v28_game_live_session_status(uuid)','EXECUTE') as auth_status_execute_ok,
+  has_function_privilege('authenticated','public.iq_v28_acquire_game_live_session(uuid,boolean)','EXECUTE') as auth_acquire_execute_ok,
+  has_function_privilege('authenticated','public.iq_v28_save_game_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb,text)','EXECUTE') as auth_capture_execute_ok,
+  not has_function_privilege('anon','public.iq_v28_game_live_session_status(uuid)','EXECUTE') as anon_status_denied,
+  not has_function_privilege('anon','public.iq_v28_save_game_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb,text)','EXECUTE') as anon_capture_denied,
+  not has_function_privilege('authenticated','public.iq_v21_save_game_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb)','EXECUTE') as v21_public_bypass_closed,
+  not has_function_privilege('authenticated','iq_v21_private.save_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb)','EXECUTE') as v21_private_bypass_closed,
+  (select relrowsecurity from pg_class where oid='public.game_live_sessions'::regclass) as sessions_rls_enabled,
+  (select relrowsecurity from pg_class where oid='public.game_live_session_events'::regclass) as events_rls_enabled,
+  (select relrowsecurity from pg_class where oid='public.game_live_handoffs'::regclass) as handoffs_rls_enabled;
