@@ -248,20 +248,50 @@ export class PermissionService {
     return targets.some(role => canonicalRoleName(role) === currentRole);
   }
 
+  _activeGameDelegations() {
+    const now = Date.now();
+    return (Array.isArray(this.currentUser?.gameDelegations) ? this.currentUser.gameDelegations : [])
+      .filter(delegation => !delegation.validUntil || Date.parse(delegation.validUntil) > now);
+  }
+
   _hasGameDelegatedPermission(permissionKey, context = {}) {
     const gameId = context?.gameId ? String(context.gameId) : "";
-    if (!gameId || !Array.isArray(this.currentUser?.gameDelegations)) return false;
+    if (!gameId) return false;
 
     const normalizedPermission = LEGACY_PERMISSION_ALIASES[permissionKey] || permissionKey;
-    const now = Date.now();
-    return this.currentUser.gameDelegations.some((delegation) => {
+    return this._activeGameDelegations().some((delegation) => {
       if (String(delegation.gameId || "") !== gameId) return false;
-      if (delegation.validUntil && Date.parse(delegation.validUntil) <= now) return false;
       const capabilities = parseArray(delegation.capabilities).map(value => String(value).toUpperCase());
       if (capabilities.includes(normalizedPermission)) return true;
       return normalizedPermission === Permission.VIEW_BOXSCORE
         && capabilities.includes(Permission.EDIT_BOXSCORE);
     });
+  }
+
+  /**
+   * Allows entry to the generic Partidos route when the user has no team scope
+   * but does have at least one live V21 game delegation. The route is then
+   * rendered by GameAccessView, which exposes only delegated games.
+   */
+  _canEnterDelegatedGames(permissionKey, context = {}) {
+    if (permissionKey !== Permission.VIEW_GAMES || context?.gameId) return false;
+    if (this._activeGameDelegations().length === 0) return false;
+    if (!context?.teamId) return true;
+    return !this.canAccessTeam(context.teamId);
+  }
+
+  /**
+   * The general Nutrition menu is a convenience entry for players. A player
+   * with an own-player identity may enter even if a stale team selector is not
+   * in scope; PlayerNutritionRouterView immediately resolves to that exact self.
+   */
+  _canEnterOwnNutrition(permissionKey, context = {}) {
+    if (permissionKey !== Permission.VIEW_NUTRITION) return false;
+    if (this.getAuthenticatedRole() !== UserRole.JUGADOR) return false;
+    const ownPlayerId = this.currentUser?.playerId || this.currentUser?.linkedPlayerIds?.[0] || null;
+    if (!ownPlayerId) return false;
+    if (context?.playerId && String(context.playerId) !== String(ownPlayerId)) return false;
+    return true;
   }
 
   can(permissionKey, context = {}) {
@@ -271,6 +301,8 @@ export class PermissionService {
     const role = this.getRoleForContext(context);
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
+    if (this._canEnterDelegatedGames(normalizedPermission, context)) return true;
+    if (this._canEnterOwnNutrition(normalizedPermission, context)) return true;
     return this._passesScope(context);
   }
 
@@ -281,6 +313,8 @@ export class PermissionService {
     const role = this.getRoleForContext(context, { preview: true });
     const allowed = ROLE_PERMISSIONS[role] || [];
     if (!allowed.includes(normalizedPermission)) return false;
+    if (this._canEnterDelegatedGames(normalizedPermission, context)) return true;
+    if (this._canEnterOwnNutrition(normalizedPermission, context)) return true;
     return this._passesScope(context);
   }
 
