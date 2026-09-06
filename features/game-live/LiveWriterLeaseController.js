@@ -36,24 +36,28 @@ function formatExpiry(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }
 
+/**
+ * UI adapter for the V28 single-writer backend lease.
+ * It never decides authorization; it only reflects backend ownership.
+ */
 export class LiveWriterLeaseController {
   constructor(supabaseClient = null) {
     this.service = new GameLiveSessionService(supabaseClient);
-    this.gameId = null;
     this.container = null;
+    this.gameId = null;
     this.heartbeatTimer = null;
-    this.generation = 0;
     this.supported = null;
     this.ownsLease = false;
+    this.generation = 0;
   }
 
-  /**
-   * Called after every LiveScoreHUDView render.
-   * It synchronously disables writer controls before any network request.
-   */
   async syncAfterRender(container, gameId) {
     this.container = container || null;
     const normalizedGameId = String(gameId || "").trim() || null;
@@ -65,8 +69,7 @@ export class LiveWriterLeaseController {
       return;
     }
 
-    const changedGame = this.gameId && this.gameId !== normalizedGameId;
-    if (changedGame) this._stopHeartbeat();
+    if (this.gameId && this.gameId !== normalizedGameId) this._stopHeartbeat();
     this.gameId = normalizedGameId;
     const generation = ++this.generation;
 
@@ -74,7 +77,6 @@ export class LiveWriterLeaseController {
     this._renderLoading();
 
     try {
-      const storedToken = this.service.getStoredToken(this.gameId);
       const status = await this.service.getStatus(this.gameId);
       if (!this._isCurrent(generation)) return;
 
@@ -87,10 +89,10 @@ export class LiveWriterLeaseController {
       }
 
       this.supported = true;
+      const storedToken = this.service.getStoredToken(this.gameId);
 
-      // A tab that already owns the lease proves ownership by heartbeat. Status
-      // alone is intentionally insufficient because another tab may use the same
-      // authenticated user.
+      // Same authenticated user can have several tabs/devices. Ownership is
+      // proven with the opaque tab token, never from status.is_mine alone.
       if (status.active && status.is_mine && storedToken) {
         try {
           const renewed = await this.service.heartbeat({
@@ -101,8 +103,8 @@ export class LiveWriterLeaseController {
           this._activateOwnedLease(renewed);
           return;
         } catch {
-          // Token may have been rotated by handoff/takeover. Continue with a
-          // fresh status check rather than trusting stale local storage.
+          // The token may have been rotated by handoff/takeover. Refresh status
+          // and continue fail-closed rather than trusting local storage.
         }
       }
 
@@ -121,6 +123,7 @@ export class LiveWriterLeaseController {
 
       if (acquired.supported === false) {
         this.supported = false;
+        this.ownsLease = false;
         this._setWriterControlsEnabled(true);
         this._renderLegacyMode();
         return;
@@ -158,18 +161,20 @@ export class LiveWriterLeaseController {
   _setWriterControlsEnabled(enabled) {
     this._controls().forEach(control => {
       if (enabled) {
-        if (control.dataset.liveWriterWasDisabled !== "true") control.disabled = false;
+        const originallyDisabled = control.dataset.liveWriterWasDisabled === "true";
+        if (!originallyDisabled) control.disabled = false;
         delete control.dataset.liveWriterBlocked;
         delete control.dataset.liveWriterWasDisabled;
         control.removeAttribute("aria-describedby");
-      } else {
-        if (control.dataset.liveWriterBlocked !== "true") {
-          control.dataset.liveWriterWasDisabled = String(Boolean(control.disabled));
-        }
-        control.dataset.liveWriterBlocked = "true";
-        control.disabled = true;
-        control.setAttribute("aria-describedby", "live-writer-lease-status");
+        return;
       }
+
+      if (control.dataset.liveWriterBlocked !== "true") {
+        control.dataset.liveWriterWasDisabled = String(Boolean(control.disabled));
+      }
+      control.dataset.liveWriterBlocked = "true";
+      control.disabled = true;
+      control.setAttribute("aria-describedby", "live-writer-lease-status");
     });
   }
 
@@ -178,9 +183,10 @@ export class LiveWriterLeaseController {
     let panel = this.container.querySelector(PANEL_SELECTOR);
     if (panel) return panel;
 
-    const hudMarker = this.container.querySelector(LIVE_HUD_MARKER);
-    const hudRoot = hudMarker?.closest?.("div[style*='max-width: 1400px']") || hudMarker?.parentElement?.parentElement;
-    if (!hudRoot) return null;
+    const marker = this.container.querySelector(LIVE_HUD_MARKER);
+    const root = marker?.closest?.("div[style*='max-width: 1400px']")
+      || marker?.parentElement?.parentElement;
+    if (!root) return null;
 
     panel = document.createElement("section");
     panel.dataset.liveWriterLeasePanel = "true";
@@ -194,7 +200,7 @@ export class LiveWriterLeaseController {
       "color:#334155",
       "font:600 12px/1.4 system-ui,sans-serif"
     ].join(";");
-    hudRoot.prepend(panel);
+    root.prepend(panel);
     return panel;
   }
 
@@ -236,8 +242,10 @@ export class LiveWriterLeaseController {
       </div>
       <div data-live-writer-handoff-output hidden style="margin-top:8px;"></div>`;
 
-    panel.querySelector("[data-live-writer-handoff-create]")?.addEventListener("click", () => this._createHandoff());
-    panel.querySelector("[data-live-writer-release]")?.addEventListener("click", () => this._release());
+    panel.querySelector("[data-live-writer-handoff-create]")
+      ?.addEventListener("click", () => this._createHandoff());
+    panel.querySelector("[data-live-writer-release]")
+      ?.addEventListener("click", () => this._release());
   }
 
   _renderBlocked(state = {}) {
@@ -248,7 +256,9 @@ export class LiveWriterLeaseController {
     const sameUser = Boolean(state.is_mine);
     panel.innerHTML = `
       <div id="live-writer-lease-status" role="status" style="color:#92400e;margin-bottom:8px;">
-        🔒 ${sameUser ? "Tu usuario ya tiene este turno abierto en otra pestaña o dispositivo" : `La captura está siendo editada por ${escapeHtml(writer)}`}${expiry ? ` · lease hasta ${escapeHtml(expiry)}` : ""}.
+        🔒 ${sameUser
+          ? "Tu usuario ya tiene este turno abierto en otra pestaña o dispositivo"
+          : `La captura está siendo editada por ${escapeHtml(writer)}`}${expiry ? ` · lease hasta ${escapeHtml(expiry)}` : ""}.
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" inputmode="text" autocomplete="off" data-live-writer-handoff-input aria-label="Código de traspaso de captura" placeholder="Código de traspaso" style="min-height:44px;min-width:220px;flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font:inherit;color:#0f172a;background:#fff;">
@@ -260,8 +270,26 @@ export class LiveWriterLeaseController {
         </button>
       </div>`;
 
-    panel.querySelector("[data-live-writer-handoff-accept]")?.addEventListener("click", () => this._acceptHandoff());
-    panel.querySelector("[data-live-writer-refresh]")?.addEventListener("click", () => this.syncAfterRender(this.container, this.gameId));
+    panel.querySelector("[data-live-writer-handoff-accept]")
+      ?.addEventListener("click", () => this._acceptHandoff());
+    panel.querySelector("[data-live-writer-refresh]")
+      ?.addEventListener("click", () => this.syncAfterRender(this.container, this.gameId));
+  }
+
+  _renderReleased() {
+    const panel = this._panel();
+    if (!panel) return;
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div id="live-writer-lease-status" role="status" style="color:#475569;">
+          ✅ Turno liberado. La captura queda protegida hasta que vuelvas a adquirirlo.
+        </div>
+        <button type="button" data-live-writer-resume style="min-height:44px;border:0;border-radius:8px;background:#1e3a8a;color:#fff;font-weight:800;padding:8px 12px;cursor:pointer;">
+          Reanudar captura
+        </button>
+      </div>`;
+    panel.querySelector("[data-live-writer-resume]")
+      ?.addEventListener("click", () => this.syncAfterRender(this.container, this.gameId));
   }
 
   _renderError(error) {
@@ -274,7 +302,8 @@ export class LiveWriterLeaseController {
       <button type="button" data-live-writer-refresh style="min-height:44px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#991b1b;font-weight:800;padding:8px 12px;cursor:pointer;">
         Reintentar
       </button>`;
-    panel.querySelector("[data-live-writer-refresh]")?.addEventListener("click", () => this.syncAfterRender(this.container, this.gameId));
+    panel.querySelector("[data-live-writer-refresh]")
+      ?.addEventListener("click", () => this.syncAfterRender(this.container, this.gameId));
   }
 
   _activateOwnedLease(state) {
@@ -323,14 +352,17 @@ export class LiveWriterLeaseController {
     const output = panel?.querySelector("[data-live-writer-handoff-output]");
     try {
       const result = await this.service.createHandoff({ gameId: this.gameId });
-      if (result.supported === false) throw new Error("El traspaso aún no está activado en este entorno.");
+      if (result.supported === false) {
+        throw new Error("El traspaso aún no está activado en este entorno.");
+      }
       if (!result.handoff_token) throw new Error("No se recibió un código de traspaso.");
+
       if (output) {
         output.hidden = false;
         output.innerHTML = `
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 10px;color:#1e3a8a;">
             Código temporal: <strong style="user-select:all;word-break:break-all;">${escapeHtml(result.handoff_token)}</strong>
-            <span style="display:block;color:#475569;font-weight:500;margin-top:3px;">Compártelo sólo con el usuario autorizado que va a continuar la captura. Caduca en unos minutos y sólo puede usarse una vez.</span>
+            <span style="display:block;color:#475569;font-weight:500;margin-top:3px;">Compártelo sólo con el usuario autorizado que continuará la captura. Caduca en unos minutos y sólo puede usarse una vez.</span>
           </div>`;
       }
     } catch (error) {
@@ -349,13 +381,16 @@ export class LiveWriterLeaseController {
       input?.focus();
       return;
     }
+
     this._setWriterControlsEnabled(false);
     try {
       const accepted = await this.service.acceptHandoff({
         gameId: this.gameId,
         handoffToken: token
       });
-      if (accepted.supported === false) throw new Error("El traspaso aún no está activado en este entorno.");
+      if (accepted.supported === false) {
+        throw new Error("El traspaso aún no está activado en este entorno.");
+      }
       this._activateOwnedLease(accepted);
     } catch (error) {
       this.ownsLease = false;
@@ -368,23 +403,22 @@ export class LiveWriterLeaseController {
     if (!this.gameId || !this.ownsLease) return;
     this._setWriterControlsEnabled(false);
     try {
-      await this.service.release({
+      const released = await this.service.release({
         gameId: this.gameId,
         reason: "Released from live capture UI"
       });
       this.ownsLease = false;
       this._stopHeartbeat();
-      const status = await this.service.getStatus(this.gameId);
-      if (status.supported === false) {
+
+      if (released.supported === false) {
+        this.supported = false;
         this._setWriterControlsEnabled(true);
         this._renderLegacyMode();
         return;
       }
-      this._renderBlocked({
-        ...status,
-        active: status.active,
-        writer_name: status.writer_name
-      });
+
+      this._setWriterControlsEnabled(false);
+      this._renderReleased();
     } catch (error) {
       this.ownsLease = false;
       this._stopHeartbeat();
@@ -407,7 +441,8 @@ export function attachLiveWriterLease(view, supabaseClient = null, gameId = null
 
   view.render = async (...args) => {
     const result = await originalRender(...args);
-    const container = view.container || document.getElementById(args[0] || "dashboard-content-area");
+    const container = view.container
+      || document.getElementById(args[0] || "dashboard-content-area");
     await controller.syncAfterRender(container, gameId || view.gameId || null);
     return result;
   };
