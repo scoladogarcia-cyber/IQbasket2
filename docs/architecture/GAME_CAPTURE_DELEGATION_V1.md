@@ -63,6 +63,8 @@ It cannot edit opponent identity, game date/time, competition, venue metadata, n
 
 This separates capture from the legacy broad `saveGameAndStats()` path, which requires `EDIT_GAME` and is intentionally not used as the delegated write boundary.
 
+For compatibility, users who already have normal team-scoped BoxScore authorization keep the established `DataStore.saveGameAndStats()` flow. The V21 scoped RPC is used only when `isGameScopedOnly` is true. This prevents a resource delegation feature from silently replacing the existing trainer/admin persistence path.
+
 ## Lifecycle integration
 The existing `iq_private.game_play_state_actor_allowed` remains the lifecycle authority. V21 only adds resource-scoped capability checks for PREPARE/START/FINISH.
 
@@ -72,6 +74,16 @@ The existing `iq_private.game_play_state_actor_allowed` remains the lifecycle au
 A manager grants access from the context of a game, selecting user, capabilities and expiry. A delegated user sees only their active delegated games and can enter the game directly.
 
 A delegated user does **not** become an ENTRENADOR/ANALISTA in the UI or backend. Outside the delegated `game_id`, their original role and permissions remain unchanged.
+
+The existing-game HUD loads the server snapshot, reconstructs roster/periods/events, keeps administrative game metadata read-only, records the real game clock and saves back into the same `game_id`; it must never create a duplicate game as a side effect of delegated capture.
+
+## Regression boundaries verified during V21
+The V21 rollout explicitly preserves and tests these pre-existing flows:
+- normal staff BoxScore save continues through `DataStore.saveGameAndStats()`;
+- historical Early Adopter feedback tests accept later release codes instead of requiring the V19 label forever;
+- Player/Family data submissions still support approve/return/reject independently of game delegation;
+- a returned Player/Family submission can be corrected and resubmitted using the same submission ID, preserving version/audit history;
+- Approval Center links a player submission back to Player 360 rather than to the obsolete player route.
 
 ## Operational rollout
 Production apply is gated by:
