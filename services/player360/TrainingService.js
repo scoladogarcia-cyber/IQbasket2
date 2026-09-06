@@ -184,11 +184,11 @@ export class TrainingService {
   /**
    * Updates the editable metadata of an existing team training session.
    *
-   * RLS remains authoritative. The team-season scope is included explicitly so
-   * a stale UI can never update a session outside the active context.
-   * When the session duration changes, full-attendance rows that still match
-   * the previous full duration are kept coherent automatically. Partial rows
-   * are intentionally left untouched.
+   * The browser never mutates `training_sessions` directly. The V15 RPC keeps
+   * the active team-season context explicit and reuses the canonical V4 update
+   * boundary for authorization, roster/date validation and duration rules.
+   * A database trigger independently enforces the duration invariant so stale
+   * clients cannot persist contradictory start/end/duration values.
    */
   async updateSession({
     trainingSessionId,
@@ -207,51 +207,37 @@ export class TrainingService {
     assertRequired(sessionDate, "sessionDate");
     assertRequired(title, "title");
 
-    const { data: previous, error: previousError } = await this.supabase
-      .from("training_sessions")
-      .select("id,duration_minutes")
-      .eq("id", trainingSessionId)
-      .eq("team_season_id", teamSeasonId)
-      .single();
+    // When both clock values exist the server is the sole duration authority.
+    // A standalone duration is only sent for sessions without explicit times.
+    const serverDuration = startTime && endTime ? null : durationMinutes;
 
-    if (previousError) throw previousError;
-
-    const { data, error } = await this.supabase
-      .from("training_sessions")
-      .update({
-        session_date: sessionDate,
-        title,
-        objective,
-        duration_minutes: durationMinutes,
-        intensity,
-        start_time: startTime,
-        end_time: endTime
-      })
-      .eq("id", trainingSessionId)
-      .eq("team_season_id", teamSeasonId)
-      .select("*")
-      .single();
+    const { data: updatedId, error } = await this.supabase.rpc(
+      "iq_v15_update_training_session",
+      {
+        p_training_session_id: trainingSessionId,
+        p_team_season_id: teamSeasonId,
+        p_session_date: sessionDate,
+        p_title: title,
+        p_objective: objective,
+        p_start_time: startTime,
+        p_end_time: endTime,
+        p_duration_minutes: serverDuration,
+        p_intensity: intensity
+      }
+    );
 
     if (error) throw error;
 
-    const previousDuration = Number(previous?.duration_minutes);
-    const nextDuration = Number(durationMinutes);
-    if (
-      Number.isFinite(previousDuration)
-      && Number.isFinite(nextDuration)
-      && previousDuration !== nextDuration
-    ) {
-      const { error: participantError } = await this.supabase
-        .from("training_participants")
-        .update({ participated_minutes: nextDuration })
-        .eq("training_session_id", trainingSessionId)
-        .eq("team_season_id", teamSeasonId)
-        .eq("attendance_status", "PRESENT")
-        .eq("participated_minutes", previousDuration);
+    // Preserve the existing service contract: callers receive the refreshed row,
+    // while every mutation remains behind the authoritative RPC boundary.
+    const { data, error: fetchError } = await this.supabase
+      .from("training_sessions")
+      .select("*")
+      .eq("id", updatedId || trainingSessionId)
+      .eq("team_season_id", teamSeasonId)
+      .single();
 
-      if (participantError) throw participantError;
-    }
-
+    if (fetchError) throw fetchError;
     return data;
   }
 
