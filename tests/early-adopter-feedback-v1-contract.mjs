@@ -26,7 +26,20 @@ assert.match(view, /maxlength="4000"/);
 assert.match(workflow, /TABLE_INSTALLED=[\s\S]*?to_regclass/);
 assert.match(workflow, /if \[ "\$TABLE_INSTALLED" = "1" \]; then/);
 assert.doesNotMatch(workflow, /case when to_regclass\('public\.product_feedback'\).*select count/s);
-assert.ok(release.release.localeCompare('2026.09.06.5') >= 0, 'La release no puede retroceder respecto a V19.');
+
+function releaseAtLeast(value, baseline) {
+  const left = String(value || '').split('.').map(Number);
+  const right = String(baseline || '').split('.').map(Number);
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const a = Number.isFinite(left[index]) ? left[index] : 0;
+    const b = Number.isFinite(right[index]) ? right[index] : 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+
+assert.ok(releaseAtLeast(release.release, '2026.09.06.5'), 'La release no puede retroceder respecto a V19.');
 if (release.release === '2026.09.06.5') assert.equal(release.label, 'early-adopters-feedback-v1');
 
 console.log('EARLY_ADOPTER_FEEDBACK_V1_CONTRACT_OK');
