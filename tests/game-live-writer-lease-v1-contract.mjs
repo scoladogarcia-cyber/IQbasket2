@@ -59,7 +59,7 @@ assert.match(rollback, /ROLLBACK_REFUSED_AUDIT_EXISTS/i);
 assert.match(rollback, /grant execute on function public\.iq_v21_save_game_capture/i);
 
 // Client rollout safety: fallback only when V28 RPC itself is absent.
-assert.match(captureService, /isMissingRpc\(v28Result\.error,v28Rpc\)/);
+assert.match(captureService, /isMissingRpc\(v28Result\.error,\s*v28Rpc\)/);
 assert.match(captureService, /iq_v21_save_game_capture/);
 assert.match(captureService, /p_lease_token: token/);
 assert.match(liveService, /sessionStorage/);
