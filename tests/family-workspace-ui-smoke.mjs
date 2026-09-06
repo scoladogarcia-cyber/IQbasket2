@@ -16,7 +16,10 @@ const result = await page.evaluate(async () => {
   const analyticsEvents = [];
   view.analytics.trackSafely = async event => { analyticsEvents.push(event); return "event"; };
   view.analytics.trackOncePerSession = async event => { analyticsEvents.push(event); return "event"; };
-  view.service.listPlayers = async () => [{ player_id: PLAYER, first_name: "Alex", last_name: "Demo" }];
+  view.service.listPlayers = async () => [
+    { player_id: PLAYER, first_name: "Alex", last_name: "Demo", team_name: "Demo U16", season_name: "2025/2026" },
+    { player_id: "99999999-9999-4999-8999-999999999999", first_name: "Sam", last_name: "Demo", team_name: "Demo U14", season_name: "2025/2026" }
+  ];
   view.service.bootstrapFree = async () => ({ plan_code: "FAMILY_FREE" });
   view.service.getProductSnapshot = async () => ({ plan_code: "FAMILY_FREE", subject_covered: true });
   view.service.getPassport = async () => ({
@@ -40,6 +43,10 @@ const result = await page.evaluate(async () => {
   const career = host.querySelector(".family-career-row")?.textContent || "";
   const dashboard = host.querySelector(".family-dashboard")?.textContent || "";
   const offer = host.querySelector(".family-conversion")?.textContent || "";
+  const support = host.querySelector("[data-family-support-guide]")?.textContent || "";
+  const playerScope = host.querySelector(".family-player-scope")?.textContent || "";
+  const playerChips = host.querySelectorAll(".family-player-chip").length;
+  const supportBeforeStats = (host.querySelector("[data-family-support-guide]")?.compareDocumentPosition(host.querySelector(".family-evidence-summary")) || 0) & Node.DOCUMENT_POSITION_FOLLOWING;
   host.querySelector("[data-family-interest]")?.click();
   await new Promise(resolve => setTimeout(resolve, 0));
   const form = host.querySelector("[data-family-claim-form]");
@@ -54,6 +61,10 @@ const result = await page.evaluate(async () => {
     career,
     dashboard,
     offer,
+    support,
+    playerScope,
+    playerChips,
+    supportBeforeStats: Boolean(supportBeforeStats),
     analyticsEvents: analyticsEvents.map(event => event.eventCode),
     claimed,
     title: host.querySelector("#family-title")?.textContent || ""
@@ -65,6 +76,9 @@ if (result.strip.length !== 4) throw new Error(`Debe mostrar las 4 etapas de val
 if (!result.locked.includes("Disponible en Family")) throw new Error(`Family Free debe mantener Player360 bloqueado: ${JSON.stringify(result)}`);
 if (!result.career.includes("Demo U16")) throw new Error(`El pasaporte debe mostrar trayectoria: ${JSON.stringify(result)}`);
 if (!result.dashboard.includes("Lo importante, de un vistazo")) throw new Error(`Debe renderizar dashboard familiar: ${JSON.stringify(result)}`);
+if (!result.playerScope.includes("Mis jugadores") || result.playerChips !== 2) throw new Error(`Debe mostrar el scope multi-jugador: ${JSON.stringify(result)}`);
+if (!result.support.includes("Cómo puedo ayudar") || !result.support.includes("Qué evitar")) throw new Error(`Debe priorizar acompañamiento familiar: ${JSON.stringify(result)}`);
+if (!result.supportBeforeStats) throw new Error(`La ayuda debe aparecer antes que la evidencia numérica: ${JSON.stringify(result)}`);
 if (!result.offer.includes("Desbloquea la evolución completa")) throw new Error(`Debe mostrar oferta contextual con evidencia suficiente: ${JSON.stringify(result)}`);
 if (!result.analyticsEvents.includes("FAMILY_PLAN_INTEREST_CLICKED")) throw new Error(`Debe medir interés sin iniciar cobro: ${JSON.stringify(result)}`);
 if (!result.claimed) throw new Error(`El formulario de vinculación debe invocar el servicio: ${JSON.stringify(result)}`);

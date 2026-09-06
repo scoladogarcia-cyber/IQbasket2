@@ -828,7 +828,12 @@ export class IQBasketApp {
 
     switch (route) {
       case "dashboard":
-        if (this.views.dashboard) await this.views.dashboard.render(contentArea, this.teamId);
+        if (this.permissionService.getAuthenticatedRole() === UserRole.FAMILIA_TUTOR) {
+          const familyView = await this.lazyViews.get("familyworkspace");
+          await familyView.render(contentArea, this.routeParams);
+        } else if (this.views.dashboard) {
+          await this.views.dashboard.render(contentArea, this.teamId);
+        }
         break;
 
       case "team":

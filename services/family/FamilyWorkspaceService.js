@@ -23,13 +23,33 @@ async function rpc(client, name, params = {}) {
   return data;
 }
 
+function normalizePlayerScopeRow(row = {}) {
+  const player = row?.player || {};
+  const context = row?.latest_context || {};
+  return {
+    ...row,
+    player_id: row.player_id ?? player.id ?? null,
+    first_name: row.first_name ?? player.first_name ?? "",
+    last_name: row.last_name ?? player.last_name ?? "",
+    photo_url: row.photo_url ?? player.photo_url ?? null,
+    primary_position: row.primary_position ?? player.primary_position ?? context.primary_position ?? null,
+    team_id: row.team_id ?? context.team_id ?? null,
+    team_season_id: row.team_season_id ?? context.team_season_id ?? null,
+    team_name: row.team_name ?? context.team_name ?? null,
+    season_name: row.season_name ?? context.season_name ?? null
+  };
+}
+
 export class FamilyWorkspaceService {
   constructor(supabaseClient = null) {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
   }
 
-  listPlayers() {
-    return rpc(this.supabase, "iq_v8_family_list_players");
+  async listPlayers() {
+    const rows = await rpc(this.supabase, "iq_v8_family_list_players");
+    return (Array.isArray(rows) ? rows : [])
+      .map(normalizePlayerScopeRow)
+      .filter(row => row.player_id);
   }
 
   claimLink(claimCode) {
