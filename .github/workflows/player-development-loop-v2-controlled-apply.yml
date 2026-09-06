@@ -1,0 +1,152 @@
+name: Player Development Loop V2 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feat/player-development-loop-v2-foundation
+    paths:
+      - ".github/player-development-loop-v2-controlled-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Apply + verify + rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static V2 contract
+        run: node tests/player-development-loop-v2-contract.mjs
+
+      - name: Capture production baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_objective_profiles)::text || '|' ||
+              (select count(*) from public.player_objective_targets)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text;
+          " | tr -d '[:space:]')
+          echo "PLAYER_DEVELOPMENT_LOOP_V2_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm V2 preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260906_preflight_player_development_loop_v2_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER_DEVELOPMENT_LOOP_V2_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Apply Player Development Loop V2
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260906_apply_player_development_loop_v2.sql
+
+      - name: Verify installed V2 boundary
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260906_verify_player_development_loop_v2_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER_DEVELOPMENT_LOOP_V2_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Run installed functional smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260906_smoke_player_development_loop_v2_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER_DEVELOPMENT_LOOP_V2_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true),(t|true)$'
+
+      - name: Verify unchanged baseline and empty V2 tables
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260906_verify_player_development_loop_v2_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^PLAYER_DEVELOPMENT_LOOP_V2_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq '^PLAYER_DEVELOPMENT_LOOP_V2_VERIFY,0,0,0,(t|true)$'
+
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.players)::text || '|' ||
+              (select count(*) from public.games)::text || '|' ||
+              (select count(*) from public.player_objective_profiles)::text || '|' ||
+              (select count(*) from public.player_objective_targets)::text || '|' ||
+              (select count(*) from public.training_sessions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text;
+          " | tr -d '[:space:]')
+          echo "PLAYER_DEVELOPMENT_LOOP_V2_POST_APPLY_BASELINE=$NEW"
+          test "$NEW" = "${{ steps.baseline.outputs.value }}"
+
+      - name: Emergency rollback if post-apply validation fails
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (to_regclass('public.player_development_cycles') is not null)::int;
+          " | tr -d '[:space:]')
+          if [ "$INSTALLED" = "1" ]; then
+            echo "V2 validation failed after apply; rolling back V2 objects."
+            psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+              --file=supabase/ready/20260906_rollback_player_development_loop_v2.sql
+          else
+            echo "V2 objects are already absent."
+          fi
+
+      - name: Verify emergency rollback baseline
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ABSENT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (
+              to_regclass('public.player_development_cycles') is null
+              and to_regclass('public.player_development_actions') is null
+              and to_regclass('public.player_development_action_evidence') is null
+            )::int;
+          " | tr -d '[:space:]')
+          test "$ABSENT" = "1"

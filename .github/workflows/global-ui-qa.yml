@@ -150,6 +150,9 @@ jobs:
       - name: Evaluation and objective profile
         run: node tests/player360-phase4c-ui-smoke.mjs
 
+      - name: Player development loop V2
+        run: node tests/player-development-loop-v2-ui-smoke.mjs
+
       - name: Longitudinal analytics and AI review
         run: node tests/player360-phase4d-ui-smoke.mjs
 

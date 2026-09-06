@@ -1,0 +1,89 @@
+name: Player Development Loop V2 FK Index Hardening
+
+on:
+  push:
+    branches:
+      - feat/player-development-loop-v2-foundation
+    paths:
+      - ".github/player-development-loop-v2-fk-index-hardening-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    name: Apply + verify V2 FK indexes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static V2 contract
+        run: node tests/player-development-loop-v2-contract.mjs
+
+      - name: Require installed V16 schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (
+              to_regclass('public.player_development_cycles') is not null
+              and to_regclass('public.player_development_actions') is not null
+              and to_regclass('public.player_development_action_evidence') is not null
+            )::int;
+          " | tr -d '[:space:]')
+          test "$INSTALLED" = "1"
+
+      - name: Apply FK index hardening
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260906_apply_player_development_loop_v2_fk_indexes.sql
+      - name: Verify FK index hardening
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (
+              to_regclass('public.player_development_action_cycle_scope_fk_idx') is not null
+              and to_regclass('public.player_development_evidence_action_scope_fk_idx') is not null
+            )::int;
+          " | tr -d '[:space:]')
+          test "$RESULT" = "1"
+
+          ACTION_DEF=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select pg_get_indexdef('public.player_development_action_cycle_scope_fk_idx'::regclass);
+          ")
+          EVIDENCE_DEF=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select pg_get_indexdef('public.player_development_evidence_action_scope_fk_idx'::regclass);
+          ")
+          echo "$ACTION_DEF" | grep -F '(cycle_id, team_season_id, player_id)'
+          echo "$EVIDENCE_DEF" | grep -F '(action_id, cycle_id, team_season_id, player_id)'
+
+      - name: Emergency rollback if verification fails
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260906_rollback_player_development_loop_v2_fk_indexes.sql
