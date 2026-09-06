@@ -31,6 +31,19 @@ assert.match(view,/Permission\.REVIEW_PRODUCT_FEEDBACK/);
 assert.match(view,/data-product-feedback-triage/);
 assert.match(view,/data-feedback-review/);
 assert.match(workflow,/20260906131500_early_adopter_feedback_triage_v1\.sql/);
-assert.ok(release.release.localeCompare("2026.09.06.6") >= 0,"La release no puede retroceder respecto a V20.");
+
+function releaseAtLeast(value,baseline){
+  const left=String(value||"").split(".").map(Number);
+  const right=String(baseline||"").split(".").map(Number);
+  const length=Math.max(left.length,right.length);
+  for(let index=0;index<length;index+=1){
+    const a=Number.isFinite(left[index])?left[index]:0;
+    const b=Number.isFinite(right[index])?right[index]:0;
+    if(a!==b)return a>b;
+  }
+  return true;
+}
+
+assert.ok(releaseAtLeast(release.release,"2026.09.06.6"),"La release no puede retroceder respecto a V20.");
 if (release.release==="2026.09.06.6") assert.equal(release.label,"early-adopters-feedback-triage-v1");
 console.log("EARLY_ADOPTER_FEEDBACK_TRIAGE_V1_CONTRACT_OK");
