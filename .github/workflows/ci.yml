@@ -85,6 +85,12 @@ jobs:
       - name: Training update duration boundary V1
         run: node tests/training-update-duration-boundary-v1-contract.mjs
 
+      - name: Player Development Loop V2 contract
+        run: node tests/player-development-loop-v2-contract.mjs
+
+      - name: Player Development Loop V2 service smoke
+        run: node tests/player-development-loop-v2-service-smoke.mjs
+
       - name: Mobile invited read-only regression
         run: node tests/mobile-invited-readonly-regression.mjs
 

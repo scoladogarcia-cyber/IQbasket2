@@ -76,6 +76,22 @@ export class FamilyWorkspaceService {
     });
   }
 
+  async getDevelopmentCycle(playerId, teamSeasonId = null) {
+    requireValue(playerId, "playerId");
+    try {
+      return await rpc(this.supabase, "iq_v16_family_development_cycle", {
+        p_player_id: playerId,
+        p_team_season_id: teamSeasonId || null
+      });
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (error?.code === "PGRST202" || message.includes("iq_v16_family_development_cycle")) {
+        return { allowed: false, reason_code: "DEVELOPMENT_CYCLE_NOT_READY", current_cycle: null };
+      }
+      throw error;
+    }
+  }
+
   createInvitation({ teamSeasonId, playerId, email, expiresHours = 168 } = {}) {
     requireValue(teamSeasonId, "teamSeasonId");
     requireValue(playerId, "playerId");

@@ -24,7 +24,7 @@ export class FamilyWorkspaceView {
     this.auth = authController;
     this.analytics = new ProductAnalyticsService(supabaseClient);
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, weeklyPlan: null, growth: null, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, growth: null, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -47,6 +47,7 @@ export class FamilyWorkspaceView {
         this.state.passport = null;
         this.state.player360 = null;
         this.state.developmentContext = null;
+        this.state.developmentCycle = null;
         this.state.weeklyPlan = null;
         container.innerHTML = this._emptyWorkspace();
         this._bind(container);
@@ -54,16 +55,18 @@ export class FamilyWorkspaceView {
       }
 
       await this.service.bootstrapFree(this.playerId);
-      const [product, passport, player360, developmentContext] = await Promise.all([
+      const [product, passport, player360, developmentContext, developmentCycle] = await Promise.all([
         this.service.getProductSnapshot(this.playerId),
         this.service.getPassport(this.playerId),
         this.service.getPlayer360Snapshot(this.playerId),
-        this.service.getDevelopmentContext(this.playerId)
+        this.service.getDevelopmentContext(this.playerId),
+        this.service.getDevelopmentCycle(this.playerId)
       ]);
       this.state.product = product || {};
       this.state.passport = passport || {};
       this.state.player360 = player360 || {};
       this.state.developmentContext = developmentContext || {};
+      this.state.developmentCycle = developmentCycle || {};
       this.state.weeklyPlan = buildFamilyWeeklyPlan(this.state.developmentContext);
       const story = this.state.player360.allowed ? presentFamilyPlayer360(this.state.player360) : null;
       this.state.growth = buildFamilyGrowthState({ product, passport, player360, story });
@@ -87,6 +90,7 @@ export class FamilyWorkspaceView {
     const growth = this.state.growth || buildFamilyGrowthState({ product, passport, player360 });
     const story = growth.story || (player360.allowed ? presentFamilyPlayer360(player360) : null);
     const weeklyPlan = this.state.weeklyPlan || buildFamilyWeeklyPlan(this.state.developmentContext || {});
+    const developmentCycle = this.state.developmentCycle || {};
 
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
@@ -103,11 +107,11 @@ export class FamilyWorkspaceView {
         <span>3 · Qué significa</span><span>4 · Qué hacemos ahora</span>
       </div>
       ${this._summary(totals, passport)}
-      ${this._familyDashboard(growth, weeklyPlan)}
+      ${this._familyDashboard(growth, weeklyPlan, developmentCycle)}
       ${this._conversionCard(growth)}
       ${this._career(passport.career || [])}
       ${this._player360(player360, story)}
-      ${this._developmentPlan(weeklyPlan)}
+      ${this._developmentPlan(weeklyPlan, developmentCycle)}
       ${this._aiProductPreview(product)}
       ${this._claimPanel()}
     </section>`;
@@ -138,14 +142,16 @@ export class FamilyWorkspaceView {
     return `<article class="family-kpi"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`;
   }
 
-  _familyDashboard(growth = {}, weeklyPlan = {}) {
+  _familyDashboard(growth = {}, weeklyPlan = {}, developmentCycle = {}) {
     const latest = growth.latestGame || null;
     const objective = growth.objective || null;
     const primary = objective?.primaryTarget || null;
     const evolution = growth.story?.evolution?.[0] || growth.body || "Seguimos acumulando evidencia.";
-    const next = weeklyPlan?.allowed && weeklyPlan?.actions?.[0]
-      ? weeklyPlan.actions[0]
-      : growth.story?.next?.[0]
+    const cycleAction = (developmentCycle?.current_cycle?.actions || []).find(item => !["COMPLETED","SKIPPED"].includes(item.status))
+      || developmentCycle?.current_cycle?.actions?.[0];
+    const next = cycleAction?.title
+      || (weeklyPlan?.allowed && weeklyPlan?.actions?.[0] ? weeklyPlan.actions[0] : null)
+      || growth.story?.next?.[0]
         || (primary?.metric_name ? `Mantener el foco compartido: ${primary.metric_name}.` : "Seguir registrando partidos y sesiones para observar la evolución.");
     const gameText = latest
       ? `${latest.opponent ? `vs ${escapeHtml(latest.opponent)} · ` : ""}${number(latest.points)} pts · ${number(latest.minutes)} min`
@@ -236,7 +242,17 @@ export class FamilyWorkspaceView {
     </section>`;
   }
 
-  _developmentPlan(plan = {}) {
+  _developmentPlan(plan = {}, cycleProjection = {}) {
+    const cycle = cycleProjection?.current_cycle || null;
+    if (cycleProjection?.allowed && cycle) {
+      const actions = (cycle.actions || []).map(item => `<li><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.status === "COMPLETED" ? "completada" : item.status === "IN_PROGRESS" ? "en curso" : item.status === "SKIPPED" ? "omitida" : "pendiente")}${item.evidence?.length ? ` · ${item.evidence.length} evidencia(s)` : ""}</li>`).join("");
+      return `<section class="family-card family-development" data-family-development-cycle>
+        <div class="family-card-head"><div><p class="family-eyebrow">Plan de desarrollo · ciclo real</p><h2>Esta semana: ${escapeHtml(cycle.focus_metric_name)}</h2></div><span>${escapeHtml(cycle.status)}</span></div>
+        <div class="family-development-grid"><article><span>Objetivo compartido</span><p>${escapeHtml(cycle.objective_title)}</p></article><article><span>Semana</span><p>${escapeHtml(cycle.week_start)} → ${escapeHtml(cycle.ends_on)}</p></article></div>
+        <ol class="family-plan-actions">${actions}</ol>
+        <p class="family-disclaimer">El progreso refleja acciones y evidencias registradas por el staff. No implica causalidad ni sustituye criterio profesional.</p>
+      </section>`;
+    }
     if (!plan?.allowed) {
       return `<section class="family-card family-locked family-development-locked">
         <div><p class="family-eyebrow">Family · Desarrollo</p><h2>Qué hacemos esta semana</h2>

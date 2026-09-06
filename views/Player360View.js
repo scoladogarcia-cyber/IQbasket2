@@ -22,6 +22,8 @@ import { WellnessService } from "../services/player360/WellnessService.js";
 import { WellnessSupportPanel } from "./player360/WellnessSupportPanel.js";
 import { PlayerDataSubmissionService } from "../services/player360/PlayerDataSubmissionService.js";
 import { PlayerSubmissionPanel } from "./player360/PlayerSubmissionPanel.js";
+import { DevelopmentCycleService } from "../services/player360/DevelopmentCycleService.js";
+import { DevelopmentCyclePanel } from "./player360/DevelopmentCyclePanel.js";
 import { ObjectiveGapCalculator } from "../domain/player360/ObjectiveGapCalculator.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 import {
@@ -113,6 +115,11 @@ export class Player360View {
       isSelfPlayer: () => this.auth?.getAuthenticatedRole?.() === UserRole.JUGADOR
     });
     this.submissionPanel = new PlayerSubmissionPanel({ service: this.submissionService });
+    this.developmentService = new DevelopmentCycleService(this.supabase);
+    this.developmentPanel = new DevelopmentCyclePanel({
+      service: this.developmentService,
+      can: permission => this._can(permission)
+    });
 
     this.containerId = "dashboard-content-area";
     this.teamId = null;
@@ -217,7 +224,10 @@ export class Player360View {
           }),
           this._isPlayerSelf()
             ? this.submissionPanel.load(this._context())
-            : Promise.resolve()
+            : Promise.resolve(),
+          this.developmentPanel.load({
+            teamSeasonId: this.teamSeasonId, playerId: this.playerId, objectiveProfile: null
+          })
         ]);
         return;
       }
@@ -268,7 +278,10 @@ export class Player360View {
         }),
         this._isPlayerSelf()
           ? this.submissionPanel.load(this._context())
-          : Promise.resolve()
+          : Promise.resolve(),
+        this.developmentPanel.load({
+          teamSeasonId: this.teamSeasonId, playerId: this.playerId, objectiveProfile: this.objectiveProfile
+        })
       ]);
     } catch (error) {
       console.error("[Player360View] Error cargando Phase 4C:", error);
@@ -606,6 +619,9 @@ export class Player360View {
     }
     if (this._can(Permission.VIEW_OBJECTIVE_PROFILE)) {
       tabs.push({ id: "objective", label: "🎯 Perfil objetivo" });
+    }
+    if (this.developmentPanel.isAvailable()) {
+      tabs.push({ id: "development", label: "🧩 Plan semanal" });
     }
     if (this.analyticsPanel.isAvailable()) {
       tabs.push({ id: "analytics", label: "📈 Evolución + IA" });
@@ -1108,6 +1124,7 @@ export class Player360View {
 
   _renderBody() {
     if (this.activeTab === "objective") return this._renderObjectivePanel();
+    if (this.activeTab === "development") return this.developmentPanel.render();
     if (this.activeTab === "analytics") return this.analyticsPanel.render();
     if (this.activeTab === "wellness") return this.wellnessPanel.render();
     if (this.activeTab === "submissions") return this.submissionPanel.render();
@@ -1118,7 +1135,7 @@ export class Player360View {
     container.querySelectorAll("[data-p360c-tab]").forEach(button => {
       button.addEventListener("click", () => {
         const requested = button.dataset.p360cTab;
-        this.activeTab = ["evaluation", "objective", "analytics", "wellness", "submissions"].includes(requested)
+        this.activeTab = ["evaluation", "objective", "development", "analytics", "wellness", "submissions"].includes(requested)
           ? requested
           : "evaluation";
         this._renderLoaded(container);
@@ -1332,6 +1349,13 @@ export class Player360View {
     this._bindTabs(container);
     this._bindEvaluationEvents(container);
     this._bindObjectiveEvents(container);
+    void this.developmentPanel.bind(container, async () => {
+      await this.developmentPanel.load({
+        teamSeasonId: this.teamSeasonId, playerId: this.playerId, objectiveProfile: this.objectiveProfile
+      });
+      this.activeTab = "development";
+      this._renderLoaded(container);
+    });
     void this.analyticsPanel.bind(container, {
       onChanged: async () => {
         this.activeTab = "analytics";
