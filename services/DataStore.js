@@ -1011,8 +1011,40 @@ class DataStoreService {
     this._notifyListeners();
   }
 
+  _familyIdentityPolicy() {
+    const user = this.permissionService?.getCurrentUser?.() || null;
+    if (String(user?.role || "").toUpperCase() !== UserRole.FAMILIA_TUTOR) return null;
+    const scope = user.familyAuthorizationScope || {};
+    return {
+      linkedPlayerIds: new Set((user.linkedPlayerIds || []).map(String)),
+      showOtherPlayerNames: scope.show_other_player_names !== false,
+      showOtherPlayerJerseys: scope.show_other_player_jerseys !== false
+    };
+  }
+
+  _applyFamilyIdentityPolicy(player) {
+    if (!player) return player;
+    const policy = this._familyIdentityPolicy();
+    if (!policy || policy.linkedPlayerIds.has(String(player.id))) return player;
+    if (policy.showOtherPlayerNames && policy.showOtherPlayerJerseys) return player;
+    return {
+      ...player,
+      ...(policy.showOtherPlayerNames ? {} : {
+        first_name: "Jugador", last_name: "", firstName: "Jugador", lastName: "",
+        name: "Jugador", full_name: "Jugador", fullName: "Jugador"
+      }),
+      ...(policy.showOtherPlayerJerseys ? {} : {
+        jersey: null, number: null, jersey_number: null, jerseyNumber: null
+      })
+    };
+  }
+
+  _applyFamilyIdentityPolicyList(players = []) {
+    return (players || []).map(player => this._applyFamilyIdentityPolicy(player));
+  }
+
   getPlayerDirectory() {
-    return [...(this.players || [])];
+    return this._applyFamilyIdentityPolicyList(this.players || []);
   }
 
   getTeamPlayers(teamId = null) {
@@ -1021,9 +1053,9 @@ class DataStoreService {
     const filtered = all.filter(
       (p) => String(p.team_id || p.teamId || "").toLowerCase() === targetTeamId
     );
-    return [...filtered].sort(
+    return this._applyFamilyIdentityPolicyList([...filtered].sort(
       (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
-    );
+    ));
   }
 
   _getRosterMembershipsForTeamSeason(teamSeasonId) {
@@ -1137,14 +1169,14 @@ class DataStoreService {
       (this.players || []).map(player => [String(player.id), player])
     );
 
-    return memberships
+    return this._applyFamilyIdentityPolicyList(memberships
       .filter(membership => this._membershipEligibleOnDate(membership, effectiveDate))
       .map(membership => {
         const player = directoryById.get(String(membership.player_id || membership.playerId));
         return player ? this._applyRosterMembership(player, membership) : null;
       })
       .filter(Boolean)
-      .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+      .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)));
   }
 
   getPlayersForActiveSeason(teamId = null) {
@@ -1201,9 +1233,9 @@ class DataStoreService {
 
     if (participants.size === 0) return teamPlayers;
 
-    return [...participants.values()].sort(
+    return this._applyFamilyIdentityPolicyList([...participants.values()].sort(
       (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
-    );
+    ));
   }
 
   getEligibleGamesForPlayer(playerId, teamId = null) {
@@ -1226,7 +1258,8 @@ class DataStoreService {
 
   getPlayerById(id) {
     if (!id) return null;
-    return (this.players || []).find((p) => String(p.id) === String(id)) || null;
+    const player = (this.players || []).find((p) => String(p.id) === String(id)) || null;
+    return this._applyFamilyIdentityPolicy(player);
   }
 
   getGames(teamId = null) {
