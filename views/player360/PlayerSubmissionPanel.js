@@ -8,6 +8,16 @@ const STATUS = Object.freeze({
   REJECTED: ["Rechazado", "#fee2e2", "#991b1b"]
 });
 
+/**
+ * Wellness metrics captured as ordinal 1–5 scales in the original check-in.
+ * Returned submissions must preserve the same constrained control instead of
+ * widening them to arbitrary numeric input.
+ */
+const WELLNESS_SCALE_1_TO_5 = new Set([
+  "hydration_adherence",
+  "meal_regularity"
+]);
+
 function esc(value = "") {
   return String(value ?? "")
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -21,6 +31,13 @@ function today() {
 
 function fieldValue(value) {
   return value === null || value === undefined ? "" : value;
+}
+
+function scaleOptions1To5(currentValue) {
+  const selected = Number(currentValue);
+  return [1, 2, 3, 4, 5]
+    .map(value => `<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`)
+    .join("");
 }
 
 export class PlayerSubmissionPanel {
@@ -105,12 +122,20 @@ export class PlayerSubmissionPanel {
           ${values.map((entry, index) => {
             const value = entry?.value;
             const code = String(entry?.metric_code || `metric_${index + 1}`);
+            const normalizedCode = code.trim().toLowerCase();
             const label = code.replaceAll("_", " ");
             if (typeof value === "boolean") {
               return `<label>${esc(label)}
                 <select class="psub-wellness-value" data-metric-code="${esc(code)}" data-value-kind="BOOLEAN">
                   <option value="true" ${value ? "selected" : ""}>Sí</option>
                   <option value="false" ${!value ? "selected" : ""}>No</option>
+                </select>
+              </label>`;
+            }
+            if (WELLNESS_SCALE_1_TO_5.has(normalizedCode)) {
+              return `<label>${esc(label)}
+                <select class="psub-wellness-value" data-metric-code="${esc(code)}" data-value-kind="NUMBER" required>
+                  ${scaleOptions1To5(value)}
                 </select>
               </label>`;
             }
