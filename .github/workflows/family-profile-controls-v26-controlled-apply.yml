@@ -66,16 +66,25 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
+
+          def strip_boundary(text, first_statement, last_statement):
+              lines = text.splitlines()
+              first = next((i for i, line in enumerate(lines) if line.strip().lower() == first_statement), None)
+              last = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].strip().lower() == last_statement), None)
+              if first is None or last is None or first >= last:
+                  raise SystemExit(f'V26_REHEARSAL_BOUNDARY_ERROR {first_statement} {last_statement}')
+              del lines[last]
+              del lines[first]
+              return chr(10).join(lines).strip()
+
           migration = Path('supabase/migrations/20260906202000_family_profile_controls_v1.sql').read_text()
           smoke = Path('supabase/drafts/20260906_smoke_family_profile_controls_v1_installed_rollback.sql').read_text()
-          migration, n1 = re.subn(r'(?im)^begin;\s*', '', migration, count=1)
-          migration, n2 = re.subn(r'(?im)^commit;\s*$', '', migration, count=1)
-          smoke, n3 = re.subn(r'(?im)^begin;\s*', '', smoke, count=1)
-          smoke, n4 = re.subn(r'(?im)^rollback;\s*$', '', smoke, count=1)
-          if (n1,n2,n3,n4) != (1,1,1,1):
-              raise SystemExit(f'V26_REHEARSAL_BOUNDARY_ERROR {(n1,n2,n3,n4)}')
-          Path('/tmp/v26-rehearsal.sql').write_text('begin;\n' + migration + '\n' + smoke + '\nrollback;\n')
+          migration = strip_boundary(migration, 'begin;', 'commit;')
+          smoke = strip_boundary(smoke, 'begin;', 'rollback;')
+          nl = chr(10)
+          Path('/tmp/v26-rehearsal.sql').write_text(
+              'begin;' + nl + migration + nl + smoke + nl + 'rollback;' + nl
+          )
           PY
 
       - name: Transactional install + functional rehearsal
