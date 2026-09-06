@@ -9,6 +9,17 @@ function assert(condition, message, detail = null) {
   }
 }
 
+function isFeedbackReleaseTraceable(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(\d{4}\.\d{2}\.\d{2})\.(\d+):(.+)$/);
+  if (!match) return false;
+  const releaseNumber = Number(match[2]);
+  const label = String(match[3] || '').trim();
+  if (!Number.isInteger(releaseNumber) || releaseNumber < 5 || !label) return false;
+  if (releaseNumber === 5) return label === 'early-adopters-feedback-v1';
+  return true;
+}
+
 async function runViewport(name, viewport) {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport });
@@ -57,7 +68,7 @@ async function runViewport(name, viewport) {
   assert(result.call?.args?.p_severity === 'BLOCKER', `${name}: severidad incorrecta`, result.call);
   assert(result.call?.args?.p_message?.includes('botón de prueba'), `${name}: mensaje perdido`, result.call);
   assert(result.call?.args?.p_route === '#/feedback', `${name}: ruta no trazada`, result.call);
-  assert(String(result.call?.args?.p_release_code || '').includes('early-adopters'), `${name}: release no trazada`, result.call);
+  assert(isFeedbackReleaseTraceable(result.call?.args?.p_release_code), `${name}: release no trazada`, result.call);
   assert(result.call?.args?.p_client_context?.role_hint === 'INVITADO', `${name}: rol de contexto no trazado`, result.call);
   assert(result.status.length > 0, `${name}: no hay confirmación de envío`);
   assert(!result.overflow, `${name}: overflow horizontal`);
