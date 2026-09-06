@@ -1,1 +1,1 @@
-apply asserted V22 UAT frontend patch
+apply asserted V22 UAT frontend patch retry 2
