@@ -1,1 +1,1 @@
-apply tester regression fixes after reproducing approval and BoxScore failures
+cleanup temporary V21 patch machinery after tester regression fixes
