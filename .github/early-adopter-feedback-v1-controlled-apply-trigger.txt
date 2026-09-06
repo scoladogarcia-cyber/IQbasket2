@@ -1,1 +1,1 @@
-Controlled production apply requested after PR #70 gates passed for commit 3ecb69c7dfc94a85c791d879e10e557a963c4f32.
+Controlled production apply retry after safe absent-table baseline fix. PR #70.

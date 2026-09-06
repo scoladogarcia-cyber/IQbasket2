@@ -44,15 +44,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
-            select
-              case when to_regclass('public.product_feedback') is null then '0'
-                   else (select count(*) from public.product_feedback)::text end || '|' ||
-              (to_regprocedure('public.iq_v19_submit_product_feedback(text,text,text,text,text,jsonb)') is not null)::int::text;
+          TABLE_INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (to_regclass('public.product_feedback') is not null)::int;
           " | tr -d '[:space:]')
+          RPC_INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (to_regprocedure('public.iq_v19_submit_product_feedback(text,text,text,text,text,jsonb)') is not null)::int;
+          " | tr -d '[:space:]')
+          if [ "$TABLE_INSTALLED" = "1" ]; then
+            ROWS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+              select count(*) from public.product_feedback;
+            " | tr -d '[:space:]')
+          else
+            ROWS=0
+          fi
+          RESULT="$ROWS|$RPC_INSTALLED"
           echo "EARLY_ADOPTER_FEEDBACK_V1_BASELINE=$RESULT"
           echo "value=$RESULT" >> "$GITHUB_OUTPUT"
-          echo "installed=${RESULT##*|}" >> "$GITHUB_OUTPUT"
+          echo "installed=$RPC_INSTALLED" >> "$GITHUB_OUTPUT"
 
       - name: Reconfirm V19 preflight
         shell: bash

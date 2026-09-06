@@ -7,6 +7,7 @@ const layout = fs.readFileSync('views/LayoutView.js', 'utf8');
 const service = fs.readFileSync('services/FeedbackService.js', 'utf8');
 const view = fs.readFileSync('views/FeedbackView.js', 'utf8');
 const release = JSON.parse(fs.readFileSync('release.json', 'utf8'));
+const workflow = fs.readFileSync('.github/workflows/early-adopter-feedback-v1-controlled-apply.yml', 'utf8');
 
 assert.match(sql, /create table if not exists public\.product_feedback/i);
 assert.match(sql, /enable row level security/i);
@@ -22,6 +23,9 @@ assert.match(layout, /route: "feedback"/);
 assert.match(layout, /EARLY ACCESS/);
 assert.match(view, /No incluyas información médica/);
 assert.match(view, /maxlength="4000"/);
+assert.match(workflow, /TABLE_INSTALLED=[\s\S]*?to_regclass/);
+assert.match(workflow, /if \[ "\$TABLE_INSTALLED" = "1" \]; then/);
+assert.doesNotMatch(workflow, /case when to_regclass\('public\.product_feedback'\).*select count/s);
 assert.equal(release.release, '2026.09.06.5');
 assert.equal(release.label, 'early-adopters-feedback-v1');
 
