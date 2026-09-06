@@ -160,6 +160,9 @@ jobs:
       - name: Family scoped player support V1
         run: node tests/family-scoped-player-support-v1-contract.mjs
 
+      - name: Family guardian submissions V1
+        run: node tests/family-guardian-submissions-v1-contract.mjs
+
       - name: Family growth Priority 2 contract
         run: node tests/family-growth-priority2-contract.mjs
 

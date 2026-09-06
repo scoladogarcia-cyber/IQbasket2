@@ -14,6 +14,12 @@ function required(value, label) {
   return value;
 }
 
+/**
+ * Validated SELF/GUARDIAN submission boundary.
+ *
+ * The browser never chooses the author relationship. V18 infers SELF or
+ * GUARDIAN from the authenticated subject relationship and active roster scope.
+ */
 export class PlayerDataSubmissionService {
   constructor(supabaseClient = null) {
     this.supabase = clientOf(supabaseClient);
@@ -24,6 +30,7 @@ export class PlayerDataSubmissionService {
       throw new Error("PlayerDataSubmissionService: backend no disponible.");
     }
   }
+
   async saveDraft({ submissionId = null, teamSeasonId, playerId, type, payload } = {}) {
     this._ready();
     required(teamSeasonId, "teamSeasonId");
@@ -31,7 +38,7 @@ export class PlayerDataSubmissionService {
     required(type, "type");
     required(payload, "payload");
     const { data, error } = await this.supabase.rpc(
-      "iq_v14_save_player_submission_draft",
+      "iq_v18_save_player_submission_draft",
       {
         p_submission_id: submissionId,
         p_team_season_id: teamSeasonId,
@@ -48,18 +55,20 @@ export class PlayerDataSubmissionService {
     this._ready();
     required(submissionId, "submissionId");
     const { data, error } = await this.supabase.rpc(
-      "iq_v14_submit_player_submission",
+      "iq_v18_submit_player_submission",
       { p_submission_id: submissionId }
     );
     if (error) throw error;
     return Boolean(data);
   }
-  async listMine({ teamSeasonId = null, limit = 100 } = {}) {
+
+  async listMine({ teamSeasonId = null, playerId = null, limit = 100 } = {}) {
     this._ready();
     const { data, error } = await this.supabase.rpc(
-      "iq_v14_list_my_player_submissions",
+      "iq_v18_list_my_player_submissions",
       {
         p_team_season_id: teamSeasonId,
+        p_player_id: playerId,
         p_limit: Math.max(1, Math.min(Number(limit) || 100, 300))
       }
     );
@@ -70,7 +79,7 @@ export class PlayerDataSubmissionService {
   async listForReview({ teamSeasonId = null, includeResolved = false, limit = 100 } = {}) {
     this._ready();
     const { data, error } = await this.supabase.rpc(
-      "iq_v14_list_player_submission_reviews",
+      "iq_v18_list_player_submission_reviews",
       {
         p_team_season_id: teamSeasonId,
         p_include_resolved: Boolean(includeResolved),
@@ -80,12 +89,13 @@ export class PlayerDataSubmissionService {
     if (error) throw error;
     return Array.isArray(data) ? data : [];
   }
+
   async review({ submissionId, decision, note = null } = {}) {
     this._ready();
     required(submissionId, "submissionId");
     required(decision, "decision");
     const { data, error } = await this.supabase.rpc(
-      "iq_v14_review_player_submission",
+      "iq_v18_review_player_submission",
       {
         p_submission_id: submissionId,
         p_decision: String(decision).toUpperCase(),

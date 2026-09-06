@@ -30,7 +30,7 @@ export class PlayerSubmissionPanel {
     this.context=context;
     this.lastError=null;
     try {
-      this.items=await this.service.listMine({ teamSeasonId:context.teamSeasonId,limit:100 });
+      this.items=await this.service.listMine({ teamSeasonId:context.teamSeasonId,playerId:context.playerId,limit:100 });
     } catch(error) {
       this.lastError=error;
       this.items=[];
@@ -72,7 +72,12 @@ export class PlayerSubmissionPanel {
     }).join("")}</div>`;
   }
   render() {
-    return `<section class="psub-panel">
+    const guardian=String(this.context?.actorRelation || "SELF").toUpperCase()==="GUARDIAN";
+    const heading=guardian ? "Aportaciones de familia" : "Mis aportaciones";
+    const intro=guardian
+      ? "Lo que aportes sobre este jugador queda como dato provisional y con procedencia Familia / Tutor. Solo pasa a su histórico cuando el staff lo valida."
+      : "Lo que declares aquí se guarda como dato provisional. Solo pasa a tu histórico cuando el staff lo valida.";
+    return `<section class="psub-panel" data-psub-actor-relation="${guardian ? "GUARDIAN" : "SELF"}">
       <style>
         .psub-panel{display:grid;gap:14px}.psub-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px}
         .psub-card h2,.psub-card h3{margin:0}.psub-card p{color:#64748b;line-height:1.5;font-size:12px}
@@ -88,13 +93,13 @@ export class PlayerSubmissionPanel {
         @media(max-width:640px){.psub-form{grid-template-columns:1fr}.psub-wide,.psub-actions{grid-column:1}.psub-actions{display:grid}.psub-actions button{width:100%}.psub-top{display:grid}}
       </style>
       <article class="psub-card">
-        <h2>Mis aportaciones</h2>
-        <p>Lo que declares aquí se guarda como dato provisional. Solo pasa a tu histórico cuando el staff lo valida.</p>
+        <h2>${heading}</h2>
+        <p>${esc(intro)}</p>
         ${this.lastError ? `<div class="psub-review">${esc(this.lastError.message||this.lastError)}</div>` : ""}
       </article>
       <article class="psub-card">
-        <h3>¿Has entrenado fuera del equipo?</h3>
-        <p>Registra tecnificación, gimnasio, tiro, academia u otra sesión propia.</p>
+        <h3>${guardian ? "¿Ha entrenado fuera del equipo?" : "¿Has entrenado fuera del equipo?"}</h3>
+        <p>${guardian ? "Registra una tecnificación, academia u otra sesión que conozcas de este jugador." : "Registra tecnificación, gimnasio, tiro, academia u otra sesión propia."}</p>
         <form id="psub-training-form" class="psub-form">
           <label>Fecha<input id="psub-date" type="date" required max="${today()}" value="${today()}"></label>
           <label>Duración (min)<input id="psub-duration" type="number" min="1" max="600" inputmode="numeric"></label>
@@ -130,7 +135,9 @@ export class PlayerSubmissionPanel {
       intensity:num("#psub-intensity"),
       objective:String(form.querySelector("#psub-objective")?.value||"").trim()||null,
       notes:String(form.querySelector("#psub-notes")?.value||"").trim()||null,
-      provider_type:"SELF_REPORTED"
+      provider_type:String(this.context?.actorRelation || "SELF").toUpperCase()==="GUARDIAN"
+        ? "GUARDIAN_REPORTED"
+        : "SELF_REPORTED"
     };
   }
   async bind(container,{ onChanged }={}) {

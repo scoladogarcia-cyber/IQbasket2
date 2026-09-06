@@ -112,7 +112,7 @@ export class Player360View {
       service: this.wellnessService,
       submissionService: this.submissionService,
       can: permission => this._can(permission),
-      isSelfPlayer: () => this.auth?.getAuthenticatedRole?.() === UserRole.JUGADOR
+      requiresSubmissionReview: () => this._usesSubmissionWorkflow()
     });
     this.submissionPanel = new PlayerSubmissionPanel({ service: this.submissionService });
     this.developmentService = new DevelopmentCycleService(this.supabase);
@@ -141,6 +141,23 @@ export class Player360View {
 
   _isPlayerSelf() {
     return this.auth?.getAuthenticatedRole?.() === UserRole.JUGADOR;
+  }
+
+  _isFamilyGuardian() {
+    return this.auth?.getAuthenticatedRole?.() === UserRole.FAMILIA_TUTOR;
+  }
+
+  _usesSubmissionWorkflow() {
+    if (this._isPlayerSelf()) return this._can(Permission.CREATE_OWN_PLAYER_SUBMISSION);
+    if (this._isFamilyGuardian()) return this._can(Permission.CREATE_LINKED_PLAYER_SUBMISSION);
+    return false;
+  }
+
+  _submissionContext() {
+    return {
+      ...this._context(),
+      actorRelation: this._isFamilyGuardian() ? "GUARDIAN" : "SELF"
+    };
   }
 
   _context() {
@@ -222,8 +239,8 @@ export class Player360View {
             playerId: this.playerId,
             dateBounds: this._dateBounds()
           }),
-          this._isPlayerSelf()
-            ? this.submissionPanel.load(this._context())
+          this._usesSubmissionWorkflow()
+            ? this.submissionPanel.load(this._submissionContext())
             : Promise.resolve(),
           this.developmentPanel.load({
             teamSeasonId: this.teamSeasonId, playerId: this.playerId, objectiveProfile: null
@@ -276,8 +293,8 @@ export class Player360View {
           playerId: this.playerId,
           dateBounds: this._dateBounds()
         }),
-        this._isPlayerSelf()
-          ? this.submissionPanel.load(this._context())
+        this._usesSubmissionWorkflow()
+          ? this.submissionPanel.load(this._submissionContext())
           : Promise.resolve(),
         this.developmentPanel.load({
           teamSeasonId: this.teamSeasonId, playerId: this.playerId, objectiveProfile: this.objectiveProfile
@@ -629,8 +646,11 @@ export class Player360View {
     if (this.wellnessPanel.isAvailable()) {
       tabs.push({ id: "wellness", label: "🥤 Nutrición + recuperación" });
     }
-    if (this._isPlayerSelf()) {
-      tabs.push({ id: "submissions", label: "📨 Mis aportaciones" });
+    if (this._usesSubmissionWorkflow()) {
+      tabs.push({
+        id: "submissions",
+        label: this._isFamilyGuardian() ? "📨 Aportaciones de familia" : "📨 Mis aportaciones"
+      });
     }
 
     if (!tabs.some(tab => tab.id === this.activeTab)) {
@@ -1365,11 +1385,11 @@ export class Player360View {
     void this.wellnessPanel.bind(container, {
       onChanged: async () => {
         this.activeTab = "wellness";
-        if (this._isPlayerSelf()) await this.submissionPanel.load(this._context());
+        if (this._usesSubmissionWorkflow()) await this.submissionPanel.load(this._submissionContext());
         this._renderLoaded(container);
       }
     });
-    if (this._isPlayerSelf()) {
+    if (this._usesSubmissionWorkflow()) {
       void this.submissionPanel.bind(container, {
         onChanged: async () => {
           this.activeTab = "submissions";

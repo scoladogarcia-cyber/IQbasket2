@@ -12,6 +12,9 @@ import { ProductAnalyticsService } from "../../services/analytics/ProductAnalyti
 import { buildFamilyWeeklyPlan } from "../../domain/family/FamilyDevelopmentPlanEngine.js";
 import { buildFamilySupportGuide } from "../../domain/family/FamilySupportGuide.js";
 import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/family-ai-products.config.js";
+import { PlayerDataSubmissionService } from "../../services/player360/PlayerDataSubmissionService.js";
+import { PlayerSubmissionPanel } from "../player360/PlayerSubmissionPanel.js";
+import { Permission } from "../../security/PermissionService.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -24,8 +27,10 @@ export class FamilyWorkspaceView {
     this.service = new FamilyWorkspaceService(supabaseClient);
     this.auth = authController;
     this.analytics = new ProductAnalyticsService(supabaseClient);
+    this.submissionService = new PlayerDataSubmissionService(supabaseClient);
+    this.contributionPanel = new PlayerSubmissionPanel({ service: this.submissionService });
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, support: null, growth: null, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, support: null, growth: null, submissionContext: null, contributionsAvailable: false, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -78,6 +83,29 @@ export class FamilyWorkspaceView {
         weeklyPlan: this.state.weeklyPlan
       });
       this.state.growth = buildFamilyGrowthState({ product, passport, player360, story });
+      const selectedScope = this.state.players.find(row => String(row.player_id) === String(this.playerId)) || {};
+      const teamSeasonId = selectedScope.team_season_id
+        || player360?.team_season_id
+        || developmentContext?.team_season_id
+        || developmentCycle?.team_season_id
+        || null;
+      this.state.submissionContext = teamSeasonId ? {
+        teamId: selectedScope.team_id || null,
+        teamSeasonId,
+        playerId: this.playerId,
+        playerTeamId: selectedScope.team_id || null,
+        actorRelation: "GUARDIAN"
+      } : null;
+      this.state.contributionsAvailable = Boolean(
+        this.state.submissionContext
+        && this.auth?.canPreview?.(
+          Permission.CREATE_LINKED_PLAYER_SUBMISSION,
+          this.state.submissionContext
+        )
+      );
+      if (this.state.contributionsAvailable) {
+        await this.contributionPanel.load(this.state.submissionContext);
+      }
       this.state.error = null;
       container.innerHTML = this._workspace();
       void this._trackWorkspaceValue();
@@ -114,6 +142,7 @@ export class FamilyWorkspaceView {
       </header>
       ${this._playerSwitcher()}
       ${this._supportGuide(support)}
+      ${this._familyContributions()}
       <div class="family-value-strip" aria-label="Recorrido de valor">
         <span>1 · Qué está pasando</span><span>2 · Cómo evoluciona</span>
         <span>3 · Qué necesita ahora</span><span>4 · Cómo puedo ayudar</span>
@@ -161,6 +190,17 @@ export class FamilyWorkspaceView {
         <article><span>Qué evitar</span><ul>${avoid}</ul></article>
       </div>
       <p class="family-disclaimer">${escapeHtml(guide.evidenceNote || "")}</p>
+    </section>`;
+  }
+
+
+  _familyContributions() {
+    if (!this.state.contributionsAvailable || !this.state.submissionContext) return "";
+    return `<section class="family-card family-contributions" data-family-contributions>
+      <div class="family-card-head"><div><p class="family-eyebrow">Aportar contexto</p><h2>Información que puede ayudar al staff</h2>
+        <p>Las aportaciones quedan vinculadas únicamente al jugador seleccionado y se guardan como provisionales hasta que el staff las valida.</p></div></div>
+      <a class="family-wellness-link" href="#/player360/${escapeHtml(this.playerId)}">🥤 Abrir check-ins de nutrición y recuperación</a>
+      ${this.contributionPanel.render()}
     </section>`;
   }
 
@@ -379,6 +419,17 @@ export class FamilyWorkspaceView {
         : "Interés registrado. No se ha realizado ningún cargo.";
     });
 
+    if (this.state.contributionsAvailable) {
+      void this.contributionPanel.bind(container, {
+        onChanged: async () => {
+          if (this.state.submissionContext) {
+            await this.contributionPanel.load(this.state.submissionContext);
+          }
+          await this.render(container, { id: this.playerId });
+        }
+      });
+    }
+
     const form = container.querySelector("[data-family-claim-form]");
     form?.addEventListener("submit", async event => {
       event.preventDefault();
@@ -410,7 +461,7 @@ export class FamilyWorkspaceView {
       .family-eyebrow{margin:0!important;font-size:11px!important;font-weight:900;color:#2563eb!important;text-transform:uppercase;letter-spacing:.12em}
       .family-plan{display:grid;gap:2px;padding:10px 14px;border-radius:14px;background:#fff;border:1px solid #bfdbfe;white-space:nowrap}.family-plan span{font-weight:900}.family-plan small{color:#64748b}
       .family-player-scope{display:grid;gap:12px;margin:14px 0;padding:18px;border:1px solid #dbeafe;border-radius:18px;background:#f8fbff}.family-player-scope h2{margin:3px 0 5px}.family-player-scope p{margin:0;color:#64748b;font-size:13px}.family-player-chips{display:flex;gap:9px;overflow-x:auto;padding:2px 0}.family-player-chip{display:grid;gap:3px;min-width:180px;padding:11px 13px;border:1px solid #cbd5e1;border-radius:13px;background:#fff;color:#0f172a;text-decoration:none}.family-player-chip span{font-size:11px;color:#64748b}.family-player-chip.active{border-color:#2563eb;box-shadow:0 0 0 2px #dbeafe}.family-link-card input{min-height:44px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;background:#fff}
-      .family-support{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-color:#bfdbfe}.family-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-support-grid article{padding:15px;border:1px solid #dbeafe;border-radius:14px;background:#fff}.family-support-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#2563eb}.family-support-grid ul,.family-support-grid ol{margin:8px 0 0;padding-left:20px}.family-support-grid li{margin:7px 0;color:#334155;font-size:14px}.family-support-question p{font-size:17px;font-weight:800;color:#0f172a}.family-evidence-summary{margin:20px 0}.family-evidence-summary h2{margin:3px 0}.family-evidence-summary p{margin:4px 0;color:#64748b;font-size:13px}.family-career-card summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center}.family-career-card summary::-webkit-details-marker{display:none}.family-career-content{margin-top:10px}
+      .family-support{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-color:#bfdbfe}.family-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-support-grid article{padding:15px;border:1px solid #dbeafe;border-radius:14px;background:#fff}.family-support-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#2563eb}.family-support-grid ul,.family-support-grid ol{margin:8px 0 0;padding-left:20px}.family-support-grid li{margin:7px 0;color:#334155;font-size:14px}.family-support-question p{font-size:17px;font-weight:800;color:#0f172a}.family-contributions{background:#f8fafc}.family-contributions>.family-card-head p{margin:4px 0;color:#64748b;font-size:13px}.family-wellness-link{display:inline-flex;align-items:center;min-height:44px;margin:4px 0 10px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:11px;background:#eff6ff;color:#1d4ed8;font-weight:850;text-decoration:none}.family-contributions .psub-panel{margin-top:4px}.family-evidence-summary{margin:20px 0}.family-evidence-summary h2{margin:3px 0}.family-evidence-summary p{margin:4px 0;color:#64748b;font-size:13px}.family-career-card summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center}.family-career-card summary::-webkit-details-marker{display:none}.family-career-content{margin-top:10px}
       .family-value-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.family-value-strip span{padding:10px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;font-size:12px;font-weight:800;text-align:center}
       .family-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.family-kpi{padding:16px;border-radius:16px;background:#0f172a;color:#fff;display:grid}.family-kpi strong{font-size:24px}.family-kpi span{font-size:12px;color:#cbd5e1}
       .family-card{padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;margin:14px 0}.family-card h2{margin:3px 0 10px}.family-card-head{display:flex;justify-content:space-between;align-items:flex-start}

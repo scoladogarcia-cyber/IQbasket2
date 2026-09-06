@@ -225,6 +225,7 @@ export class ApprovalCenterService {
     const canReturn = pending && Boolean(this.auth?.canPreview?.(Permission.RETURN_PLAYER_SUBMISSION, context));
     const canReject = pending && Boolean(this.auth?.canPreview?.(Permission.REJECT_PLAYER_SUBMISSION, context));
     const wellness = row.submission_type === "WELLNESS_CHECKIN";
+    const actorLabel = row.actor_relation === "GUARDIAN" ? "Familia / Tutor" : "Jugador";
     const values = Array.isArray(payload.values) ? payload.values : [];
     const detail = wellness
       ? values.map(value => `${String(value.metric_code || "").replaceAll("_", " ")}: ${value.value}`).join(" · ")
@@ -239,8 +240,8 @@ export class ApprovalCenterService {
       resolvedAt: row.reviewed_at || null,
       title: `${row.player_name || "Jugador"} · ${wellness ? "Check-in" : "Entrenamiento externo"}`,
       subtitle: wellness
-        ? `${payload.module === "nutrition" ? "Nutrición" : "Recuperación"} · ${payload.entry_date || ""}`
-        : `${payload.activity_date || ""}`,
+        ? `${actorLabel} · ${payload.module === "nutrition" ? "Nutrición" : "Recuperación"} · ${payload.entry_date || ""}`
+        : `${actorLabel} · ${payload.activity_date || ""}`,
       detail,
       teamSeasonId: row.team_season_id,
       playerId: row.player_id,

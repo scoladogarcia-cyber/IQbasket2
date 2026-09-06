@@ -92,10 +92,12 @@ function sortEntries(rows) {
 }
 
 export class WellnessSupportPanel {
-  constructor({ service, submissionService = null, can, isSelfPlayer = null, modules = null } = {}) {
+  constructor({ service, submissionService = null, can, requiresSubmissionReview = null, isSelfPlayer = null, modules = null } = {}) {
     this.service = service;
     this.submissionService = submissionService;
-    this.isSelfPlayer = typeof isSelfPlayer === "function" ? isSelfPlayer : () => false;
+    this.requiresSubmissionReview = typeof requiresSubmissionReview === "function"
+      ? requiresSubmissionReview
+      : (typeof isSelfPlayer === "function" ? isSelfPlayer : () => false);
     this.can = typeof can === "function" ? can : () => false;
     this.allowedModules = Array.isArray(modules)
       ? new Set(modules.map(module => String(module).toLowerCase()))
@@ -342,7 +344,7 @@ export class WellnessSupportPanel {
 
           <div class="p360w-actions">
             <button type="button" class="p360w-secondary" id="p360w-cancel">Cancelar</button>
-            <button type="submit" class="p360w-primary">${this.isSelfPlayer() ? "Enviar para validar" : "Guardar"}</button>
+            <button type="submit" class="p360w-primary">${this.requiresSubmissionReview() ? "Enviar para validar" : "Guardar"}</button>
           </div>
         </form>
       </article>
@@ -461,8 +463,8 @@ export class WellnessSupportPanel {
     const module=this.activeModule;
     const data=this.data[module] || {};
     const access=data.access || {};
-    const canEdit=!this.isSelfPlayer() && this._baseCanEdit(module) && access.can_update;
-    const canArchive=!this.isSelfPlayer() && this._baseCanEdit(module) && access.can_archive;
+    const canEdit=!this.requiresSubmissionReview() && this._baseCanEdit(module) && access.can_update;
+    const canArchive=!this.requiresSubmissionReview() && this._baseCanEdit(module) && access.can_archive;
     const metricMap=this._metricMap(module);
 
     if (!data.entries.length) {
@@ -702,7 +704,7 @@ export class WellnessSupportPanel {
       submit.disabled=true;
       try {
         const access=this.data[this.activeModule]?.access;
-        if (this.isSelfPlayer()) {
+        if (this.requiresSubmissionReview()) {
           if (!this.submissionService) throw new Error("Servicio de validación no disponible.");
           await this.submissionService.saveAndSubmit({
             teamSeasonId:this.context.teamSeasonId,
@@ -710,7 +712,7 @@ export class WellnessSupportPanel {
             type:"WELLNESS_CHECKIN",
             payload:{ module:this.activeModule, entry_date:form.querySelector("#p360w-entry-date")?.value, values }
           });
-          alert("✅ Check-in enviado al staff para validar. No contará en tu histórico hasta su aprobación.");
+          alert("✅ Check-in enviado al staff para validar. No contará en el histórico del jugador hasta su aprobación.");
         } else {
           await this.service.saveManualEntry({
             entryId:this.editingEntryId,

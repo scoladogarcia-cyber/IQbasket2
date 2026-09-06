@@ -1,0 +1,143 @@
+name: Family Guardian Submissions V1 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feat/family-guardian-submissions-v1
+    paths:
+      - ".github/family-guardian-submissions-v1-controlled-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Apply + verify + rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static V18 contract
+        run: node tests/family-guardian-submissions-v1-contract.mjs
+
+      - name: Capture production baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player_data_submissions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player360_subject_relationships
+                where relationship_type='GUARDIAN' and status='ACTIVE')::text || '|' ||
+              (to_regprocedure('public.iq_v18_save_player_submission_draft(uuid,uuid,uuid,text,jsonb)') is not null)::int::text;
+          " | tr -d '[:space:]')
+          echo "FAMILY_GUARDIAN_SUBMISSIONS_V1_BASELINE=$RESULT"
+          echo "value=$RESULT" >> "$GITHUB_OUTPUT"
+          echo "installed=${RESULT##*|}" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm V18 preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260906_preflight_family_guardian_submissions_v1_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^FAMILY_GUARDIAN_SUBMISSIONS_V1_PREFLIGHT,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Apply Family Guardian Submissions V1
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/migrations/20260906081406_family_guardian_submissions_v1.sql
+
+      - name: Verify installed V18 boundary
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/ready/20260906_verify_family_guardian_submissions_v1_readonly.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^FAMILY_GUARDIAN_SUBMISSIONS_V1_VERIFY,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true)$'
+
+      - name: Run installed guardian smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv \
+            --file=supabase/drafts/20260906_smoke_family_guardian_submissions_v1_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^FAMILY_GUARDIAN_SUBMISSIONS_V1_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true),(t|true),(t|true),(t|true),(t|true)$'
+
+      - name: Verify unchanged baseline and installed V18
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select
+              (select count(*) from public.player_data_submissions)::text || '|' ||
+              (select count(*) from public.external_development_sessions)::text || '|' ||
+              (select count(*) from public.player360_subject_relationships
+                where relationship_type='GUARDIAN' and status='ACTIVE')::text || '|1';
+          " | tr -d '[:space:]')
+          EXPECTED="${{ steps.baseline.outputs.value }}"
+          EXPECTED="${EXPECTED%|*}|1"
+          echo "FAMILY_GUARDIAN_SUBMISSIONS_V1_POST_APPLY=$NEW"
+          test "$NEW" = "$EXPECTED"
+
+      - name: Emergency rollback if V18 validation fails
+        if: failure() && steps.apply.outcome == 'success' && steps.baseline.outputs.installed == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 \
+            --file=supabase/ready/20260906_rollback_family_guardian_submissions_v1.sql
+
+      - name: Verify emergency rollback baseline
+        if: failure() && steps.apply.outcome == 'success' && steps.baseline.outputs.installed == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ABSENT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="
+            select (
+              to_regprocedure('public.iq_v18_save_player_submission_draft(uuid,uuid,uuid,text,jsonb)') is null
+              and not exists (
+                select 1 from information_schema.columns
+                where table_schema='public'
+                  and table_name='player_data_submissions'
+                  and column_name='actor_relation'
+              )
+            )::int;
+          " | tr -d '[:space:]')
+          test "$ABSENT" = "1"

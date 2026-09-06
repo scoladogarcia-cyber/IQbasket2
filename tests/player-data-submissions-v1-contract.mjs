@@ -6,6 +6,7 @@ import { UserRole } from "../security/roles.js";
 const files = Object.fromEntries(await Promise.all([
   ["sql","../supabase/ready/20260905_apply_player_data_submissions_v1.sql"],
   ["indexes","../supabase/ready/20260906_apply_player_data_submissions_fk_indexes_v1.sql"],
+  ["v18","../supabase/migrations/20260906081406_family_guardian_submissions_v1.sql"],
   ["service","../services/player360/PlayerDataSubmissionService.js"],
   ["wellness","../views/player360/WellnessSupportPanel.js"],
   ["panel","../views/player360/PlayerSubmissionPanel.js"],
@@ -43,9 +44,12 @@ assert.equal(has(UserRole.ENTRENADOR,Permission.APPROVE_PLAYER_SUBMISSION),true)
 assert.equal(has(UserRole.ADMIN,Permission.RETURN_PLAYER_SUBMISSION),true);
 assert.equal(has(UserRole.ADMIN,Permission.REJECT_PLAYER_SUBMISSION),true);
 
-assert.match(files.service,/iq_v14_save_player_submission_draft/);
-assert.match(files.service,/iq_v14_submit_player_submission/);
-assert.match(files.service,/iq_v14_review_player_submission/);
+assert.match(files.service,/iq_v18_save_player_submission_draft/);
+assert.match(files.service,/iq_v18_submit_player_submission/);
+assert.match(files.service,/iq_v18_review_player_submission/);
+assert.match(files.v18,/create or replace function public\.iq_v14_save_player_submission_draft[\s\S]*iq_v18_save_player_submission_draft/i);
+assert.match(files.v18,/create or replace function public\.iq_v14_submit_player_submission[\s\S]*iq_v18_submit_player_submission/i);
+assert.match(files.v18,/create or replace function public\.iq_v14_review_player_submission[\s\S]*iq_v18_review_player_submission/i);
 assert.match(files.wellness,/Enviar para validar/);
 assert.match(files.wellness,/submissionService\.saveAndSubmit/);
 assert.match(files.panel,/Guardar borrador/);
