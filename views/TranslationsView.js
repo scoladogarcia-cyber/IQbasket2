@@ -26,6 +26,7 @@ import { SeasonManagementView } from "./SeasonManagementView.js";
 import { SeasonFreezeService } from "../services/seasons/SeasonFreezeService.js";
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
+import { FamilyProfileControls } from "../components/admin/FamilyProfileControls.js";
 
 function normalizeIsoDate(value = "") {
   const raw = String(value || "").trim();
@@ -2195,7 +2196,7 @@ export class TranslationsView {
     });
 
     // BINDING FICHA TÉCNICA DE USUARIO Y ASIGNACIÓN MULTIEQUIPO
-    const renderUserCardContent = (userProf) => {
+    const renderUserCardContent = (userProf, familyProfileControls = null) => {
       const modalContent = container.querySelector("#user-card-modal-content");
       if (!modalContent) return;
 
@@ -2225,6 +2226,10 @@ export class TranslationsView {
             </div>
           ` : ''}
 
+          ${userProf.role === UserRole.FAMILIA_TUTOR ? `
+            <div id="family-profile-controls-slot"></div>
+          ` : ''}
+
           <form id="form-save-user-teams-assignment">
             <h5 style="margin: 0 0 10px 0; font-size: 13px; color: #1e3a8a;">🛡️ EQUIPOS PERMITIDOS / ASIGNADOS:</h5>
             
@@ -2247,6 +2252,14 @@ export class TranslationsView {
 
         </div>
       `;
+
+      if (familyProfileControls) {
+        const familySlot = modalContent.querySelector("#family-profile-controls-slot");
+        if (familySlot) {
+          familySlot.innerHTML = familyProfileControls.render();
+          familyProfileControls.bind(familySlot);
+        }
+      }
 
       modalContent.querySelectorAll(".btn-approve-join-req").forEach(btn => {
         btn.addEventListener("click", async (e) => {
@@ -2337,7 +2350,7 @@ export class TranslationsView {
     });
 
     container.querySelectorAll(".btn-open-user-card").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         const email = e.currentTarget.getAttribute("data-email");
         const userProf = this.profilesList.find(p => p.email === email);
 
@@ -2345,7 +2358,22 @@ export class TranslationsView {
           const modal = container.querySelector("#modal-user-card");
           if (modal) {
             modal.style.display = "flex";
-            renderUserCardContent(userProf);
+            let familyProfileControls = null;
+            if (userProf.role === UserRole.FAMILIA_TUTOR) {
+              familyProfileControls = new FamilyProfileControls(supabase);
+              try {
+                await familyProfileControls.load({
+                  userId: userProf.id,
+                  teamSeasonId: provisioningTeamSeasonId,
+                  players: teamPlayers
+                });
+              } catch (error) {
+                console.warn("[FamilyProfileV26] No se pudo cargar el perfil:", error.message);
+                alert(`❌ No se pudo cargar el perfil Family: ${error.message || error}`);
+                familyProfileControls = null;
+              }
+            }
+            renderUserCardContent(userProf, familyProfileControls);
           }
         }
       });

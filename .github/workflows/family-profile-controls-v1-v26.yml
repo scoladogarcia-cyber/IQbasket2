@@ -1,0 +1,44 @@
+name: Family Profile Controls V26
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20260906202000_family_profile_controls_v1.sql"
+      - "services/family/FamilyProfileAdminService.js"
+      - "components/admin/FamilyProfileControls.js"
+      - "views/TranslationsView.js"
+      - "services/DataStore.js"
+      - "tests/family-profile-controls-v1-contract.mjs"
+      - "release.json"
+      - ".github/workflows/family-profile-controls-v1-v26.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20260906202000_family_profile_controls_v1.sql"
+      - "services/family/FamilyProfileAdminService.js"
+      - "components/admin/FamilyProfileControls.js"
+      - "views/TranslationsView.js"
+      - "services/DataStore.js"
+      - "tests/family-profile-controls-v1-contract.mjs"
+      - "release.json"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: V26 contract
+        run: node tests/family-profile-controls-v1-contract.mjs
+      - name: Existing Family contract
+        run: node tests/family-scoped-player-support-v1-contract.mjs
+      - name: Build
+        run: npm run build

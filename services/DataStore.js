@@ -9,6 +9,11 @@ import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapte
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
+import {
+  buildFamilyIdentityPolicy,
+  applyFamilyIdentityPolicy,
+  applyFamilyIdentityPolicyList
+} from "./family/FamilyIdentityPolicy.js";
 
 class DataStoreService {
   constructor() {
@@ -1011,8 +1016,22 @@ class DataStoreService {
     this._notifyListeners();
   }
 
+  _familyIdentityPolicy() {
+    return buildFamilyIdentityPolicy(
+      this.permissionService?.getCurrentUser?.() || null
+    );
+  }
+
+  _applyFamilyIdentityPolicy(player) {
+    return applyFamilyIdentityPolicy(player, this._familyIdentityPolicy());
+  }
+
+  _applyFamilyIdentityPolicyList(players = []) {
+    return applyFamilyIdentityPolicyList(players, this._familyIdentityPolicy());
+  }
+
   getPlayerDirectory() {
-    return [...(this.players || [])];
+    return this._applyFamilyIdentityPolicyList(this.players || []);
   }
 
   getTeamPlayers(teamId = null) {
@@ -1021,9 +1040,9 @@ class DataStoreService {
     const filtered = all.filter(
       (p) => String(p.team_id || p.teamId || "").toLowerCase() === targetTeamId
     );
-    return [...filtered].sort(
+    return this._applyFamilyIdentityPolicyList([...filtered].sort(
       (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
-    );
+    ));
   }
 
   _getRosterMembershipsForTeamSeason(teamSeasonId) {
@@ -1137,14 +1156,14 @@ class DataStoreService {
       (this.players || []).map(player => [String(player.id), player])
     );
 
-    return memberships
+    return this._applyFamilyIdentityPolicyList(memberships
       .filter(membership => this._membershipEligibleOnDate(membership, effectiveDate))
       .map(membership => {
         const player = directoryById.get(String(membership.player_id || membership.playerId));
         return player ? this._applyRosterMembership(player, membership) : null;
       })
       .filter(Boolean)
-      .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0));
+      .sort((a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)));
   }
 
   getPlayersForActiveSeason(teamId = null) {
@@ -1201,9 +1220,9 @@ class DataStoreService {
 
     if (participants.size === 0) return teamPlayers;
 
-    return [...participants.values()].sort(
+    return this._applyFamilyIdentityPolicyList([...participants.values()].sort(
       (a, b) => (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
-    );
+    ));
   }
 
   getEligibleGamesForPlayer(playerId, teamId = null) {
@@ -1226,7 +1245,8 @@ class DataStoreService {
 
   getPlayerById(id) {
     if (!id) return null;
-    return (this.players || []).find((p) => String(p.id) === String(id)) || null;
+    const player = (this.players || []).find((p) => String(p.id) === String(id)) || null;
+    return this._applyFamilyIdentityPolicy(player);
   }
 
   getGames(teamId = null) {

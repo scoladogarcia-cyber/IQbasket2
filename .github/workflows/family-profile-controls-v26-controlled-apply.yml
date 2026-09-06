@@ -1,0 +1,153 @@
+name: Family Profile Controls V26 Controlled Apply
+
+on:
+  push:
+    branches:
+      - feat/family-profile-controls-v1
+    paths:
+      - ".github/family-profile-controls-v26-controlled-apply-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-apply:
+    name: Rehearse + apply + verify + rollback smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - name: Require database secret
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/family-profile-controls-v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Static V26 contract
+        run: node tests/family-profile-controls-v1-contract.mjs
+
+      - name: Capture production baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLED=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('public.iq_v26_get_family_profile_config(uuid,uuid)') is not null)::int;" | tr -d '[:space:]')
+          MARKERS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_subject_relationships where coalesce(verification_source,'')='FAMILY_PROFILE_ADMIN_V26' or coalesce(revocation_reason,'')='FAMILY_PROFILE_ADMIN_UPDATE_V26';" | tr -d '[:space:]')
+          echo "V26_BASELINE_INSTALLED=$INSTALLED V26_MARKERS=$MARKERS"
+          test "$INSTALLED" = "0"
+          test "$MARKERS" = "0"
+          echo "installed=$INSTALLED" >> "$GITHUB_OUTPUT"
+
+      - name: Reconfirm readonly preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260906_preflight_family_profile_controls_v1_readonly.sql
+          OK=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('public.iq_v17_family_authorization_scope()') is not null and to_regprocedure('public.iq_v6_role_for_team_season(uuid)') is not null and to_regprocedure('public.iq_account_is_active()') is not null and to_regclass('public.player360_subject_relationships') is not null and to_regclass('public.roster_memberships') is not null)::int;" | tr -d '[:space:]')
+          test "$OK" = "1"
+
+      - name: Build transactional V26 rehearsal
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def strip_boundary(text, first_statement, last_statement):
+              lines = text.splitlines()
+              first = next((i for i, line in enumerate(lines) if line.strip().lower() == first_statement), None)
+              last = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].strip().lower() == last_statement), None)
+              if first is None or last is None or first >= last:
+                  raise SystemExit(f'V26_REHEARSAL_BOUNDARY_ERROR {first_statement} {last_statement}')
+              del lines[last]
+              del lines[first]
+              return chr(10).join(lines).strip()
+
+          migration = Path('supabase/migrations/20260906202000_family_profile_controls_v1.sql').read_text()
+          smoke = Path('supabase/drafts/20260906_smoke_family_profile_controls_v1_installed_rollback.sql').read_text()
+          migration = strip_boundary(migration, 'begin;', 'commit;')
+          smoke = strip_boundary(smoke, 'begin;', 'rollback;')
+          nl = chr(10)
+          Path('/tmp/v26-rehearsal.sql').write_text(
+              'begin;' + nl + migration + nl + smoke + nl + 'rollback;' + nl
+          )
+          PY
+
+      - name: Transactional install + functional rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=/tmp/v26-rehearsal.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^FAMILY_PROFILE_CONTROLS_V26_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true),(t|true),(t|true),(t|true),(t|true),(t|true)$'
+          ABSENT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('public.iq_v26_get_family_profile_config(uuid,uuid)') is null)::int;" | tr -d '[:space:]')
+          test "$ABSENT" = "1"
+
+      - name: Apply Family Profile Controls V26
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/migrations/20260906202000_family_profile_controls_v1.sql
+
+      - name: Verify installed V26 boundary
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260906_verify_family_profile_controls_v1_readonly.sql
+          OK=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('public.iq_v26_get_family_profile_config(uuid,uuid)') is not null and to_regprocedure('public.iq_v26_save_family_profile_config(uuid,uuid,uuid[],boolean,boolean)') is not null and to_regclass('public.family_profile_config_audit') is not null and has_function_privilege('authenticated','public.iq_v26_get_family_profile_config(uuid,uuid)','execute') and has_function_privilege('authenticated','public.iq_v26_save_family_profile_config(uuid,uuid,uuid[],boolean,boolean)','execute') and not has_function_privilege('authenticated','iq_private.v26_can_manage_family_profile(uuid)','execute') and not has_table_privilege('authenticated','public.family_profile_config_audit','select') and not has_table_privilege('authenticated','public.family_profile_config_audit','insert'))::int;" | tr -d '[:space:]')
+          test "$OK" = "1"
+
+      - name: Run installed V26 smoke with rollback
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --csv --file=supabase/drafts/20260906_smoke_family_profile_controls_v1_installed_rollback.sql)
+          echo "$OUT"
+          LAST=$(printf '%s\n' "$OUT" | grep '^FAMILY_PROFILE_CONTROLS_V26_INSTALLED_SMOKE_ROLLBACK,' | tail -n 1)
+          test -n "$LAST"
+          echo "$LAST" | grep -Eq ',(t|true),(t|true),(t|true),(t|true),(t|true),(t|true)$'
+
+      - name: Verify smoke left no V26 configuration data
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUDIT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.family_profile_config_audit;" | tr -d '[:space:]')
+          MARKERS=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select count(*) from public.player360_subject_relationships where coalesce(verification_source,'')='FAMILY_PROFILE_ADMIN_V26' or coalesce(revocation_reason,'')='FAMILY_PROFILE_ADMIN_UPDATE_V26';" | tr -d '[:space:]')
+          echo "V26_POST_APPLY_AUDIT=$AUDIT V26_POST_APPLY_MARKERS=$MARKERS"
+          test "$AUDIT" = "0"
+          test "$MARKERS" = "0"
+
+      - name: Emergency fail-closed rollback if V26 validation fails
+        if: failure() && steps.apply.outcome == 'success' && steps.baseline.outputs.installed == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --set=ON_ERROR_STOP=1 --file=supabase/ready/20260906_rollback_family_profile_controls_v1.sql
+
+      - name: Verify emergency rollback
+        if: failure() && steps.apply.outcome == 'success' && steps.baseline.outputs.installed == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ABSENT=$(psql "$SUPABASE_DB_URL" --tuples-only --no-align --command="select (to_regprocedure('public.iq_v26_get_family_profile_config(uuid,uuid)') is null and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_profiles' and column_name='family_show_other_player_names'))::int;" | tr -d '[:space:]')
+          test "$ABSENT" = "1"
