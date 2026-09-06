@@ -1,0 +1,1 @@
+apply tester regression fixes after reproducing approval and BoxScore failures
