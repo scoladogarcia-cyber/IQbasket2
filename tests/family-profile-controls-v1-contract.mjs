@@ -7,6 +7,7 @@ import {
   applyFamilyIdentityPolicyList
 } from "../services/family/FamilyIdentityPolicy.js";
 
+// Node-safe contract: runtime browser/Supabase wiring is verified statically below.
 const migration = fs.readFileSync("supabase/migrations/20260906202000_family_profile_controls_v1.sql", "utf8");
 const service = fs.readFileSync("services/family/FamilyProfileAdminService.js", "utf8");
 const component = fs.readFileSync("components/admin/FamilyProfileControls.js", "utf8");
