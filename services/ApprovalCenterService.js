@@ -432,6 +432,18 @@ export class ApprovalCenterService {
       return this.gameLockService.resolveRequest(item.id, "REJECTED", note || null);
     }
 
+    if (item.type === RequestType.PLAYER_DATA_SUBMISSION) {
+      const rejectionNote = String(note || "").trim();
+      if (!rejectionNote) {
+        throw new Error("Indica el motivo del rechazo.");
+      }
+      return this.playerSubmissionService.review({
+        submissionId: item.id,
+        decision: "REJECTED",
+        note: rejectionNote
+      });
+    }
+
     if (item.type === RequestType.TEAM_SEASON_FREEZE) {
       return this.seasonFreezeService.resolveRequest(item.id, "REJECTED", note || null);
     }

@@ -619,19 +619,26 @@ export class GameBoxScoreView {
         const saveButton = container.querySelector("#btn-save-boxscore");
         if (saveButton) saveButton.disabled = true;
         try {
-          const snapshot = await this.captureService.saveCapture({
-            gameId: currentGame.id,
-            starterIds,
-            stats: statsList
-          });
-
           if (this.isGameScopedOnly) {
+            const snapshot = await this.captureService.saveCapture({
+              gameId: currentGame.id,
+              starterIds,
+              stats: statsList
+            });
             this.gameScopedSnapshot = snapshot || this.gameScopedSnapshot;
             this.games = [this.gameScopedSnapshot.game];
             this.players = this.gameScopedSnapshot.players || this.players;
             this.gameStats = this.gameScopedSnapshot.stats || statsList;
           } else {
-            await DataStore.init(DataStore.getActiveTeamId?.(), true);
+            // Preserve the established team-scoped save path for normal staff.
+            // The V21 RPC is reserved for users whose only authorization is the
+            // explicit per-game delegation, avoiding a regression in existing
+            // trainer/admin workflows and keeping DataStore as their boundary.
+            const gameData = {
+              ...currentGame,
+              starter_ids: starterIds
+            };
+            await DataStore.saveGameAndStats(gameData, statsList);
           }
 
           alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
