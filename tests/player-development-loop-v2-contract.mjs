@@ -10,6 +10,10 @@ const panel = readFileSync(new URL("../views/player360/DevelopmentCyclePanel.js"
 const player360 = readFileSync(new URL("../views/Player360View.js", import.meta.url), "utf8");
 const familyService = readFileSync(new URL("../services/family/FamilyWorkspaceService.js", import.meta.url), "utf8");
 const familyView = readFileSync(new URL("../views/family/FamilyWorkspaceView.js", import.meta.url), "utf8");
+const preflight = readFileSync(new URL("../supabase/ready/20260906_preflight_player_development_loop_v2_readonly.sql", import.meta.url), "utf8");
+const verify = readFileSync(new URL("../supabase/ready/20260906_verify_player_development_loop_v2_readonly.sql", import.meta.url), "utf8");
+const installedSmoke = readFileSync(new URL("../supabase/drafts/20260906_smoke_player_development_loop_v2_installed_rollback.sql", import.meta.url), "utf8");
+const controlledApply = readFileSync(new URL("../.github/workflows/player-development-loop-v2-controlled-apply.yml", import.meta.url), "utf8");
 
 for (const table of ["player_development_cycles", "player_development_actions", "player_development_action_evidence"]) {
   assert.match(apply, new RegExp(`create table public\\.${table}`, "i"));
@@ -30,6 +34,19 @@ assert.match(apply, /tp\.player_id=v_action\.player_id/i);
 assert.match(apply, /pgs\.game_id=g\.id and pgs\.player_id=v_action\.player_id/i);
 assert.match(apply, /DEVELOPMENT_CYCLE_ACTIONS_NOT_FINISHED/i);
 assert.match(apply, /iq_saas_entitlement_check\([\s\S]*'DEVELOPMENT_PLAN'/i);
+assert.doesNotMatch(preflight, /\b(create|alter|drop|insert|update|delete|grant|revoke)\b/i, "El preflight V2 debe ser estrictamente read-only.");
+assert.equal((installedSmoke.match(/^\s*begin;\s*$/gmi) || []).length, 1, "El smoke V2 debe abrir una sola transacción.");
+assert.equal((installedSmoke.match(/^\s*rollback;\s*$/gmi) || []).length, 1, "El smoke V2 debe terminar en ROLLBACK.");
+assert.equal((installedSmoke.match(/^\s*commit;\s*$/gmi) || []).length, 0, "El smoke V2 no puede hacer COMMIT.");
+assert.match(verify, /PLAYER_DEVELOPMENT_LOOP_V2_VERIFY/i);
+for (const file of [
+  "20260906_preflight_player_development_loop_v2_readonly.sql",
+  "20260906_apply_player_development_loop_v2.sql",
+  "20260906_verify_player_development_loop_v2_readonly.sql",
+  "20260906_smoke_player_development_loop_v2_installed_rollback.sql",
+  "20260906_rollback_player_development_loop_v2.sql"
+]) assert.match(controlledApply, new RegExp(file));
+assert.match(controlledApply, /Emergency rollback if post-apply validation fails/);
 
 const familyStart = apply.indexOf("create or replace function public.iq_v16_family_development_cycle");
 const familyEnd = apply.indexOf("do $development_verify$", familyStart);
