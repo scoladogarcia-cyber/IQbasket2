@@ -50,7 +50,19 @@ assert.match(workflow,/20260906133707_game_capture_delegation_v1\.sql/);
 assert.match(workflow,/Verify sporting row baseline unchanged/);
 assert.match(workflow,/Emergency rollback if a fresh V21 apply fails validation/);
 
-assert.ok(release.release.localeCompare("2026.09.06.7") >= 0,"La release no puede retroceder respecto a V21.");
+function releaseAtLeast(value,baseline){
+  const left=String(value||"").split(".").map(Number);
+  const right=String(baseline||"").split(".").map(Number);
+  const length=Math.max(left.length,right.length);
+  for(let index=0;index<length;index+=1){
+    const a=Number.isFinite(left[index])?left[index]:0;
+    const b=Number.isFinite(right[index])?right[index]:0;
+    if(a!==b)return a>b;
+  }
+  return true;
+}
+
+assert.ok(releaseAtLeast(release.release,"2026.09.06.7"),"La release no puede retroceder respecto a V21.");
 if (release.release==="2026.09.06.7") assert.equal(release.label,"game-capture-delegation-v1");
 
 console.log("GAME_CAPTURE_DELEGATION_V1_CONTRACT_OK");
