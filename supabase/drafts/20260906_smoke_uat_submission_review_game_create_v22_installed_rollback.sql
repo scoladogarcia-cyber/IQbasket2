@@ -74,7 +74,7 @@ select set_config(
 
 set local role authenticated;
 
-do $smoke$
+do $authenticated_smoke$
 declare
   v_coach uuid:=current_setting('iq.v22.coach_id')::uuid;
   v_player uuid:=current_setting('iq.v22.player_id')::uuid;
@@ -86,7 +86,8 @@ declare
   v_module text;
   v_resource uuid;
   v_game uuid;
-  v_status text;
+  v_game_status text;
+  v_review_status text;
 begin
   if auth.uid()<>v_coach then raise exception 'V22_SMOKE_AUTH_CONTEXT_FAILED'; end if;
 
@@ -108,22 +109,21 @@ begin
   perform public.iq_v18_review_player_submission(
     v_reject,'REJECTED','V22 rollback smoke rejection'
   );
-  select status into v_status from public.player_data_submissions where id=v_reject;
-  if v_status<>'REJECTED' then raise exception 'V22_SMOKE_REJECT_FAILED'; end if;
+  select status into v_review_status
+  from public.iq_v18_list_player_submission_reviews(v_team_season,true,100)
+  where id=v_reject;
+  if v_review_status<>'REJECTED' then raise exception 'V22_SMOKE_REJECT_FAILED'; end if;
 
   v_resource:=public.iq_v18_review_player_submission(
     v_approve,'APPROVED','V22 rollback smoke approval'
   );
   if v_resource is null then raise exception 'V22_SMOKE_APPROVE_DID_NOT_MATERIALIZE'; end if;
-  if not exists (
-    select 1 from public.player360_wellness_entries e
-    where e.id=v_resource
-      and e.player_id=v_player
-      and e.team_season_id=v_team_season
-      and e.source_type in ('PLAYER_SELF_REPORT','GUARDIAN_REPORT')
-  ) then
-    raise exception 'V22_SMOKE_MATERIALIZED_ROW_INVALID';
-  end if;
+  perform set_config('iq.v22.materialized_resource',v_resource::text,true);
+
+  select status into v_review_status
+  from public.iq_v18_list_player_submission_reviews(v_team_season,true,100)
+  where id=v_approve;
+  if v_review_status<>'APPROVED' then raise exception 'V22_SMOKE_APPROVE_STATUS_FAILED'; end if;
 
   if public.iq_v4e_can_access_sensitive_resource(
     v_player,v_team_season,v_module,'CREATE','SPORT_PERFORMANCE'
@@ -148,15 +148,41 @@ begin
   ) values (
     v_team,v_season,v_team_season,current_date,current_date,'18:00',
     'ZZ V22 rollback smoke','UAT_SMOKE','Local','Programado','SCHEDULED'
-  ) returning id into v_game;
+  ) returning id,status into v_game,v_game_status;
 
   if v_game is null then raise exception 'V22_SMOKE_GAME_CREATE_FAILED'; end if;
-  select status into v_status from public.games where id=v_game;
-  if v_status<>'Programado' then raise exception 'V22_SMOKE_GAME_STATUS_SYNC_FAILED'; end if;
+  if v_game_status<>'Programado' then raise exception 'V22_SMOKE_GAME_STATUS_SYNC_FAILED'; end if;
+  perform set_config('iq.v22.game_id',v_game::text,true);
 end
-$smoke$;
+$authenticated_smoke$;
 
 reset role;
+
+do $postgres_verify$
+declare
+  v_resource uuid:=current_setting('iq.v22.materialized_resource')::uuid;
+  v_game uuid:=current_setting('iq.v22.game_id')::uuid;
+  v_player uuid:=current_setting('iq.v22.player_id')::uuid;
+  v_team_season uuid:=current_setting('iq.v22.team_season_id')::uuid;
+begin
+  if not exists (
+    select 1 from public.player360_wellness_entries e
+    where e.id=v_resource
+      and e.player_id=v_player
+      and e.team_season_id=v_team_season
+      and e.source_type in ('PLAYER_SELF_REPORT','GUARDIAN_REPORT')
+  ) then
+    raise exception 'V22_SMOKE_MATERIALIZED_ROW_INVALID';
+  end if;
+
+  if not exists (
+    select 1 from public.games g
+    where g.id=v_game and g.status='Programado' and g.play_state='SCHEDULED'
+  ) then
+    raise exception 'V22_SMOKE_GAME_ROW_INVALID';
+  end if;
+end
+$postgres_verify$;
 
 select
   'UAT_HOTFIX_V22_INSTALLED_SMOKE_ROLLBACK' as section,
