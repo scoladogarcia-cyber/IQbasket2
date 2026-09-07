@@ -5,6 +5,7 @@ on:
     branches:
       - qa/global-ui-acceptance-v1
     paths:
+      - "index.html"
       - "index.js"
       - "views/**"
       - "styles/**"
@@ -16,6 +17,7 @@ on:
     branches:
       - main
     paths:
+      - "index.html"
       - "index.js"
       - "views/**"
       - "styles/**"
