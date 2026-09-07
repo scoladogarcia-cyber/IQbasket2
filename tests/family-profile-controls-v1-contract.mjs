@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { FamilyProfileControls } from "../components/admin/FamilyProfileControls.js";
+import { Permission, ROLE_PERMISSIONS } from "../security/permissions.js";
+import { UserRole } from "../security/roles.js";
 import {
   buildFamilyIdentityPolicy,
   applyFamilyIdentityPolicy,
@@ -10,6 +12,7 @@ import {
 // Node-safe contract: runtime browser/Supabase wiring is verified statically below.
 const migration = fs.readFileSync("supabase/migrations/20260906202000_family_profile_controls_v1.sql", "utf8");
 const service = fs.readFileSync("services/family/FamilyProfileAdminService.js", "utf8");
+const workspaceService = fs.readFileSync("services/family/FamilyWorkspaceService.js", "utf8");
 const component = fs.readFileSync("components/admin/FamilyProfileControls.js", "utf8");
 const settings = fs.readFileSync("views/TranslationsView.js", "utf8");
 const datastore = fs.readFileSync("services/DataStore.js", "utf8");
@@ -40,9 +43,15 @@ assert.doesNotMatch(managerHelper, /'ENTRENADOR'|'ANALISTA'|'FAMILIA_TUTOR'/);
 assert.doesNotMatch(service, /\.from\(/);
 assert.match(service, /iq_v26_get_family_profile_config/);
 assert.match(service, /iq_v26_save_family_profile_config/);
+assert.match(workspaceService, /iq_v8_family_create_link_invitation/);
 assert.match(component, /family-profile-player/);
 assert.match(component, /family-show-other-names/);
 assert.match(component, /family-show-other-jerseys/);
+assert.match(component, /family-invite-generate/);
+assert.match(component, /family-invite-player/);
+assert.match(component, /family-invite-email/);
+assert.match(component, /createInvitation/);
+assert.match(component, /Código para entregar a la familia/);
 assert.match(component, /function renderStyles\(\)/);
 assert.match(settings, /FamilyProfileControls/);
 assert.match(settings, /userProf\.role === UserRole\.FAMILIA_TUTOR/);
@@ -51,6 +60,22 @@ assert.match(datastore, /FamilyIdentityPolicy\.js/);
 assert.match(datastore, /buildFamilyIdentityPolicy/);
 assert.match(datastore, /applyFamilyIdentityPolicyList/);
 assert.match(identityPolicy, /no browser, Supabase or global-state dependency/i);
+
+// Family must be able to enter its own workspace, while invitation creation
+// remains an administrative capability and is not silently widened to coaches.
+assert.ok(
+  ROLE_PERMISSIONS[UserRole.FAMILIA_TUTOR].includes(Permission.VIEW_FAMILY_WORKSPACE),
+  "FAMILIA_TUTOR debe poder abrir el workspace Family."
+);
+assert.ok(
+  ROLE_PERMISSIONS[UserRole.ADMIN].includes(Permission.INVITE_FAMILY_LINK),
+  "ADMIN debe conservar la capacidad de invitar vínculos Family."
+);
+assert.equal(
+  ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.INVITE_FAMILY_LINK),
+  false,
+  "ENTRENADOR no debe crear relaciones de tutor por una delegación deportiva."
+);
 
 // Pure presentation contract: linked children always keep identity; non-linked
 // players follow the two independently configurable Family preferences.
@@ -125,6 +150,9 @@ assert.match(html, /value="p1" checked/);
 assert.match(html, /value="p2" checked/);
 assert.doesNotMatch(html, /id="family-show-other-names" checked/);
 assert.match(html, /id="family-show-other-jerseys" checked/);
+assert.match(html, /class="family-invite-generate"/);
+assert.match(html, /class="family-invite-player"/);
+assert.match(html, /class="family-invite-email"/);
 
 // Empty-state regression: styles must also be present when no team-season is
 // selected, otherwise the modal can inherit unreadable text/background styles.
