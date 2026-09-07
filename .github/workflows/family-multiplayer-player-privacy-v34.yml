@@ -12,7 +12,6 @@ on:
       - "supabase/ready/20260907_*family_multiplayer_player_privacy_v34*.sql"
       - "tests/family-multiplayer-player-privacy-v34-contract.mjs"
       - "index.html"
-      - "release.json"
       - ".github/workflows/family-multiplayer-player-privacy-v34.yml"
   push:
     branches: [main]
@@ -26,7 +25,6 @@ on:
       - "supabase/ready/20260907_*family_multiplayer_player_privacy_v34*.sql"
       - "tests/family-multiplayer-player-privacy-v34-contract.mjs"
       - "index.html"
-      - "release.json"
       - ".github/workflows/family-multiplayer-player-privacy-v34.yml"
 
 jobs:
