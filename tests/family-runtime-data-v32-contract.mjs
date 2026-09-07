@@ -7,8 +7,21 @@ import {
 } from "../views/family/FamilyWorkspaceV32View.js";
 
 const read = path => fs.readFileSync(path, "utf8");
+const versionParts = value => String(value || "").split(".").map(part => Number(part) || 0);
+const releaseAtLeast = (value, baseline) => {
+  const current = versionParts(value);
+  const minimum = versionParts(baseline);
+  const size = Math.max(current.length, minimum.length);
+  for (let index = 0; index < size; index += 1) {
+    const left = current[index] || 0;
+    const right = minimum[index] || 0;
+    if (left !== right) return left > right;
+  }
+  return true;
+};
 
 const migration = read("supabase/migrations/20260907133500_family_runtime_data_v32.sql");
+const playedHistoryV33 = read("supabase/migrations/20260907152000_family_played_history_v33.sql");
 const familyService = read("services/family/FamilyWorkspaceService.js");
 const familyView = read("views/family/FamilyWorkspaceV32View.js");
 const lazyRegistry = read("services/LazyViewRegistry.js");
@@ -35,12 +48,25 @@ assert.match(migration, /r\.player_id=p_player_id/i);
 assert.doesNotMatch(migration, /iq_v32_guardian_linked_wellness_read_allowed[\s\S]*p_action[^$]*='CREATE'/i);
 assert.doesNotMatch(migration, /iq_v32_guardian_linked_wellness_read_allowed[\s\S]*p_action[^$]*='UPDATE'/i);
 
-// Browser rollout is progressive: V32 when installed, V8 fallback while Pages/DB roll out.
+// Browser rollout is progressive: V33 -> V32 -> V8 where applicable.
+assert.match(familyService, /iq_v33_family_player_passport/);
 assert.match(familyService, /iq_v32_family_list_players/);
 assert.match(familyService, /iq_v8_family_list_players/);
 assert.match(familyService, /iq_v32_family_player_passport/);
+assert.match(familyService, /iq_v8_family_player_passport/);
 assert.match(familyService, /iq_v32_family_player360_snapshot/);
 assert.match(familyService, /progressiveRpc/);
+
+// V33 narrows longitudinal sporting evidence to games that are actually played.
+assert.match(playedHistoryV33, /iq_v33_family_player_passport/i);
+assert.match(playedHistoryV33, /v_base:=public\.iq_v32_family_player_passport\(p_player_id\)/i);
+assert.match(playedHistoryV33, /section_access,game_history/i);
+assert.match(playedHistoryV33, /section_access,basic_stats/i);
+assert.match(playedHistoryV33, /section_access,basic_timeline/i);
+const finishedFilters = playedHistoryV33.match(/upper\(coalesce\(g\.play_state,''\)\)='FINISHED'/gi) || [];
+assert.ok(finishedFilters.length >= 4, "Career, totals, recent games and timeline must all use FINISHED games.");
+assert.match(playedHistoryV33, /'play_state',g\.play_state/i);
+assert.doesNotMatch(playedHistoryV33, /update\s+public\.games|delete\s+from\s+public\.games/i);
 
 // Basic sporting evidence remains available independently from advanced paid Player360.
 assert.match(lazyRegistry, /FamilyWorkspaceV32View/);
@@ -78,10 +104,22 @@ assert.match(gameCapture, /#\/easy-entry\/\$\{encodeURIComponent\(String\(game\.
 assert.match(gameCapture, /Permission\.RECORD_LIVE_GAME/);
 assert.match(gameCapture, /Permission\.RECORD_QUICK_GAME/);
 
+// V33 fixes the runtime wiring behind those buttons without broadening RBAC.
+assert.match(lazyRegistry, /QUICK_CAPTURE_ROUTES/);
+assert.match(lazyRegistry, /FACTORY_LOADERS\.easyentry\(dependencies, \{ gameId \}\)/);
+assert.match(lazyRegistry, /new GameCaptureDelegationService\(runtimeClient\)/);
+assert.match(lazyRegistry, /new GamePlayStateService\(runtimeClient\)/);
+assert.match(lazyRegistry, /new DelegatedQuickEntryView\(supabase, authController, gameId\)/);
+assert.match(lazyRegistry, /Cargando partidos…/);
+assert.doesNotMatch(lazyRegistry, /authController\.supabase\s*=/);
+
 // Nutrition must open Wellness directly instead of landing on the first Player360 tab.
 assert.match(nutritionRouter, /view\.activeTab = "wellness"/);
 assert.match(nutritionRouter, /return view\.render\(containerId, subjectPlayerId, teamId\)/);
 assert.doesNotMatch(nutritionRouter, /window\.location\.hash\s*=\s*target/);
 
-assert.equal(release.label, "family-runtime-data-v32");
-console.log("FAMILY_RUNTIME_DATA_V32_OK");
+assert.ok(releaseAtLeast(release.release, "2026.09.07.15"), "Family runtime release cannot go backwards.");
+if (release.release === "2026.09.07.15") assert.equal(release.label, "family-runtime-data-v32");
+if (release.release === "2026.09.07.16") assert.equal(release.label, "family-capture-polish-v33");
+
+console.log("FAMILY_RUNTIME_DATA_V32_V33_OK");
