@@ -22,8 +22,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new AdvancedStatsView(gameController);
   },
   boxscore: async ({ supabase, authController }) => {
-    const { GameBoxScoreView } = await import("../views/GameBoxScoreView.js");
-    return new GameBoxScoreView(supabase, authController);
+    const { ScopedGameBoxScoreView } = await import("../views/games/ScopedGameBoxScoreView.js");
+    return new ScopedGameBoxScoreView(supabase, authController);
   },
   player: async ({ supabase, authController }) => {
     const { PlayerStatsView } = await import("../views/PlayerStatsView.js");
@@ -42,8 +42,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new ReportsView(authController);
   },
   familyworkspace: async ({ supabase, authController }) => {
-    const { FamilyWorkspaceV30View } = await import("../views/family/FamilyWorkspaceV30View.js");
-    return new FamilyWorkspaceV30View(supabase, authController);
+    const { FamilyWorkspaceV31View } = await import("../views/family/FamilyWorkspaceV31View.js");
+    return new FamilyWorkspaceV31View(supabase, authController);
   },
   business: async ({ supabase, authController }) => {
     const { BusinessMetricsView } = await import("../views/admin/BusinessMetricsView.js");
