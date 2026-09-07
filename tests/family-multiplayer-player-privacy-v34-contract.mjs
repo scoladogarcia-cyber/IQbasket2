@@ -11,7 +11,6 @@ const playerService = read("services/player/PlayerIdentityPreferenceService.js")
 const playerEnhancer = read("features/player-dashboard/PlayerDashboardPrivacyEnhancer.js");
 const adminEnhancer = read("features/admin/PlayerProfilePrivacyAdminEnhancer.js");
 const index = read("index.html");
-const release = JSON.parse(read("release.json"));
 
 // Family multi-player baseline: verified Guardian relation remains the authority.
 assert.match(migration, /relationship_type='GUARDIAN'/i);
@@ -62,9 +61,8 @@ assert.match(playerEnhancer, /team-player-mobile-card/);
 assert.match(playerEnhancer, /roster-table-body/);
 assert.match(playerEnhancer, /playerId === ownPlayerId\(\)/);
 
-assert.equal(release.release, "2026.09.07.17");
-assert.equal(release.label, "family-multiplayer-player-privacy-v34");
-
+// Release progression is owned by the dedicated Release Version Guard. A phase
+// contract must validate V34 invariants without freezing the whole product at V34.
 for (const file of [
   "services/family/FamilyWorkspaceService.js",
   "services/family/FamilyProfileAdminService.js",
