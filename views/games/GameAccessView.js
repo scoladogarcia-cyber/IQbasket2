@@ -1,8 +1,8 @@
 /**
  * @fileoverview Access-aware entry point for the Partidos route.
- * @description Users with normal team scope keep the full GameLiveEditorView.
- * Users whose only authority comes from V21 per-game delegation receive a
- * minimal delegated-game landing instead of team-wide game data.
+ * @description Users with normal team scope keep the full team game list while
+ * resource-scoped capture permissions are surfaced independently. Users whose
+ * only authority comes from V21 per-game delegation receive a minimal landing.
  */
 
 import { DataStore } from "../../services/DataStore.js";
@@ -21,8 +21,8 @@ export class GameAccessView {
 
   async _fullView() {
     if (this.fullView) return this.fullView;
-    const { GameLiveEditorView } = await import("../GameLiveEditorView.js");
-    this.fullView = new GameLiveEditorView(this.gameController, this.auth);
+    const { GameCaptureModesView } = await import("./GameCaptureModesView.js");
+    this.fullView = new GameCaptureModesView(this.gameController, this.auth);
     return this.fullView;
   }
 
@@ -52,8 +52,8 @@ export class GameAccessView {
   async render(containerId = "dashboard-content-area", gameId = null, teamId = null) {
     const resolvedTeamId = teamId || DataStore.getActiveTeamId?.() || null;
 
-    // A specific game opened through the team editor keeps the historical path.
-    // Delegated capture and BoxScore use their dedicated /live/:id and /boxscore/:id routes.
+    // A specific game opened through the broad team editor keeps the historical
+    // path. Delegated live/quick/Acta capture use their dedicated resource routes.
     if (gameId) {
       const view = await this._fullView();
       return view.render(containerId, gameId, resolvedTeamId);
