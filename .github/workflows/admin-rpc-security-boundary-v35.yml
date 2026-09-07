@@ -3,7 +3,8 @@ name: Admin RPC Security Boundary V35
 on:
   pull_request:
     paths:
-      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35.sql"
+      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35_private.sql"
+      - "supabase/migrations/20260907173100_admin_rpc_security_boundary_v35_public.sql"
       - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
       - "tests/admin-rpc-security-boundary-v35-contract.mjs"
       - "views/TranslationsView.js"
@@ -12,7 +13,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35.sql"
+      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35_private.sql"
+      - "supabase/migrations/20260907173100_admin_rpc_security_boundary_v35_public.sql"
       - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
       - "tests/admin-rpc-security-boundary-v35-contract.mjs"
       - "views/TranslationsView.js"
