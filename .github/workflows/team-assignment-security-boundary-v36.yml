@@ -1,0 +1,39 @@
+name: Team Assignment Security Boundary V36
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20260907180000_team_assignment_security_boundary_v36_private.sql"
+      - "supabase/migrations/20260907180100_team_assignment_security_boundary_v36_public.sql"
+      - "supabase/ready/20260907_verify_team_assignment_security_boundary_v36_readonly.sql"
+      - "tests/team-assignment-security-boundary-v36-contract.mjs"
+      - "views/TranslationsView.js"
+      - "release.json"
+      - ".github/workflows/team-assignment-security-boundary-v36.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20260907180000_team_assignment_security_boundary_v36_private.sql"
+      - "supabase/migrations/20260907180100_team_assignment_security_boundary_v36_public.sql"
+      - "supabase/ready/20260907_verify_team_assignment_security_boundary_v36_readonly.sql"
+      - "tests/team-assignment-security-boundary-v36-contract.mjs"
+      - "views/TranslationsView.js"
+      - "release.json"
+      - ".github/workflows/team-assignment-security-boundary-v36.yml"
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: V36 team-assignment security contract
+        run: node tests/team-assignment-security-boundary-v36-contract.mjs
+      - name: Syntax check admin UI integration
+        run: node --check views/TranslationsView.js
+      - name: Production build
+        run: npm run build

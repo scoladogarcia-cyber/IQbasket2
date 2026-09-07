@@ -8,7 +8,6 @@ const publicMigration = read("supabase/migrations/20260907173100_admin_rpc_secur
 const migration = `${privateMigration}\n${publicMigration}`;
 const verifier = read("supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql");
 const settingsView = read("views/TranslationsView.js");
-const release = JSON.parse(read("release.json"));
 
 // Phase 1 is behavior-neutral: only the non-exposed implementation is created.
 assert.match(privateMigration, /create schema if not exists iq_v35_private/i);
@@ -80,7 +79,6 @@ assert.match(verifier, /role_private_definer_ok/i);
 assert.match(verifier, /anon_account_execute_denied_ok/i);
 assert.match(verifier, /anon_role_execute_denied_ok/i);
 
-assert.equal(release.release, "2026.09.07.18");
-assert.equal(release.label, "admin-rpc-security-boundary-v35");
-
+// Release progression belongs to Release Version Guard. Historical phase
+// contracts must remain forward-compatible with V36 and later releases.
 console.log("ADMIN_RPC_SECURITY_BOUNDARY_V35_CONTRACT_OK");
