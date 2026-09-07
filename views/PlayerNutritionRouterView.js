@@ -1,7 +1,8 @@
 /**
- * @fileoverview Role-aware entry point for the general Nutrition navigation item.
- * @description A player never enters the team-level nutrition selector: the route
- * resolves directly to their own Player 360. Staff keeps the existing NutritionView.
+ * @fileoverview Subject-aware entry point for the general Nutrition navigation item.
+ * @description Player and Family never enter the team-level nutrition selector:
+ * the route resolves to the authorized Player 360 subject. Staff keeps the
+ * existing NutritionView. Backend privacy/RLS remains authoritative.
  */
 
 import { UserRole } from "../security/roles.js";
@@ -13,9 +14,23 @@ export class PlayerNutritionRouterView {
     this.staffView = staffView;
   }
 
-  _ownPlayerId() {
+  _subjectPlayerId(requestedPlayerId = null, role = null) {
     const user = this.auth?.getCurrentUser?.() || null;
-    return user?.playerId || user?.player_id || user?.linkedPlayerIds?.[0] || null;
+    const ownPlayerId = user?.playerId || user?.player_id || user?.linked_player_id || null;
+    const linkedPlayerIds = Array.isArray(user?.linkedPlayerIds)
+      ? user.linkedPlayerIds.map(String).filter(Boolean)
+      : [];
+
+    if (role === UserRole.JUGADOR) return ownPlayerId || linkedPlayerIds[0] || null;
+
+    if (role === UserRole.FAMILIA_TUTOR) {
+      const requested = requestedPlayerId ? String(requestedPlayerId) : null;
+      if (requested && linkedPlayerIds.includes(requested)) return requested;
+      if (ownPlayerId && linkedPlayerIds.includes(String(ownPlayerId))) return ownPlayerId;
+      return linkedPlayerIds[0] || ownPlayerId || null;
+    }
+
+    return null;
   }
 
   async _staffView() {
@@ -27,19 +42,23 @@ export class PlayerNutritionRouterView {
 
   async render(containerId = "dashboard-content-area", playerId = null, teamId = null) {
     const role = this.auth?.getAuthenticatedRole?.();
-    if (role !== UserRole.JUGADOR) {
+    const isSubjectScoped = role === UserRole.JUGADOR || role === UserRole.FAMILIA_TUTOR;
+
+    if (!isSubjectScoped) {
       const view = await this._staffView();
       return view.render(containerId, playerId, teamId);
     }
 
     const container = document.getElementById(containerId);
-    const ownPlayerId = this._ownPlayerId();
-    if (!ownPlayerId) {
+    const subjectPlayerId = this._subjectPlayerId(playerId, role);
+    const isFamily = role === UserRole.FAMILIA_TUTOR;
+
+    if (!subjectPlayerId) {
       if (container) {
         container.innerHTML = `
           <section style="max-width:760px;margin:0 auto;padding:18px;font-family:var(--font-family-base,system-ui);">
             <div style="padding:18px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;color:#64748b;line-height:1.5;">
-              🔒 Nutrición forma parte de tu Player 360, pero tu cuenta todavía no tiene un jugador propio vinculado.
+              🔒 Nutrición forma parte de Player 360, pero esta cuenta todavía no tiene ${isFamily ? "un jugador vinculado" : "un jugador propio vinculado"}.
             </div>
           </section>`;
       }
@@ -50,12 +69,12 @@ export class PlayerNutritionRouterView {
       container.innerHTML = `
         <section style="max-width:760px;margin:0 auto;padding:18px;font-family:var(--font-family-base,system-ui);">
           <div style="padding:18px;border:1px solid #dbeafe;border-radius:14px;background:#eff6ff;color:#1e3a8a;font-weight:800;">
-            🥤 Abriendo Nutrición dentro de tu Player 360…
+            🥤 Abriendo Nutrición ${isFamily ? "del jugador vinculado" : "dentro de tu Player 360"}…
           </div>
         </section>`;
     }
 
-    const target = `#/player360/${encodeURIComponent(String(ownPlayerId))}`;
+    const target = `#/player360/${encodeURIComponent(String(subjectPlayerId))}`;
     if (window.location.hash !== target) window.location.hash = target;
   }
 }
