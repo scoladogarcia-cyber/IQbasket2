@@ -1,0 +1,36 @@
+name: Family links capture comparison V30
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "security/permissions.js"
+      - "services/LazyViewRegistry.js"
+      - "services/family/**"
+      - "services/games/**"
+      - "views/family/**"
+      - "views/games/**"
+      - "components/games/**"
+      - "supabase/migrations/20260907072*.sql"
+      - "tests/family-links-capture-comparison-v30-contract.mjs"
+      - ".github/workflows/family-links-capture-comparison-v30.yml"
+  push:
+    branches:
+      - "feat/family-links-capture-comparison-v30"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: V30 Family/capture contract
+        run: node tests/family-links-capture-comparison-v30-contract.mjs
+      - name: Build
+        run: npm ci && npm run build
