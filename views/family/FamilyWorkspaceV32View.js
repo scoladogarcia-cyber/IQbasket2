@@ -12,17 +12,27 @@ const esc = (value = "") => String(value ?? "")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const n = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 
+function recentGameRows(passport = {}) {
+  return (Array.isArray(passport.recent_games) ? passport.recent_games : [])
+    .filter(row => row && (row.date || row.game_id));
+}
+
+/** Presenter expects newest evidence first: recent window, then previous window. */
+function newestRecentGames(passport = {}) {
+  return [...recentGameRows(passport)]
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 12);
+}
+
+/** Charts read naturally left-to-right from oldest to newest. */
 function chronologicalRecentGames(passport = {}) {
-  const rows = Array.isArray(passport.recent_games) ? passport.recent_games : [];
-  return [...rows]
-    .filter(row => row && (row.date || row.game_id))
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-    .slice(-12);
+  return newestRecentGames(passport)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
 }
 
 export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
   _basicStory() {
-    const games = chronologicalRecentGames(this.state?.passport || {});
+    const games = newestRecentGames(this.state?.passport || {});
     if (!games.length) return null;
     return presentFamilyPlayer360({ recent_games: games });
   }
@@ -80,5 +90,5 @@ export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
   }
 }
 
-export { chronologicalRecentGames };
+export { newestRecentGames, chronologicalRecentGames };
 export default FamilyWorkspaceV32View;
