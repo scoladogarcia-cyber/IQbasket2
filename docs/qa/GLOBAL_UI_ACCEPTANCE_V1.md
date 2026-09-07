@@ -38,7 +38,21 @@ El gate reutiliza las pruebas existentes de aceptación para:
 - ENTRENADOR;
 - INVITADO.
 
-Se verifica visibilidad frente a mutación conforme a RBAC, manteniendo backend/RLS como autoridad final.
+La ampliación móvil añade cobertura explícita para:
+
+- JUGADOR;
+- FAMILIA_TUTOR.
+
+Se verifica visibilidad frente a mutación conforme a RBAC, manteniendo backend/RLS/ABAC como autoridad final.
+
+### Navegadores móviles
+
+La aceptación específica de JUGADOR y FAMILIA_TUTOR se ejecuta en:
+
+- Chromium;
+- WebKit (regresión equivalente al motor Safari/iPhone).
+
+Se comprueban navegación inferior, rutas propias/vinculadas, targets táctiles, drawer `Más`, scroll y geometría de las familias de modales utilizadas por los módulos lazy.
 
 ### Idiomas
 
@@ -77,12 +91,29 @@ El gate global ejecuta también las smokes existentes de:
 
 `styles/global.css` aplica reglas tipográficas a todos los `span`. Esto puede sobrescribir la escala visual definida por componentes compactos. No se cambia la regla global en esta fase por el riesgo de alterar toda la aplicación; se encapsula explícitamente el shell en `styles/layout.css` y se añade una regresión permanente.
 
+## Hallazgo WebKit 2026-09-07
+
+El nuevo gate WebKit reprodujo un fallo que Chromium no detectaba: el drawer `Más` quedaba formalmente abierto pero su panel conservaba parcialmente la transformación de entrada, dejando la mayor parte de las opciones fuera del viewport de 390×844.
+
+La corrección mantiene el overlay como única fuente de verdad de visibilidad (`display`, clases `open/is-visible` y `aria-hidden`) y elimina en móvil la segunda capa de visibilidad basada en `translateY` del panel. Se conserva el scroll vertical, safe-area y el límite por `100svh`.
+
+El mismo escenario pasa después de la corrección en Chromium y WebKit para JUGADOR y FAMILIA_TUTOR.
+
+## Verificación ABAC real de Nutrition/Recovery
+
+Además de los browser smokes con fixtures se ha verificado el backend productivo mediante transacciones con `ROLLBACK`, sin modificar datos reales:
+
+- SUPERADMIN: lectura/creación/edición/archivo de Nutrition y acceso a Recovery correctos; no se relajan las protecciones especiales de exportación o neurocognición.
+- JUGADOR: `PLAYER_SELF_SERVICE` permite leer, crear, editar y archivar Nutrition/Recovery para su jugador vinculado cuando existe autorización de tratamiento.
+- FAMILIA_TUTOR: la relación GUARDIAN está activa y verificada, pero la autorización de tratamiento actual del jugador incluye `SPORT_PERFORMANCE` y `PLAYER_SELF_SERVICE`, no `FAMILY_SUPPORT`; por ello Nutrition/Recovery sensible permanece denegado por ABAC. Es el comportamiento seguro esperado con la autorización actual y no debe solventarse ampliando permisos frontend.
+
 ## Criterio de salida
 
 V1 se considera cerrada cuando:
 
 - Global UI Shell QA = PASS;
 - Role Acceptance UI = PASS;
+- Mobile Role + WebKit QA = PASS en Chromium y WebKit;
 - Core User Flows = PASS;
 - Player 360 browser smokes = PASS;
 - Operations browser smokes = PASS;
@@ -90,4 +121,4 @@ V1 se considera cerrada cuando:
 
 ## Revalidación 2026-09-07
 
-Se relanza el gate completo desde `qa/global-ui-acceptance-v1` apuntando al `main` posterior a V30 (Family links, modos de captura y comparación). Este commit es únicamente documental y existe para disparar una regresión limpia sobre el estado productivo actual antes de introducir nuevas correcciones funcionales.
+Se relanza el gate completo desde `qa/global-ui-acceptance-v1` apuntando al `main` posterior a V30 (Family links, modos de captura y comparación). La regresión base resultó verde y la ampliación WebKit permitió detectar y corregir el problema de drawer descrito arriba. Este documento se actualiza al final de la corrección para disparar una última regresión completa sobre el estado que se propone fusionar a `main`.
