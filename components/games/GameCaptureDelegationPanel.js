@@ -12,8 +12,9 @@ import {
 } from "../../services/games/GameCaptureDelegationService.js";
 
 const LABELS = Object.freeze({
-  [Permission.RECORD_LIVE_GAME]: "Anotación en vivo",
-  [Permission.EDIT_BOXSCORE]: "Editar BoxScore",
+  [Permission.RECORD_LIVE_GAME]: "En vivo · Play-by-play",
+  [Permission.RECORD_QUICK_GAME]: "Marcación rápida",
+  [Permission.EDIT_BOXSCORE]: "Acta / BoxScore",
   [Permission.PREPARE_GAME]: "Preparar partido",
   [Permission.START_GAME]: "Iniciar partido",
   [Permission.FINISH_GAME]: "Finalizar partido"
@@ -121,10 +122,6 @@ export class GameCaptureDelegationPanel {
     return this.rows.filter(row => !activeIds.has(String(row.id)));
   }
 
-  /**
-   * V21 stores one row for every independent capability. Grouping is a presentation
-   * concern only: granular rows and auditability remain untouched in the database.
-   */
   _groupRows(rows = []) {
     const groups = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
@@ -163,6 +160,7 @@ export class GameCaptureDelegationPanel {
   _capabilityOptions() {
     const defaults = new Set([
       Permission.RECORD_LIVE_GAME,
+      Permission.RECORD_QUICK_GAME,
       Permission.EDIT_BOXSCORE,
       Permission.PREPARE_GAME,
       Permission.START_GAME,
@@ -211,7 +209,7 @@ export class GameCaptureDelegationPanel {
           <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px;">
             <div>
               <h2 id="delegation-title" style="margin:0;font-size:18px;font-weight:900;color:#0f172a;">Delegar captura de partido</h2>
-              <p style="margin:4px 0 0;font-size:12px;color:#64748b;">vs ${escapeHtml(this.activeGame.opponent || "Rival")} · acceso temporal sólo a este partido.</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#64748b;">vs ${escapeHtml(this.activeGame.opponent || "Rival")} · puedes conceder cada modo de captura por separado.</p>
             </div>
             <button type="button" id="btn-close-game-delegation" aria-label="Cerrar" style="border:0;background:#f1f5f9;border-radius:8px;min-width:44px;min-height:44px;font-size:18px;cursor:pointer;">✕</button>
           </div>
@@ -226,7 +224,7 @@ export class GameCaptureDelegationPanel {
               </label>
             </div>
             <div style="margin-top:12px;">
-              <span style="display:block;font-size:11px;font-weight:800;color:#475569;margin-bottom:6px;">CAPACIDADES</span>
+              <span style="display:block;font-size:11px;font-weight:800;color:#475569;margin-bottom:6px;">CAPACIDADES INDEPENDIENTES</span>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px;">${this._capabilityOptions()}</div>
             </div>
             <label style="display:block;margin-top:12px;font-size:11px;font-weight:800;color:#475569;">NOTA INTERNA
