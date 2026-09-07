@@ -9,8 +9,9 @@
 --   * Public endpoints remain callable only by authenticated users.
 --   * Public endpoints run as SECURITY INVOKER.
 --   * Only private implementation functions run as SECURITY DEFINER.
---   * Existing SUPERADMIN / ADMIN / team-scope checks are preserved verbatim.
---   * SUPERADMIN creation remains denied and the master identity stays protected.
+--   * Existing SUPERADMIN / ADMIN / team-scope authorization is preserved.
+--   * SUPERADMIN creation remains denied and privileged targets stay protected.
+--   * No identity, team or environment value is hardcoded in the V35 boundary.
 --   * No direct table grants are added and no UI/API signature changes are needed.
 -- =============================================================================
 
@@ -134,6 +135,7 @@ declare
   v_actor_role text;
   v_actor_teams uuid[];
   v_target_email text;
+  v_target_role text;
   v_target_teams uuid[];
   v_player_team uuid;
   v_is_super boolean := false;
@@ -156,15 +158,17 @@ begin
   from public.user_profiles up
   where up.id=auth.uid();
 
-  select lower(up.email), coalesce(up.assigned_team_ids,'{}'::uuid[])
-    into v_target_email, v_target_teams
+  select lower(up.email),
+         upper(coalesce(up.global_role,up.role,'USER')),
+         coalesce(up.assigned_team_ids,'{}'::uuid[])
+    into v_target_email, v_target_role, v_target_teams
   from public.user_profiles up
   where up.id=p_user_id;
 
   if v_target_email is null then
     raise exception 'ROLE_ASSIGNMENT_USER_NOT_FOUND';
   end if;
-  if v_target_email='scolado@nechigroup.com' then
+  if v_target_role='SUPERADMIN' then
     raise exception 'MASTER_IDENTITY_PROTECTED';
   end if;
   if v_role='SUPERADMIN' then
