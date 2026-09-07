@@ -7,7 +7,6 @@ const privateMigration = read("supabase/migrations/20260907180000_team_assignmen
 const publicMigration = read("supabase/migrations/20260907180100_team_assignment_security_boundary_v36_public.sql");
 const verifier = read("supabase/ready/20260907_verify_team_assignment_security_boundary_v36_readonly.sql");
 const settingsView = read("views/TranslationsView.js");
-const release = JSON.parse(read("release.json"));
 
 // Phase 1 must not replace the browser-visible API.
 assert.match(privateMigration, /create or replace function iq_v35_private\.set_user_team_assignments/i);
@@ -61,7 +60,5 @@ assert.match(verifier, /private_definer_ok/i);
 assert.match(verifier, /authorization_guards_ok/i);
 assert.match(verifier, /no_identity_hardcode_ok/i);
 
-assert.equal(release.release, "2026.09.07.19");
-assert.equal(release.label, "team-assignment-security-boundary-v36");
-
+// Historical contracts validate their boundary, not the current product release.
 console.log("TEAM_ASSIGNMENT_SECURITY_BOUNDARY_V36_CONTRACT_OK");
