@@ -1,8 +1,9 @@
 /**
  * @fileoverview Access-aware entry point for the Partidos route.
- * @description Users with normal team scope keep the full GameLiveEditorView.
- * Users whose only authority comes from V21 per-game delegation receive a
- * minimal delegated-game landing instead of team-wide game data.
+ * @description Users with a real team-season scope keep the full
+ * GameLiveEditorView. Users whose effective authority for the selected season
+ * comes only from V21 per-game delegation receive a minimal delegated-game
+ * landing instead of team-wide game data.
  */
 
 import { DataStore } from "../../services/DataStore.js";
@@ -26,25 +27,38 @@ export class GameAccessView {
     return this.fullView;
   }
 
-  _hasNormalTeamScope(teamId) {
-    if (!teamId) return false;
-    if (typeof this.auth?.canAccessTeam === "function") {
-      return Boolean(this.auth.canAccessTeam(teamId));
+  /**
+   * Distinguishes a real contextual team-season scope from legacy team-only
+   * compatibility. A stale `assigned_team_ids` entry must never mask a valid
+   * per-game delegation, otherwise delegated Family/guest users are routed to
+   * the team-wide editor and cannot see their assigned game.
+   */
+  _hasNormalTeamSeasonScope(teamId, teamSeasonId = null) {
+    if (!teamId || typeof this.auth?.canAccessTeam !== "function") return false;
+    if (!this.auth.canAccessTeam(teamId)) return false;
+
+    if (teamSeasonId && typeof this.auth?.canAccessTeamSeason === "function") {
+      return Boolean(this.auth.canAccessTeamSeason(teamSeasonId));
     }
-    return false;
+
+    // Compatibility for old contexts that genuinely do not expose a
+    // team-season identifier. Modern routes should normally resolve one.
+    return true;
   }
 
   async render(containerId = "dashboard-content-area", gameId = null, teamId = null) {
     const resolvedTeamId = teamId || DataStore.getActiveTeamId?.() || null;
+    const resolvedTeamSeasonId = DataStore.getActiveTeamSeasonId?.() || null;
 
     // A specific game opened through the team editor keeps the historical path.
-    // Delegated capture and BoxScore use their dedicated /live/:id and /boxscore/:id routes.
+    // Delegated capture and BoxScore use their dedicated /live/:id and
+    // /boxscore/:id routes, where V21/V28 enforce resource-level authority.
     if (gameId) {
       const view = await this._fullView();
       return view.render(containerId, gameId, resolvedTeamId);
     }
 
-    if (!this._hasNormalTeamScope(resolvedTeamId)) {
+    if (!this._hasNormalTeamSeasonScope(resolvedTeamId, resolvedTeamSeasonId)) {
       let delegations = [];
       try {
         delegations = await this.delegationService.getMyDelegations();
