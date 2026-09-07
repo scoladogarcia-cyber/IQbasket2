@@ -87,3 +87,7 @@ V1 se considera cerrada cuando:
 - Player 360 browser smokes = PASS;
 - Operations browser smokes = PASS;
 - no se detectan regresiones visuales o de permisos en desktop/tablet/iPhone.
+
+## Revalidación 2026-09-07
+
+Se relanza el gate completo desde `qa/global-ui-acceptance-v1` apuntando al `main` posterior a V30 (Family links, modos de captura y comparación). Este commit es únicamente documental y existe para disparar una regresión limpia sobre el estado productivo actual antes de introducir nuevas correcciones funcionales.
