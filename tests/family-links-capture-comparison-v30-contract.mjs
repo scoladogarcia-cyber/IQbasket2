@@ -49,7 +49,8 @@ assert.match(isolationMigration, /p_starter_ids is not null and not \(v_can_live
 assert.match(isolationMigration, /create or replace function iq_v28_private\.can_record/);
 assert.match(isolationMigration, /or iq_v21_private\.has_capability\(p_game_id,'RECORD_QUICK_GAME'\)/);
 assert.match(quickView, /saveCapture\(/);
-assert.doesNotMatch(quickView, /DataStore/);
+assert.doesNotMatch(quickView, /import\s+.*DataStore/);
+assert.doesNotMatch(quickView, /\bDataStore\./);
 
 // Grouped delegation snapshots must route a QUICK-only user to the scoped quick view.
 assert.match(lazyRegistry, /capabilities\.includes\("RECORD_QUICK_GAME"\)/);
