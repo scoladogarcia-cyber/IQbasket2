@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { PermissionService, Permission, UserRole } from "../security/PermissionService.js";
 import { ReportAccessPolicy, ReportType } from "../security/ReportAccessPolicy.js";
-import { ReportExporter } from "../services/ReportExporter.js";
 
 const TEAM_ID = "11111111-1111-4111-8111-111111111111";
 const TEAM_SEASON_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -72,23 +71,22 @@ const sanitized = playerPolicy.sanitizeDossierConfig({
 assert.deepEqual(sanitized.authorizedPlayerIds, [OWN_PLAYER]);
 assert.deepEqual(sanitized.config.selectedPlayerIds, [OWN_PLAYER]);
 
-// Exporter itself fails closed: view-level button checks are never sufficient.
-globalThis.alert = () => {};
-assert.equal(ReportExporter.printReport("forbidden", "<p>secret</p>"), false);
-assert.equal(ReportExporter.withAuthorization({ allowed: true }, () => "AUTHORIZED_EXPORT_CONTEXT"), "AUTHORIZED_EXPORT_CONTEXT");
-
-// Contract: V37 keeps the proven V36 implementation and adds a distinct evolution mode.
+// Static browser-boundary contract: ReportExporter cannot be imported in bare Node
+// because the browser data layer intentionally uses the Supabase ESM URL.
 const viewSource = fs.readFileSync("views/ReportsView.js", "utf8");
 const exporterSource = fs.readFileSync("services/ReportExporter.js", "utf8");
 const migrationSource = fs.readFileSync("supabase/migrations/20260907190000_restore_demo_invited_scope_v37.sql", "utf8");
 assert.match(viewSource, /ReportsViewLegacyV36/);
 assert.match(viewSource, /ReportAccessPolicy/);
-assert.match(viewSource, /data-mode = "evolution"|dataset\.mode = "evolution"/);
+assert.match(viewSource, /dataset\.mode = "evolution"/);
 assert.match(viewSource, /PLAYER_EVOLUTION/);
 assert.match(viewSource, /sanitizeDossierConfig/);
-assert.match(exporterSource, /REPORT_EXPORT_DENIED|REPORT_SCOPE_DENIED|falta autorización de recurso/);
+assert.match(viewSource, /ReportExporter\.withAuthorization/);
+assert.match(exporterSource, /static _activeAuthorization = null/);
+assert.match(exporterSource, /if \(!authorization\?\.allowed\)/);
 assert.match(exporterSource, /withAuthorization/);
-assert.match(migrationSource, /function_role\) <> 'INVITADO'|upper\(function_role\) <> 'INVITADO'/i);
+assert.match(exporterSource, /falta autorización de recurso/);
+assert.match(migrationSource, /upper\(function_role\) <> 'INVITADO'/i);
 assert.match(migrationSource, /status = 'ACTIVE'/i);
 
 console.log("REPORT_ACCESS_V37_CONTRACT_OK");
