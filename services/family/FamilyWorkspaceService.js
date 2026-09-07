@@ -72,16 +72,24 @@ export class FamilyWorkspaceService {
 
   claimLink(claimCode) {
     requireValue(claimCode, "claimCode");
-    return rpc(this.supabase, "iq_v8_family_claim_link", {
-      p_claim_code: String(claimCode).trim()
-    });
+    const params = { p_claim_code: String(claimCode).trim() };
+    return progressiveRpc(
+      this.supabase,
+      "iq_v34_family_claim_link",
+      "iq_v8_family_claim_link",
+      params
+    );
   }
 
   bootstrapFree(playerId) {
     requireValue(playerId, "playerId");
-    return rpc(this.supabase, "iq_v8_family_bootstrap_free", {
-      p_player_id: playerId
-    });
+    const params = { p_player_id: playerId };
+    return progressiveRpc(
+      this.supabase,
+      "iq_v34_family_bootstrap_free",
+      "iq_v8_family_bootstrap_free",
+      params
+    );
   }
 
   getProductSnapshot(playerId) {
