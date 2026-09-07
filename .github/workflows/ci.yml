@@ -163,6 +163,9 @@ jobs:
       - name: Family guardian submissions V1
         run: node tests/family-guardian-submissions-v1-contract.mjs
 
+      - name: Family runtime data V32 contract
+        run: node tests/family-runtime-data-v32-contract.mjs
+
       - name: Early adopter feedback V1
         run: node tests/early-adopter-feedback-v1-contract.mjs
 

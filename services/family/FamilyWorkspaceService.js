@@ -23,6 +23,20 @@ async function rpc(client, name, params = {}) {
   return data;
 }
 
+function missingRpc(error, rpcName) {
+  const message = String(error?.message || "");
+  return error?.code === "PGRST202" || message.includes(rpcName);
+}
+
+async function progressiveRpc(client, preferredName, fallbackName, params = {}) {
+  try {
+    return await rpc(client, preferredName, params);
+  } catch (error) {
+    if (!fallbackName || !missingRpc(error, preferredName)) throw error;
+    return rpc(client, fallbackName, params);
+  }
+}
+
 function normalizePlayerScopeRow(row = {}) {
   const player = row?.player || {};
   const context = row?.latest_context || {};
@@ -46,7 +60,11 @@ export class FamilyWorkspaceService {
   }
 
   async listPlayers() {
-    const rows = await rpc(this.supabase, "iq_v8_family_list_players");
+    const rows = await progressiveRpc(
+      this.supabase,
+      "iq_v32_family_list_players",
+      "iq_v8_family_list_players"
+    );
     return (Array.isArray(rows) ? rows : [])
       .map(normalizePlayerScopeRow)
       .filter(row => row.player_id);
@@ -75,17 +93,25 @@ export class FamilyWorkspaceService {
 
   getPassport(playerId) {
     requireValue(playerId, "playerId");
-    return rpc(this.supabase, "iq_v8_family_player_passport", {
-      p_player_id: playerId
-    });
+    return progressiveRpc(
+      this.supabase,
+      "iq_v32_family_player_passport",
+      "iq_v8_family_player_passport",
+      { p_player_id: playerId }
+    );
   }
 
   getPlayer360Snapshot(playerId, teamSeasonId = null) {
     requireValue(playerId, "playerId");
-    return rpc(this.supabase, "iq_v8_family_player360_snapshot", {
-      p_player_id: playerId,
-      p_team_season_id: teamSeasonId || null
-    });
+    return progressiveRpc(
+      this.supabase,
+      "iq_v32_family_player360_snapshot",
+      "iq_v8_family_player360_snapshot",
+      {
+        p_player_id: playerId,
+        p_team_season_id: teamSeasonId || null
+      }
+    );
   }
 
   getDevelopmentContext(playerId, teamSeasonId = null) {

@@ -9,10 +9,25 @@ import { GameLiveEditorView } from "../GameLiveEditorView.js";
 
 function modeButtonStyle(kind = "quick") {
   const styles = {
+    live: "background:#1e3a8a;color:#fff;border:1px solid #1e3a8a;",
     quick: "background:#fff7ed;color:#9a3412;border:1px solid #fdba74;",
     scope: "background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;"
   };
   return `${styles[kind] || styles.quick}padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;`;
+}
+
+function boxScoreButtonOf(card) {
+  return [...card.querySelectorAll("button,a")].find(node => {
+    const route = `${node.getAttribute("href") || ""} ${node.getAttribute("onclick") || ""}`;
+    return route.includes("#/boxscore/");
+  }) || null;
+}
+
+function gameIdFromBoxScore(node) {
+  if (!node) return null;
+  const route = `${node.getAttribute("href") || ""} ${node.getAttribute("onclick") || ""}`;
+  const match = route.match(/#\/boxscore\/([0-9a-f-]{36})/i);
+  return match?.[1] || null;
 }
 
 export class GameCaptureModesView extends GameLiveEditorView {
@@ -33,8 +48,11 @@ export class GameCaptureModesView extends GameLiveEditorView {
   _decorateCaptureModes(container, teamId) {
     container.querySelectorAll(".game-item-card").forEach(card => {
       const editButton = card.querySelector(".btn-open-court-direct[data-id]");
+      const existingLiveButton = card.querySelector(".btn-live-existing-game[data-id]");
+      const boxScoreButton = boxScoreButtonOf(card);
       const gameId = editButton?.dataset.id
-        || card.querySelector(".btn-live-existing-game[data-id]")?.dataset.id
+        || existingLiveButton?.dataset.id
+        || gameIdFromBoxScore(boxScoreButton)
         || null;
       const game = this.games.find(row => String(row.id) === String(gameId));
       if (!game) return;
@@ -45,7 +63,10 @@ export class GameCaptureModesView extends GameLiveEditorView {
       const canQuick = !locked && this._can(Permission.RECORD_QUICK_GAME, game);
       const canActa = !locked && this._can(Permission.EDIT_BOXSCORE, game);
       const hasCaptureScope = canLive || canQuick || canActa;
-      const actions = editButton?.parentElement || card.querySelector(".btn-live-existing-game")?.parentElement;
+      const actions = editButton?.parentElement
+        || existingLiveButton?.parentElement
+        || boxScoreButton?.parentElement
+        || null;
       if (!actions) return;
 
       // Broad metadata/game editing is deliberately not implied by capture access.
@@ -53,19 +74,24 @@ export class GameCaptureModesView extends GameLiveEditorView {
       // by Family users while preserving it for staff who really can edit a game.
       if (editButton && !canEditGame) editButton.remove();
 
-      const liveButton = actions.querySelector(".btn-live-existing-game");
-      if (liveButton) {
-        if (canLive) {
+      let liveButton = actions.querySelector(".btn-live-existing-game");
+      if (canLive) {
+        if (liveButton) {
           liveButton.textContent = "⚡ Anotación en vivo";
           liveButton.removeAttribute("disabled");
         } else {
-          liveButton.remove();
+          liveButton = document.createElement("a");
+          liveButton.href = `#/live/${encodeURIComponent(String(game.id))}`;
+          liveButton.dataset.liveCaptureId = String(game.id);
+          liveButton.setAttribute("style", modeButtonStyle("live"));
+          liveButton.textContent = "⚡ Anotación en vivo";
+          if (boxScoreButton) actions.insertBefore(liveButton, boxScoreButton);
+          else actions.prepend(liveButton);
         }
+      } else if (liveButton) {
+        liveButton.remove();
       }
 
-      const boxScoreButton = [...actions.querySelectorAll("button")].find(button =>
-        String(button.getAttribute("onclick") || "").includes("#/boxscore/")
-      );
       if (boxScoreButton) {
         boxScoreButton.textContent = canActa ? "📋 Acta / BoxScore" : "📋 BoxScore";
       }

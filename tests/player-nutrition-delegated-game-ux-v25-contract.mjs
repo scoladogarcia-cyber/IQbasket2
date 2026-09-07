@@ -65,7 +65,10 @@ assert.match(delegatedGames, /#\/boxscore\/\$\{encodeURIComponent\(gameId\)\}/);
 assert.doesNotMatch(delegatedGames, /\.from\(/);
 assert.doesNotMatch(delegatedGames, /user_player_links|family_player_links|linkedPlayerIds/);
 assert.match(nutritionRouter, /UserRole\.JUGADOR/);
-assert.match(nutritionRouter, /#\/player360\/\$\{encodeURIComponent/);
+assert.match(nutritionRouter, /UserRole\.FAMILIA_TUTOR/);
+assert.match(nutritionRouter, /view\.activeTab = "wellness"/);
+assert.match(nutritionRouter, /return view\.render\(containerId, subjectPlayerId, teamId\)/);
+assert.doesNotMatch(nutritionRouter, /window\.location\.hash\s*=\s*target/);
 
 const submissionPanel = new PlayerSubmissionPanel({ service: {} });
 const correctionHtml = submissionPanel._wellnessCorrectionEditor({

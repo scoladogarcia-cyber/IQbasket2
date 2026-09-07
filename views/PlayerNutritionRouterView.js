@@ -1,8 +1,9 @@
 /**
  * @fileoverview Subject-aware entry point for the general Nutrition navigation item.
  * @description Player and Family never enter the team-level nutrition selector:
- * the route resolves to the authorized Player 360 subject. Staff keeps the
- * existing NutritionView. Backend privacy/RLS remains authoritative.
+ * the route resolves to the authorized Player 360 subject and opens the Wellness
+ * tab directly. Staff keeps the existing NutritionView. Backend privacy/RLS
+ * remains authoritative.
  */
 
 import { UserRole } from "../security/roles.js";
@@ -12,6 +13,7 @@ export class PlayerNutritionRouterView {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
     this.staffView = staffView;
+    this.subjectView = null;
   }
 
   _subjectPlayerId(requestedPlayerId = null, role = null) {
@@ -38,6 +40,13 @@ export class PlayerNutritionRouterView {
     const { NutritionView } = await import("./NutritionView.js");
     this.staffView = new NutritionView(this.supabase, this.auth);
     return this.staffView;
+  }
+
+  async _subjectView() {
+    if (this.subjectView) return this.subjectView;
+    const { Player360View } = await import("./Player360View.js");
+    this.subjectView = new Player360View(this.supabase, this.auth);
+    return this.subjectView;
   }
 
   async render(containerId = "dashboard-content-area", playerId = null, teamId = null) {
@@ -74,8 +83,12 @@ export class PlayerNutritionRouterView {
         </section>`;
     }
 
-    const target = `#/player360/${encodeURIComponent(String(subjectPlayerId))}`;
-    if (window.location.hash !== target) window.location.hash = target;
+    // Do not redirect to the generic Player360 route: that route selects the
+    // first available tab and previously landed Family on "Plan semanal". The
+    // Nutrition navigation must deterministically render Wellness.
+    const view = await this._subjectView();
+    view.activeTab = "wellness";
+    return view.render(containerId, subjectPlayerId, teamId);
   }
 }
 
