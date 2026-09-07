@@ -44,7 +44,8 @@ for (const guard of [
 assert.match(migration, /from public\.roster_memberships rm[\s\S]*join public\.team_seasons ts/i);
 assert.match(migration, /rm\.team_season_id=p_team_season_id/i);
 assert.match(migration, /v_target_teams && v_actor_teams/i);
-assert.match(migration, /v_target_email='scolado@nechigroup\.com'/i);
+assert.match(migration, /v_target_role='SUPERADMIN'[\s\S]*MASTER_IDENTITY_PROTECTED/i);
+assert.doesNotMatch(migration, /scolado@nechigroup\.com/i);
 
 // Browser-visible signatures stay compatible; UI must not be rewritten around DB security.
 assert.match(settingsView, /rpc\("iq_v7_assign_user_role_context"/);
