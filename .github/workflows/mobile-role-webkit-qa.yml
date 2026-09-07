@@ -1,0 +1,85 @@
+name: Mobile Role + WebKit QA
+
+on:
+  push:
+    branches:
+      - qa/global-ui-acceptance-v1
+    paths:
+      - "index.html"
+      - "index.js"
+      - "views/**"
+      - "styles/**"
+      - "security/**"
+      - "services/**"
+      - "tests/mobile-role-webkit-ui-smoke.mjs"
+      - ".github/workflows/mobile-role-webkit-qa.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "index.js"
+      - "views/**"
+      - "styles/**"
+      - "security/**"
+      - "services/**"
+      - "tests/mobile-role-webkit-ui-smoke.mjs"
+      - ".github/workflows/mobile-role-webkit-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-role-webkit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GLOBAL_UI_QA_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  mobile-role-browser:
+    name: iPhone roles · ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install app
+        run: npm ci
+
+      - name: Install Playwright browser without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/mobile-role-${{ matrix.browser }}-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$GLOBAL_UI_QA_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mobile-role-${{ matrix.browser }}-vite.log
+          exit 1
+
+      - name: Player and Family mobile acceptance
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/mobile-role-webkit-ui-smoke.mjs
+
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/mobile-role-${{ matrix.browser }}-vite.log || true
