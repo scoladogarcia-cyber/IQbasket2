@@ -1,0 +1,29 @@
+/**
+ * @fileoverview WebKit-safe geometry for the mobile "Más" drawer.
+ *
+ * LayoutView already owns visibility through the overlay display/open state.
+ * Keeping a second visibility mechanism on the sheet itself (translateY)
+ * caused Safari/WebKit to retain an intermediate transformed position after
+ * opening, leaving most actions outside the visual viewport. On mobile the
+ * drawer therefore stays in normal flex flow and the overlay is the single
+ * source of truth for visibility.
+ */
+
+@media (max-width: 767px) {
+  html body .mobile-drawer-overlay {
+    max-height: 100svh !important;
+  }
+
+  html body .mobile-drawer-overlay .mobile-drawer-content {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-height: calc(100svh - max(12px, env(safe-area-inset-top, 0px))) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
