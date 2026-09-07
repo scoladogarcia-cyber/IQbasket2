@@ -91,14 +91,21 @@ export class FamilyWorkspaceService {
     });
   }
 
-  getPassport(playerId) {
+  async getPassport(playerId) {
     requireValue(playerId, "playerId");
-    return progressiveRpc(
-      this.supabase,
-      "iq_v32_family_player_passport",
-      "iq_v8_family_player_passport",
-      { p_player_id: playerId }
-    );
+    const params = { p_player_id: playerId };
+    try {
+      return await progressiveRpc(
+        this.supabase,
+        "iq_v33_family_player_passport",
+        "iq_v32_family_player_passport",
+        params
+      );
+    } catch (error) {
+      // Compatibilidad para entornos que todavía no hayan recibido V32/V33.
+      if (!missingRpc(error, "iq_v32_family_player_passport")) throw error;
+      return rpc(this.supabase, "iq_v8_family_player_passport", params);
+    }
   }
 
   getPlayer360Snapshot(playerId, teamSeasonId = null) {
