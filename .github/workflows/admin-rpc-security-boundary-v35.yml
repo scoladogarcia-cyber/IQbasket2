@@ -8,7 +8,6 @@ on:
       - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
       - "tests/admin-rpc-security-boundary-v35-contract.mjs"
       - "views/TranslationsView.js"
-      - "release.json"
       - ".github/workflows/admin-rpc-security-boundary-v35.yml"
   push:
     branches: [main]
@@ -18,7 +17,6 @@ on:
       - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
       - "tests/admin-rpc-security-boundary-v35-contract.mjs"
       - "views/TranslationsView.js"
-      - "release.json"
       - ".github/workflows/admin-rpc-security-boundary-v35.yml"
 
 jobs:
