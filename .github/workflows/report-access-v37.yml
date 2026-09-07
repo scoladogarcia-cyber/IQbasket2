@@ -1,0 +1,42 @@
+name: Report Access + Demo Readonly V37
+
+on:
+  push:
+    branches:
+      - "fix/demo-readonly-reports-v37"
+    paths:
+      - "views/ReportsView.js"
+      - "views/ReportsViewLegacyV36.js"
+      - "views/reports/PlayerEvolutionReportRenderer.js"
+      - "services/ReportExporter.js"
+      - "security/ReportAccessPolicy.js"
+      - "tests/report-access-v37-contract.mjs"
+      - "supabase/migrations/20260907190000_restore_demo_invited_scope_v37.sql"
+      - "supabase/ready/20260907_verify_demo_invited_scope_v37_readonly.sql"
+      - ".github/workflows/report-access-v37.yml"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Report access V37 contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Report/resource authorization contract
+        run: node tests/report-access-v37-contract.mjs
+      - name: Production bundle build
+        run: npm run build
