@@ -34,6 +34,21 @@ export class GameAccessView {
     return false;
   }
 
+  _isUnlinkedFamily() {
+    const user = this.auth?.getCurrentUser?.() || null;
+    const role = String(
+      this.auth?.getAuthenticatedRole?.()
+      || user?.role
+      || ""
+    ).trim().toUpperCase();
+    if (role !== "FAMILIA_TUTOR") return false;
+
+    const linkedIds = Array.isArray(user?.linkedPlayerIds)
+      ? user.linkedPlayerIds.filter(Boolean)
+      : [];
+    return linkedIds.length === 0 && !user?.playerId && !user?.linked_player_id;
+  }
+
   async render(containerId = "dashboard-content-area", gameId = null, teamId = null) {
     const resolvedTeamId = teamId || DataStore.getActiveTeamId?.() || null;
 
@@ -44,7 +59,10 @@ export class GameAccessView {
       return view.render(containerId, gameId, resolvedTeamId);
     }
 
-    if (!this._hasNormalTeamScope(resolvedTeamId)) {
+    // Family without a linked player never inherits team-wide read authority from
+    // a stale legacy team assignment. A valid game delegation remains sufficient
+    // to enter Partidos, but only through the delegated-game projection.
+    if (this._isUnlinkedFamily() || !this._hasNormalTeamScope(resolvedTeamId)) {
       let delegations = [];
       try {
         delegations = await this.delegationService.getMyDelegations();
