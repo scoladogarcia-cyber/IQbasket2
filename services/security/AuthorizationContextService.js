@@ -5,7 +5,9 @@
  *
  * Durante la transición:
  * - team_season_memberships es la fuente v3 para alcance contextual;
- * - assigned_team_ids y linked_player_id se conservan como compatibilidad;
+ * - Family usa V17 como autoridad de alcance cuando está disponible;
+ * - assigned_team_ids se conserva como compatibilidad para perfiles legacy,
+ *   pero nunca amplía por sí solo el alcance de una familia sin jugador;
  * - no cambia todavía el rol funcional usado por ROLE_PERMISSIONS.
  */
 
@@ -54,12 +56,13 @@ export class AuthorizationContextService {
   async enrichProfile(profile = {}) {
     if (!this.supabase || !profile?.id) return profile;
 
+    const familyProfile = isFamilyProfile(profile);
     const legacyTeamIds = arrayish(profile.assigned_team_ids ?? profile.allowedTeamIds);
     const legacyLinkedPlayerIds = profile.linked_player_id
       ? [profile.linked_player_id]
       : [];
 
-    const familyScopePromise = isFamilyProfile(profile)
+    const familyScopePromise = familyProfile
       ? this.supabase.rpc("iq_v17_family_authorization_scope")
       : Promise.resolve({ data: null, error: null });
 
@@ -140,6 +143,18 @@ export class AuthorizationContextService {
       ...arrayish(profile.allowed_season_ids)
     ];
 
+    // Once the V17 Family scope is available, a legacy team assignment must not
+    // become an independent privacy grant. We retain it only for an old Family
+    // profile that still has a legacy linked_player_id and has not yet been
+    // migrated to a V17 guardian relation.
+    const allowLegacyFamilyTeamFallback = familyProfile
+      && familyScope
+      && legacyLinkedPlayerIds.length > 0
+      && familyLinkedPlayerIds.length === 0;
+    const authoritativeLegacyTeamIds = familyProfile && familyScope && !allowLegacyFamilyTeamFallback
+      ? []
+      : legacyTeamIds;
+
     let gameDelegations = [];
     try {
       gameDelegations = await this.gameCaptureDelegationService.getMyDelegations();
@@ -149,7 +164,7 @@ export class AuthorizationContextService {
 
     return {
       ...profile,
-      allowedTeamIds: uniqueStrings([...legacyTeamIds, ...v3TeamIds, ...familyTeamIds]),
+      allowedTeamIds: uniqueStrings([...authoritativeLegacyTeamIds, ...v3TeamIds, ...familyTeamIds]),
       allowedSeasonIds: uniqueStrings([...legacyAllowedSeasonIds, ...familyGlobalSeasonIds]),
       allowedTeamSeasonIds: uniqueStrings([...teamSeasonIds, ...familyTeamSeasonIds]),
       allowedGlobalSeasonIds: uniqueStrings([...globalSeasonIds, ...familyGlobalSeasonIds]),
