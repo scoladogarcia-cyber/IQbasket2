@@ -1,4 +1,6 @@
 -- IQBasket V34 · read-only post-apply verification
+-- SECURITY INVOKER is PostgreSQL's default and pg_get_functiondef() may omit
+-- the explicit clause. Check pg_proc.prosecdef instead: false = invoker.
 select
   exists(select 1 from information_schema.columns where table_schema='public' and table_name='user_profiles' and column_name='player_show_other_player_names' and data_type='boolean' and is_nullable='NO') as player_names_pref_ok,
   exists(select 1 from information_schema.columns where table_schema='public' and table_name='user_profiles' and column_name='player_show_other_player_jerseys' and data_type='boolean' and is_nullable='NO') as player_jerseys_pref_ok,
@@ -13,8 +15,8 @@ select
   not has_function_privilege('anon','public.iq_v34_family_bootstrap_free(uuid)','EXECUTE') as anon_family_denied_ok,
   has_function_privilege('authenticated','public.iq_v34_my_player_identity_preferences(uuid)','EXECUTE') as authenticated_player_execute_ok,
   not has_function_privilege('anon','public.iq_v34_my_player_identity_preferences(uuid)','EXECUTE') as anon_player_denied_ok,
-  pg_get_functiondef('public.iq_v34_family_bootstrap_free(uuid)'::regprocedure) ilike '%security invoker%' as public_family_invoker_ok,
-  pg_get_functiondef('public.iq_v34_save_player_profile_config(text,uuid,boolean,boolean)'::regprocedure) ilike '%security invoker%' as public_player_save_invoker_ok,
+  not (select p.prosecdef from pg_proc p where p.oid='public.iq_v34_family_bootstrap_free(uuid)'::regprocedure) as public_family_invoker_ok,
+  not (select p.prosecdef from pg_proc p where p.oid='public.iq_v34_save_player_profile_config(text,uuid,boolean,boolean)'::regprocedure) as public_player_save_invoker_ok,
   not exists (
     select 1
     from public.saas_billing_accounts a
