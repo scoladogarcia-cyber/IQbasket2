@@ -93,11 +93,13 @@ function hasActiveQuickDelegation(authController, gameId) {
   const now = Date.now();
   return (user?.gameDelegations || []).some(item => {
     const id = item.gameId || item.game_id;
-    const capability = String(item.capability || "").toUpperCase();
+    const capabilities = Array.isArray(item.capabilities)
+      ? item.capabilities.map(value => String(value || "").toUpperCase())
+      : [String(item.capability || "").toUpperCase()].filter(Boolean);
     const until = Date.parse(item.validUntil || item.valid_until || "");
     const from = Date.parse(item.validFrom || item.valid_from || "");
     return String(id) === String(gameId)
-      && capability === "RECORD_QUICK_GAME"
+      && capabilities.includes("RECORD_QUICK_GAME")
       && (!Number.isFinite(from) || from <= now)
       && (!Number.isFinite(until) || until > now);
   });
