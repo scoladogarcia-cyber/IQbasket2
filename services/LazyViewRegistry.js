@@ -86,6 +86,33 @@ const SINGLETON_LOADERS = Object.freeze({
 });
 
 const ALIASES = Object.freeze({ equipo: "team", perfil: "profile" });
+const QUICK_CAPTURE_ROUTES = new Set(["easy-entry", "easy", "entrada-facil", "live-entry"]);
+
+function currentHashRoute() {
+  if (typeof window === "undefined") return "";
+  return String(window.location?.hash || "")
+    .replace(/^#\//, "")
+    .split("/")[0]
+    .toLowerCase();
+}
+
+/**
+ * Evita el flash blanco del primer acceso a Partidos mientras se descarga la
+ * vista lazy. No afecta a navegación ni permisos: es únicamente feedback UX.
+ */
+function showLazyRouteLoading(canonical) {
+  if (canonical !== "liveeditor" || typeof document === "undefined") return;
+  const container = document.getElementById("dashboard-content-area");
+  if (!container) return;
+  container.innerHTML = `
+    <div role="status" aria-live="polite" style="min-height:220px;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 18px;color:#475569;box-shadow:0 4px 16px rgba(15,23,42,.04);">
+        <span aria-hidden="true" style="width:22px;height:22px;border:3px solid #e2e8f0;border-top-color:#f97316;border-radius:50%;animation:iq-lazy-spin .8s linear infinite"></span>
+        <strong style="font-size:13px">Cargando partidos…</strong>
+      </div>
+      <style>@keyframes iq-lazy-spin{to{transform:rotate(360deg)}}</style>
+    </div>`;
+}
 
 function hasActiveQuickDelegation(authController, gameId) {
   if (!gameId) return false;
@@ -106,13 +133,36 @@ function hasActiveQuickDelegation(authController, gameId) {
 }
 
 const FACTORY_LOADERS = Object.freeze({
-  livehud: async ({ supabase, authController }, { gameId = null } = {}) => {
-    const [{ LiveScoreHUDView }, { attachLiveWriterLease }] = await Promise.all([
+  livehud: async (dependencies, { gameId = null } = {}) => {
+    // index.js mantiene aliases históricos agrupados. Si la URL es una ruta de
+    // captura rápida, resolvemos aquí el factory correcto para no abrir el HUD Pro.
+    if (QUICK_CAPTURE_ROUTES.has(currentHashRoute())) {
+      return FACTORY_LOADERS.easyentry(dependencies, { gameId });
+    }
+
+    const { supabase, authController } = dependencies;
+    const [
+      { LiveScoreHUDView },
+      { attachLiveWriterLease },
+      { GameCaptureDelegationService },
+      { GamePlayStateService }
+    ] = await Promise.all([
       import("../views/LiveScoreHUDView.js"),
-      import("../features/game-live/LiveWriterLeaseController.js")
+      import("../features/game-live/LiveWriterLeaseController.js"),
+      import("./games/GameCaptureDelegationService.js"),
+      import("./games/GamePlayStateService.js")
     ]);
+
+    const runtimeClient = supabase || authController?.supabase || null;
     const view = new LiveScoreHUDView(authController, gameId);
-    return attachLiveWriterLease(view, supabase || authController?.supabase || null, gameId);
+
+    // LiveScoreHUDView nació antes de la inyección explícita del cliente de datos.
+    // El factory es la frontera de composición: aquí sustituimos sus servicios por
+    // instancias correctamente cableadas sin ampliar permisos ni mutar el RBAC.
+    view.captureService = new GameCaptureDelegationService(runtimeClient);
+    view.playStateService = new GamePlayStateService(runtimeClient);
+
+    return attachLiveWriterLease(view, runtimeClient, gameId);
   },
   easyentry: async ({ supabase, gameController, authController, i18n }, { gameId = null } = {}) => {
     if (hasActiveQuickDelegation(authController, gameId)) {
@@ -139,6 +189,7 @@ export class LazyViewRegistry {
     if (this.pending.has(canonical)) return this.pending.get(canonical);
     const loader = SINGLETON_LOADERS[canonical];
     if (!loader) throw new Error(`UNKNOWN_LAZY_VIEW:${canonical}`);
+    showLazyRouteLoading(canonical);
     const promise = loader(this.dependencies)
       .then(view => {
         this.target[canonical] = view;
