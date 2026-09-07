@@ -8,8 +8,9 @@ import { Permission } from "../../security/permissions.js";
 import { GameCaptureDelegationService } from "../../services/games/GameCaptureDelegationService.js";
 
 const CAPABILITY_LABELS = Object.freeze({
-  [Permission.RECORD_LIVE_GAME]: "Anotación en vivo",
-  [Permission.EDIT_BOXSCORE]: "Editar BoxScore",
+  [Permission.RECORD_LIVE_GAME]: "Partido en vivo · Play-by-play",
+  [Permission.RECORD_QUICK_GAME]: "Marcación rápida",
+  [Permission.EDIT_BOXSCORE]: "Acta / BoxScore",
   [Permission.PREPARE_GAME]: "Preparar partido",
   [Permission.START_GAME]: "Iniciar partido",
   [Permission.FINISH_GAME]: "Finalizar partido"
@@ -53,7 +54,8 @@ export class DelegatedGamesView {
     const capabilities = capabilitiesOf(row);
     const gameId = String(row.game_id || row.gameId || "");
     const locked = String(row.edit_state || row.editState || "OPEN").toUpperCase() === "LOCKED";
-    const canCapture = capabilities.includes(Permission.RECORD_LIVE_GAME) && !locked;
+    const canLive = capabilities.includes(Permission.RECORD_LIVE_GAME) && !locked;
+    const canQuick = capabilities.includes(Permission.RECORD_QUICK_GAME) && !locked;
     const canBoxScore = capabilities.includes(Permission.EDIT_BOXSCORE);
     const labels = capabilities
       .map(capability => CAPABILITY_LABELS[capability] || capability)
@@ -72,9 +74,10 @@ export class DelegatedGamesView {
         </div>
         <div class="dg-caps">${labels}</div>
         <div class="dg-actions">
-          ${canCapture ? `<a href="#/live/${encodeURIComponent(gameId)}" class="dg-primary">⚡ Abrir captura</a>` : ""}
-          ${canBoxScore ? `<a href="#/boxscore/${encodeURIComponent(gameId)}" class="dg-secondary">📋 ${locked ? "Ver" : "Editar"} BoxScore</a>` : ""}
-          ${!canCapture && !canBoxScore ? `<span class="dg-no-action">Las acciones delegadas estarán disponibles dentro del flujo autorizado del partido.</span>` : ""}
+          ${canLive ? `<a href="#/live/${encodeURIComponent(gameId)}" class="dg-primary">⚡ En vivo · Play-by-play</a>` : ""}
+          ${canQuick ? `<a href="#/easy-entry/${encodeURIComponent(gameId)}" class="dg-quick">🏀 Marcación rápida</a>` : ""}
+          ${canBoxScore ? `<a href="#/boxscore/${encodeURIComponent(gameId)}" class="dg-secondary">📋 ${locked ? "Ver" : "Editar"} Acta</a>` : ""}
+          ${!canLive && !canQuick && !canBoxScore ? `<span class="dg-no-action">Las acciones delegadas estarán disponibles dentro del flujo autorizado del partido.</span>` : ""}
         </div>
         ${row.valid_until ? `<small class="dg-expiry">Acceso temporal hasta ${esc(new Date(row.valid_until).toLocaleString())}</small>` : ""}
       </article>`;
@@ -101,14 +104,14 @@ export class DelegatedGamesView {
           .dg-list{display:grid;gap:12px}.dg-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.dg-eyebrow{font-size:10px;font-weight:900;letter-spacing:.08em;color:#6366f1}.dg-card h2{margin:4px 0;font-size:19px}.dg-card p{margin:0;color:#64748b;font-size:12px}
           .dg-status{border-radius:999px;padding:5px 8px;font-size:10px;font-weight:900;white-space:nowrap}.dg-status.open{background:#dcfce7;color:#166534}.dg-status.locked{background:#f1f5f9;color:#64748b}
           .dg-caps{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.dg-cap{border-radius:999px;padding:5px 8px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:800}
-          .dg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.dg-actions a{min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;padding:9px 13px;text-decoration:none;font-size:12px;font-weight:900}.dg-primary{background:#1e3a8a;color:#fff}.dg-secondary{background:#f8fafc;color:#0f172a;border:1px solid #cbd5e1}.dg-no-action{color:#64748b;font-size:12px;line-height:1.45}
+          .dg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.dg-actions a{min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;padding:9px 13px;text-decoration:none;font-size:12px;font-weight:900}.dg-primary{background:#1e3a8a;color:#fff}.dg-quick{background:#fff7ed;color:#9a3412;border:1px solid #fdba74}.dg-secondary{background:#f8fafc;color:#0f172a;border:1px solid #cbd5e1}.dg-no-action{color:#64748b;font-size:12px;line-height:1.45}
           .dg-expiry{display:block;margin-top:10px;color:#64748b}.dg-empty{color:#64748b;text-align:center;line-height:1.5}.dg-error{border-color:#fecaca;background:#fef2f2;color:#991b1b}
           @media(max-width:640px){.delegated-games{padding:12px;padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))}.dg-card-top{display:grid}.dg-actions{display:grid}.dg-actions a{width:100%}}
         </style>
         <header class="dg-hero">
           <h1>🏀 Mis partidos asignados</h1>
           <p>Aquí sólo aparecen los partidos a los que te han dado acceso temporal.</p>
-          <div class="dg-info">La delegación de un partido no vincula jugadores ni abre el equipo completo. Son permisos independientes para proteger los datos de cada jugador.</div>
+          <div class="dg-info">En vivo, Marcación rápida y Acta son permisos independientes. Delegar un partido no amplía el acceso al resto del equipo.</div>
         </header>
         ${this.delegations.length
           ? `<div class="dg-list">${this.delegations.map(row => this._card(row)).join("")}</div>`
