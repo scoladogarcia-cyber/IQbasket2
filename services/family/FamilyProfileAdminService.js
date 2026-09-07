@@ -1,7 +1,8 @@
 /**
  * @fileoverview Administrative boundary for Family profile configuration.
- * @description Uses only V26 RPCs. Direct reads/writes to guardian relationships,
- * user profile preferences and audit tables are intentionally forbidden here.
+ * @description Reads through V26 and progressively saves through V34 so every
+ * verified linked child receives the basic Family Free baseline. Direct table
+ * reads/writes remain forbidden here.
  */
 
 function clientOf(candidate) {
@@ -22,6 +23,11 @@ function normalizeConfig(data = {}) {
     showOtherPlayerNames: data.show_other_player_names !== false,
     showOtherPlayerJerseys: data.show_other_player_jerseys !== false
   };
+}
+
+function missingRpc(error, rpcName) {
+  const message = String(error?.message || "");
+  return error?.code === "PGRST202" || message.includes(rpcName);
 }
 
 export class FamilyProfileAdminService {
@@ -52,16 +58,20 @@ export class FamilyProfileAdminService {
     showOtherPlayerJerseys = true
   }) {
     const client = this._client();
-    const uniquePlayerIds = [...new Set((playerIds || []).filter(Boolean).map(String))];
-    const { data, error } = await client.rpc("iq_v26_save_family_profile_config", {
+    const params = {
       p_user_id: assertUuidish(userId, "Usuario Family"),
       p_team_season_id: assertUuidish(teamSeasonId, "Equipo-temporada"),
-      p_player_ids: uniquePlayerIds,
+      p_player_ids: [...new Set((playerIds || []).filter(Boolean).map(String))],
       p_show_other_player_names: Boolean(showOtherPlayerNames),
       p_show_other_player_jerseys: Boolean(showOtherPlayerJerseys)
-    });
-    if (error) throw new Error(error.message || "No se pudo guardar el perfil Family.");
-    return normalizeConfig(data || {});
+    };
+
+    let response = await client.rpc("iq_v34_save_family_profile_config", params);
+    if (response.error && missingRpc(response.error, "iq_v34_save_family_profile_config")) {
+      response = await client.rpc("iq_v26_save_family_profile_config", params);
+    }
+    if (response.error) throw new Error(response.error.message || "No se pudo guardar el perfil Family.");
+    return normalizeConfig(response.data || {});
   }
 }
 
