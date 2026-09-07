@@ -1,0 +1,49 @@
+name: Family delegation onboarding V29
+
+on:
+  pull_request:
+    paths:
+      - "security/permissions.js"
+      - "services/security/AuthorizationContextService.js"
+      - "views/games/GameAccessView.js"
+      - "services/LazyViewRegistry.js"
+      - "services/family/FamilyStaffService.js"
+      - "views/family/FamilyStaffView.js"
+      - "views/family/FamilyAdvisorAccessView.js"
+      - "supabase/migrations/20260907054500_family_delegation_onboarding_v1.sql"
+      - "supabase/ready/20260907_*family_delegation_onboarding_v1*.sql"
+      - "tests/family-delegation-onboarding-v29-contract.mjs"
+      - ".github/workflows/family-delegation-onboarding-v29.yml"
+  push:
+    branches: [main]
+    paths:
+      - "security/permissions.js"
+      - "services/security/AuthorizationContextService.js"
+      - "views/games/GameAccessView.js"
+      - "services/LazyViewRegistry.js"
+      - "services/family/FamilyStaffService.js"
+      - "views/family/FamilyStaffView.js"
+      - "views/family/FamilyAdvisorAccessView.js"
+      - "supabase/migrations/20260907054500_family_delegation_onboarding_v1.sql"
+      - "supabase/ready/20260907_*family_delegation_onboarding_v1*.sql"
+      - "tests/family-delegation-onboarding-v29-contract.mjs"
+      - ".github/workflows/family-delegation-onboarding-v29.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Family V29 contract
+        run: node tests/family-delegation-onboarding-v29-contract.mjs
+      - name: Production build
+        run: npm run build
