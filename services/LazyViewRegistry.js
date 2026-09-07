@@ -42,8 +42,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new ReportsView(authController);
   },
   familyworkspace: async ({ supabase, authController }) => {
-    const { FamilyWorkspaceView } = await import("../views/family/FamilyWorkspaceView.js");
-    return new FamilyWorkspaceView(supabase, authController);
+    const { FamilyWorkspaceV30View } = await import("../views/family/FamilyWorkspaceV30View.js");
+    return new FamilyWorkspaceV30View(supabase, authController);
   },
   business: async ({ supabase, authController }) => {
     const { BusinessMetricsView } = await import("../views/admin/BusinessMetricsView.js");
@@ -78,18 +78,30 @@ const SINGLETON_LOADERS = Object.freeze({
   profile: async ({ authController }) => {
     const { ProfileView } = await import("../views/ProfileView.js");
     return new ProfileView(authController);
-  }
-,
+  },
   settings: async ({ authController }) => {
     const { TranslationsView } = await import("../views/TranslationsView.js");
     return new TranslationsView(authController);
   }
 });
 
-const ALIASES = Object.freeze({
-  equipo: "team",
-  perfil: "profile"
-});
+const ALIASES = Object.freeze({ equipo: "team", perfil: "profile" });
+
+function hasActiveQuickDelegation(authController, gameId) {
+  if (!gameId) return false;
+  const user = authController?.getCurrentUser?.() || authController?.currentUser || null;
+  const now = Date.now();
+  return (user?.gameDelegations || []).some(item => {
+    const id = item.gameId || item.game_id;
+    const capability = String(item.capability || "").toUpperCase();
+    const until = Date.parse(item.validUntil || item.valid_until || "");
+    const from = Date.parse(item.validFrom || item.valid_from || "");
+    return String(id) === String(gameId)
+      && capability === "RECORD_QUICK_GAME"
+      && (!Number.isFinite(from) || from <= now)
+      && (!Number.isFinite(until) || until > now);
+  });
+}
 
 const FACTORY_LOADERS = Object.freeze({
   livehud: async ({ supabase, authController }, { gameId = null } = {}) => {
@@ -100,11 +112,16 @@ const FACTORY_LOADERS = Object.freeze({
     const view = new LiveScoreHUDView(authController, gameId);
     return attachLiveWriterLease(view, supabase || authController?.supabase || null, gameId);
   },
-  easyentry: async ({ gameController, authController, i18n }, { gameId = null } = {}) => {
+  easyentry: async ({ supabase, gameController, authController, i18n }, { gameId = null } = {}) => {
+    if (hasActiveQuickDelegation(authController, gameId)) {
+      const { DelegatedQuickEntryView } = await import("../views/games/DelegatedQuickEntryView.js");
+      return new DelegatedQuickEntryView(supabase, authController, gameId);
+    }
     const { EasyStatsEntryView } = await import("../views/EasyStatsEntryView.js");
     return new EasyStatsEntryView(gameController, authController, i18n, gameId);
   }
 });
+
 export class LazyViewRegistry {
   constructor(dependencies, target = {}) {
     this.dependencies = Object.freeze({ ...dependencies });
@@ -112,18 +129,14 @@ export class LazyViewRegistry {
     this.pending = new Map();
   }
 
-  _canonicalKey(key) {
-    return ALIASES[key] || key;
-  }
+  _canonicalKey(key) { return ALIASES[key] || key; }
 
   async get(key) {
     const canonical = this._canonicalKey(key);
     if (this.target[canonical]) return this.target[canonical];
     if (this.pending.has(canonical)) return this.pending.get(canonical);
-
     const loader = SINGLETON_LOADERS[canonical];
     if (!loader) throw new Error(`UNKNOWN_LAZY_VIEW:${canonical}`);
-
     const promise = loader(this.dependencies)
       .then(view => {
         this.target[canonical] = view;
@@ -133,7 +146,6 @@ export class LazyViewRegistry {
         return view;
       })
       .finally(() => this.pending.delete(canonical));
-
     this.pending.set(canonical, promise);
     return promise;
   }
