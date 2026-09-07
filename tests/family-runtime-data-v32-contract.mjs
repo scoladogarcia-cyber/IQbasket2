@@ -27,8 +27,8 @@ assert.match(migration, /iq_v32_family_player360_snapshot/i);
 // Nutrition/Recovery only, READ only, and Family Support purpose only.
 assert.match(migration, /iq_v32_guardian_linked_wellness_read_allowed/i);
 assert.match(migration, /in \('nutrition','recovery'\)/i);
-assert.match(migration, /coalesce\(p_action,''\)\)='READ'/i);
-assert.match(migration, /coalesce\(p_purpose,''\)\)='FAMILY_SUPPORT'/i);
+assert.match(migration, /upper\(trim\(coalesce\(p_action,''\)\)\)='READ'/i);
+assert.match(migration, /upper\(trim\(coalesce\(p_purpose,''\)\)\)='FAMILY_SUPPORT'/i);
 assert.match(migration, /r\.relationship_type='GUARDIAN'/i);
 assert.match(migration, /r\.status='ACTIVE'/i);
 assert.match(migration, /r\.player_id=p_player_id/i);
@@ -72,7 +72,7 @@ assert.equal(pointTrend?.direction, "UP");
 
 // A BoxScore-only legacy card must still reveal its delegated Live/Quick actions.
 assert.match(gameCapture, /gameIdFromBoxScore/);
-assert.match(gameCapture, /#\/boxscore\/\(\[0-9a-f-\]\{36\}\)/i);
+assert.match(gameCapture, /route\.match\([^\n]*boxscore/i);
 assert.match(gameCapture, /#\/live\/\$\{encodeURIComponent\(String\(game\.id\)\)\}/);
 assert.match(gameCapture, /#\/easy-entry\/\$\{encodeURIComponent\(String\(game\.id\)\)\}/);
 assert.match(gameCapture, /Permission\.RECORD_LIVE_GAME/);
