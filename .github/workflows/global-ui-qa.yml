@@ -3,7 +3,7 @@ name: Global UI QA
 on:
   push:
     branches:
-      - qa/global-ui-acceptance-v1
+      - "qa/**"
     paths:
       - "index.js"
       - "views/**"
@@ -207,6 +207,12 @@ jobs:
           done
           cat /tmp/global-ui-operations-vite.log
           exit 1
+
+      - name: Season head coach domain regression
+        run: node tests/season-head-coach-history-regression.mjs
+
+      - name: Season head coach UI
+        run: node tests/season-head-coach-ui-smoke.mjs
 
       - name: Roster UI smoke
         run: node tests/phase3e-ui-smoke.mjs
