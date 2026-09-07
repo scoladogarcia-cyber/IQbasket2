@@ -1,0 +1,52 @@
+name: Family Multiplayer + Player Privacy V34
+
+on:
+  pull_request:
+    paths:
+      - "features/admin/PlayerProfilePrivacyAdminEnhancer.js"
+      - "features/player-dashboard/PlayerDashboardPrivacyEnhancer.js"
+      - "services/family/FamilyProfileAdminService.js"
+      - "services/family/FamilyWorkspaceService.js"
+      - "services/player/PlayerIdentityPreferenceService.js"
+      - "supabase/migrations/20260907170000_family_multiplayer_player_privacy_v34.sql"
+      - "supabase/ready/20260907_*family_multiplayer_player_privacy_v34*.sql"
+      - "tests/family-multiplayer-player-privacy-v34-contract.mjs"
+      - "index.html"
+      - "release.json"
+      - ".github/workflows/family-multiplayer-player-privacy-v34.yml"
+  push:
+    branches: [main]
+    paths:
+      - "features/admin/PlayerProfilePrivacyAdminEnhancer.js"
+      - "features/player-dashboard/PlayerDashboardPrivacyEnhancer.js"
+      - "services/family/FamilyProfileAdminService.js"
+      - "services/family/FamilyWorkspaceService.js"
+      - "services/player/PlayerIdentityPreferenceService.js"
+      - "supabase/migrations/20260907170000_family_multiplayer_player_privacy_v34.sql"
+      - "supabase/ready/20260907_*family_multiplayer_player_privacy_v34*.sql"
+      - "tests/family-multiplayer-player-privacy-v34-contract.mjs"
+      - "index.html"
+      - "release.json"
+      - ".github/workflows/family-multiplayer-player-privacy-v34.yml"
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: V34 architecture and security contract
+        run: node tests/family-multiplayer-player-privacy-v34-contract.mjs
+      - name: Syntax check V34 browser modules
+        run: |
+          node --check features/admin/PlayerProfilePrivacyAdminEnhancer.js
+          node --check features/player-dashboard/PlayerDashboardPrivacyEnhancer.js
+          node --check services/player/PlayerIdentityPreferenceService.js
+          node --check services/family/FamilyProfileAdminService.js
+          node --check services/family/FamilyWorkspaceService.js
+      - name: Production build
+        run: npm run build
