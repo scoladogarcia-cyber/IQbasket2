@@ -1,0 +1,37 @@
+name: Admin RPC Security Boundary V35
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35.sql"
+      - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
+      - "tests/admin-rpc-security-boundary-v35-contract.mjs"
+      - "views/TranslationsView.js"
+      - "release.json"
+      - ".github/workflows/admin-rpc-security-boundary-v35.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20260907173000_admin_rpc_security_boundary_v35.sql"
+      - "supabase/ready/20260907_verify_admin_rpc_security_boundary_v35_readonly.sql"
+      - "tests/admin-rpc-security-boundary-v35-contract.mjs"
+      - "views/TranslationsView.js"
+      - "release.json"
+      - ".github/workflows/admin-rpc-security-boundary-v35.yml"
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: V35 administrative RPC security contract
+        run: node tests/admin-rpc-security-boundary-v35-contract.mjs
+      - name: Syntax check admin UI integration
+        run: node --check views/TranslationsView.js
+      - name: Production build
+        run: npm run build
