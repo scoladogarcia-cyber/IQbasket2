@@ -462,6 +462,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.SELECT_SEASON,
     Permission.VIEW_DASHBOARD,
     Permission.VIEW_APPROVAL_CENTER,
+    Permission.VIEW_FAMILY_WORKSPACE,
     Permission.VIEW_TEAM,
     Permission.VIEW_ROSTER,
     Permission.VIEW_PLAYER_PROFILE,
