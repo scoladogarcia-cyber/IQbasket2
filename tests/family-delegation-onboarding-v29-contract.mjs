@@ -25,13 +25,19 @@ assert.ok(
   ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.INVITE_FAMILY_LINK),
   "ENTRENADOR must have the narrow Family invitation permission"
 );
+// V30 intentionally adds team-scoped revocation for inherited guardian links.
+// Direct relationship creation/Privacy Center administration remains forbidden.
 assert.ok(
-  !ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.REVOKE_FAMILY_LINK),
-  "ENTRENADOR must not gain direct Family relationship administration"
+  ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.REVOKE_FAMILY_LINK),
+  "ENTRENADOR must be able to revoke an inherited Family link in current roster scope"
+);
+assert.ok(
+  !ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.CREATE_PRIVACY_AUTHORIZATION),
+  "ENTRENADOR must not gain arbitrary direct Family relationship creation"
 );
 assert.ok(
   !ROLE_PERMISSIONS[UserRole.ENTRENADOR].includes(Permission.VIEW_PRIVACY_AUTHORIZATIONS),
-  "Trainer invitation permission must not expose the Privacy Center"
+  "Trainer invitation/revocation permissions must not expose the Privacy Center"
 );
 
 assert.match(authContext, /authoritativeLegacyTeamIds/);
@@ -46,7 +52,7 @@ assert.match(gameAccess, /delegatedView\.render/);
 
 assert.match(lazyViews, /FamilyAdvisorAccessView/);
 assert.match(advisorAccess, /Permission\.INVITE_FAMILY_LINK/);
-assert.match(advisorAccess, /FamilyStaffView/);
+assert.match(advisorAccess, /FamilyStaff(?:V30)?View/);
 assert.match(advisorAccess, /FamilyAdvisorView/);
 assert.match(staffService, /iq_v29_create_family_link_invitation/);
 assert.match(staffService, /iq_v29_find_family_profile/);
