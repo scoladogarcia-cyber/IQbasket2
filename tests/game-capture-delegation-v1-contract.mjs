@@ -3,6 +3,8 @@ import fs from "node:fs";
 
 const migration=fs.readFileSync("supabase/migrations/20260906133707_game_capture_delegation_v1.sql","utf8");
 const service=fs.readFileSync("services/games/GameCaptureDelegationService.js","utf8");
+const accessView=fs.readFileSync("views/games/GameAccessView.js","utf8");
+const delegatedView=fs.readFileSync("views/games/DelegatedGamesView.js","utf8");
 const workflow=fs.readFileSync(".github/workflows/game-capture-delegation-v1-controlled-apply.yml","utf8");
 const preflight=fs.readFileSync("supabase/ready/20260906_preflight_game_capture_delegation_v1_readonly.sql","utf8");
 const verify=fs.readFileSync("supabase/ready/20260906_verify_game_capture_delegation_v1_readonly.sql","utf8");
@@ -38,6 +40,21 @@ assert.match(service,/Permission\.RECORD_LIVE_GAME/);
 assert.match(service,/Permission\.EDIT_BOXSCORE/);
 assert.doesNotMatch(service,/Permission\.CANCEL_GAME/);
 assert.doesNotMatch(service,/Permission\.LOCK_GAME/);
+
+// Regression V29: a legacy team assignment is not enough to bypass the
+// delegated-only landing. The selected team-season must also be in scope.
+assert.match(accessView,/_hasNormalTeamSeasonScope\(teamId, teamSeasonId = null\)/);
+assert.match(accessView,/DataStore\.getActiveTeamSeasonId/);
+assert.match(accessView,/this\.auth\.canAccessTeamSeason\(teamSeasonId\)/);
+assert.match(accessView,/this\.delegationService\.getMyDelegations\(\)/);
+assert.match(accessView,/this\.delegatedView\.render\(containerId, delegations\)/);
+
+// Delegated action buttons must respect the sporting state as well as the
+// delegated capability. FINISHED games may expose BoxScore but never live capture.
+assert.match(delegatedView,/captureStateAllowed = \["READY", "LIVE"\]\.includes\(playState\)/);
+assert.match(delegatedView,/playState === "FINISHED"/);
+assert.match(delegatedView,/La anotación en vivo ya no está disponible porque el partido está finalizado/);
+assert.match(delegatedView,/typeof containerId === "string"/);
 
 assert.match(preflight,/GAME_CAPTURE_DELEGATION_V1_PREFLIGHT/);
 assert.match(verify,/GAME_CAPTURE_DELEGATION_V1_VERIFY/);
