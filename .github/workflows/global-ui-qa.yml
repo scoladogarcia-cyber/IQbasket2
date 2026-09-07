@@ -5,7 +5,9 @@ on:
     branches:
       - "qa/**"
     paths:
+      - "index.html"
       - "index.js"
+      - "features/**"
       - "views/**"
       - "styles/**"
       - "security/**"
@@ -20,7 +22,9 @@ on:
     branches:
       - main
     paths:
+      - "index.html"
       - "index.js"
+      - "features/**"
       - "views/**"
       - "styles/**"
       - "security/**"
@@ -88,6 +92,9 @@ jobs:
 
       - name: Invited route matrix
         run: node tests/invited-route-matrix-ui-smoke.mjs
+
+      - name: Family + Player coherence V31
+        run: node tests/family-player-coherence-v31-ui-smoke.mjs
 
       - name: Mobile shell logout and viewport modals
         run: node tests/mobile-shell-interaction-ui-smoke.mjs
