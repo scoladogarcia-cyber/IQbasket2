@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const migration = read("supabase/migrations/20260907170000_family_multiplayer_player_privacy_v34.sql");
+const verifier = read("supabase/ready/20260907_verify_family_multiplayer_player_privacy_v34_readonly.sql");
 const familyService = read("services/family/FamilyWorkspaceService.js");
 const familyAdmin = read("services/family/FamilyProfileAdminService.js");
 const playerService = read("services/player/PlayerIdentityPreferenceService.js");
@@ -35,6 +36,12 @@ assert.match(migration, /iq_v34_my_player_identity_preferences/i);
 assert.match(migration, /security invoker/i);
 assert.match(migration, /revoke all on function public\.iq_v34_my_player_identity_preferences\(uuid\) from public,anon,authenticated/i);
 assert.match(migration, /grant execute on function public\.iq_v34_my_player_identity_preferences\(uuid\) to authenticated/i);
+
+// PostgreSQL may omit explicit SECURITY INVOKER in pg_get_functiondef() because
+// INVOKER is the default. The production verifier must inspect pg_proc.prosecdef.
+assert.match(verifier, /pg_proc/i);
+assert.match(verifier, /prosecdef/i);
+assert.doesNotMatch(verifier, /pg_get_functiondef[\s\S]*security invoker/i);
 
 assert.match(playerService, /iq_v34_get_player_profile_config/);
 assert.match(playerService, /iq_v34_save_player_profile_config/);
