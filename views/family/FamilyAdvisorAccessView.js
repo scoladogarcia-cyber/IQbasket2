@@ -1,7 +1,7 @@
 /**
  * @fileoverview Role-aware entry point for Familias & Bienestar.
  * @description Staff with the narrow Family invitation capability receives the
- * onboarding workspace; all other roles keep the existing FamilyAdvisorView.
+ * V30 relationship workspace; all other roles keep the existing advisor view.
  */
 
 import { DataStore } from "../../services/DataStore.js";
@@ -30,8 +30,8 @@ export class FamilyAdvisorAccessView {
 
   async _staff() {
     if (this.staffView) return this.staffView;
-    const { FamilyStaffView } = await import("./FamilyStaffView.js");
-    this.staffView = new FamilyStaffView(this.supabase, this.auth);
+    const { FamilyStaffV30View } = await import("./FamilyStaffV30View.js");
+    this.staffView = new FamilyStaffV30View(this.supabase, this.auth);
     return this.staffView;
   }
 
