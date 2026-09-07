@@ -10,6 +10,7 @@ import { GameLiveSessionService } from "./GameLiveSessionService.js";
 
 export const DELEGATABLE_GAME_PERMISSIONS = Object.freeze([
   Permission.RECORD_LIVE_GAME,
+  Permission.RECORD_QUICK_GAME,
   Permission.EDIT_BOXSCORE,
   Permission.PREPARE_GAME,
   Permission.START_GAME,
@@ -129,13 +130,6 @@ export class GameCaptureDelegationService {
     return Array.isArray(data) ? data : [];
   }
 
-  /**
-   * Save sporting capture data through the authoritative V28 boundary.
-   *
-   * During the controlled rollout, installations where V28 has not yet been
-   * applied receive PGRST202 and safely fall back to V21. Once V28 exists, no
-   * permission/lease error ever falls back to V21.
-   */
   async saveCapture({
     gameId,
     teamScore = null,
@@ -175,8 +169,6 @@ export class GameCaptureDelegationService {
       throw rpcError(v28Result.error, "No se pudo guardar la captura del partido.");
     }
 
-    // Deployment compatibility only: this path disappears naturally after the
-    // V28 migration is installed and its RPC is visible to PostgREST.
     const { data, error } = await this.supabase.rpc("iq_v21_save_game_capture", baseArgs);
     if (error) throw rpcError(error, "No se pudo guardar la captura del partido.");
     return data || null;
