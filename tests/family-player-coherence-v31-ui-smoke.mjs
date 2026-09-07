@@ -90,15 +90,30 @@ async function installFixture(page) {
     box._renderGameBoxScoreDetail = () => { scopedDetail += 1; };
     await box.render("v31-host", GAME_ID);
 
-    // 3. Main Nutrition route: Family resolves to linked Player 360 and never
-    // enters the staff nutrition selector.
+    // 3. Main Nutrition route: Family resolves the exact linked subject and opens
+    // Wellness directly. It must never enter the staff nutrition selector nor
+    // depend on a generic Player360 hash that could select another tab.
     let staffCalls = 0;
     const nutrition = new PlayerNutritionRouterView(null, familyAuth, {
       render() { staffCalls += 1; }
     });
+    const nutritionRenderState = {
+      calls: 0,
+      playerId: null,
+      teamId: null,
+      activeTabAtRender: null
+    };
+    nutrition.subjectView = {
+      activeTab: "evaluation",
+      async render(_containerId, playerId, teamId) {
+        nutritionRenderState.calls += 1;
+        nutritionRenderState.playerId = playerId;
+        nutritionRenderState.teamId = teamId;
+        nutritionRenderState.activeTabAtRender = this.activeTab;
+      }
+    };
     history.replaceState(null, "", "#/nutrition");
     await nutrition.render("v31-host", null, TEAM_ID);
-    const nutritionHash = location.hash;
 
     // 4. Family global team layer: rich team metrics remain privacy-safe because
     // identity masking has already happened in the server snapshot.
@@ -162,7 +177,7 @@ async function installFixture(page) {
       scopedDetail,
       scopedOnly: box.isGameScopedOnly,
       staffCalls,
-      nutritionHash,
+      nutritionRenderState,
       familyTeamState,
       privacyPanel: Boolean(privacyPanel),
       positionsPressed,
@@ -187,7 +202,10 @@ async function runViewport(browser, name, viewport) {
 
   ok(state.scopedLoad === 1 && state.scopedDetail === 1 && state.scopedOnly, name, "Acta delegada no fuerza el boundary V21");
   ok(state.staffCalls === 0, name, "Family entró erróneamente en NutritionView de staff");
-  ok(state.nutritionHash === `#/player360/${OWN_PLAYER_ID}`, name, "Nutrición Family no resuelve el jugador vinculado");
+  ok(state.nutritionRenderState.calls === 1, name, "Nutrición Family no abre Player360 del sujeto");
+  ok(state.nutritionRenderState.playerId === OWN_PLAYER_ID, name, "Nutrición Family no resuelve el jugador vinculado exacto");
+  ok(state.nutritionRenderState.teamId === TEAM_ID, name, "Nutrición Family pierde el contexto de equipo");
+  ok(state.nutritionRenderState.activeTabAtRender === "wellness", name, "Nutrición Family no abre directamente Wellness");
 
   ok(state.familyTeamState.title.includes("IQBasket Showcase U18"), name, "Falta contexto global de equipo en Family");
   ok(state.familyTeamState.text.includes("72.4") && state.familyTeamState.text.includes("108.2") && state.familyTeamState.text.includes("97.4"), name, "Family no muestra KPIs globales avanzados");
