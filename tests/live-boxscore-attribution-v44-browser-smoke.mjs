@@ -50,7 +50,10 @@ const result = await page.evaluate(async () => {
   const projected = view._buildLivePayload().stats;
   const selectedStats = projected.find(row => row.player_id === players[2].id) || null;
   const toast = document.querySelector("#v44-action-confirmation");
-  const toastStyle = toast ? getComputedStyle(toast) : null;
+  // getComputedStyle() is live in browsers. Snapshot primitive values before the
+  // next HUD rerender detaches this first confirmation node.
+  const toastPosition = toast ? String(getComputedStyle(toast).position || "") : null;
+  const toastText = toast?.textContent || "";
   const feedHasPlayer = container.textContent.includes("Jugadora 3");
 
   // Repeat with a rebound to prove action-first attribution does not depend on
@@ -71,8 +74,8 @@ const result = await page.evaluate(async () => {
     eventPlayerId: event?.player_id || event?.playerId || null,
     assists: selectedStats?.assists ?? null,
     toastVisible: Boolean(toast),
-    toastPosition: toastStyle?.position || null,
-    toastText: toast?.textContent || "",
+    toastPosition,
+    toastText,
     feedHasPlayer,
     reboundCount: reboundStats?.def_reb ?? null
   };
