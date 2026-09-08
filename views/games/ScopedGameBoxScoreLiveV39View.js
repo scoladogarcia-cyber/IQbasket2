@@ -92,6 +92,44 @@ export class ScopedGameBoxScoreLiveV39View extends ScopedGameBoxScoreLiveV38View
     return /^#\/boxscore\/[0-9a-f-]{36}\/(?:live|stream|marcador)(?:$|[/?])/i.test(String(window.location.hash || ""));
   }
 
+  /**
+   * V38 intentionally projects only the last 12 rows for its compact BoxScore
+   * banner. The dedicated V39 Acta must be cumulative, so the spectator route
+   * reads the complete authorized game history (bounded defensively to 500 rows).
+   * This remains SELECT-only and therefore inside the existing RLS boundary.
+   */
+  async _loadLiveData(gameId) {
+    if (!this.supabase?.from) throw new Error("Backend no disponible.");
+
+    const gameResult = await this.supabase
+      .from("games")
+      .select("*")
+      .eq("id", gameId)
+      .maybeSingle();
+    if (gameResult.error) throw gameResult.error;
+
+    const eventsResult = await this.supabase
+      .from("play_by_play_events")
+      .select("*")
+      .eq("game_id", gameId)
+      .limit(500);
+    if (eventsResult.error) throw eventsResult.error;
+
+    const indexed = (Array.isArray(eventsResult.data) ? eventsResult.data : [])
+      .map((event, index) => ({ event, index }));
+    indexed.sort((a, b) => {
+      const at = Date.parse(a.event.created_at || a.event.updated_at || "");
+      const bt = Date.parse(b.event.created_at || b.event.updated_at || "");
+      if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return bt - at;
+      return b.index - a.index;
+    });
+
+    return {
+      game: gameResult.data || null,
+      events: indexed.map(item => item.event)
+    };
+  }
+
   async render(containerId = "dashboard-content-area", targetGameId = null) {
     if (!targetGameId || !this._isStreamRoute()) {
       this._stopStreamPoll();
@@ -311,8 +349,9 @@ export class ScopedGameBoxScoreLiveV39View extends ScopedGameBoxScoreLiveV38View
       stateNode.dataset.state = state || "UNKNOWN";
     }
 
+    const lookup = this._playerLookup();
     const lastText = last
-      ? `${periodLabel(last)} ${eventClock(last)} · ${actionLabel(actionOf(last))} · ${isOpponent(last) ? "Rival" : (this._playerLookup().get(String(last.player_id || last.playerId || ""))?.name || "Jugador")}`
+      ? `${periodLabel(last)} ${eventClock(last)} · ${actionLabel(actionOf(last))} · ${isOpponent(last) ? "Rival" : (lookup.get(String(last.player_id || last.playerId || ""))?.name || "Jugador")}`
       : "Todavía no hay jugadas.";
     setText("[data-v39-last-play]", lastText);
     setText("[data-v39-summary-last]", last ? actionLabel(actionOf(last)) : "—");
@@ -320,7 +359,7 @@ export class ScopedGameBoxScoreLiveV39View extends ScopedGameBoxScoreLiveV38View
     const shortFeed = container.querySelector("[data-v39-short-feed]");
     if (shortFeed) shortFeed.innerHTML = this._feedMarkup(events, 6);
     const fullFeed = container.querySelector("[data-v39-full-feed]");
-    if (fullFeed) fullFeed.innerHTML = this._feedMarkup(events, 30);
+    if (fullFeed) fullFeed.innerHTML = this._feedMarkup(events, 60);
 
     const acta = container.querySelector("[data-v39-acta-body]");
     if (acta) {
