@@ -22,8 +22,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new AdvancedStatsView(gameController);
   },
   boxscore: async ({ supabase, authController }) => {
-    const { ScopedGameBoxScoreLiveV38View } = await import("../views/games/ScopedGameBoxScoreLiveV38View.js");
-    return new ScopedGameBoxScoreLiveV38View(supabase, authController);
+    const { ScopedGameBoxScoreLiveV39View } = await import("../views/games/ScopedGameBoxScoreLiveV39View.js");
+    return new ScopedGameBoxScoreLiveV39View(supabase, authController);
   },
   player: async ({ supabase, authController }) => {
     const { PlayerStatsView } = await import("../views/PlayerStatsView.js");
@@ -96,10 +96,6 @@ function currentHashRoute() {
     .toLowerCase();
 }
 
-/**
- * Evita el flash blanco del primer acceso a Partidos mientras se descarga la
- * vista lazy. No afecta a navegación ni permisos: es únicamente feedback UX.
- */
 function showLazyRouteLoading(canonical) {
   if (canonical !== "liveeditor" || typeof document === "undefined") return;
   const container = document.getElementById("dashboard-content-area");
@@ -134,34 +130,34 @@ function hasActiveQuickDelegation(authController, gameId) {
 
 const FACTORY_LOADERS = Object.freeze({
   livehud: async (dependencies, { gameId = null } = {}) => {
-    // index.js mantiene aliases históricos agrupados. Si la URL es una ruta de
-    // captura rápida, resolvemos aquí el factory correcto para no abrir el HUD Pro.
     if (QUICK_CAPTURE_ROUTES.has(currentHashRoute())) {
       return FACTORY_LOADERS.easyentry(dependencies, { gameId });
     }
 
     const { supabase, authController } = dependencies;
     const [
-      { LiveScoreHUDViewV38 },
+      { LiveScoreHUDViewV39 },
       { attachLiveWriterLease },
+      { attachLiveCaptureStartGate },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
-      import("../views/LiveScoreHUDViewV38.js"),
+      import("../views/LiveScoreHUDViewV39.js"),
       import("../features/game-live/LiveWriterLeaseController.js"),
+      import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
       import("./games/GamePlayStateService.js")
     ]);
 
     const runtimeClient = supabase || authController?.supabase || null;
-    const view = new LiveScoreHUDViewV38(authController, gameId);
-
-    // V38 conserva la frontera de composición V28: los servicios reales se
-    // inyectan aquí y el HUD no amplía permisos ni conoce credenciales.
+    const view = new LiveScoreHUDViewV39(authController, gameId);
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 
-    return attachLiveWriterLease(view, runtimeClient, gameId);
+    // Composition order matters: the sporting-state gate renders first. The
+    // writer lease then stays dormant until the game is really LIVE.
+    const gated = attachLiveCaptureStartGate(view, runtimeClient, authController, gameId);
+    return attachLiveWriterLease(gated, runtimeClient, gameId);
   },
   easyentry: async ({ supabase, gameController, authController, i18n }, { gameId = null } = {}) => {
     if (hasActiveQuickDelegation(authController, gameId)) {

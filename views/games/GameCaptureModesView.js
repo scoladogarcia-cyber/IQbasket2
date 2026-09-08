@@ -1,16 +1,18 @@
 /**
  * @fileoverview Role/resource-aware game list for IQBasket capture modes.
- * @description Keeps broad game editing separate from the three resource-scoped
- * capture capabilities: live play-by-play, quick capture and Acta/BoxScore.
- * Delegated users never receive EDIT_GAME as a side effect of capture access.
+ * @description Keeps broad game editing separate from resource-scoped capture
+ * capabilities and V39 spectator mode. Delegated users never receive EDIT_GAME
+ * or CREATE_GAME as a side effect of capture access.
  */
 import { Permission } from "../../security/PermissionService.js";
 import { GameLiveEditorView } from "../GameLiveEditorView.js";
+import { LiveGameSetupV39View } from "./LiveGameSetupV39View.js";
 
 function modeButtonStyle(kind = "quick") {
   const styles = {
     live: "background:#1e3a8a;color:#fff;border:1px solid #1e3a8a;",
     quick: "background:#fff7ed;color:#9a3412;border:1px solid #fdba74;",
+    spectator: "background:#ecfeff;color:#155e75;border:1px solid #67e8f9;",
     scope: "background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;"
   };
   return `${styles[kind] || styles.quick}padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;`;
@@ -37,12 +39,41 @@ export class GameCaptureModesView extends GameLiveEditorView {
 
   /**
    * The legacy list remains authoritative for normal staff operations. After it
-   * renders, this extension adapts only the capture actions to the resource-level
-   * permissions already enforced by PermissionService and the V21/V30 RPCs.
+   * renders, this extension adapts only capture/streaming actions.
    */
   async _renderGamesList(container, teamId) {
     await super._renderGamesList(container, teamId);
     this._decorateCaptureModes(container, teamId);
+    this._decorateNewLiveGame(container, teamId);
+  }
+
+  _decorateNewLiveGame(container, teamId) {
+    const legacyButton = container.querySelector("#btn-create-game-hud");
+    if (!legacyButton) return;
+
+    // Clone removes the legacy listener that launched an in-memory HUD without
+    // gameId. V39 always persists first so lease/live sync/followers are valid.
+    const button = legacyButton.cloneNode(true);
+    legacyButton.replaceWith(button);
+
+    const context = { teamId };
+    const canLaunch = !this._isTeamSeasonFrozen(teamId)
+      && Boolean(this.auth?.canPreview?.(Permission.CREATE_GAME, context))
+      && Boolean(this.auth?.canPreview?.(Permission.RECORD_LIVE_GAME, context))
+      && Boolean(this.auth?.canPreview?.(Permission.PREPARE_GAME, context))
+      && Boolean(this.auth?.canPreview?.(Permission.START_GAME, context));
+
+    button.textContent = `⚡ Nuevo partido en vivo${canLaunch ? "" : " 🔒"}`;
+    button.disabled = !canLaunch;
+    button.setAttribute("aria-disabled", String(!canLaunch));
+    button.style.cursor = canLaunch ? "pointer" : "not-allowed";
+    button.style.opacity = canLaunch ? "1" : ".58";
+
+    button.addEventListener("click", () => {
+      if (!canLaunch) return;
+      const setup = new LiveGameSetupV39View(this.supabase, this.auth);
+      setup.render("dashboard-content-area", teamId);
+    });
   }
 
   _decorateCaptureModes(container, teamId) {
@@ -62,6 +93,7 @@ export class GameCaptureModesView extends GameLiveEditorView {
       const canLive = !locked && this._can(Permission.RECORD_LIVE_GAME, game);
       const canQuick = !locked && this._can(Permission.RECORD_QUICK_GAME, game);
       const canActa = !locked && this._can(Permission.EDIT_BOXSCORE, game);
+      const canViewBox = this._can(Permission.VIEW_BOXSCORE, game);
       const hasCaptureScope = canLive || canQuick || canActa;
       const actions = editButton?.parentElement
         || existingLiveButton?.parentElement
@@ -69,9 +101,6 @@ export class GameCaptureModesView extends GameLiveEditorView {
         || null;
       if (!actions) return;
 
-      // Broad metadata/game editing is deliberately not implied by capture access.
-      // Removing this dead action avoids the misleading EDIT_GAME alert reported
-      // by Family users while preserving it for staff who really can edit a game.
       if (editButton && !canEditGame) editButton.remove();
 
       let liveButton = actions.querySelector(".btn-live-existing-game");
@@ -96,13 +125,22 @@ export class GameCaptureModesView extends GameLiveEditorView {
         boxScoreButton.textContent = canActa ? "📋 Acta / BoxScore" : "📋 BoxScore";
       }
 
+      if (canViewBox && !actions.querySelector(`[data-live-view-id="${CSS.escape(String(game.id))}"]`)) {
+        const spectator = document.createElement("a");
+        spectator.href = `#/boxscore/${encodeURIComponent(String(game.id))}/live`;
+        spectator.dataset.liveViewId = String(game.id);
+        spectator.setAttribute("style", modeButtonStyle("spectator"));
+        spectator.textContent = "📡 Marcador / Acta";
+        if (boxScoreButton) actions.insertBefore(spectator, boxScoreButton);
+        else actions.appendChild(spectator);
+      }
+
       if (canQuick && !actions.querySelector(`[data-quick-capture-id="${CSS.escape(String(game.id))}"]`)) {
         const quick = document.createElement("a");
         quick.href = `#/easy-entry/${encodeURIComponent(String(game.id))}`;
         quick.dataset.quickCaptureId = String(game.id);
         quick.setAttribute("style", modeButtonStyle("quick"));
         quick.textContent = "🏀 Partido rápido";
-
         if (boxScoreButton) actions.insertBefore(quick, boxScoreButton);
         else actions.appendChild(quick);
       }
