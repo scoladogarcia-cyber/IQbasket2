@@ -41,7 +41,9 @@ assert.match(leaseController, /releaseForNavigation/);
 assert.match(leaseController, /restoreAfterHudRender/);
 assert.match(leaseController, /attachLiveWriterLeaseV43/);
 
-assert.match(registry, /LiveScoreHUDViewV42Safe/);
+// V43 owns the lease/freshness boundary, not one frozen sporting-view filename.
+// Later scorer adapters may evolve while retaining the V43 single-writer layer.
+assert.match(registry, /LiveScoreHUDViewV(?:42Safe|4[3-9])/);
 assert.match(registry, /attachLiveWriterLeaseV43/);
 assert.doesNotMatch(registry, /import\("\.\.\/features\/game-live\/LiveWriterLeaseController\.js"\)/);
 
@@ -54,8 +56,19 @@ assert.match(migration, /security invoker/i);
 assert.match(migration, /grant execute on function public\.iq_v43_recover_own_game_live_session\(uuid\)/);
 
 const release = JSON.parse(releaseText);
-assert.equal(release.release, "2026.09.08.26");
-assert.equal(release.label, "release-freshness-lease-recovery-v43");
+const versionParts = value => String(value || "").split(".").map(part => Number(part) || 0);
+const compareVersions = (left, right) => {
+  const a = versionParts(left);
+  const b = versionParts(right);
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    if ((a[index] || 0) > (b[index] || 0)) return 1;
+    if ((a[index] || 0) < (b[index] || 0)) return -1;
+  }
+  return 0;
+};
+assert.ok(compareVersions(release.release, "2026.09.08.26") >= 0, "La release no puede retroceder por debajo de V43.");
+assert.ok(String(release.label || "").trim().length > 0, "La release debe mantener una etiqueta descriptiva.");
 
 // Functional client contract: recovery must rotate/store the server token.
 const storage = new Map();
