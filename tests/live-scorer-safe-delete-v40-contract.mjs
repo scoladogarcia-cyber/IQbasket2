@@ -7,7 +7,6 @@ const service = await readFile(new URL("../services/games/GameDeletionServiceV40
 const modes = await readFile(new URL("../views/games/GameCaptureModesView.js", import.meta.url), "utf8");
 const scorer = await readFile(new URL("../views/LiveScoreHUDViewV40.js", import.meta.url), "utf8");
 const registry = await readFile(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
-const release = JSON.parse(await readFile(new URL("../release.json", import.meta.url), "utf8"));
 
 // Database: destructive delete is centralized, permission checked and audited.
 assert.match(migration, /create schema if not exists iq_v40_private/i);
@@ -66,7 +65,8 @@ assert.ok(
   "the UI must refresh only after the server confirms deletion"
 );
 
-// Scorer: V40 is a visible, immersive presentation over proven V39 behavior.
+// Scorer: V40 remains the proven immersive base even when a later presentation
+// layer becomes the active registry target.
 assert.match(scorer, /extends LiveScoreHUDViewV39/);
 assert.match(scorer, /dataset\.v40Scorer/);
 assert.match(scorer, /position:fixed!important/);
@@ -77,10 +77,7 @@ assert.match(scorer, /ACTION_ORDER/);
 assert.match(scorer, /window\.location\.hash = "#\/partidos"/);
 assert.doesNotMatch(scorer, /saveGameAndStats/);
 
-assert.match(registry, /LiveScoreHUDViewV40/);
 assert.match(registry, /attachLiveCaptureStartGate/);
 assert.match(registry, /attachLiveWriterLease/);
-assert.equal(release.release, "2026.09.08.23");
-assert.equal(release.label, "immersive-live-scorer-safe-delete-v40");
 
 console.log("V40 immersive live scorer + safe delete contract OK");
