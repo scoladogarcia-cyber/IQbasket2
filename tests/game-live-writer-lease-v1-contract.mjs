@@ -68,17 +68,17 @@ assert.match(liveService, /iq_v28_heartbeat_game_live_session/);
 assert.match(liveService, /iq_v28_create_game_live_handoff/);
 assert.match(liveService, /iq_v28_accept_game_live_handoff/);
 
-// UI is progressively attached without adding concurrency logic to the HUD.
+// V28 invariant: the server-authoritative writer lease remains attached to the
+// live HUD. Later releases may extend the UI adapter; the contract must not pin
+// the implementation to one historical filename or function suffix.
 assert.match(controller, /WRITER_CONTROL_SELECTOR/);
 assert.match(controller, /_setWriterControlsEnabled\(false\)/);
 assert.match(controller, /30_000/);
 assert.match(controller, /Transferir captura/);
 assert.match(controller, /Aceptar traspaso/);
 assert.match(controller, /attachLiveWriterLease/);
-assert.match(lazyRegistry, /LiveWriterLeaseController\.js/);
-// Later releases may compose other decorators before the lease. The invariant is
-// that the live HUD factory still returns a view wrapped by attachLiveWriterLease.
-assert.match(lazyRegistry, /return\s+attachLiveWriterLease\([^,]+,\s*runtimeClient,\s*gameId\)/);
+assert.match(lazyRegistry, /LiveWriterLease[A-Za-z0-9]*Controller\.js/);
+assert.match(lazyRegistry, /return\s+attachLiveWriterLease[A-Za-z0-9]*\([^,]+,\s*runtimeClient,\s*gameId\)/);
 
 const gameId = "11111111-1111-4111-8111-111111111111";
 const calls = [];

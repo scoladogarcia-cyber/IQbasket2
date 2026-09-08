@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises";
 const scorer = await readFile(new URL("../views/LiveScoreHUDViewV42.js", import.meta.url), "utf8");
 const scoreSafe = await readFile(new URL("../views/LiveScoreHUDViewV42Safe.js", import.meta.url), "utf8");
 const registry = await readFile(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
-const release = JSON.parse(await readFile(new URL("../release.json", import.meta.url), "utf8"));
 
 assert.match(scorer, /extends LiveScoreHUDViewV38/);
 assert.doesNotMatch(scorer, /extends LiveScoreHUDViewV4[01]/);
@@ -40,7 +39,6 @@ assert.match(registry, /new LiveScoreHUDViewV42Safe\(authController, gameId\)/);
 assert.match(registry, /attachLiveWriterLease/);
 assert.match(registry, /attachLiveCaptureStartGate/);
 
-assert.equal(release.release, "2026.09.08.25");
-assert.equal(release.label, "recovered-live-scorer-v42");
-
+// Historical contracts validate the V42 boundary, not the repository's current
+// release number. Future releases must be able to keep this regression green.
 console.log("V42 recovered live scorer contract OK");

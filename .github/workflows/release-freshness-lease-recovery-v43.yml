@@ -1,0 +1,119 @@
+name: Release Freshness + Lease Recovery V43
+
+on:
+  push:
+    branches:
+      - fix/release-freshness-lease-recovery-v43
+      - main
+    paths:
+      - "index.html"
+      - "release.json"
+      - "services/LazyViewRegistry.js"
+      - "services/games/GameLiveSessionV43Service.js"
+      - "features/game-live/LiveWriterLeaseV43Controller.js"
+      - "supabase/migrations/20260908093000_game_live_same_user_recovery_v43.sql"
+      - "tests/release-freshness-lease-recovery-v43-contract.mjs"
+      - "tests/live-lease-recovery-v43-browser-smoke.mjs"
+      - "tests/live-scorer-recovery-v42-contract.mjs"
+      - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/release-freshness-lease-recovery-v43.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "release.json"
+      - "services/LazyViewRegistry.js"
+      - "services/games/GameLiveSessionV43Service.js"
+      - "features/game-live/LiveWriterLeaseV43Controller.js"
+      - "supabase/migrations/20260908093000_game_live_same_user_recovery_v43.sql"
+      - "tests/release-freshness-lease-recovery-v43-contract.mjs"
+      - "tests/live-lease-recovery-v43-browser-smoke.mjs"
+      - "tests/live-scorer-recovery-v42-contract.mjs"
+      - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/release-freshness-lease-recovery-v43.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-freshness-lease-recovery-v43-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  contract-build:
+    name: Contract + V42 regression + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V43 freshness + recovery contract
+        run: node tests/release-freshness-lease-recovery-v43-contract.mjs
+      - name: V42 scorer regression
+        run: node tests/live-scorer-recovery-v42-contract.mjs
+      - name: Production build
+        run: npm run build
+      - name: Simulate Pages release stamp
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const release = JSON.parse(fs.readFileSync('release.json','utf8')).release;
+          const path = 'dist/index.html';
+          const placeholder = '__IQBASKET_BUILD_RELEASE__';
+          let html = fs.readFileSync(path,'utf8');
+          if (!html.includes(placeholder)) throw new Error('Missing release placeholder');
+          html = html.replaceAll(placeholder, release);
+          fs.writeFileSync(path, html);
+          if (!html.includes(release) || html.includes(placeholder)) throw new Error('Release stamp failed');
+          NODE
+
+  browser-recovery:
+    name: Same-user recovery · ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install app
+        run: npm ci
+      - name: Install Playwright browser without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/v43-${{ matrix.browser }}-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/v43-${{ matrix.browser }}-vite.log
+          exit 1
+      - name: Recover own lease and survive HUD rerender
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/live-lease-recovery-v43-browser-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/v43-${{ matrix.browser }}-vite.log || true

@@ -137,13 +137,13 @@ const FACTORY_LOADERS = Object.freeze({
     const { supabase, authController } = dependencies;
     const [
       { LiveScoreHUDViewV42Safe },
-      { attachLiveWriterLease },
+      { attachLiveWriterLeaseV43 },
       { attachLiveCaptureStartGate },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
       import("../views/LiveScoreHUDViewV42Safe.js"),
-      import("../features/game-live/LiveWriterLeaseController.js"),
+      import("../features/game-live/LiveWriterLeaseV43Controller.js"),
       import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
       import("./games/GamePlayStateService.js")
@@ -154,10 +154,10 @@ const FACTORY_LOADERS = Object.freeze({
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 
-    // Composition order matters: the sporting-state gate renders first. The
-    // writer lease then stays dormant until the game is really LIVE.
+    // Composition order matters: sporting lifecycle first, then the V43
+    // recoverable single-writer boundary. Business permissions stay unchanged.
     const gated = attachLiveCaptureStartGate(view, runtimeClient, authController, gameId);
-    return attachLiveWriterLease(gated, runtimeClient, gameId);
+    return attachLiveWriterLeaseV43(gated, runtimeClient, gameId);
   },
   easyentry: async ({ supabase, gameController, authController, i18n }, { gameId = null } = {}) => {
     if (hasActiveQuickDelegation(authController, gameId)) {
