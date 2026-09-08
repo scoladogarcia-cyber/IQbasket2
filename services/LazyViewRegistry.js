@@ -136,13 +136,13 @@ const FACTORY_LOADERS = Object.freeze({
 
     const { supabase, authController } = dependencies;
     const [
-      { LiveScoreHUDViewV42Safe },
+      { LiveScoreHUDViewV43 },
       { attachLiveWriterLeaseV43 },
       { attachLiveCaptureStartGate },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
-      import("../views/LiveScoreHUDViewV42Safe.js"),
+      import("../views/LiveScoreHUDViewV43.js"),
       import("../features/game-live/LiveWriterLeaseV43Controller.js"),
       import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
@@ -150,7 +150,7 @@ const FACTORY_LOADERS = Object.freeze({
     ]);
 
     const runtimeClient = supabase || authController?.supabase || null;
-    const view = new LiveScoreHUDViewV42Safe(authController, gameId);
+    const view = new LiveScoreHUDViewV43(authController, gameId);
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 
