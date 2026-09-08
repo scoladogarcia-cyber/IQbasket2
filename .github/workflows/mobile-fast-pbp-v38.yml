@@ -1,0 +1,50 @@
+name: Mobile Fast PBP + Live Game V38
+
+on:
+  push:
+    branches:
+      - feat/mobile-fast-pbp-v38
+      - main
+    paths:
+      - "views/LiveScoreHUDViewV38.js"
+      - "views/games/ScopedGameBoxScoreLiveV38View.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/mobile-fast-pbp-v38-contract.mjs"
+      - "release.json"
+      - ".github/workflows/mobile-fast-pbp-v38.yml"
+  pull_request:
+    paths:
+      - "views/LiveScoreHUDViewV38.js"
+      - "views/games/ScopedGameBoxScoreLiveV38View.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/mobile-fast-pbp-v38-contract.mjs"
+      - "release.json"
+      - ".github/workflows/mobile-fast-pbp-v38.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: V38 mobile live contract
+        run: node tests/mobile-fast-pbp-v38-contract.mjs
+
+      - name: Production build
+        run: npm run build
