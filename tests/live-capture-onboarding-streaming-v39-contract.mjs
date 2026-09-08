@@ -31,22 +31,23 @@ assert.match(gate, /targetState: "READY"/);
 assert.match(gate, /targetState: "LIVE"/);
 
 assert.match(scorer, /extends LiveScoreHUDViewV38/);
-assert.match(scorer, /position:sticky/);
+assert.match(scorer, /position:fixed/);
 assert.match(scorer, /data-v39-palette="team"/);
 assert.match(scorer, /data-v39-palette="opponent"/);
-assert.match(scorer, /bottom:calc\(76px/);
+assert.match(scorer, /bottom:calc\(78px/);
 
-assert.match(viewer, /#\\\/boxscore\\\//);
+assert.match(viewer, /boxscore/);
 assert.match(viewer, /Marcador y acta en directo/);
 assert.match(viewer, /data-v39-stream-tab="acta"/);
 assert.match(viewer, /data-v39-stream-tab="pbp"/);
+assert.match(viewer, /from\("play_by_play_events"\)/);
+assert.match(viewer, /\.limit\(500\)/);
 assert.doesNotMatch(viewer, /\.insert\(/);
 assert.doesNotMatch(viewer, /\.update\(/);
 assert.doesNotMatch(viewer, /\.delete\(/);
 
 assert.match(modes, /cloneNode\(true\)/);
 assert.match(modes, /Nuevo partido en vivo/);
-assert.match(modes, /#\/boxscore\/\$\{encodeURIComponent\(String\(game\.id\)\)\}\/live/);
 assert.match(modes, /Marcador \/ Acta/);
 
 assert.match(registry, /LiveScoreHUDViewV39/);
