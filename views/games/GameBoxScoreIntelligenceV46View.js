@@ -9,35 +9,10 @@ import { GameBoxScoreView as GameBoxScoreBaseView } from "../GameBoxScoreBaseVie
 import { buildGameIntelligence } from "../../domain/intelligence/GameIntelligenceEngine.js";
 import { normalizeGameStatsForIntelligence } from "../../domain/intelligence/GameIntelligenceInputAdapter.js";
 import { renderGameIntelligencePanel } from "../components/GameIntelligencePanelV46.js";
-
-/**
- * Keep delegated capture inside its authorized workspace while normal team
- * users return to the complete game list after a successful save.
- * @param {boolean} isGameScopedOnly
- * @returns {string}
- */
-export function resolveBoxScorePostSaveDestination(isGameScopedOnly = false) {
-  return isGameScopedOnly ? "#/dashboard" : "#/games";
-}
-
-/**
- * The legacy BoxScore implementation confirms a successful persistence by
- * disabling Save and then re-rendering the same game. A failed save re-enables
- * the button and never calls render, so this predicate does not redirect errors.
- * @param {{targetGameId?:string|null, selectedGameId?:string|null, saveButtonDisabled?:boolean}} input
- * @returns {boolean}
- */
-export function isConfirmedBoxScoreSaveRerender({
-  targetGameId = null,
-  selectedGameId = null,
-  saveButtonDisabled = false
-} = {}) {
-  return Boolean(
-    targetGameId
-    && saveButtonDisabled
-    && String(targetGameId) === String(selectedGameId)
-  );
-}
+import {
+  isConfirmedBoxScoreSaveRerender,
+  resolveBoxScorePostSaveDestination
+} from "./BoxScorePostSaveNavigationV46.js";
 
 export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
   /**

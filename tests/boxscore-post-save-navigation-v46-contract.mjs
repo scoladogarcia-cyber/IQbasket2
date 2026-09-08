@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   isConfirmedBoxScoreSaveRerender,
   resolveBoxScorePostSaveDestination
-} from "../views/games/GameBoxScoreIntelligenceV46View.js";
+} from "../views/games/BoxScorePostSaveNavigationV46.js";
 
 assert.equal(resolveBoxScorePostSaveDestination(false), "#/games");
 assert.equal(resolveBoxScorePostSaveDestination(true), "#/dashboard");
@@ -37,8 +37,6 @@ assert.match(baseSource, /await this\.render\(containerId, currentGame\.id\)/,
 assert.match(baseSource, /if \(saveButton\) saveButton\.disabled = false/,
   "El error debe reactivar Guardar y no activar la navegación de éxito.");
 assert.match(enhancerSource, /window\.location\.hash = resolveBoxScorePostSaveDestination/);
-assert.match(enhancerSource, /"#\/games"/);
-assert.match(enhancerSource, /"#\/dashboard"/);
 assert.doesNotMatch(enhancerSource, /saveGameAndStats|saveCapture\(/,
   "La extensión UX no puede duplicar la persistencia del BoxScore.");
 
