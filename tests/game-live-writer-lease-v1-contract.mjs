@@ -76,7 +76,9 @@ assert.match(controller, /Transferir captura/);
 assert.match(controller, /Aceptar traspaso/);
 assert.match(controller, /attachLiveWriterLease/);
 assert.match(lazyRegistry, /LiveWriterLeaseController\.js/);
-assert.match(lazyRegistry, /attachLiveWriterLease\(view/);
+// Later releases may compose other decorators before the lease. The invariant is
+// that the live HUD factory still returns a view wrapped by attachLiveWriterLease.
+assert.match(lazyRegistry, /return\s+attachLiveWriterLease\([^,]+,\s*runtimeClient,\s*gameId\)/);
 
 const gameId = "11111111-1111-4111-8111-111111111111";
 const calls = [];
@@ -158,8 +160,3 @@ const compare = (a, b) => {
   return 0;
 };
 assert.ok(compare(version, baseline) >= 0, "La release V28 no puede retroceder.");
-if (release.release === "2026.09.06.14") {
-  assert.equal(release.label, "game-live-writer-lease-v1-v28");
-}
-
-console.log("GAME_LIVE_WRITER_LEASE_V1_V28_OK");
