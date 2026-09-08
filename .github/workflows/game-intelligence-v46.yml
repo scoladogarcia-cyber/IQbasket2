@@ -1,0 +1,87 @@
+name: Game Intelligence Panel V46
+
+on:
+  push:
+    branches:
+      - feat/game-intelligence-panel-v46
+      - main
+    paths:
+      - "views/GameBoxScoreView.js"
+      - "views/GameBoxScoreBaseView.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "views/games/BoxScorePostSaveNavigationV46.js"
+      - "views/components/GameIntelligencePanelV46.js"
+      - "domain/intelligence/GameIntelligenceInputAdapter.js"
+      - "domain/intelligence/GameIntelligenceEngine.js"
+      - "tests/game-intelligence-v46-contract.mjs"
+      - "tests/boxscore-post-save-navigation-v46-contract.mjs"
+      - "tests/game-intelligence-v45-contract.mjs"
+      - "tests/game-locking-ui-rbac.mjs"
+      - "tests/boxscore-edit-ui-smoke.mjs"
+      - "docs/architecture/GAME_INTELLIGENCE_PANEL_V46.md"
+      - "release.json"
+      - ".github/workflows/game-intelligence-v46.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/GameBoxScoreView.js"
+      - "views/GameBoxScoreBaseView.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "views/games/BoxScorePostSaveNavigationV46.js"
+      - "views/components/GameIntelligencePanelV46.js"
+      - "domain/intelligence/GameIntelligenceInputAdapter.js"
+      - "domain/intelligence/GameIntelligenceEngine.js"
+      - "tests/game-intelligence-v46-contract.mjs"
+      - "tests/boxscore-post-save-navigation-v46-contract.mjs"
+      - "tests/game-intelligence-v45-contract.mjs"
+      - "tests/game-locking-ui-rbac.mjs"
+      - "tests/boxscore-edit-ui-smoke.mjs"
+      - "docs/architecture/GAME_INTELLIGENCE_PANEL_V46.md"
+      - "release.json"
+      - ".github/workflows/game-intelligence-v46.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-intelligence-v46-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-ui-build:
+    name: Intelligence panel + BoxScore regression + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V46 panel contract
+        run: node tests/game-intelligence-v46-contract.mjs
+      - name: V46 post-save navigation contract
+        run: node tests/boxscore-post-save-navigation-v46-contract.mjs
+      - name: V45 intelligence regression
+        run: node tests/game-intelligence-v45-contract.mjs
+      - name: Game locking and RBAC regression
+        run: node tests/game-locking-ui-rbac.mjs
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start preview server
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/iqbasket-v46-vite.log 2>&1 &
+          echo $! > /tmp/iqbasket-v46-vite.pid
+          node -e "const http=require('http');let n=0;const ping=()=>http.get('http://127.0.0.1:4173',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>{if(++n>60)process.exit(1);setTimeout(ping,250)});ping();"
+      - name: Existing BoxScore browser smoke
+        run: node tests/boxscore-edit-ui-smoke.mjs
+      - name: Production build
+        run: npm run build
