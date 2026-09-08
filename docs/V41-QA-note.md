@@ -1,1 +1,0 @@
-Validated before PR on the V41 code head with Chromium and WebKit portrait/landscape smoke, V41 contract, V40/V39/V38 regressions and production build. Subsequent documentation-only commits do not change runtime code.
