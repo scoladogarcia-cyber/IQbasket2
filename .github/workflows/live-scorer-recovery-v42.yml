@@ -1,0 +1,104 @@
+name: Recovered Live Scorer V42
+
+on:
+  push:
+    branches:
+      - fix/scorer-recovery-v42
+      - main
+    paths:
+      - "views/LiveScoreHUDViewV42.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/live-scorer-recovery-v42-contract.mjs"
+      - "tests/live-scorer-v42-mobile-recovery-smoke.mjs"
+      - "tests/live-scorer-viewport-v41-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-scorer-recovery-v42.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "views/LiveScoreHUDViewV42.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/live-scorer-recovery-v42-contract.mjs"
+      - "tests/live-scorer-v42-mobile-recovery-smoke.mjs"
+      - "tests/live-scorer-viewport-v41-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-scorer-recovery-v42.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-scorer-v42-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  contract-regressions-build:
+    name: Contract + regressions + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V42 scorer recovery contract
+        run: node tests/live-scorer-recovery-v42-contract.mjs
+      - name: V41 historical viewport regression
+        run: node tests/live-scorer-viewport-v41-contract.mjs
+      - name: V40 safe-delete regression
+        run: node tests/live-scorer-safe-delete-v40-contract.mjs
+      - name: V39 live-capture regression
+        run: node tests/live-capture-onboarding-streaming-v39-contract.mjs
+      - name: V38 fast-PBP regression
+        run: node tests/mobile-fast-pbp-v38-contract.mjs
+      - name: Production build
+        run: npm run build
+
+  mobile-functional:
+    name: iPhone recovery · ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install app
+        run: npm ci
+      - name: Install Playwright browser without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/v42-live-${{ matrix.browser }}-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/v42-live-${{ matrix.browser }}-vite.log
+          exit 1
+      - name: Team/rival court + PBP annul + portrait/landscape
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/live-scorer-v42-mobile-recovery-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/v42-live-${{ matrix.browser }}-vite.log || true
