@@ -1,10 +1,13 @@
 /**
  * @fileoverview Role/resource-aware game list for IQBasket capture modes.
  * @description Keeps broad game editing separate from resource-scoped capture
- * capabilities and V39 spectator mode. Delegated users never receive EDIT_GAME
- * or CREATE_GAME as a side effect of capture access.
+ * capabilities, V39 spectator mode and V40 confirmed destructive deletion.
+ * Delegated users never receive EDIT_GAME or CREATE_GAME as a side effect of
+ * capture access.
  */
 import { Permission } from "../../security/PermissionService.js";
+import { DataStore } from "../../services/DataStore.js";
+import { GameDeletionServiceV40 } from "../../services/games/GameDeletionServiceV40.js";
 import { GameLiveEditorView } from "../GameLiveEditorView.js";
 import { LiveGameSetupV39View } from "./LiveGameSetupV39View.js";
 
@@ -33,18 +36,65 @@ function gameIdFromBoxScore(node) {
 }
 
 export class GameCaptureModesView extends GameLiveEditorView {
+  constructor(gameController, authController) {
+    super(gameController, authController);
+    this.gameDeletionService = new GameDeletionServiceV40(this.supabase);
+  }
+
   _can(permission, game = {}) {
     return Boolean(this.auth?.canPreview?.(permission, this._gameContext(game)));
   }
 
   /**
    * The legacy list remains authoritative for normal staff operations. After it
-   * renders, this extension adapts only capture/streaming actions.
+   * renders, this extension adapts only capture/streaming/destructive actions.
    */
   async _renderGamesList(container, teamId) {
     await super._renderGamesList(container, teamId);
+    this._decorateConfirmedDeletion(container, teamId);
     this._decorateCaptureModes(container, teamId);
     this._decorateNewLiveGame(container, teamId);
+  }
+
+  /**
+   * Removes the legacy optimistic delete listener by cloning each button.
+   * The card disappears only after the database RPC confirms the transaction.
+   */
+  _decorateConfirmedDeletion(container, teamId) {
+    container.querySelectorAll(".btn-delete-game-direct[data-id]").forEach(legacyButton => {
+      const button = legacyButton.cloneNode(true);
+      legacyButton.replaceWith(button);
+
+      button.addEventListener("click", async event => {
+        event.preventDefault();
+        const id = String(event.currentTarget.dataset.id || "");
+        const game = this.games.find(row => String(row.id) === id) || null;
+        if (!game || !this._canDeleteGame(game)) return;
+
+        const opponent = game.opponent || game.opponent_name || game.opponentName || "Rival";
+        if (!confirm(`¿Eliminar definitivamente el partido contra ${opponent}? Se borrarán sus estadísticas y jugadas asociadas. Esta acción no se puede deshacer.`)) return;
+
+        const currentButton = event.currentTarget;
+        currentButton.disabled = true;
+        try {
+          await this.gameDeletionService.deleteGame({
+            gameId: id,
+            reason: "Eliminación confirmada desde la lista de partidos"
+          });
+
+          // Remote-first: refresh from the source of truth only after confirmation.
+          DataStore.isLoaded = false;
+          await DataStore.init(teamId, true);
+          this.games = DataStore.getGames(teamId) || [];
+          await this._renderGamesList(container, teamId);
+          alert("✅ Partido eliminado definitivamente.");
+        } catch (error) {
+          console.error("[GameCaptureModesView] Error eliminando partido:", error);
+          alert(`❌ ${error.message || error}`);
+          currentButton.disabled = false;
+        }
+      });
+    });
   }
 
   _decorateNewLiveGame(container, teamId) {
