@@ -50,14 +50,14 @@ assert.match(html, /no clasifica jugadoras ni establece causas/i);
 
 const limited = buildGameIntelligence({
   playerStats: normalizeGameStatsForIntelligence([
-    { player_id: "hidden", points: 10, fg2_made: 1, fg2_attempted: 2, fg3_made: 1, fg3_attempted: 2 }
+    { player_id: "hidden-player-id", points: 10, fg2_made: 1, fg2_attempted: 2, fg3_made: 1, fg3_attempted: 2 }
   ])
 });
 const limitedHtml = renderGameIntelligencePanel({ intelligence: limited });
 assert.match(limitedHtml, /role="status"/);
 assert.match(limitedHtml, /Revisar datos/);
 assert.match(limitedHtml, /no coinciden con los puntos derivados/i);
-assert.doesNotMatch(limitedHtml, /hidden/);
+assert.doesNotMatch(limitedHtml, /hidden-player-id/);
 
 const emptyHtml = renderGameIntelligencePanel({
   intelligence: buildGameIntelligence({ playerStats: [] })
