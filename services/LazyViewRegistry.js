@@ -136,13 +136,13 @@ const FACTORY_LOADERS = Object.freeze({
 
     const { supabase, authController } = dependencies;
     const [
-      { LiveScoreHUDViewV42Safe },
+      { LiveScoreHUDViewV44 },
       { attachLiveWriterLeaseV43 },
       { attachLiveCaptureStartGate },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
-      import("../views/LiveScoreHUDViewV42Safe.js"),
+      import("../views/LiveScoreHUDViewV44.js"),
       import("../features/game-live/LiveWriterLeaseV43Controller.js"),
       import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
@@ -150,12 +150,13 @@ const FACTORY_LOADERS = Object.freeze({
     ]);
 
     const runtimeClient = supabase || authController?.supabase || null;
-    const view = new LiveScoreHUDViewV42Safe(authController, gameId);
+    const view = new LiveScoreHUDViewV44(authController, gameId);
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 
     // Composition order matters: sporting lifecycle first, then the V43
-    // recoverable single-writer boundary. Business permissions stay unchanged.
+    // recoverable single-writer boundary. V44 changes sporting projection/UX,
+    // not the backend authorization or concurrency policy.
     const gated = attachLiveCaptureStartGate(view, runtimeClient, authController, gameId);
     return attachLiveWriterLeaseV43(gated, runtimeClient, gameId);
   },
