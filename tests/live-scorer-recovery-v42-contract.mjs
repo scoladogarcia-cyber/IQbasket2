@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const scorer = await readFile(new URL("../views/LiveScoreHUDViewV42.js", import.meta.url), "utf8");
+const scoreSafe = await readFile(new URL("../views/LiveScoreHUDViewV42Safe.js", import.meta.url), "utf8");
 const registry = await readFile(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
 const release = JSON.parse(await readFile(new URL("../release.json", import.meta.url), "utf8"));
 
@@ -25,9 +26,17 @@ assert.doesNotMatch(scorer, /data-v39-palette/);
 assert.doesNotMatch(scorer, /v40-more-open/);
 assert.doesNotMatch(scorer, /height:100dvh/);
 
-assert.match(registry, /LiveScoreHUDViewV42/);
-assert.match(registry, /import\("\.\.\/views\/LiveScoreHUDViewV42\.js"\)/);
-assert.match(registry, /new LiveScoreHUDViewV42\(authController, gameId\)/);
+assert.match(scoreSafe, /extends LiveScoreHUDViewV42/);
+assert.match(scoreSafe, /scoreBaselineTeam/);
+assert.match(scoreSafe, /scoreBaselineOpponent/);
+assert.match(scoreSafe, /storedTeam - pbpTeam/);
+assert.match(scoreSafe, /storedOpponent - pbpOpponent/);
+assert.match(scoreSafe, /let team = Number\(this\.scoreBaselineTeam/);
+assert.match(scoreSafe, /let opponent = Number\(this\.scoreBaselineOpponent/);
+
+assert.match(registry, /LiveScoreHUDViewV42Safe/);
+assert.match(registry, /import\("\.\.\/views\/LiveScoreHUDViewV42Safe\.js"\)/);
+assert.match(registry, /new LiveScoreHUDViewV42Safe\(authController, gameId\)/);
 assert.match(registry, /attachLiveWriterLease/);
 assert.match(registry, /attachLiveCaptureStartGate/);
 
