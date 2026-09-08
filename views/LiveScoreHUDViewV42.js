@@ -184,6 +184,12 @@ export class LiveScoreHUDViewV42 extends LiveScoreHUDViewV38 {
   }
 
   _normalizeRunningScores() {
+    // Some historical/imported games can have an authoritative stored score but
+    // no granular PBP. Rendering that state must not silently turn it into 0-0.
+    // Mutation paths call the base recalculator first, so deleting the final live
+    // event still correctly leaves a 0-0 score when the capture itself is empty.
+    if (!this.playByPlayEvents.length) return;
+
     let team = 0;
     let opponent = 0;
     this.playByPlayEvents.forEach(event => {
