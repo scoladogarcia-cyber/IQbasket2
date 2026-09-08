@@ -31,33 +31,55 @@
 
   <div id="app"></div>
 
-  <!-- Offline-first decora la persistencia antes de arrancar la aplicación. -->
-  <!-- Guard minimo fuera del bundle: evita mezclar una pestana antigua con un backend mas nuevo. -->
+  <!--
+    V43 release freshness guard.
+    The deploy workflow replaces the placeholder below inside dist/index.html,
+    so the browser compares the bundle it actually loaded with release.json.
+  -->
   <script>
     (() => {
-      let loadedRelease = null;
+      const embedded = '__IQBASKET_BUILD_RELEASE__';
+      const buildRelease = embedded.startsWith('__IQBASKET_') ? null : embedded;
       let stale = false;
+      window.__IQBASKET_BUILD_RELEASE__ = buildRelease;
+
+      const freshReload = latest => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('iqrelease', String(latest || Date.now()).replace(/[^0-9A-Za-z._-]/g, '-'));
+        window.location.replace(url.toString());
+      };
+
+      const showStale = latest => {
+        if (stale || document.getElementById('iq-release-stale-overlay')) return;
+        stale = true;
+        window.__IQBASKET_RELEASE_STALE__ = true;
+        const overlay = document.createElement('div');
+        overlay.id = 'iq-release-stale-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.88)';
+        overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px;font-family:system-ui,sans-serif"><strong style="font-size:20px">Nueva versi&oacute;n disponible</strong><p style="line-height:1.5">La pantalla cargada es anterior a la versi&oacute;n publicada. Actualiza antes de seguir anotando para evitar mezclar interfaces o datos.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar IQBasket</button><small style="display:block;margin-top:10px;color:#64748b">Cargada: '+(buildRelease || 'desarrollo')+' · Publicada: '+latest+'</small></div>';
+        document.body.appendChild(overlay);
+        document.getElementById('iq-release-reload')?.addEventListener('click', () => freshReload(latest));
+      };
+
       const check = async () => {
         if (stale) return;
         try {
           const response = await fetch(`./release.json?t=${Date.now()}`, { cache: 'no-store' });
           if (!response.ok) return;
-          const release = String((await response.json())?.release || '').trim();
-          if (!release) return;
-          if (!loadedRelease) { loadedRelease = release; window.__IQBASKET_RELEASE__ = release; return; }
-          if (release === loadedRelease) return;
-          stale = true; window.__IQBASKET_RELEASE_STALE__ = true;
-          const overlay = document.createElement('div');
-          overlay.id = 'iq-release-stale-overlay';
-          overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.88)';
-          overlay.innerHTML = '<div style="max-width:420px;width:100%;background:white;color:#0f172a;border-radius:18px;padding:24px"><strong style="font-size:20px">Nueva versi&oacute;n disponible</strong><p>IQBasket se ha actualizado. Actualiza antes de seguir editando.</p><button id="iq-release-reload" style="width:100%;min-height:48px;border:0;border-radius:12px;background:#f97316;color:white;font-weight:800">Actualizar ahora</button></div>';
-          document.body.appendChild(overlay);
-          document.getElementById('iq-release-reload')?.addEventListener('click', () => location.reload());
+          const latest = String((await response.json())?.release || '').trim();
+          if (!latest) return;
+          window.__IQBASKET_PUBLISHED_RELEASE__ = latest;
+          // Local/dev builds are intentionally not forced to match Pages metadata.
+          if (!buildRelease) return;
+          if (latest !== buildRelease) showStale(latest);
         } catch (_) {}
       };
-      addEventListener('focus', check); addEventListener('online', check);
+
+      addEventListener('focus', check);
+      addEventListener('online', check);
       document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
-      setInterval(check, 60000); check();
+      setInterval(check, 60000);
+      check();
     })();
   </script>
   <script type="module" src="./features/offline/OfflineFirstBootstrap.js"></script>
