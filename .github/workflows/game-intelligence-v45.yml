@@ -1,0 +1,58 @@
+name: Game Intelligence Foundation V45
+
+on:
+  push:
+    branches:
+      - feat/game-intelligence-foundation-v45
+      - main
+    paths:
+      - "config/game-intelligence.config.js"
+      - "domain/intelligence/GameIntelligenceEngine.js"
+      - "tests/game-intelligence-v45-contract.mjs"
+      - "docs/architecture/GAME_INTELLIGENCE_V45.md"
+      - "config/player360-ai-gateway.config.js"
+      - "release.json"
+      - ".github/workflows/game-intelligence-v45.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "config/game-intelligence.config.js"
+      - "domain/intelligence/GameIntelligenceEngine.js"
+      - "tests/game-intelligence-v45-contract.mjs"
+      - "docs/architecture/GAME_INTELLIGENCE_V45.md"
+      - "config/player360-ai-gateway.config.js"
+      - "release.json"
+      - ".github/workflows/game-intelligence-v45.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-intelligence-v45-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-build:
+    name: Intelligence contract + regressions + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V45 game intelligence contract
+        run: node tests/game-intelligence-v45-contract.mjs
+      - name: Player360 AI gateway compatibility
+        run: node tests/player360-ai-gateway-contract.mjs
+      - name: V44 live BoxScore regression
+        run: node tests/live-boxscore-attribution-v44-contract.mjs
+      - name: Production build
+        run: npm run build
