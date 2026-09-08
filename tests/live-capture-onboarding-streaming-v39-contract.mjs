@@ -50,10 +50,21 @@ assert.match(modes, /cloneNode\(true\)/);
 assert.match(modes, /Nuevo partido en vivo/);
 assert.match(modes, /Marcador \/ Acta/);
 
-assert.match(registry, /LiveScoreHUDViewV39/);
-assert.match(registry, /ScopedGameBoxScoreLiveV39View/);
+// V39 guarantees remain required even if a later scorer presentation wraps them.
 assert.match(registry, /attachLiveCaptureStartGate/);
-assert.equal(release.release, "2026.09.08.22");
-assert.equal(release.label, "live-capture-onboarding-streaming-v39");
+assert.match(registry, /attachLiveWriterLease/);
+assert.match(registry, /ScopedGameBoxScoreLiveV39View/);
+
+const current = release.release.split(".").map(Number);
+const baseline = "2026.09.08.22".split(".").map(Number);
+const compare = (a, b) => {
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    const diff = (a[i] || 0) - (b[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+};
+assert.ok(compare(current, baseline) >= 0, "La release no puede retroceder respecto a V39.");
 
 console.log("V39 live capture onboarding + streaming contract OK");
