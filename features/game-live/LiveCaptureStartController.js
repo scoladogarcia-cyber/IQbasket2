@@ -10,6 +10,17 @@ import { Permission } from "../../security/PermissionService.js";
 import { GamePlayStateService } from "../../services/games/GamePlayStateService.js";
 
 const GATE_SELECTOR = "[data-live-start-gate]";
+const CAPTURE_CONTROLS = [
+  ".btn-action-shot",
+  ".btn-action-direct",
+  ".btn-opp-action",
+  ".btn-period-hud",
+  ".v38-player",
+  "#btn-add-ot",
+  "#btn-hud-undo",
+  "#btn-hud-redo",
+  "#btn-hud-subs"
+].join(",");
 
 function escapeHtml(value = "") {
   return String(value ?? "")
@@ -54,6 +65,23 @@ export class LiveCaptureStartController {
     return this.container?.querySelector?.(".v39-live-root,.v38-live-root") || null;
   }
 
+  _suspendCaptureUntilLive() {
+    this.container?.querySelectorAll?.(CAPTURE_CONTROLS).forEach(control => {
+      control.dataset.liveStartGateBlocked = "true";
+      control.disabled = true;
+    });
+
+    // LiveWriterLeaseController detects the HUD through this marker. While the
+    // sporting state is not LIVE we temporarily rename it, so the lease does not
+    // race ahead and show the misleading V38 error seen on mobile.
+    const finish = this.container?.querySelector?.("#btn-hud-finish");
+    if (finish) {
+      finish.dataset.liveStartOriginalId = "btn-hud-finish";
+      finish.id = "btn-hud-finish-gated";
+      finish.disabled = true;
+    }
+  }
+
   async syncAfterRender(container, gameId) {
     this.container = container || null;
     this.gameId = String(gameId || this.view?.gameId || "").trim() || null;
@@ -71,6 +99,7 @@ export class LiveCaptureStartController {
         return { state, gated: false };
       }
 
+      this._suspendCaptureUntilLive();
       if (state === "SCHEDULED" || state === "READY") {
         this._renderGate(state);
         return { state, gated: true };
@@ -80,6 +109,7 @@ export class LiveCaptureStartController {
       return { state, gated: true };
     } catch (error) {
       if (generation !== this.generation) return { state: null, gated: false };
+      this._suspendCaptureUntilLive();
       this._renderError(error);
       return { state: null, gated: true };
     }
@@ -116,8 +146,8 @@ export class LiveCaptureStartController {
       <div class="v39-live-start-copy">
         <strong>🏀 ${state === "SCHEDULED" ? "Partido todavía programado" : "Partido preparado"}</strong>
         <span>${canAct
-          ? "La anotación se habilitará al iniciar el estado deportivo LIVE."
-          : "La captura está preparada, pero un usuario con permiso de inicio debe poner el partido en vivo."}</span>
+          ? "Pulsa una vez para activar el partido y habilitar toda la anotación."
+          : "Un usuario con permiso de inicio debe poner el partido en vivo antes de anotar."}</span>
       </div>
       ${canAct ? `<button type="button" data-live-start-action>${label}</button>` : ""}
       <div data-live-start-feedback role="status" aria-live="polite"></div>`;
@@ -148,7 +178,7 @@ export class LiveCaptureStartController {
       </div>
       <button type="button" data-live-start-retry>Reintentar</button>`;
     panel.querySelector("[data-live-start-retry]")?.addEventListener("click", () => {
-      this.syncAfterRender(this.container, this.gameId).catch(() => {});
+      this.view.render(this.container?.id || "dashboard-content-area").catch(() => {});
     });
   }
 
@@ -181,7 +211,6 @@ export class LiveCaptureStartController {
       }
       this._syncLocalState(state);
       if (state !== "LIVE") throw new Error(`El partido quedó en estado ${state}.`);
-      this._removeGate();
       await this.view.render(this.container?.id || "dashboard-content-area");
     } catch (error) {
       if (feedback) feedback.textContent = error?.message || "No se pudo iniciar el partido.";
