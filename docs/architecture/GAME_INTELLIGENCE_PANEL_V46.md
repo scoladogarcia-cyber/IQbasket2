@@ -44,6 +44,16 @@ Las tasas por debajo de la muestra mínima V45 se muestran como `muestra limitad
 
 Si los puntos almacenados no coinciden con los puntos derivados de tiros anotados, el panel muestra una advertencia de calidad y mantiene la lectura como limitada. No corrige datos automáticamente.
 
+## Flujo post-guardado
+
+Tras un guardado correcto del BoxScore en el flujo normal de equipo, la aplicación vuelve automáticamente a **Partidos** (`#/games`) para mostrar de nuevo la lista completa con los datos ya persistidos.
+
+La decisión de navegación está aislada en `views/games/BoxScorePostSaveNavigationV46.js` y no duplica ninguna escritura. Se apoya en la confirmación de éxito ya existente en el flujo de guardado:
+
+- si el guardado termina correctamente, se navega a Partidos;
+- si falla, el usuario permanece en el BoxScore y el botón Guardar vuelve a habilitarse;
+- si el acceso está delegado únicamente a un partido, se vuelve a `#/dashboard` para no ampliar el alcance autorizado del usuario.
+
 ## UX y accesibilidad
 
 - `section` con `aria-labelledby`;
@@ -83,8 +93,9 @@ El incremento valida:
 - aviso de inconsistencia de puntos;
 - ausencia de red/RPC/persistencia en adapter, presenter y extensión;
 - preservación del contrato de locking/RBAC del BoxScore;
+- navegación post-guardado normal y scoped;
 - regresión V45;
-- smoke browser existente de edición/bloqueo de BoxScore;
+- smoke browser existente de edición/bloqueo de BoxScore en escritorio y móvil;
 - build de producción.
 
 ## Siguiente incremento recomendado
