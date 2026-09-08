@@ -61,6 +61,22 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Stamp exact build release into HTML
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const release = JSON.parse(fs.readFileSync('release.json', 'utf8')).release;
+          const path = 'dist/index.html';
+          const placeholder = '__IQBASKET_BUILD_RELEASE__';
+          let html = fs.readFileSync(path, 'utf8');
+          if (!html.includes(placeholder)) {
+            throw new Error(`Missing ${placeholder} in ${path}`);
+          }
+          html = html.replaceAll(placeholder, String(release));
+          fs.writeFileSync(path, html);
+          console.log(`Stamped IQBasket build release ${release}`);
+          NODE
+
       - name: Add release metadata to artifact
         run: cp release.json dist/release.json
 
@@ -72,6 +88,12 @@ jobs:
             echo "Absolute /assets paths would break the GitHub Pages project path."
             exit 1
           fi
+          if grep -q '__IQBASKET_BUILD_RELEASE__' dist/index.html; then
+            echo "Build release placeholder was not stamped."
+            exit 1
+          fi
+          RELEASE="$(node -p "JSON.parse(require('fs').readFileSync('release.json','utf8')).release")"
+          grep -Fq "$RELEASE" dist/index.html
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
