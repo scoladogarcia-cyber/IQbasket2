@@ -22,8 +22,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new AdvancedStatsView(gameController);
   },
   boxscore: async ({ supabase, authController }) => {
-    const { ScopedGameBoxScoreView } = await import("../views/games/ScopedGameBoxScoreView.js");
-    return new ScopedGameBoxScoreView(supabase, authController);
+    const { ScopedGameBoxScoreLiveV38View } = await import("../views/games/ScopedGameBoxScoreLiveV38View.js");
+    return new ScopedGameBoxScoreLiveV38View(supabase, authController);
   },
   player: async ({ supabase, authController }) => {
     const { PlayerStatsView } = await import("../views/PlayerStatsView.js");
@@ -142,23 +142,22 @@ const FACTORY_LOADERS = Object.freeze({
 
     const { supabase, authController } = dependencies;
     const [
-      { LiveScoreHUDView },
+      { LiveScoreHUDViewV38 },
       { attachLiveWriterLease },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
-      import("../views/LiveScoreHUDView.js"),
+      import("../views/LiveScoreHUDViewV38.js"),
       import("../features/game-live/LiveWriterLeaseController.js"),
       import("./games/GameCaptureDelegationService.js"),
       import("./games/GamePlayStateService.js")
     ]);
 
     const runtimeClient = supabase || authController?.supabase || null;
-    const view = new LiveScoreHUDView(authController, gameId);
+    const view = new LiveScoreHUDViewV38(authController, gameId);
 
-    // LiveScoreHUDView nació antes de la inyección explícita del cliente de datos.
-    // El factory es la frontera de composición: aquí sustituimos sus servicios por
-    // instancias correctamente cableadas sin ampliar permisos ni mutar el RBAC.
+    // V38 conserva la frontera de composición V28: los servicios reales se
+    // inyectan aquí y el HUD no amplía permisos ni conoce credenciales.
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 
