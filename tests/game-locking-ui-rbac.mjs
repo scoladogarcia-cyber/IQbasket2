@@ -8,7 +8,8 @@ const service = readFileSync(
 );
 const dataStore = readFileSync(new URL("../services/DataStore.js", import.meta.url), "utf8");
 const view = readFileSync(new URL("../views/GameLiveEditorView.js", import.meta.url), "utf8");
-const boxScoreView = readFileSync(new URL("../views/GameBoxScoreView.js", import.meta.url), "utf8");
+const boxScoreEntry = readFileSync(new URL("../views/GameBoxScoreView.js", import.meta.url), "utf8");
+const boxScoreView = readFileSync(new URL("../views/GameBoxScoreBaseView.js", import.meta.url), "utf8");
 
 const teamId = "11111111-1111-4111-8111-111111111111";
 const teamSeasonId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -69,6 +70,7 @@ assert.match(dataStore, /Partido cerrado: reabre el partido antes de modificar d
 assert.match(view, /Solicitar cierre/i);
 assert.match(view, /Reabrir/i);
 assert.match(view, /Peticiones de cierre/i);
+assert.match(boxScoreEntry, /GameBoxScoreIntelligenceV46View/);
 assert.match(boxScoreView, /Permission\.EDIT_BOXSCORE/);
 assert.match(boxScoreView, /GameLockService\.isLocked/);
 assert.match(boxScoreView, /_isTeamSeasonFrozen/);
