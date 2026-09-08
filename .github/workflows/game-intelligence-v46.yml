@@ -13,6 +13,7 @@ on:
       - "domain/intelligence/GameIntelligenceInputAdapter.js"
       - "domain/intelligence/GameIntelligenceEngine.js"
       - "tests/game-intelligence-v46-contract.mjs"
+      - "tests/boxscore-post-save-navigation-v46-contract.mjs"
       - "tests/game-intelligence-v45-contract.mjs"
       - "tests/game-locking-ui-rbac.mjs"
       - "tests/boxscore-edit-ui-smoke.mjs"
@@ -30,6 +31,7 @@ on:
       - "domain/intelligence/GameIntelligenceInputAdapter.js"
       - "domain/intelligence/GameIntelligenceEngine.js"
       - "tests/game-intelligence-v46-contract.mjs"
+      - "tests/boxscore-post-save-navigation-v46-contract.mjs"
       - "tests/game-intelligence-v45-contract.mjs"
       - "tests/game-locking-ui-rbac.mjs"
       - "tests/boxscore-edit-ui-smoke.mjs"
@@ -62,12 +64,16 @@ jobs:
         run: npm ci
       - name: V46 panel contract
         run: node tests/game-intelligence-v46-contract.mjs
+      - name: V46 post-save navigation contract
+        run: node tests/boxscore-post-save-navigation-v46-contract.mjs
       - name: V45 intelligence regression
         run: node tests/game-intelligence-v45-contract.mjs
       - name: Game locking and RBAC regression
         run: node tests/game-locking-ui-rbac.mjs
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright without modifying lockfile
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
       - name: Start preview server
         run: |
           npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/iqbasket-v46-vite.log 2>&1 &
