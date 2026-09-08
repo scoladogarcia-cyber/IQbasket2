@@ -1,0 +1,54 @@
+name: Live Capture Onboarding + Streaming V39
+
+on:
+  push:
+    branches:
+      - feat/live-capture-onboarding-streaming-v39
+      - main
+    paths:
+      - "services/games/LiveGameLaunchService.js"
+      - "views/games/LiveGameSetupV39View.js"
+      - "features/game-live/LiveCaptureStartController.js"
+      - "views/LiveScoreHUDViewV39.js"
+      - "views/games/ScopedGameBoxScoreLiveV39View.js"
+      - "views/games/GameCaptureModesView.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-capture-onboarding-streaming-v39.yml"
+  pull_request:
+    paths:
+      - "services/games/LiveGameLaunchService.js"
+      - "views/games/LiveGameSetupV39View.js"
+      - "features/game-live/LiveCaptureStartController.js"
+      - "views/LiveScoreHUDViewV39.js"
+      - "views/games/ScopedGameBoxScoreLiveV39View.js"
+      - "views/games/GameCaptureModesView.js"
+      - "services/LazyViewRegistry.js"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-capture-onboarding-streaming-v39.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: V39 live capture contract
+        run: node tests/live-capture-onboarding-streaming-v39-contract.mjs
+      - name: V38 regression contract
+        run: node tests/mobile-fast-pbp-v38-contract.mjs
+      - name: Production build
+        run: npm run build
