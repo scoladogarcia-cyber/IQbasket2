@@ -1,1 +1,0 @@
-Runtime files changed by V41: views/LiveScoreHUDViewV41.js and services/LazyViewRegistry.js. Test/release files: tests/live-scorer-viewport-v41-contract.mjs, tests/live-scorer-v41-mobile-orientation-smoke.mjs, tests/live-scorer-safe-delete-v40-contract.mjs, .github/workflows/live-scorer-viewport-v41.yml, release.json.
