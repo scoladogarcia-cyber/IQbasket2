@@ -68,7 +68,7 @@ assert.ok(
 
 // Scorer: V40 is a visible, immersive presentation over proven V39 behavior.
 assert.match(scorer, /extends LiveScoreHUDViewV39/);
-assert.match(scorer, /data\.v40Scorer/);
+assert.match(scorer, /dataset\.v40Scorer/);
 assert.match(scorer, /position:fixed!important/);
 assert.match(scorer, /height:100dvh!important/);
 assert.match(scorer, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)!important/);
