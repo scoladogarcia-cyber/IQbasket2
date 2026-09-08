@@ -1,0 +1,77 @@
+name: Immersive Live Scorer + Safe Delete V40
+
+on:
+  push:
+    branches:
+      - fix/live-scorer-delete-v40
+      - main
+    paths:
+      - "views/LiveScoreHUDViewV40.js"
+      - "views/games/GameCaptureModesView.js"
+      - "services/games/GameDeletionServiceV40.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20260908074500_live_scorer_delete_v40.sql"
+      - "tests/live-scorer-safe-delete-v40-contract.mjs"
+      - "tests/live-scorer-v40-mobile-ui-smoke.mjs"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-scorer-safe-delete-v40.yml"
+  pull_request:
+    paths:
+      - "views/LiveScoreHUDViewV40.js"
+      - "views/games/GameCaptureModesView.js"
+      - "services/games/GameDeletionServiceV40.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20260908074500_live_scorer_delete_v40.sql"
+      - "tests/live-scorer-safe-delete-v40-contract.mjs"
+      - "tests/live-scorer-v40-mobile-ui-smoke.mjs"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "release.json"
+      - ".github/workflows/live-scorer-safe-delete-v40.yml"
+
+permissions:
+  contents: read
+
+env:
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  contract-ui-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium smoke dependency
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/v40-live-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/v40-live-vite.log
+          exit 1
+      - name: V40 scorer and safe-delete contract
+        run: node tests/live-scorer-safe-delete-v40-contract.mjs
+      - name: V40 iPhone scorer smoke
+        run: node tests/live-scorer-v40-mobile-ui-smoke.mjs
+      - name: V39 regression contract
+        run: node tests/live-capture-onboarding-streaming-v39-contract.mjs
+      - name: V38 regression contract
+        run: node tests/mobile-fast-pbp-v38-contract.mjs
+      - name: Production build
+        run: npm run build
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/v40-live-vite.log || true
