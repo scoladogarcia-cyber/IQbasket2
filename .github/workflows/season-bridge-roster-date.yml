@@ -6,6 +6,7 @@ on:
     paths:
       - "supabase/migrations/20260920110000_repair_team_season_legacy_game_fk.sql"
       - "supabase/migrations/20260920111000_adjust_roster_start_safely.sql"
+      - "supabase/migrations/20260920112000_roster_start_revoke_anon.sql"
       - "services/roster/RosterEligibilityDateService.js"
       - "features/roster/RosterEligibilityDateEnhancer.js"
       - "index.html"
@@ -16,6 +17,7 @@ on:
     paths:
       - "supabase/migrations/20260920110000_repair_team_season_legacy_game_fk.sql"
       - "supabase/migrations/20260920111000_adjust_roster_start_safely.sql"
+      - "supabase/migrations/20260920112000_roster_start_revoke_anon.sql"
       - "services/roster/RosterEligibilityDateService.js"
       - "features/roster/RosterEligibilityDateEnhancer.js"
       - "index.html"
