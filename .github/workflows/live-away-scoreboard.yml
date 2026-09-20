@@ -1,0 +1,73 @@
+name: Live Away Scoreboard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "domain/games/GameScoreOrientation.js"
+      - "views/LiveScoreHUDViewV42Safe.js"
+      - "tests/live-away-scoreboard-regression.mjs"
+      - "tests/live-away-scoreboard-browser.mjs"
+      - ".github/workflows/live-away-scoreboard.yml"
+  push:
+    branches: [main]
+    paths:
+      - "domain/games/GameScoreOrientation.js"
+      - "views/LiveScoreHUDViewV42Safe.js"
+      - "tests/live-away-scoreboard-regression.mjs"
+      - "tests/live-away-scoreboard-browser.mjs"
+      - ".github/workflows/live-away-scoreboard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Score orientation regression
+        run: node tests/live-away-scoreboard-regression.mjs
+      - name: Production build
+        run: npm run build
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+      QA_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/away-${{ matrix.browser }}.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/away-${{ matrix.browser }}.log
+          exit 1
+      - name: Verify visitor, home, resumed actions and final acta
+        run: node tests/live-away-scoreboard-browser.mjs
+      - if: failure()
+        run: cat /tmp/away-${{ matrix.browser }}.log || true
