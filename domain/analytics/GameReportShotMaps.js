@@ -1,6 +1,7 @@
 /**
- * @fileoverview Cartas de tiro del informe final, por equipo y por partido.
- * @description No atribuye fallos al rival cuando la captura solo contiene sus canastas.
+ * @fileoverview Coordenadas canónicas de tiros por equipo y partido.
+ * @description Los tiros libres rivales no tienen localización de campo;
+ * nunca se inventan intentos fallados ni se convierten en mapas de eficiencia.
  */
 import { resolveShotMade } from "./ShotOutcomeResolver.js";
 
@@ -11,10 +12,11 @@ const coordinate = (row, key, alias) => {
   return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
 };
 
-/** @returns {{our: object, opponent: object}} Separación semántica sin modificar eventos. */
+/** @returns {{our: object, opponent: object}} Solo el encuentro seleccionado. */
 export function buildGameShotMaps(events = [], gameId = null) {
   const our = [], opponent = [];
-  let ownShots = 0, opponentScores = 0, ownLocated = 0, opponentLocated = 0;
+  let ownShots = 0, opponentScores = 0, opponentFreeThrows = 0;
+  let opponentPoints = 0;
   for (const event of Array.isArray(events) ? events : []) {
     if (gameId && String(event.game_id ?? event.gameId) !== String(gameId)) continue;
     const action = String(event.action_type ?? event.action ?? event.event_type ?? "").toLowerCase();
@@ -25,28 +27,27 @@ export function buildGameShotMaps(events = [], gameId = null) {
     if (!ownShot && !opponentScore) continue;
     const x = coordinate(event, "coord_x", "coordX");
     const y = coordinate(event, "coord_y", "coordY");
-    const made = resolveShotMade(event);
+    const points = Number(event.points ?? 0);
     if (isOpponent) {
-      opponentScores++;
-      if (x !== null && y !== null) {
-        opponent.push({ x, y, made: true, points: Number(event.points || 0) });
-        opponentLocated++;
-      }
+      if (points === 1) { opponentFreeThrows += 1; continue; }
+      if (points !== 2 && points !== 3) continue;
+      opponentScores += 1;
+      opponentPoints += points;
+      if (x !== null && y !== null) opponent.push({ x, y, made: true, points });
     } else {
-      ownShots++;
-      if (x !== null && y !== null) {
-        our.push({ x, y, made, points: Number(event.points || 0) });
-        ownLocated++;
-      }
+      ownShots += 1;
+      if (x !== null && y !== null) our.push({ x, y, made: resolveShotMade(event), points });
     }
   }
   return {
-    our: { shots: our, observed: ownShots, located: ownLocated, made: our.filter(shot => shot.made).length,
-      coverage: ownShots ? `${ownLocated}/${ownShots} tiros localizados` : "No hay tiros registrados",
-      completeOutcomes: ownShots > 0 && ownLocated === ownShots },
-    opponent: { shots: opponent, observed: opponentScores, located: opponentLocated, made: opponentLocated,
-      coverage: opponentScores ? `${opponentLocated}/${opponentScores} canastas localizadas` : "No hay canastas localizadas",
+    our: { shots: our, observed: ownShots, located: our.length, made: our.filter(shot => shot.made).length,
+      coverage: ownShots ? `${our.length}/${ownShots} tiros localizados` : "No hay tiros registrados",
+      completeOutcomes: ownShots > 0 && ownShots === our.length },
+    opponent: { shots: opponent, observed: opponentScores, located: opponent.length, made: opponent.length,
+      freeThrows: opponentFreeThrows, points: opponentPoints,
+      locatedPoints: opponent.reduce((sum, shot) => sum + shot.points, 0),
+      coverage: opponentScores ? `${opponent.length} canastas de campo localizadas de ${opponentScores} registradas; ${opponentFreeThrows} TL sin posición` : `${opponentFreeThrows} TL; no hay canastas de campo registradas`,
       completeOutcomes: false,
-      note: "Mapa de canastas registradas del rival; los tiros fallados no se capturan de forma completa. No se puede calcular su acierto por zonas." }
+      note: "Azul = 2 puntos; ámbar = 3 puntos. Se muestran únicamente canastas de campo con coordenadas. Sin fallos rivales no hay porcentajes por zonas." }
   };
 }
