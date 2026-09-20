@@ -1,14 +1,17 @@
 /**
- * @fileoverview Informes V50: exportación completa y visible de datos + mapas.
- * @description Extensión aditiva de V49: mantiene informes de partido, dossier
- * configurable, evolución y RBAC existentes. No escribe en la base de datos.
+ * @fileoverview Informes V50: exportación completa de temporada y ficha individual.
+ * @description Mantiene V49, dossier y RBAC. Los informes de jugador leen actas
+ * actuales y añaden T2/T3/TC/TL, rebotes, acciones y porcentajes al PDF.
  */
 import ReportsView from "./ReportsView.js";
 import { DataStore } from "../services/DataStore.js";
 import { ReportExporter } from "../services/ReportExporter.js";
 import { ReportType } from "../security/ReportAccessPolicy.js";
+import { supabase as reportSupabase } from "../config/database.config.js";
 import { loadAuthorizedFinalGameReport } from "../services/games/GameFinalReportReadService.js";
 import { loadCompleteSeasonReports, buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
+import { loadAuthorizedPlayerSeasonStats, replaceScopedPlayerStatsInMemory } from "../services/reports/PlayerSeasonReadService.js";
+import { renderPlayerCompleteBoxScore } from "./reports/PlayerCompleteBoxScore.js";
 
 const gameScope = (game, context) => ({
   ...context,
@@ -17,11 +20,17 @@ const gameScope = (game, context) => ({
   gameId: game.id
 });
 const normalizeId = value => String(value ?? "");
+const safeTitle = value => String(value ?? "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 90);
+const sameScope = (a, b) => normalizeId(a.teamId) === normalizeId(b.teamId)
+  && normalizeId(a.teamSeasonId) === normalizeId(b.teamSeasonId);
 
 export class ReportsViewV50 extends ReportsView {
   constructor(authController = null) {
     super(authController);
     this._completeSeasonExportRunning = false;
+    this._playerPdfRunning = false;
+    this._playerReadToken = 0;
+    this._playerReportReady = false;
   }
 
   /** La vista puede filtrar sede, siempre dentro de la temporada activa. */
@@ -37,6 +46,131 @@ export class ReportsViewV50 extends ReportsView {
         : venue === "visitante" || venue === "away" || game.is_home === false;
     });
     return [...games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+  }
+
+  /** Tabla individual compartida por pantalla y por el dossier heredado. */
+  _renderSinglePlayerCard(player, games) {
+    const original = super._renderSinglePlayerCard(player, games);
+    return `${original}${renderPlayerCompleteBoxScore({
+      player,
+      games,
+      stats: DataStore.getPlayerGameStats?.(player.id) || []
+    })}`;
+  }
+
+  /** Selección exacta del jugador y de los partidos de la temporada filtrada. */
+  _playerSelection(context) {
+    const authorized = this._authorizedPlayers();
+    const players = this.selectedPlayerId === "all"
+      ? authorized
+      : authorized.filter(player => normalizeId(player.id) === normalizeId(this.selectedPlayerId));
+    if (!players.length) throw new Error("No hay jugadores autorizados en esta selección.");
+    const games = this._getFilteredGames();
+    if (!games.length) throw new Error("No hay partidos de esta temporada con los filtros seleccionados.");
+    if (!context.teamSeasonId) throw new Error("Selecciona una temporada válida para consultar las actas individuales.");
+    return { players, games };
+  }
+
+  /** Lectura con RLS y RBAC; reemplaza SOLO las actas autorizadas en memoria. */
+  async _loadPlayerSelection(context, selection) {
+    const stats = await loadAuthorizedPlayerSeasonStats({
+      supabase: reportSupabase,
+      policy: this.reportAccessPolicy,
+      context,
+      players: selection.players,
+      games: selection.games
+    });
+    return stats;
+  }
+
+  /** No dibujar un informe aparentemente vacío cuando falla la consulta. */
+  async _refreshPlayerMode(container) {
+    const content = container.querySelector("#report-view-content-area");
+    if (!content) return;
+    const token = ++this._playerReadToken;
+    const context = this._reportContext();
+    const selected = normalizeId(this.selectedPlayerId);
+    this._playerReportReady = false;
+    content.textContent = "Recuperando actas y tiros individuales actualizados…";
+    try {
+      const selection = this._playerSelection(context);
+      const stats = await this._loadPlayerSelection(context, selection);
+      if (token !== this._playerReadToken || this.reportMode !== "player"
+        || normalizeId(this.selectedPlayerId) !== selected || !sameScope(context, this._reportContext())) return;
+      const stillAllowed = selection.players.every(player => this.reportAccessPolicy.canView(ReportType.PLAYER_STATS, {
+        ...context, playerId: player.id, playerTeamId: player.team_id || player.teamId || context.teamId
+      }));
+      if (!stillAllowed) throw new Error("Tus permisos han cambiado durante la consulta.");
+      replaceScopedPlayerStatsInMemory(DataStore, { ...selection, stats });
+      content.innerHTML = this._renderPlayerReport(selection.players, selection.games);
+      this._playerReportReady = true;
+      const button = container.querySelector("#btn-export-complete-players");
+      if (button) button.disabled = !this._canExportPlayers(context, selection.players) || this._playerPdfRunning;
+    } catch (error) {
+      console.warn("[ReportsViewV50] Lectura individual cancelada:", error);
+      if (token === this._playerReadToken && this.reportMode === "player") {
+        content.textContent = `No se ha podido recuperar el informe individual actualizado. ${error.message || "Reintenta la lectura."} No se ha modificado ningún dato.`;
+      }
+    }
+  }
+
+  _canExportPlayers(context, players) {
+    return players.length > 0 && players.every(player => this.reportAccessPolicy.canExport(ReportType.PLAYER_STATS, {
+      ...context, playerId: player.id, playerTeamId: player.team_id || player.teamId || context.teamId
+    }));
+  }
+
+  /** Exportación específica sin cifras prefijadas del antiguo PDF personalizado. */
+  async _exportCompletePlayers(button) {
+    if (this._playerPdfRunning || !this._playerReportReady) return;
+    const context = this._reportContext();
+    let selection;
+    try { selection = this._playerSelection(context); }
+    catch (error) { button.title = error.message; return; }
+    if (!this._canExportPlayers(context, selection.players)) return;
+    // Safari exige abrir la ventana dentro del clic, antes de cualquier await.
+    const printWindow = window.open("", "_blank", "width=1024,height=768");
+    if (!printWindow) {
+      alert("Permite ventanas emergentes para imprimir el informe de jugadores.");
+      return;
+    }
+    this._playerPdfRunning = true;
+    button.disabled = true;
+    printWindow.document.body.textContent = "Recuperando estadísticas individuales actualizadas…";
+    try {
+      const selected = normalizeId(this.selectedPlayerId);
+      const stats = await this._loadPlayerSelection(context, selection);
+      if (!sameScope(context, this._reportContext()) || this.reportMode !== "player"
+        || normalizeId(this.selectedPlayerId) !== selected
+        || !this._canExportPlayers(this._reportContext(), selection.players)) {
+        throw new Error("El jugador, la temporada o los permisos han cambiado durante la exportación.");
+      }
+      replaceScopedPlayerStatsInMemory(DataStore, { ...selection, stats });
+      const report = selection.players.map((player, i) => `<section style="${i ? "break-before:page;page-break-before:always;" : ""}break-inside:auto">
+        ${this._renderSinglePlayerCard(player, selection.games)}
+      </section>`).join("");
+      const team = DataStore.getTeamById?.(context.teamId);
+      const season = DataStore.getActiveSeasonDisplayName?.(context.teamId) || "Temporada";
+      const name = selection.players.length === 1 ? selection.players[0].first_name || selection.players[0].name || "Jugador" : "Plantilla";
+      const html = `<style>@media print{@page{size:A4 landscape;margin:9mm}.iq-player-boxscore{font-size:8px!important}.iq-player-boxscore td,.iq-player-boxscore th{padding:2px 3px!important}.iq-player-detail{break-inside:auto!important}}</style>
+        <header style="padding:12px;border-bottom:2px solid #1e3a8a;margin-bottom:14px"><h1>Informe individual completo · ${selection.players.length === 1 ? "Jugador" : "Plantilla"}</h1><p>${String(team?.name || "Equipo").replace(/[&<>"']/g, "")} · ${String(season).replace(/[&<>"']/g, "")} · ${selection.games.length} partidos seleccionados</p></header>${report}`;
+      const decision = this.reportAccessPolicy.authorizeExport(ReportType.PLAYER_STATS, {
+        ...context,
+        playerId: selection.players[0].id,
+        playerTeamId: selection.players[0].team_id || selection.players[0].teamId || context.teamId
+      });
+      if (!ReportExporter.printReport(`IQBasket_Jugador_${safeTitle(name)}_${safeTitle(season)}`, html, {
+        authorization: decision, printWindow
+      })) throw new Error("El navegador no ha podido preparar el PDF.");
+    } catch (error) {
+      console.warn("[ReportsViewV50] Exportación individual cancelada:", error);
+      if (!printWindow.closed && printWindow.document?.body) {
+        printWindow.document.body.textContent = `No se ha generado un PDF incompleto. ${error.message || "Vuelve a intentarlo."}`;
+      }
+    } finally {
+      this._playerPdfRunning = false;
+      if (button.isConnected) button.disabled = !this._playerReportReady || !this._canExportPlayers(this._reportContext(), this._authorizedPlayers().filter(player => this.selectedPlayerId === "all" || normalizeId(player.id) === normalizeId(this.selectedPlayerId)));
+    }
   }
 
   /**
@@ -118,11 +252,31 @@ export class ReportsViewV50 extends ReportsView {
     }
   }
 
-  /** Botón explícito junto al selector: visible incluso al elegir «Todos». */
+  /** Botones específicos junto al selector; en Jugador se oculta el PDF obsoleto. */
   async render(containerId = "dashboard-content-area") {
+    // Invalida las lecturas asíncronas de jugador al cambiar de pantalla.
+    ++this._playerReadToken;
     await super.render(containerId);
-    if (this.reportMode !== "game" && this.reportMode !== "season_dossier") return;
     const container = document.getElementById(containerId) || document.getElementById("main-content") || document.querySelector(".app-main-content") || document.body;
+    if (this.reportMode === "player") {
+      const toolbar = container?.querySelector("#filter-venue")?.parentElement;
+      const legacy = toolbar?.querySelector("#btn-open-dossier-modal");
+      if (legacy) legacy.style.display = "none";
+      if (toolbar) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.id = "btn-export-complete-players";
+        button.textContent = "📥 Exportar informe individual completo (PDF)";
+        button.style.cssText = "padding:10px 14px;border-radius:8px;border:1px solid #15803d;background:#15803d;color:#fff;font-size:12px;font-weight:800;min-height:44px;max-width:100%;white-space:normal;cursor:pointer";
+        button.disabled = true;
+        button.title = "Acta individual por partido, T2/T3/TC/TL, rebotes, acciones, porcentajes, radar y mapa de tiro. Imprimir → Guardar como PDF.";
+        button.addEventListener("click", () => { void this._exportCompletePlayers(button); });
+        toolbar.append(button);
+      }
+      await this._refreshPlayerMode(container);
+      return;
+    }
+    if (this.reportMode !== "game" && this.reportMode !== "season_dossier") return;
     const toolbar = container?.querySelector("#filter-venue")?.parentElement;
     if (!toolbar || toolbar.querySelector("#btn-export-complete-season")) return;
     const context = this._reportContext();
