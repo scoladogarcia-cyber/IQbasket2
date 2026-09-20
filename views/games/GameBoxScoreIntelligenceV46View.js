@@ -1,14 +1,16 @@
 /**
  * @fileoverview V46 read-only extension of the established GameBoxScoreView.
  * @description Preserves the complete V44/V45 BoxScore behavior and injects a
- * deterministic, privacy-preserving team reading from the already-authorized
- * persisted stats. No new write path or permission is introduced.
+ * deterministic, privacy-preserving team reading from authorized persisted stats.
+ * V47 ensures a finished live match is read from the database, not a stale cache.
  */
 
 import { GameBoxScoreView as GameBoxScoreBaseView } from "../GameBoxScoreBaseView.js";
 import { buildGameIntelligence } from "../../domain/intelligence/GameIntelligenceEngine.js";
 import { normalizeGameStatsForIntelligence } from "../../domain/intelligence/GameIntelligenceInputAdapter.js";
 import { renderGameIntelligencePanel } from "../components/GameIntelligencePanelV46.js";
+import { DataStore } from "../../services/DataStore.js";
+import { refreshGameBoxScore } from "../../services/games/GameBoxScoreFreshReadService.js";
 import {
   isConfirmedBoxScoreSaveRerender,
   resolveBoxScorePostSaveDestination
@@ -31,6 +33,28 @@ export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
     })) {
       window.location.hash = resolveBoxScorePostSaveDestination(this.isGameScopedOnly);
       return;
+    }
+
+    // El cierre del anotador guarda mediante la RPC de captura sin refrescar
+    // necesariamente DataStore. Una acta a cero en su caché NO representa la
+    // verdad persistida. Consultamos únicamente este partido antes de pintarlo.
+    if (targetGameId && container) {
+      try {
+        await refreshGameBoxScore({
+          supabase: this.supabase,
+          dataStore: DataStore,
+          gameId: targetGameId
+        });
+      } catch (error) {
+        console.warn("[GameBoxScore] No se puede mostrar un acta no sincronizada:", error);
+        container.innerHTML = `
+          <div role="alert" style="padding:24px;color:#991b1b;background:white;border:1px solid #fecaca;border-radius:12px;">
+            <strong>El acta todavía no se ha podido cargar.</strong>
+            <p>No se ha modificado ningún dato. Vuelve a abrir este partido desde Partidos cuando la conexión esté disponible. No guardes un acta vacía.</p>
+            <a href="#/games" style="color:#1e40af;font-weight:700;">Volver a Partidos</a>
+          </div>`;
+        return;
+      }
     }
 
     return super.render(containerId, targetGameId);
