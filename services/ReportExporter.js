@@ -44,7 +44,8 @@ export class ReportExporter {
    *
    * @param {string} title Título del documento.
    * @param {string} contentHtml HTML ya reducido al scope autorizado.
-   * @param {{authorization?: object}} options Decisión explícita opcional.
+   * @param {{authorization?: object, printWindow?: Window}} options Decisión y ventana
+   *   opcional abierta SINCRÓNICAMENTE en el clic (Safari bloquea popups tras await).
    */
   static printReport(title = "Informe_IQ_Basket", contentHtml = "", options = {}) {
     const authorization = ReportExporter._resolveAuthorization(options);
@@ -56,20 +57,23 @@ export class ReportExporter {
       return false;
     }
 
-    const printWindow = window.open("", "_blank", "width=1024,height=768");
-    if (!printWindow) {
+    // Una ventana proporcionada debe proceder del clic del usuario después de
+    // autorizar. Sin ella se conserva el flujo anterior de impresión de un partido.
+    const printWindow = options?.printWindow || window.open("", "_blank", "width=1024,height=768");
+    if (!printWindow || printWindow.closed) {
       alert(TranslationStore
         ? TranslationStore.t("popup_blocked", "La ventana emergente para imprimir fue bloqueada. Permite las ventanas emergentes.")
         : "La ventana emergente para imprimir fue bloqueada.");
       return false;
     }
 
+    const safeTitle = String(title ?? "Informe_IQ_Basket").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
     const htmlDoc = `
       <!DOCTYPE html>
       <html lang="${I18n.getLocale ? I18n.getLocale() : 'es'}">
       <head>
         <meta charset="UTF-8">
-        <title>${title}</title>
+        <title>${safeTitle}</title>
         <style>
           @page {
             size: A4 portrait;
