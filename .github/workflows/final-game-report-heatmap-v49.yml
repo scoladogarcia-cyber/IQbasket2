@@ -1,0 +1,30 @@
+name: V49 Full BoxScore and Opponent Heatmap
+on:
+  pull_request:
+    paths:
+      - 'domain/stats/OpponentGameComparison.js'
+      - 'domain/analytics/GameReportShotMaps.js'
+      - 'views/reports/**'
+      - 'views/heatmap/**'
+      - 'services/games/GameFinalReportReadService.js'
+      - 'services/LazyViewRegistry.js'
+      - 'tests/full-game-report-opponent-heatmap-v49.mjs'
+      - '.github/workflows/final-game-report-heatmap-v49.yml'
+  push:
+    branches: [main]
+jobs:
+  full-boxscore-opponent-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Complete BoxScore, opponent source and glossary regression
+        run: node tests/full-game-report-opponent-heatmap-v49.mjs
+      - name: Existing report regression
+        run: node tests/final-game-report-v48.mjs
+      - name: Production build
+        run: npm run build
