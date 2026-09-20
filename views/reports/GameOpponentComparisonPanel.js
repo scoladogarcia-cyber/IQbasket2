@@ -6,7 +6,8 @@ const val = entry => entry?.value === null || entry?.value === undefined ? "N/D"
 const valWithSource = entry => `<strong>${esc(val(entry))}</strong><small style="display:block;color:#64748b">${esc(entry?.source || "no disponible")}</small>`;
 const own = (value, qualifier = "acta") => `<strong>${esc(value ?? "N/D")}</strong><small style="display:block;color:#64748b">${esc(qualifier)}</small>`;
 const pct = (m,a) => a > 0 ? formatMetric(m * 100 / a,"%") : "N/D";
-const score = (m,a) => m.value === null || a.value === null ? "N/D" : `${m.value}/${a.value}`;
+// Preserve both independently observed components; a missing denominator must not erase the known makes.
+const score = (m,a) => `${val(m)}/${val(a)}`;
 const scoreSource = (m,a) => m.source === a.source ? m.source : `${m.source}; ${a.source}`;
 
 /** @returns {string} HTML escapado y autocontenido para pantalla e impresión. */
