@@ -1,0 +1,29 @@
+name: V50 Complete Season Reports
+on:
+  pull_request:
+    paths:
+      - 'services/LazyViewRegistry.js'
+      - 'services/ReportExporter.js'
+      - 'services/reports/CompleteSeasonReportService.js'
+      - 'views/ReportsViewV50.js'
+      - 'views/reports/FullGameBoxScoreTables.js'
+      - 'tests/complete-season-report-v50.mjs'
+      - '.github/workflows/complete-season-report-v50.yml'
+  push:
+    branches: [main]
+jobs:
+  complete-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Complete PDF, authorized scope and mobile popup regression
+        run: node tests/complete-season-report-v50.mjs
+      - name: Existing full game report regression
+        run: node tests/full-game-report-opponent-heatmap-v49.mjs
+      - name: Production build
+        run: npm run build
