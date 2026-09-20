@@ -1,0 +1,38 @@
+name: V47 Final Acta Freshness
+
+on:
+  push:
+    branches:
+      - main
+      - fix/boxscore-read-after-live-finalization-20260920
+    paths:
+      - "services/games/GameBoxScoreFreshReadService.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "tests/boxscore-final-acta-freshness-v47.mjs"
+      - ".github/workflows/boxscore-final-acta-v47.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/games/GameBoxScoreFreshReadService.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "tests/boxscore-final-acta-freshness-v47.mjs"
+      - ".github/workflows/boxscore-final-acta-v47.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify fresh read keeps the completed acta and other games
+        run: node tests/boxscore-final-acta-freshness-v47.mjs
+      - name: Production build
+        run: npm run build
