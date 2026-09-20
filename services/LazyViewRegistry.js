@@ -38,8 +38,9 @@ const SINGLETON_LOADERS = Object.freeze({
     return new ComparatorView(authController);
   },
   reports: async ({ authController }) => {
-    const { ReportsViewV50 } = await import("../views/ReportsViewV50.js");
-    return new ReportsViewV50(authController);
+    // ReportsViewV50 permanece como base estable; V53 incorpora resumen y CSV/XLS.
+    const { ReportsViewV53 } = await import("../views/ReportsViewV53.js");
+    return new ReportsViewV53(authController);
   },
   familyworkspace: async ({ supabase, authController }) => {
     const { FamilyWorkspaceV32View } = await import("../views/family/FamilyWorkspaceV32View.js");
@@ -51,7 +52,7 @@ const SINGLETON_LOADERS = Object.freeze({
   },
   familyadvisor: async ({ supabase, authController }) => {
     const { FamilyAdvisorAccessView } = await import("../views/family/FamilyAdvisorAccessView.js");
-    return new FamilyAdvisorAccessView(supabase, authController);
+    return new FamilyAdvisorAccessView(authController);
   },
   training: async ({ supabase, authController }) => {
     const { TrainingView } = await import("../views/TrainingView.js");
@@ -103,7 +104,6 @@ function showLazyRouteLoading(canonical) {
   container.innerHTML = `
     <div role="status" aria-live="polite" style="min-height:220px;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
       <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 18px;color:#475569;box-shadow:0 4px 16px rgba(15,23,42,.04);">
-        <span aria-hidden="true" style="width:22px;height:22px;border:3px solid #e2e8f0;border-top-color:#f97316;border-radius:50%;animation:iq-lazy-spin .8s linear infinite"></span>
         <strong style="font-size:13px">Cargando partidos…</strong>
       </div>
       <style>@keyframes iq-lazy-spin{to{transform:rotate(360deg)}}</style>
