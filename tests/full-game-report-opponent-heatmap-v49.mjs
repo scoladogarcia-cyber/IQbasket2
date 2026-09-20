@@ -43,7 +43,10 @@ const html = renderFinalGameReportV49({game,teamName:"JMJ Manyanet",stats,player
 assert.match(html,/Acta individual completa · JMJ Manyanet/);
 assert.match(html,/TAP REC/);
 assert.match(html,/\+\/−/);
-assert.match(html,/Desglose|Detalle de lanzamientos/);
+assert.doesNotMatch(html,/Datos adicionales del partido|Detalle de lanzamientos/,"Sin captura opcional no se muestra ninguna sección avanzada vacía");
+const withOptional = renderFinalGameReportV49({game,teamName:"JMJ Manyanet",stats:[{...stats[0],fg_rim_made:2}],players,events,eventsAvailable:true,periods:[]});
+assert.match(withOptional,/Datos adicionales del partido/);
+assert.match(withOptional,/Detalle de lanzamientos/);
 assert.match(html,/Comparativa: tiros y rebotes/);
 assert.match(html,/eventos registrados/);
 assert.match(html,/2\/N\/D/);
@@ -68,4 +71,4 @@ assert.match(heatmap,/renderOpponentScoringCourt/);
 assert.match(reader,/team_game_stats/);
 assert.match(reader,/renderFinalGameReportV49/);
 assert.doesNotMatch(reader,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
-console.log("FINAL_REPORT_HEATMAP_V49_OK: acta, comparativa rival, cobertura, mapas y glosario");
+console.log("FINAL_REPORT_HEATMAP_V49_OK: acta, opcionales evidenciados, comparativa rival, mapas y glosario");
