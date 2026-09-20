@@ -1,7 +1,7 @@
 /**
- * @fileoverview Extensión V49 del informe V48 conservando su resultado y controles.
- * @description Sustituye sólo bloques delimitados del HTML de presentación; no
- * altera datos ni la evaluación base. Glosario como última hoja imprimible.
+ * @fileoverview Extensión V49 del informe V48 con resumen visual V53.
+ * @description Conserva acta, comparativa, mapas y glosario; inserta una portada
+ * descriptiva antes del desglose usando exclusivamente el partido consultado.
  */
 import { renderFinalGameReport } from "./GameFinalReportRenderer.js";
 import { renderFullGameBoxScoreTables } from "./FullGameBoxScoreTables.js";
@@ -9,6 +9,7 @@ import { renderGameOpponentComparisonPanel } from "./GameOpponentComparisonPanel
 import { renderGameStatisticsGlossary } from "./GameStatisticsGlossary.js";
 import { renderOpponentScoringCourt } from "./OpponentScoringCourt.js";
 import { buildGameShotMaps } from "../../domain/analytics/GameReportShotMaps.js";
+import { renderSelectedGamesOverview } from "./SelectedGamesOverviewV53.js";
 
 const ACTA_START = '<section class="iq-report-panel"><h2>Acta individual completa';
 const METRIC_START = '<section class="iq-report-panel"><h2>Indicadores y comparación';
@@ -21,10 +22,7 @@ const EXTRA_STYLES = `
 @media print{.iq-full-boxscore{break-inside:auto!important}.iq-full-boxscore .iq-report-scroll{overflow:visible!important}.iq-full-boxscore table{width:100%!important;table-layout:auto}.iq-full-boxscore .iq-table th,.iq-full-boxscore .iq-table td{font-size:7px;padding:2px;white-space:normal;overflow-wrap:anywhere}.iq-full-boxscore .iq-table th:first-child,.iq-full-boxscore .iq-table td:first-child{min-width:80px;text-align:left}.iq-full-boxscore table{break-inside:avoid}.iq-opponent-comparison .iq-table{font-size:10px}.iq-report-glossary{margin-top:0!important;break-before:page!important;page-break-before:always!important}.iq-glossary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px}.iq-glossary-entry{padding:2px 0}.iq-glossary-entry span{font-size:9px}.iq-glossary-entry strong{font-size:9px}}
 `;
 
-/**
- * @param {object} payload Payload ya reducido al ámbito de lectura autorizado.
- * @returns {string} HTML imprimible con el glosario como última hoja.
- */
+/** Solo datos del encuentro ya autorizado; la infografía precede al acta. */
 export function renderFinalGameReportV49(payload = {}) {
   const { game, players = [], stats = [], teamStats = null, events = [], eventsAvailable = true } = payload;
   const original = renderFinalGameReport(payload);
@@ -45,9 +43,10 @@ export function renderFinalGameReportV49(payload = {}) {
     || !(beforeActa < beforeMetrics && beforeMetrics < beforeMaps && beforeMaps < beforeEvaluation && beforeEvaluation < end)) {
     throw new Error("El contrato de secciones del informe ha cambiado. No se imprime un acta parcial.");
   }
+  const overview = renderSelectedGamesOverview([{ game, stats }], { title: "El partido en un vistazo" });
   const metricsPanel = original.slice(beforeMetrics,beforeMaps)
     .replace(/<p>Rival:[\s\S]*?<\/p>(?=<\/section>)/, '<p>Consultar el comparativo anterior para distinguir estadísticas guardadas, recuentos de eventos y datos no disponibles del rival.</p>');
-  const enhanced = original.slice(0,beforeActa) + acta + comparison + metricsPanel + newMaps + original.slice(beforeEvaluation,end)
+  const enhanced = original.slice(0,beforeActa) + overview + acta + comparison + metricsPanel + newMaps + original.slice(beforeEvaluation,end)
     + renderGameStatisticsGlossary() + original.slice(end);
   return enhanced.replace("</style>", EXTRA_STYLES + "</style>");
 }
