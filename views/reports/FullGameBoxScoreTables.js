@@ -1,7 +1,7 @@
 /**
  * @fileoverview Acta de partido completa y legible en móvil/PDF, sin recortes.
- * @description Tablas separadas de acta, ratios y acciones avanzadas. Los campos
- * opcionales ausentes son N/D; no se interpretan como 0 ni se mezclan partidos.
+ * @description Tablas separadas de acta, ratios y acciones adicionales. Los
+ * campos opcionales ausentes son N/D; no se interpretan como 0 ni se mezclan partidos.
  */
 import { buildGameReportMetrics, formatMetric } from "../../domain/stats/GameReportMetrics.js";
 const esc = x => String(x ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
@@ -38,16 +38,24 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
     [["fg_rim_made","ARO C"],["fg_rim_attempted","ARO I"],["fg_mid_made","MEDIA C"],["fg_mid_attempted","MEDIA I"],["fg_corner3_made","ESQ3 C"],["fg_corner3_attempted","ESQ3 I"],["assisted_fg_made","TC asist."],["potential_assists","AST pot."],["secondary_assists","AST sec."]],
     [["drives","ENTR"],["paint_touches","TOQ Z"],["deflections","DESV"],["charges_drawn","C. REC"],["contested_rebounds","REB DIS"],["box_outs","BLO REB"]]
   ];
-  const detailTables = detailGroups.map((group,index) => {
+  // Un grupo completamente ausente no aporta una tabla llena de N/D. Un cero
+  // explícitamente guardado SÍ cuenta como registro válido y debe mostrarse.
+  const groupHasData = group => stats.some(row => group.some(([field]) => raw(row, field) !== null));
+  const hasAnyDetail = detailGroups.some(groupHasData);
+  const detailTables = detailGroups.filter(groupHasData).map(group => {
+    const index = detailGroups.indexOf(group);
     const values = computed.rows.map((m,i)=>`<tr>${named(m)}${group.map(([field])=>`<td>${show(raw(stats[i],field))}</td>`).join("")}</tr>`).join("");
     const totals = group.map(([field])=>`<td>${sumOptional(field)}</td>`).join("");
     return `<h3 style="font-size:14px">${index ? "Acciones y defensa" : "Detalle de lanzamientos y creación"}</h3>${table(["Jugador",...group.map(([,label])=>label)],values,`<tr><th>TOTAL EQUIPO</th>${totals}</tr>`)}`;
   }).join("");
+  const advancedHelp = hasAnyDetail
+    ? "Estas acciones se registran adicionalmente durante el partido. Solo aparecen los bloques con algún dato guardado; N/D significa que ese dato concreto no consta. El 0 indica que se registró un cero."
+    : "No se anotaron datos adicionales de detalle en este partido. Esta sección sirve para el Detalle de lanzamientos por zona, asistencias potenciales y acciones defensivas específicas; no es un error del BoxScore y no se calculan cifras inexistentes.";
 
   return `<section class="iq-report-panel iq-full-boxscore"><h2>Acta individual completa · ${esc(game.opponent || "Partido")}</h2><p>Acta principal (cada columna completa; sin recortar la tabla para imprimir).</p>
     ${table(mainHeaders,mainRows,footerMain)}
     <h3 style="font-size:14px;margin-top:14px">Porcentajes y métricas avanzadas</h3>${table(efficiencyHeaders,efficiencyRows,`<tr><th>TOTAL EQUIPO</th>${efficiencyTotal.map(cell=>`<td>${cell}</td>`).join("")}</tr>`)}
-    <h3 style="font-size:14px;margin-top:14px">Registro avanzado (si se capturó)</h3>${detailTables}
+    <h3 style="font-size:14px;margin-top:14px">Datos adicionales del partido (solo si se anotaron)</h3><p style="font-size:12px;color:#334155">${advancedHelp}</p>${detailTables}
     <p style="font-size:11px">C = convertidos; I = intentados; N/D = campo no capturado o no calculable. Los totales de métricas no aditivas no se suman. USG se recalcula, no utiliza el valor legado.</p>
   </section>`;
 }
