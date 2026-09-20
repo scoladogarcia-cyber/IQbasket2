@@ -14,8 +14,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new GameAccessView(gameController, authController, supabase);
   },
   heatmap: async ({ supabase, authController }) => {
-    const { HeatmapAnalysisView } = await import("../views/HeatmapAnalysisView.js");
-    return new HeatmapAnalysisView(supabase, authController);
+    const { HeatmapOpponentV49View } = await import("../views/heatmap/HeatmapOpponentV49View.js");
+    return new HeatmapOpponentV49View(supabase, authController);
   },
   advanced: async ({ gameController }) => {
     const { AdvancedStatsView } = await import("../views/AdvancedStatsView.js");
@@ -144,7 +144,6 @@ const FACTORY_LOADERS = Object.freeze({
     ] = await Promise.all([
       import("../views/LiveScoreHUDViewV44.js"),
       import("../features/game-live/LiveWriterLeaseV43Controller.js"),
-      import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
       import("./games/GamePlayStateService.js")
     ]);
