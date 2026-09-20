@@ -46,7 +46,7 @@ export function buildGameShotMaps(events = [], gameId = null) {
     opponent: { shots: opponent, observed: opponentScores, located: opponent.length, made: opponent.length,
       freeThrows: opponentFreeThrows, points: opponentPoints,
       locatedPoints: opponent.reduce((sum, shot) => sum + shot.points, 0),
-      coverage: opponentScores ? `${opponent.length}/${opponentScores} canastas de campo localizadas; ${opponentFreeThrows} TL sin posición` : `${opponentFreeThrows} TL; no hay canastas de campo registradas`,
+      coverage: opponentScores ? `${opponent.length} canastas de campo localizadas de ${opponentScores} registradas; ${opponentFreeThrows} TL sin posición` : `${opponentFreeThrows} TL; no hay canastas de campo registradas`,
       completeOutcomes: false,
       note: "Azul = 2 puntos; ámbar = 3 puntos. Se muestran únicamente canastas de campo con coordenadas. Sin fallos rivales no hay porcentajes por zonas." }
   };
