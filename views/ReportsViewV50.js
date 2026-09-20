@@ -21,6 +21,9 @@ const gameScope = (game, context) => ({
 });
 const normalizeId = value => String(value ?? "");
 const safeTitle = value => String(value ?? "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 90);
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+})[char]);
 const sameScope = (a, b) => normalizeId(a.teamId) === normalizeId(b.teamId)
   && normalizeId(a.teamSeasonId) === normalizeId(b.teamSeasonId);
 
@@ -48,14 +51,33 @@ export class ReportsViewV50 extends ReportsView {
     return [...games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
   }
 
-  /** Tabla individual compartida por pantalla y por el dossier heredado. */
+  /**
+   * El acta va PRIMERO: la ficha visual legacy ocupaba una pantalla entera y el
+   * PDF desplazaba los tiros a páginas posteriores, haciendo parecer que faltan.
+   * Se reutiliza exactamente el mismo HTML para pantalla y PDF, sin recálculos.
+   */
   _renderSinglePlayerCard(player, games) {
-    const original = super._renderSinglePlayerCard(player, games);
-    return `${original}${renderPlayerCompleteBoxScore({
+    const detail = renderPlayerCompleteBoxScore({
       player,
       games,
       stats: DataStore.getPlayerGameStats?.(player.id) || []
-    })}`;
+    });
+    const name = [player.first_name ?? player.firstName, player.last_name ?? player.lastName]
+      .filter(Boolean).join(" ") || player.name || "Jugador";
+    // Se preserva el dorsal 0: player.jersey || '-' lo ocultaba en la ficha antigua.
+    const label = `#${player.jersey ?? player.number ?? "–"} ${name}`;
+    const original = super._renderSinglePlayerCard(player, games);
+    return `<section class="iq-player-report" style="margin-bottom:20px;break-inside:auto">
+      <header style="background:#eff6ff;border:1px solid #bfdbfe;padding:12px 14px;border-radius:10px;margin-bottom:10px">
+        <h2 style="font-size:18px;color:#172554;margin:0">${escapeHtml(label)}</h2>
+        <p style="font-size:11px;margin:4px 0 0;color:#334155">Primero: tiros y estadísticas reales por partido y temporada. Después: gráficas y mapa de tiro, si existen posiciones registradas.</p>
+      </header>
+      ${detail}
+      <div class="iq-player-visuals" style="margin-top:14px;break-before:page;page-break-before:always">
+        <h3 style="font-size:13px;color:#334155;margin-bottom:8px">Gráficas complementarias · ${escapeHtml(label)}</h3>
+        ${original}
+      </div>
+    </section>`;
   }
 
   /** Selección exacta del jugador y de los partidos de la temporada filtrada. */
