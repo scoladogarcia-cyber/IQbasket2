@@ -43,7 +43,8 @@ BEGIN
 
   -- Reuse a real legacy season if it is unambiguous. Formatting differences
   -- such as 2026/2027 vs 2026-2027 must not create duplicated seasons.
-  SELECT count(*)::integer, min(s.id)
+  -- PostgreSQL does not implement min(uuid); order the UUID array explicitly.
+  SELECT count(*)::integer, (array_agg(s.id ORDER BY s.created_at, s.id))[1]
   INTO candidates, legacy_id
   FROM public.seasons s
   WHERE s.team_id = scope_row.team_id
