@@ -24,7 +24,7 @@ export class ReportsViewV50 extends ReportsView {
     this._completeSeasonExportRunning = false;
   }
 
-  /** No mostrar ni exportar un partido de una temporada distinta a la activa. */
+  /** La vista puede filtrar sede, siempre dentro de la temporada activa. */
   _getFilteredGames() {
     const teamId = DataStore.getActiveTeamId?.();
     const activeSeasonGames = DataStore.getGamesForActiveSeason?.(teamId);
@@ -39,10 +39,16 @@ export class ReportsViewV50 extends ReportsView {
     return [...games].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
   }
 
-  /** Intersección de temporada, lectura y permiso explícito de exportación. */
+  /**
+   * Exportación COMPLETA: no se aplican los filtros de sede ni de partido de la
+   * pantalla. Solo temporada activa, partidos legibles y permiso por recurso.
+   */
   _exportableGames(context) {
-    const games = this.reportAccessPolicy.filterGames(this._getFilteredGames(), context);
-    return games.filter(game => this.reportAccessPolicy.canExport(ReportType.GAME_STATS, gameScope(game, context)));
+    const seasonGames = DataStore.getGamesForActiveSeason?.(context.teamId) || [];
+    const allowed = this.reportAccessPolicy.filterGames(seasonGames, context);
+    return allowed
+      .filter(game => this.reportAccessPolicy.canExport(ReportType.GAME_STATS, gameScope(game, context)))
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
   }
 
   /** Apertura sin await para evitar bloqueo de ventana emergente en iOS Safari. */
@@ -137,7 +143,7 @@ export class ReportsViewV50 extends ReportsView {
     if (oldExport) toolbar.insertBefore(button, oldExport);
     else toolbar.append(button);
     const help = document.createElement("span");
-    help.textContent = "Completo: todos los partidos autorizados de la temporada. El PDF personalizado antiguo es una selección distinta.";
+    help.textContent = "Completo: todos los partidos autorizados de la temporada, independientemente del filtro Local/Visitante. El PDF personalizado antiguo es una selección distinta.";
     help.style.cssText = "width:100%;font-size:11px;color:#475569";
     toolbar.append(help);
   }
