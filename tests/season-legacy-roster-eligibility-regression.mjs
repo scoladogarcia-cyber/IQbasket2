@@ -6,6 +6,7 @@ import { RosterEligibilityDateService } from "../services/roster/RosterEligibili
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const bridge = read("supabase/migrations/20260920110000_repair_team_season_legacy_game_fk.sql");
 const eligibility = read("supabase/migrations/20260920111000_adjust_roster_start_safely.sql");
+const grantFix = read("supabase/migrations/20260920112000_roster_start_revoke_anon.sql");
 const html = read("index.html");
 const enhancer = read("features/roster/RosterEligibilityDateEnhancer.js");
 
@@ -22,6 +23,9 @@ assert.match(eligibility, /ROSTER_START_AFTER_RECORDED_PARTICIPATION/);
 assert.match(eligibility, /public\.player_game_stats/);
 assert.match(eligibility, /public\.game_events/);
 assert.match(eligibility, /starter_ids/);
+assert.match(eligibility, /FROM PUBLIC, anon/);
+assert.match(grantFix, /FROM PUBLIC, anon/);
+assert.match(grantFix, /TO authenticated/);
 assert.doesNotMatch(eligibility, /delete from public\./i);
 assert.match(html, /features\/roster\/RosterEligibilityDateEnhancer\.js/);
 assert.match(enhancer, /Permission\.MANAGE_ROSTER/);
