@@ -35,12 +35,22 @@ assert.throws(()=>buildCompleteSeasonReport({reports:[]}));
 assert.throws(()=>buildCompleteSeasonReport({reports:[{game:games[0],html:"informe incompleto"}]}));
 
 const optionalAbsent = renderFullGameBoxScoreTables({game:games[0],players,stats});
-assert.match(optionalAbsent,/Datos adicionales del partido \(solo si se anotaron\)/);
-assert.match(optionalAbsent,/No se anotaron datos adicionales/);
-assert.doesNotMatch(optionalAbsent,/<th scope="col">ARO C<\/th>/,"No crear una tabla toda N\/D");
-const optionalZero = renderFullGameBoxScoreTables({game:games[0],players,stats:[{...stats[0],fg_rim_made:0}]});
-assert.match(optionalZero,/<th scope="col">ARO C<\/th>/,"Cero registrado no equivale a N\/D");
-assert.match(optionalZero,/Detalle de lanzamientos y creación/);
+assert.doesNotMatch(optionalAbsent,/Datos adicionales del partido/,"No mostrar ninguna sección opcional vacía");
+assert.doesNotMatch(optionalAbsent,/<th scope="col">ARO C<\/th>/);
+const optionalZeros = Object.fromEntries([
+  "fg_rim_made","fg_rim_attempted","fg_mid_made","fg_mid_attempted","fg_corner3_made","fg_corner3_attempted",
+  "assisted_fg_made","potential_assists","secondary_assists","drives","paint_touches","deflections",
+  "charges_drawn","contested_rebounds","box_outs"
+].map(key => [key,0]));
+const defaultZeroReport = renderFullGameBoxScoreTables({game:games[0],players,stats:[{...stats[0],...optionalZeros}]});
+assert.doesNotMatch(defaultZeroReport,/Datos adicionales del partido/,"Los ceros DEFAULT de Supabase no indican captura");
+assert.doesNotMatch(defaultZeroReport,/Detalle de lanzamientos y creación|Acciones y defensa/);
+const optionalRecorded = renderFullGameBoxScoreTables({game:games[0],players,stats:[{...stats[0],...optionalZeros,fg_rim_made:1}]});
+assert.match(optionalRecorded,/Datos adicionales del partido/);
+assert.match(optionalRecorded,/<th scope="col">ARO C<\/th>/);
+assert.doesNotMatch(optionalRecorded,/<th scope="col">AST pot\.<\/th>/,"Ocultar columnas cuyo único valor es DEFAULT 0");
+assert.doesNotMatch(optionalRecorded,/Acciones y defensa/,"Ocultar el otro grupo sin acciones positivas");
+assert.doesNotMatch(renderFinalGameReportV49({game:games[0],players,stats:[{...stats[0],...optionalZeros}],events:events("g-1")}),/Datos adicionales del partido/);
 
 const policy = allowed => ({authorizeExport:()=>({allowed})});
 const read = id => Promise.resolve({game:games.find(g=>g.id===id),html:reports.find(r=>r.game.id===id).html,context:{teamId},policy:policy(true)});
@@ -54,6 +64,13 @@ await assert.rejects(loadCompleteSeasonReports({games:[games[0],games[0]],teamId
 const facade = readFileSync(new URL("../views/ReportsViewV50.js",import.meta.url),"utf8");
 const registry = readFileSync(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8");
 const exporter = readFileSync(new URL("../services/ReportExporter.js",import.meta.url),"utf8");
+const readService = readFileSync(new URL("../services/games/GameFinalReportReadService.js",import.meta.url),"utf8");
+const app = readFileSync(new URL("../index.js",import.meta.url),"utf8");
+assert.match(app,/this\.authController = this\.permissionService/,"La app real pasa PermissionService, no AuthController");
+assert.match(readService,/supabase as configuredSupabase/,"Fuente central de Supabase autenticada");
+assert.match(readService,/const client = supabase\?\.from \? supabase : configuredSupabase/,"Sin cliente inyectado, usar instancia autenticada");
+assert.match(readService,/refreshGameBoxScore\(\{ supabase: client/);
+assert.doesNotMatch(readService,/await supabase\.from\(/,"Ninguna consulta debe usar el parámetro posiblemente indefinido");
 assert.match(facade,/btn-export-complete-season/);
 assert.match(facade,/getGamesForActiveSeason/);
 const exportScope = facade.slice(facade.indexOf("_exportableGames(context)"),facade.indexOf("/** Apertura sin await"));
@@ -68,4 +85,4 @@ assert.match(exporter,/if \(!authorization\?\.allowed\)/,"El exportador debe val
 assert.match(exporter,/options\?\.printWindow \|\| window\.open/);
 assert.ok(exporter.indexOf("if (!authorization?.allowed)", exporter.indexOf("static printReport")) < exporter.indexOf("const printWindow =",exporter.indexOf("static printReport")),"La autorización precede a la apertura/uso de ventana");
 assert.doesNotMatch(facade,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
-console.log("COMPLETE_SEASON_REPORT_V50_OK: dos partidos, mapas, glosario, temporada íntegra, permisos, sin PDF parcial y ayuda");
+console.log("COMPLETE_SEASON_REPORT_V50_OK: lectura real con PermissionService, opcionales DEFAULT cero ocultos, mapas, permisos y PDF completo");
