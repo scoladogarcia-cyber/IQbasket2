@@ -8,6 +8,7 @@ const read = path => readFile(new URL(path, root), "utf8");
 const [
   indexHtml,
   deployWorkflow,
+  stampScript,
   leaseController,
   leaseService,
   registry,
@@ -16,6 +17,7 @@ const [
 ] = await Promise.all([
   read("index.html"),
   read(".github/workflows/deploy-pages.yml"),
+  read("scripts/stamp-build-release.mjs"),
   read("features/game-live/LiveWriterLeaseV43Controller.js"),
   read("services/games/GameLiveSessionV43Service.js"),
   read("services/LazyViewRegistry.js"),
@@ -29,9 +31,13 @@ assert.match(indexHtml, /cache: 'no-store'/);
 assert.match(indexHtml, /searchParams\.set\('iqrelease'/);
 assert.match(indexHtml, /Actualizar IQBasket/);
 
-assert.match(deployWorkflow, /Stamp exact build release into HTML/);
-assert.match(deployWorkflow, /replaceAll\(placeholder/);
+assert.match(deployWorkflow, /Stamp exact commit release into HTML and metadata/);
+assert.match(deployWorkflow, /node scripts\/stamp-build-release\.mjs/);
+assert.match(deployWorkflow, /node tests\/release-freshness-contract\.mjs/);
 assert.match(deployWorkflow, /Build release placeholder was not stamped/);
+assert.match(stampScript, /replaceAll\(PLACEHOLDER, release\)/);
+assert.match(stampScript, /source_release:/);
+assert.match(stampScript, /commit:/);
 
 assert.match(leaseService, /iq_v43_recover_own_game_live_session/);
 assert.match(leaseService, /this\.storeToken\(id, result\.lease_token\)/);
