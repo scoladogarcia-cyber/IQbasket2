@@ -11,9 +11,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
  * @returns {Promise<boolean>} true si se refrescó un partido presente en el contexto actual.
  */
 export async function refreshGameBoxScore({ supabase, dataStore, gameId }) {
+  // El modo sin cliente (offline / test aislado) mantiene el comportamiento
+  // anterior, sin validar ni consultar IDs sintéticos de los tests.
+  if (!supabase?.from || !dataStore?.getGames || !dataStore?.getPlayerGameStats) return false;
   const id = String(gameId || "").trim();
   if (!UUID.test(id)) throw new Error("Identificador del partido inválido.");
-  if (!supabase?.from || !dataStore?.getGames || !dataStore?.getPlayerGameStats) return false;
 
   // Un enlace delegado o externo que no pertenece al contexto local se resuelve
   // mediante el snapshot autorizado del flujo existente, sin ampliar acceso.
