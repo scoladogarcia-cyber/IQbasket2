@@ -56,6 +56,10 @@ const registry = readFileSync(new URL("../services/LazyViewRegistry.js",import.m
 const exporter = readFileSync(new URL("../services/ReportExporter.js",import.meta.url),"utf8");
 assert.match(facade,/btn-export-complete-season/);
 assert.match(facade,/getGamesForActiveSeason/);
+const exportScope = facade.slice(facade.indexOf("_exportableGames(context)"),facade.indexOf("/** Apertura sin await"));
+assert.match(exportScope,/getGamesForActiveSeason\?\.\(context\.teamId\)/,"Exportar temporada activa completa");
+assert.doesNotMatch(exportScope,/_getFilteredGames\(/,"El filtro de sede no puede limitar la exportación completa");
+assert.match(facade,/independientemente del filtro Local\/Visitante/);
 assert.match(facade,/authorizeExport\(ReportType\.SEASON_DOSSIER/);
 assert.ok(facade.indexOf('window.open("", "_blank"') < facade.indexOf("await loadCompleteSeasonReports"),"Safari: popup abierto dentro del clic");
 assert.match(registry,/ReportsViewV50/);
@@ -64,4 +68,4 @@ assert.match(exporter,/if \(!authorization\?\.allowed\)/,"El exportador debe val
 assert.match(exporter,/options\?\.printWindow \|\| window\.open/);
 assert.ok(exporter.indexOf("if (!authorization?.allowed)", exporter.indexOf("static printReport")) < exporter.indexOf("const printWindow =",exporter.indexOf("static printReport")),"La autorización precede a la apertura/uso de ventana");
 assert.doesNotMatch(facade,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
-console.log("COMPLETE_SEASON_REPORT_V50_OK: dos partidos, ambos mapas, un glosario, permisos, sin PDF parcial y claridad opcionales");
+console.log("COMPLETE_SEASON_REPORT_V50_OK: dos partidos, mapas, glosario, temporada íntegra, permisos, sin PDF parcial y ayuda");
