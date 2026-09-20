@@ -1,0 +1,48 @@
+/**
+ * @fileoverview Único punto de lectura del informe final de partido bajo RLS y RBAC.
+ * @description No ejecuta escrituras, no reconstruye valores ausentes y no mezcla temporadas.
+ */
+import { refreshGameBoxScore } from "./GameBoxScoreFreshReadService.js";
+import { ReportAccessPolicy, ReportType } from "../../security/ReportAccessPolicy.js";
+import { renderFinalGameReport } from "../../views/reports/GameFinalReportRenderer.js";
+
+/**
+ * @param {{supabase: object, dataStore: object, auth: object, gameId: string}} input
+ * @returns {Promise<{html: string, game: object, context: object, policy: ReportAccessPolicy}>}
+ */
+export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth, gameId }) {
+  if (!supabase?.from || !dataStore?.getGames) throw new Error("Servicio de informes no disponible.");
+  const localGame = (dataStore.getGames() || []).find(g => String(g.id) === String(gameId));
+  if (!localGame) throw new Error("Partido no incluido en el contexto autorizado.");
+  const context = {
+    teamId: localGame.team_id || localGame.teamId,
+    teamSeasonId: localGame.team_season_id || localGame.teamSeasonId,
+    gameId: localGame.id
+  };
+  const policy = new ReportAccessPolicy(auth);
+  if (!policy.canView(ReportType.GAME_STATS, context)) throw new Error("No tienes permiso para consultar este informe.");
+  const { data: game, error: gameError } = await supabase.from("games").select("*").eq("id", gameId).single();
+  if (gameError || !game || String(game.team_id) !== String(context.teamId)) throw new Error("No se pudo consultar el partido autorizado.");
+  const gameContext = { ...context, teamSeasonId: game.team_season_id || context.teamSeasonId };
+  if (!policy.canView(ReportType.GAME_STATS, gameContext)) throw new Error("El acceso a esta temporada no está autorizado.");
+  const refreshed = await refreshGameBoxScore({ supabase, dataStore, gameId });
+  if (!refreshed) throw new Error("No se pudo recuperar el acta persistida de este partido.");
+  const allStats = dataStore.getPlayerGameStats(null, gameId) || [];
+  const players = policy.filterPlayers(dataStore.getSeasonParticipantPlayers?.(context.teamId) || dataStore.getPlayers?.(context.teamId) || [], gameContext);
+  const allowed = new Set(players.map(player => String(player.id)));
+  const stats = allStats.filter(row => allowed.has(String(row.player_id ?? row.playerId)));
+  if (allStats.length && stats.length === 0) throw new Error("No hay estadísticas de jugadores dentro del alcance autorizado.");
+  const { data: periods, error: periodsError } = await supabase.from("game_period_scores").select("*").eq("game_id", gameId).order("period_number", { ascending: true });
+  if (periodsError) throw new Error("No se han podido recuperar los parciales; no se mostrará un informe incompleto.");
+  let events = [], eventsAvailable = true;
+  try {
+    const response = await supabase.from("game_events").select("game_id,action_type,points,made,coord_x,coord_y,shot_zone,is_opponent").eq("game_id", gameId).limit(5000);
+    if (response.error || !Array.isArray(response.data)) throw new Error("Eventos no disponibles");
+    events = response.data;
+  } catch (error) {
+    console.warn("[FinalReport] Mapas no disponibles:", error);
+    eventsAvailable = false;
+  }
+  const html = renderFinalGameReport({ game, teamName: dataStore.getTeamById?.(context.teamId)?.name || "Nuestro equipo", players, stats, periods: periods || [], events, eventsAvailable, completeRoster: stats.length === allStats.length });
+  return { html, game, context: gameContext, policy };
+}
