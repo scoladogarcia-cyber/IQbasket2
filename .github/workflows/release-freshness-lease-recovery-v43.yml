@@ -12,6 +12,8 @@ on:
       - "services/games/GameLiveSessionV43Service.js"
       - "features/game-live/LiveWriterLeaseV43Controller.js"
       - "supabase/migrations/20260908093000_game_live_same_user_recovery_v43.sql"
+      - "scripts/stamp-build-release.mjs"
+      - "tests/release-freshness-contract.mjs"
       - "tests/release-freshness-lease-recovery-v43-contract.mjs"
       - "tests/live-lease-recovery-v43-browser-smoke.mjs"
       - "tests/live-scorer-recovery-v42-contract.mjs"
@@ -27,6 +29,8 @@ on:
       - "services/games/GameLiveSessionV43Service.js"
       - "features/game-live/LiveWriterLeaseV43Controller.js"
       - "supabase/migrations/20260908093000_game_live_same_user_recovery_v43.sql"
+      - "scripts/stamp-build-release.mjs"
+      - "tests/release-freshness-contract.mjs"
       - "tests/release-freshness-lease-recovery-v43-contract.mjs"
       - "tests/live-lease-recovery-v43-browser-smoke.mjs"
       - "tests/live-scorer-recovery-v42-contract.mjs"
@@ -61,23 +65,19 @@ jobs:
         run: npm ci
       - name: V43 freshness + recovery contract
         run: node tests/release-freshness-lease-recovery-v43-contract.mjs
+      - name: Commit freshness regression
+        run: node tests/release-freshness-contract.mjs
       - name: V42 scorer regression
         run: node tests/live-scorer-recovery-v42-contract.mjs
       - name: Production build
         run: npm run build
       - name: Simulate Pages release stamp
+        run: node scripts/stamp-build-release.mjs
+      - name: Verify simulated release metadata
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const release = JSON.parse(fs.readFileSync('release.json','utf8')).release;
-          const path = 'dist/index.html';
-          const placeholder = '__IQBASKET_BUILD_RELEASE__';
-          let html = fs.readFileSync(path,'utf8');
-          if (!html.includes(placeholder)) throw new Error('Missing release placeholder');
-          html = html.replaceAll(placeholder, release);
-          fs.writeFileSync(path, html);
-          if (!html.includes(release) || html.includes(placeholder)) throw new Error('Release stamp failed');
-          NODE
+          test -f dist/release.json
+          RELEASE="$(node -p "JSON.parse(require('fs').readFileSync('dist/release.json','utf8')).release")"
+          grep -Fq "$RELEASE" dist/index.html
 
   browser-recovery:
     name: Same-user recovery · ${{ matrix.browser }}
