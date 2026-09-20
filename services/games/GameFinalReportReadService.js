@@ -36,7 +36,7 @@ export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth,
   if (periodsError) throw new Error("No se han podido recuperar los parciales; no se mostrará un informe incompleto.");
   let events = [], eventsAvailable = true;
   try {
-    const response = await supabase.from("game_events").select("game_id,action_type,points,made,coord_x,coord_y,shot_zone,is_opponent").eq("game_id", gameId).limit(5000);
+    const response = await supabase.from("game_events").select("game_id,action_type,points,made,coord_x,coord_y,shot_zone").eq("game_id", gameId).limit(5000);
     if (response.error || !Array.isArray(response.data)) throw new Error("Eventos no disponibles");
     events = response.data;
   } catch (error) {
