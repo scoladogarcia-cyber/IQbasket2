@@ -38,8 +38,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new ComparatorView(authController);
   },
   reports: async ({ authController }) => {
-    const { ReportsView } = await import("../views/ReportsView.js");
-    return new ReportsView(authController);
+    const { ReportsViewV50 } = await import("../views/ReportsViewV50.js");
+    return new ReportsViewV50(authController);
   },
   familyworkspace: async ({ supabase, authController }) => {
     const { FamilyWorkspaceV32View } = await import("../views/family/FamilyWorkspaceV32View.js");
@@ -65,7 +65,7 @@ const SINGLETON_LOADERS = Object.freeze({
   },
   player360: async ({ supabase, authController }) => {
     const { Player360View } = await import("../views/Player360View.js");
-    return new Player360View(supabase, authController);
+    return new Player360View(authController, supabase);
   },
   privacy: async ({ supabase, authController }) => {
     const { PrivacyCenterView } = await import("../views/PrivacyCenterView.js");
