@@ -1,0 +1,27 @@
+name: V48 Final Game Report
+on:
+  pull_request:
+    paths:
+      - 'domain/stats/GameReportMetrics.js'
+      - 'domain/analytics/GameReportShotMaps.js'
+      - 'views/reports/GameFinalReportRenderer.js'
+      - 'views/games/GameBoxScoreIntelligenceV46View.js'
+      - 'views/ReportsView.js'
+      - 'tests/final-game-report-v48.mjs'
+      - '.github/workflows/final-game-report-v48.yml'
+  push:
+    branches: [main]
+jobs:
+  final-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Report metrics, acta, privacy and shot-map regression
+        run: node tests/final-game-report-v48.mjs
+      - name: Production build
+        run: npm run build
