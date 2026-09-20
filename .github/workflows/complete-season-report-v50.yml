@@ -11,6 +11,7 @@ on:
       - 'views/reports/PlayerCompleteBoxScore.js'
       - 'tests/complete-season-report-v50.mjs'
       - 'tests/player-complete-report-v51.mjs'
+      - 'tests/player-report-layout-v52.mjs'
       - '.github/workflows/complete-season-report-v50.yml'
   push:
     branches: [main]
@@ -30,5 +31,7 @@ jobs:
         run: node tests/full-game-report-opponent-heatmap-v49.mjs
       - name: Individual player boxscore, scope and PDF regression
         run: node tests/player-complete-report-v51.mjs
+      - name: Player first-screen and PDF layout regression
+        run: node tests/player-report-layout-v52.mjs
       - name: Production build
         run: npm run build
