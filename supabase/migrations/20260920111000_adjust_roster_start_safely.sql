@@ -102,6 +102,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.iq_v3_update_roster_start(uuid,uuid,date) FROM PUBLIC;
+-- Supabase may assign an explicit anon EXECUTE grant via default privileges;
+-- revoking PUBLIC alone is insufficient. The RPC is authenticated-only.
+REVOKE ALL ON FUNCTION public.iq_v3_update_roster_start(uuid,uuid,date)
+  FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.iq_v3_update_roster_start(uuid,uuid,date) TO authenticated;
 COMMIT;
