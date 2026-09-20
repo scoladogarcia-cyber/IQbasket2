@@ -14,6 +14,7 @@ const ACTA_START = '<section class="iq-report-panel"><h2>Acta individual complet
 const METRIC_START = '<section class="iq-report-panel"><h2>Indicadores y comparación';
 const MAP_START = '<section class="iq-report-panel"><h2>Mapas espaciales';
 const EVALUATION_START = '<section class="iq-report-panel"><h2>Evaluación descriptiva';
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const EXTRA_STYLES = `
 .iq-full-acta{table-layout:auto}.iq-full-boxscore h3{margin:16px 0 6px}.iq-full-boxscore .iq-table th,.iq-full-boxscore .iq-table td{white-space:nowrap;text-align:center;border:1px solid #e2e8f0;padding:4px}.iq-full-boxscore .iq-table th:first-child{text-align:left}.iq-opponent-comparison .iq-table td{vertical-align:top}.iq-report-glossary{break-before:page;page-break-before:always;break-inside:auto!important}.iq-glossary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px}.iq-glossary-entry{border-bottom:1px solid #e2e8f0;padding:4px 0;break-inside:avoid}.iq-glossary-entry strong,.iq-glossary-entry span{display:block}.iq-glossary-entry strong{color:#1e3a8a}.iq-glossary-entry span{font-size:11px;color:#334155}
 @media(max-width:650px){.iq-glossary-grid{grid-template-columns:1fr}}
@@ -27,7 +28,8 @@ const EXTRA_STYLES = `
 export function renderFinalGameReportV49(payload = {}) {
   const { game, players = [], stats = [], teamStats = null, events = [], eventsAvailable = true } = payload;
   const original = renderFinalGameReport(payload);
-  const acta = renderFullGameBoxScoreTables({ game, players, stats });
+  const acta = renderFullGameBoxScoreTables({ game, players, stats })
+    .replace(/(<h2>Acta individual completa · )[^<]*(<\/h2>)/, (_match, start, end) => `${start}${escapeHtml(payload.teamName || "Nuestro equipo")}${end}`);
   const comparison = renderGameOpponentComparisonPanel({ game, stats, teamStats, events, eventsAvailable });
   const maps = buildGameShotMaps(eventsAvailable ? events : [], game?.id);
   const originalOwnCourt = original.match(/<section class="iq-report-panel iq-map"><h3>Nuestros tiros:[\s\S]*?<\/section>/)?.[0] || '<p>No hay mapa propio disponible.</p>';
