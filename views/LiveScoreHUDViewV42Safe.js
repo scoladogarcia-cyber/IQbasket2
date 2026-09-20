@@ -3,9 +3,11 @@
  * @description Preserves authoritative historical game scores when an older
  * game has missing or partial play-by-play, while allowing live PBP edits and
  * annulments to recalculate deterministically from the preserved baseline.
+ * Venue only affects presentation: canonical team/opponent scores never swap.
  */
 
 import { LiveScoreHUDViewV42 } from "./LiveScoreHUDViewV42.js";
+import { orientGameScore } from "../domain/games/GameScoreOrientation.js";
 
 function scoreFromEvents(events = [], opponent = false) {
   return (events || []).reduce((sum, event) => {
@@ -53,6 +55,42 @@ export class LiveScoreHUDViewV42Safe extends LiveScoreHUDViewV42 {
 
     this.teamScore = team;
     this.opponentScore = opponent;
+  }
+
+  /**
+   * V38 already places the home/away names correctly, but always paints
+   * teamScore on the left. Correct only those two DOM values after its render;
+   * never swap game state, events, periods, stats or synchronization payloads.
+   * V44 invokes this through super._renderHUD() on every live action/resume.
+   */
+  _renderHUD() {
+    super._renderHUD();
+    const scorebar = this.container?.querySelector?.(".v38-scorebar");
+    if (!scorebar) return;
+    const homeValue = scorebar.querySelector(".v38-team-home strong");
+    const awayValue = scorebar.querySelector(".v38-team-away strong");
+    if (!homeValue || !awayValue) return;
+    const display = orientGameScore(this.config?.venue, this.teamScore, this.opponentScore);
+    homeValue.textContent = String(display.homeScore);
+    awayValue.textContent = String(display.awayScore);
+  }
+
+  /**
+   * The final acta's original `teamScore-opponentScore vs Rival` is own-team
+   * first, unlike the live home-away scoreboard. Name both sides explicitly
+   * without modifying the authoritative totals or the save handler.
+   */
+  _renderPostGameActa() {
+    super._renderPostGameActa();
+    const title = this.container?.querySelector?.("h1");
+    if (!title?.textContent?.includes("Acta Oficial")) return;
+    const result = title.parentElement?.querySelector?.("span");
+    if (!result?.textContent?.includes("Resultado Final:")) return;
+    const display = orientGameScore(this.config?.venue, this.teamScore, this.opponentScore);
+    const opponent = String(this.config?.opponent || "Rival");
+    const home = display.isAway ? opponent : "Mi equipo";
+    const away = display.isAway ? "Mi equipo" : opponent;
+    result.textContent = `Resultado final (local – visitante): ${home} ${display.homeScore} – ${display.awayScore} ${away}`;
   }
 }
 
