@@ -1,21 +1,17 @@
 /**
- * @fileoverview Exportación integral de la temporada a partir de informes ya autorizados.
- * @description Reutiliza el generador V49: no recalcula estadísticas, no inventa
- * mapas y no produce un PDF parcial si falla la lectura de algún encuentro.
+ * @fileoverview Exportación integral de una selección autorizada de partidos.
+ * @description Portada agregada solo con actas autorizadas; los informes detallados
+ * se reutilizan completos. Nunca produce PDF parcial si falla una lectura.
  */
 import { ReportType } from "../../security/ReportAccessPolicy.js";
+import { renderSelectedGamesOverview } from "../../views/reports/SelectedGamesOverviewV53.js";
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 const asId = value => String(value ?? "");
 const ARTICLE_OPEN = '<article class="iq-final-report">';
 const GLOSSARY_OPEN = '<section class="iq-report-panel iq-report-glossary"';
 
-/**
- * Lee exclusivamente partidos autorizados, verificando el contexto después de
- * cada lectura fresca (RLS). Nunca devuelve un documento de temporada incompleto.
- * @param {{games:object[], loadReport:Function, teamId:string, teamSeasonId?:string}} input
- * @returns {Promise<Array<{game:object,html:string}>>}
- */
+/** Lee solo la selección autorizada, validando contexto y permiso tras cada lectura. */
 export async function loadCompleteSeasonReports({ games, loadReport, teamId, teamSeasonId = null } = {}) {
   if (!Array.isArray(games) || !games.length || typeof loadReport !== "function" || !teamId) {
     throw new Error("Selecciona una temporada con partidos autorizados para exportar.");
@@ -37,7 +33,7 @@ export async function loadCompleteSeasonReports({ games, loadReport, teamId, tea
       || typeof report?.html !== "string") {
       throw new Error("Un partido ha cambiado de ámbito o no permite su exportación. No se ha generado un documento parcial.");
     }
-    results.push({ game: report.game, html: report.html });
+    results.push({ game: report.game, html: report.html, stats: Array.isArray(report.stats) ? report.stats : null });
   }
   return results;
 }
@@ -59,10 +55,7 @@ function extractReport(html) {
   };
 }
 
-/**
- * Une todos los BoxScores y mapas, con portada e índice de partidos y un único
- * glosario al final. No introduce métricas ni referencias a otras temporadas.
- */
+/** Portada, dashboard de selección, todos los informes y un único glosario final. */
 export function buildCompleteSeasonReport({ reports = [], teamName = "Nuestro equipo", seasonName = "Temporada seleccionada" } = {}) {
   if (!Array.isArray(reports) || !reports.length) throw new Error("No hay informes completos para exportar.");
   const chunks = reports.map(row => extractReport(row?.html || ""));
@@ -74,8 +67,9 @@ export function buildCompleteSeasonReport({ reports = [], teamName = "Nuestro eq
     <p>${reports.length} partido(s). Datos, actas, comparativas y mapas disponibles de los encuentros autorizados. Cada sección identifica sus datos no registrados como N/D.</p>
     <h3>Índice de partidos</h3><table class="iq-table"><thead><tr><th>#</th><th>Fecha</th><th>Rival</th><th>Marcador (nuestro equipo – rival)</th></tr></thead><tbody>${gameRows}</tbody></table>
     <p>Los mapas muestran solo eventos con coordenadas reales. La guía de estadísticas está al final del documento.</p></section>`;
+  const overview = renderSelectedGamesOverview(reports.map(row => ({game: row.game, stats: row.stats})), {title: "El/los partidos seleccionados: resumen infográfico"});
   const reportsHtml = chunks.map((chunk, index) => `<article class="iq-final-report iq-season-game-report" aria-label="Informe de partido ${index + 1}">${chunk.content}</article>`).join("");
   const finalGlossary = `<article class="iq-final-report">${chunks[0].glossary}</article>`;
   const printStyle = `<style>.iq-season-cover{font:14px system-ui,sans-serif;color:#0f172a;background:white;padding:24px;max-width:1100px;margin:auto}.iq-season-cover h1{font-size:26px}.iq-season-cover table{width:100%;border-collapse:collapse}.iq-season-cover td,.iq-season-cover th{padding:8px;border:1px solid #cbd5e1;text-align:left}.iq-season-cover th{background:#eaf0fa}@media print{.iq-season-cover{break-after:page;page-break-after:always}.iq-season-game-report{break-before:page;page-break-before:always}.iq-season-cover td,.iq-season-cover th{padding:4px;font-size:10px}}@media(max-width:700px){.iq-season-cover{padding:12px;overflow-x:auto}}</style>`;
-  return `${chunks[0].styles}${printStyle}<main class="iq-season-complete">${intro}${reportsHtml}${finalGlossary}</main>`;
+  return `${chunks[0].styles}${printStyle}<main class="iq-season-complete">${intro}${overview}${reportsHtml}${finalGlossary}</main>`;
 }

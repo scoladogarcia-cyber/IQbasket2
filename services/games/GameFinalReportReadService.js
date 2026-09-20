@@ -9,10 +9,6 @@ import { renderFinalGameReportV49 } from "../../views/reports/GameFinalReportV49
 
 /** @param {{supabase?:object,dataStore:object,auth:object,gameId:string}} input */
 export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth, gameId }) {
-  // La aplicación principal pasa PermissionService como authController: contiene
-  // permisos, NO el cliente de base de datos. Las lecturas usan el singleton
-  // autenticado que ya utiliza DataStore, nunca el controlador de permisos.
-  // Se conserva la inyección explícita para otras vistas y pruebas aisladas.
   const client = supabase?.from ? supabase : configuredSupabase;
   if (!client?.from || !dataStore?.getGames) throw new Error("Servicio de informes no disponible.");
   const localGame = (dataStore.getGames() || []).find(g => String(g.id) === String(gameId));
@@ -40,7 +36,7 @@ export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth,
   let events = [], eventsAvailable = true;
   try {
     const response = await client.from("game_events")
-      .select("game_id,period,action_type,points,made,coord_x,coord_y,shot_zone")
+      .select("game_id,player_id,period,action_type,points,made,coord_x,coord_y,shot_zone")
       .eq("game_id",gameId).limit(5000);
     if (response.error || !Array.isArray(response.data) || response.data.length === 5000) throw new Error("Eventos no disponibles o incompletos");
     events = response.data;
@@ -53,5 +49,7 @@ export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth,
     teamStats: aggregate || null, periods: periods || [], events, eventsAvailable,
     completeRoster: stats.length === allStats.length
   });
-  return { html, game, context: gameContext, policy };
+  // Solo filas autorizadas. El consumidor debe volver a verificar permiso antes
+  // de exportar/importar; los eventos pueden faltar y se indican como tales.
+  return { html, game, context: gameContext, policy, stats, players, periods: periods || [], events, eventsAvailable };
 }

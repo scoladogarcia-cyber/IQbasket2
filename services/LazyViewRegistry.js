@@ -38,8 +38,9 @@ const SINGLETON_LOADERS = Object.freeze({
     return new ComparatorView(authController);
   },
   reports: async ({ authController }) => {
-    const { ReportsViewV50 } = await import("../views/ReportsViewV50.js");
-    return new ReportsViewV50(authController);
+    // ReportsViewV50 permanece como base estable; V53 incorpora resumen y CSV/XLS.
+    const { ReportsViewV53 } = await import("../views/ReportsViewV53.js");
+    return new ReportsViewV53(authController);
   },
   familyworkspace: async ({ supabase, authController }) => {
     const { FamilyWorkspaceV32View } = await import("../views/family/FamilyWorkspaceV32View.js");
