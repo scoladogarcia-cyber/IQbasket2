@@ -5,9 +5,12 @@ on:
       - 'services/LazyViewRegistry.js'
       - 'services/ReportExporter.js'
       - 'services/reports/CompleteSeasonReportService.js'
+      - 'services/reports/PlayerSeasonReadService.js'
       - 'views/ReportsViewV50.js'
       - 'views/reports/FullGameBoxScoreTables.js'
+      - 'views/reports/PlayerCompleteBoxScore.js'
       - 'tests/complete-season-report-v50.mjs'
+      - 'tests/player-complete-report-v51.mjs'
       - '.github/workflows/complete-season-report-v50.yml'
   push:
     branches: [main]
@@ -25,5 +28,7 @@ jobs:
         run: node tests/complete-season-report-v50.mjs
       - name: Existing full game report regression
         run: node tests/full-game-report-opponent-heatmap-v49.mjs
+      - name: Individual player boxscore, scope and PDF regression
+        run: node tests/player-complete-report-v51.mjs
       - name: Production build
         run: npm run build
