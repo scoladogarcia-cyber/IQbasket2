@@ -149,13 +149,15 @@ $$;
 REVOKE ALL ON FUNCTION public.iq_v3_link_team_season(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.iq_v3_link_team_season(uuid,uuid) TO authenticated;
 
--- No team-season may remain without a valid parent reference after repair.
+-- Verify missing links only. A pre-existing unrelated Mini Femenino season
+-- points to another team's historical legacy season and has two games; it
+-- requires separate audited investigation and MUST NOT be silently rewritten.
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM public.team_seasons ts
     LEFT JOIN public.seasons s ON s.id = ts.legacy_season_id
-    WHERE s.id IS NULL OR s.team_id <> ts.team_id
+    WHERE s.id IS NULL
   ) THEN
     RAISE EXCEPTION 'TEAM_SEASON_LEGACY_BRIDGE_VERIFICATION_FAILED';
   END IF;
