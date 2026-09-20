@@ -83,7 +83,9 @@ export class TeamStatsView {
           totalPts += comp.points || 0;
         });
 
-        const realPpg = gp > 0 ? Number((totalPts / gp).toFixed(1)) : (p.ppg !== undefined && p.ppg !== null ? Number(p.ppg) : 0.0);
+        // La media de la plantilla pertenece exclusivamente a los partidos de la temporada activa.
+        // players.ppg es un acumulado de la ficha y podría proceder de una temporada anterior.
+        const realPpg = gp > 0 ? Number((totalPts / gp).toFixed(1)) : 0;
 
         return {
           ...p,
