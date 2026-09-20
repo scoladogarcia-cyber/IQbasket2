@@ -24,6 +24,8 @@ on:
       - "services/**"
       - "styles/**"
       - "views/**"
+      - "scripts/stamp-build-release.mjs"
+      - "tests/release-freshness-contract.mjs"
       - "package.json"
       - "package-lock.json"
       - "vite.config.js"
@@ -58,27 +60,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Release freshness regression
+        run: node tests/release-freshness-contract.mjs
+
       - name: Build
         run: npm run build
 
-      - name: Stamp exact build release into HTML
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const release = JSON.parse(fs.readFileSync('release.json', 'utf8')).release;
-          const path = 'dist/index.html';
-          const placeholder = '__IQBASKET_BUILD_RELEASE__';
-          let html = fs.readFileSync(path, 'utf8');
-          if (!html.includes(placeholder)) {
-            throw new Error(`Missing ${placeholder} in ${path}`);
-          }
-          html = html.replaceAll(placeholder, String(release));
-          fs.writeFileSync(path, html);
-          console.log(`Stamped IQBasket build release ${release}`);
-          NODE
-
-      - name: Add release metadata to artifact
-        run: cp release.json dist/release.json
+      - name: Stamp exact commit release into HTML and metadata
+        run: node scripts/stamp-build-release.mjs
 
       - name: Verify Pages artifact
         run: |
@@ -92,8 +81,9 @@ jobs:
             echo "Build release placeholder was not stamped."
             exit 1
           fi
-          RELEASE="$(node -p "JSON.parse(require('fs').readFileSync('release.json','utf8')).release")"
+          RELEASE="$(node -p "JSON.parse(require('fs').readFileSync('dist/release.json','utf8')).release")"
           grep -Fq "$RELEASE" dist/index.html
+          node -e "const m=require('./dist/release.json');if(m.commit!==process.env.GITHUB_SHA.toLowerCase())process.exit(1)"
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
