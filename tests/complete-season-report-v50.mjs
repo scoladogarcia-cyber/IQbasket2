@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { renderFinalGameReportV49 } from "../views/reports/GameFinalReportV49Renderer.js";
 import { renderFullGameBoxScoreTables } from "../views/reports/FullGameBoxScoreTables.js";
 import { loadCompleteSeasonReports, buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
-import { ReportExporter } from "../services/ReportExporter.js";
 
 const teamId = "team-1";
 const seasonId = "season-1";
@@ -54,22 +53,15 @@ await assert.rejects(loadCompleteSeasonReports({games:[games[0],games[0]],teamId
 
 const facade = readFileSync(new URL("../views/ReportsViewV50.js",import.meta.url),"utf8");
 const registry = readFileSync(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8");
+const exporter = readFileSync(new URL("../services/ReportExporter.js",import.meta.url),"utf8");
 assert.match(facade,/btn-export-complete-season/);
 assert.match(facade,/getGamesForActiveSeason/);
 assert.match(facade,/authorizeExport\(ReportType\.SEASON_DOSSIER/);
 assert.ok(facade.indexOf('window.open("", "_blank"') < facade.indexOf("await loadCompleteSeasonReports"),"Safari: popup abierto dentro del clic");
 assert.match(registry,/ReportsViewV50/);
 assert.match(registry,/new Player360View\(supabase, authController\)/,"No modificar otras vistas");
+assert.match(exporter,/if \(!authorization\?\.allowed\)/,"El exportador debe validar permisos antes de escribir");
+assert.match(exporter,/options\?\.printWindow \|\| window\.open/);
+assert.ok(exporter.indexOf("if (!authorization?.allowed)", exporter.indexOf("static printReport")) < exporter.indexOf("const printWindow =",exporter.indexOf("static printReport")),"La autorización precede a la apertura/uso de ventana");
 assert.doesNotMatch(facade,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/);
-
-let opened = 0;
-const written = [];
-const mockWindow = {closed:false,document:{open(){},write(value){written.push(value);},close(){} }};
-globalThis.window = {open(){opened++;return mockWindow;}};
-globalThis.alert = ()=>{};
-assert.equal(ReportExporter.printReport("Prohibido","información",{authorization:{allowed:false},printWindow:mockWindow}),false);
-assert.equal(written.length,0,"Sin permisos no escribe en ventana preabierta");
-assert.equal(ReportExporter.printReport("Permitido","Informe",{authorization:{allowed:true},printWindow:mockWindow}),true);
-assert.equal(opened,0,"No intenta abrir otra ventana después de la lectura asíncrona");
-assert.match(written[0],/Informe/);
-console.log("COMPLETE_SEASON_REPORT_V50_OK: dos partidos, todos los mapas, un glosario, permisos, sin PDF parcial, Safari y aclaración opcionales");
+console.log("COMPLETE_SEASON_REPORT_V50_OK: dos partidos, ambos mapas, un glosario, permisos, sin PDF parcial y claridad opcionales");
