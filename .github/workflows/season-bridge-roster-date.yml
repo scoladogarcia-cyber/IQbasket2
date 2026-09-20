@@ -1,0 +1,43 @@
+name: Season Bridge and Roster Date
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20260920110000_repair_team_season_legacy_game_fk.sql"
+      - "supabase/migrations/20260920111000_adjust_roster_start_safely.sql"
+      - "supabase/migrations/20260920112000_roster_start_revoke_anon.sql"
+      - "services/roster/RosterEligibilityDateService.js"
+      - "features/roster/RosterEligibilityDateEnhancer.js"
+      - "index.html"
+      - "tests/season-legacy-roster-eligibility-regression.mjs"
+      - ".github/workflows/season-bridge-roster-date.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/20260920110000_repair_team_season_legacy_game_fk.sql"
+      - "supabase/migrations/20260920111000_adjust_roster_start_safely.sql"
+      - "supabase/migrations/20260920112000_roster_start_revoke_anon.sql"
+      - "services/roster/RosterEligibilityDateService.js"
+      - "features/roster/RosterEligibilityDateEnhancer.js"
+      - "index.html"
+      - "tests/season-legacy-roster-eligibility-regression.mjs"
+      - ".github/workflows/season-bridge-roster-date.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Validate season FK and authorization contracts
+        run: node tests/season-legacy-roster-eligibility-regression.mjs
+      - name: Build production bundle
+        run: npm run build
