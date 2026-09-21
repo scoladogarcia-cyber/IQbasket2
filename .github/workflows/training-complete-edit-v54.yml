@@ -1,0 +1,43 @@
+name: Training Complete Edit V54
+
+on:
+  push:
+    branches: [main, feat/training-full-edit-block-participation-v54-20260921]
+    paths:
+      - 'views/training/TrainingCompleteEditV54View.js'
+      - 'services/player360/TrainingCompleteEditV54Service.js'
+      - 'services/LazyViewRegistry.js'
+      - 'config/trainingEditV54.config.js'
+      - 'supabase/migrations/20260921090000_training_complete_edit_v54.sql'
+      - 'supabase/migrations/20260921090500_training_block_integrity_v54.sql'
+      - 'supabase/migrations/20260921091000_training_minutes_integrity_v54.sql'
+      - 'tests/training-complete-edit-v54.mjs'
+      - 'tests/training-minutes-integrity-v54.mjs'
+      - '.github/workflows/training-complete-edit-v54.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  training-contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check JS syntax
+        run: |
+          node --check views/training/TrainingCompleteEditV54View.js
+          node --check services/player360/TrainingCompleteEditV54Service.js
+      - name: Verify V54 complete-edit and security boundary
+        run: |
+          node tests/training-complete-edit-v54.mjs
+          node tests/training-minutes-integrity-v54.mjs
+      - name: Build production bundle
+        run: npm run build
