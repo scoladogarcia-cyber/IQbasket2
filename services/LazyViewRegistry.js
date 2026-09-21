@@ -55,8 +55,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new FamilyAdvisorAccessView(supabase, authController);
   },
   training: async ({ supabase, authController }) => {
-    const { TrainingCompleteEditV54View } = await import("../views/training/TrainingCompleteEditV54View.js");
-    return new TrainingCompleteEditV54View(supabase, authController);
+    const { TrainingAttendanceHistoryV55View } = await import("../views/training/TrainingAttendanceHistoryV55View.js");
+    return new TrainingAttendanceHistoryV55View(supabase, authController);
   },
   nutrition: async ({ supabase, authController }) => {
     const { NutritionView } = await import("../views/NutritionView.js");
@@ -135,7 +135,7 @@ const FACTORY_LOADERS = Object.freeze({
       return FACTORY_LOADERS.easyentry(dependencies, { gameId });
     }
 
-    const { supabase, authController } = dependencies;
+    const { supabase, gameController, authController } = dependencies;
     const [
       { LiveScoreHUDViewV44 },
       { attachLiveWriterLeaseV43 },
