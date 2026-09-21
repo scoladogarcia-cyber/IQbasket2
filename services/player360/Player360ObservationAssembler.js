@@ -15,6 +15,7 @@ import {
   PLAYER360_SOURCE_TYPE,
   PLAYER360_SENSITIVITY
 } from "../../config/player360.config.js";
+import { attendedTraining } from "../../domain/training/TrainingAttendanceV55.js";
 
 function finite(value) {
   if (value === null || value === undefined || value === "" || typeof value === "boolean") {
@@ -143,10 +144,12 @@ export class Player360ObservationAssembler {
       });
 
     (trainingSessions || []).forEach(session => {
+      if (String(session?.status || '').toUpperCase() === 'ARCHIVED') return;
       const participant = (session?.participants || []).find(row =>
         String(row?.player_id || row?.playerId || "") === String(playerId)
       );
-      if (!participant) return;
+      // Roster membership, pending attendance and an absence are not performed training.
+      if (!attendedTraining(participant)) return;
 
       addMappedObservations({
         target: observations,
