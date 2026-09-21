@@ -1,0 +1,56 @@
+name: Training Complete Edit V54 Browser
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'views/training/**'
+      - 'services/player360/TrainingCompleteEditV54Service.js'
+      - 'services/LazyViewRegistry.js'
+      - 'config/trainingEditV54.config.js'
+      - 'tests/training-complete-edit-v54-browser.mjs'
+      - '.github/workflows/training-complete-edit-v54-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'views/training/**'
+      - 'tests/training-complete-edit-v54-browser.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  training-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install isolated Playwright browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start local application
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/training-v54-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/training-v54-vite.log
+          exit 1
+      - name: Verify complete training editing on browser
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/training-complete-edit-v54-browser.mjs
+      - name: Debug Vite on failure
+        if: failure()
+        run: cat /tmp/training-v54-vite.log || true
