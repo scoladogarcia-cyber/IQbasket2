@@ -6,10 +6,12 @@ import { TRAINING_TYPE_OPTIONS, BLOCK_PARTICIPATION_OPTIONS } from '../config/tr
 const text = path => readFileSync(new URL(path,import.meta.url),'utf8');
 const sql=text('../supabase/migrations/20260921090000_training_complete_edit_v54.sql');
 const ui=text('../views/training/TrainingCompleteEditV54View.js');
+const v55=text('../views/training/TrainingAttendanceHistoryV55View.js');
 const registry=text('../services/LazyViewRegistry.js');
 
-// The UI must use a single save, not a sequence of non-atomic metadata/child writes.
-assert.match(registry,/TrainingCompleteEditV54View/);
+// V55 is the routed view, but must inherit the same single atomic V54 editor.
+assert.match(registry,/TrainingAttendanceHistoryV55View/);
+assert.match(v55,/extends TrainingCompleteEditV54View/);
 assert.match(ui,/completeService\.saveComplete/);
 assert.match(ui,/p360-cancel-training-edit/);
 for(const item of ['v54-date','v54-type','v54-intensity','v54-block','v54-person','v54-part-status','v54-part-block-minutes','v54-part-reason','v54-eligibility-warning']) assert.ok(ui.includes(item),`Missing field ${item}`);
