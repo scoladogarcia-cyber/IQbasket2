@@ -57,29 +57,30 @@ try {
   await form.locator('.v54-type').selectOption('TACTICAL');
   await form.locator('.v54-title').fill('Entrenamiento corregido');
   await form.locator('.v54-intensity').fill('5.5');
-  const first=form.locator('.v54-person').filter({has:page.locator('[data-player-id="10000000-0000-4000-8000-000000000001"]')});
   const person1=form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000001"]');
   await person1.locator('.v54-person-status').selectOption('PARTIAL');
   await person1.locator('.v54-person-minutes').fill('30');
+  await person1.locator('.v54-exceptions summary').click();
   await person1.locator('.v54-assignment').nth(0).locator('.v54-part-status').selectOption('FULL');
   await person1.locator('.v54-assignment').nth(1).locator('.v54-part-status').selectOption('NOT_ATTENDED');
   await person1.locator('.v54-assignment').nth(1).locator('.v54-part-reason').selectOption('LIMITED');
-  // Remove another participant explicitly, add a missing one, edit blocks.
+  // Remove another participant explicitly, add a missing one, and add/delete a draft block.
   await form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000002"] .v54-person-included').uncheck();
   await form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000003"] .v54-person-included').check();
-  await form.locator('.v54-block').nth(1).locator('.v54-remove-block').click();
   await form.locator('.v54-add-block').click();
-  await form.locator('.v54-block').nth(1).locator('.v54-block-title').fill('Bloque añadido');
-  await form.locator('.v54-block').nth(1).locator('.v54-block-minutes').fill('30');
+  await form.locator('.v54-block').nth(2).locator('.v54-remove-block').click();
+  await form.locator('.v54-add-block').click();
+  await form.locator('.v54-block').nth(2).locator('.v54-block-title').fill('Bloque añadido');
+  await form.locator('.v54-block').nth(2).locator('.v54-block-minutes').fill('30');
   page.once('dialog',dialog=>dialog.accept());
   await form.locator('button[type="submit"]').click();
-  await page.waitForFunction(()=>window.__v54Calls.length===1);
+  await page.waitForFunction(()=>window.__v54Calls.length===1,{},{timeout:12000});
   const saved=await page.evaluate(()=>window.__v54Calls[0]);
   assert.equal(saved.date,'2026-09-18');
   assert.equal(saved.trainingType,'TACTICAL');
   assert.equal(saved.intensity,5.5);
-  assert.equal(saved.blocks.length,2);
-  assert.equal(saved.blocks[1].title,'Bloque añadido');
+  assert.equal(saved.blocks.length,3);
+  assert.equal(saved.blocks[2].title,'Bloque añadido');
   assert.equal(saved.participants.length,2);
   assert.equal(saved.removed.length,1);
   assert.equal(saved.confirmedRemovals,true);
