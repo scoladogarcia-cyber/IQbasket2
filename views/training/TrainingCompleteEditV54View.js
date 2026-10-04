@@ -29,6 +29,12 @@ export class TrainingCompleteEditV54View extends TrainingView {
     this.completeEditReady=false;
     this.editRevisions=new Map();
     this.nextDraftBlock=0;
+    this.trainingPlayerIdentities=new Map();
+    this.editPlayerDirectoryRows=new Map();
+    this.editPlayerQuery='';
+    this.editPlayerPage=1;
+    this.editPlayerRequestSeq=0;
+    this.editPlayerSearchTimer=null;
   }
 
   async _load() {
@@ -39,6 +45,27 @@ export class TrainingCompleteEditV54View extends TrainingView {
     try {
       this.blockAssignments=await this.completeService.listBlockParticipation(this.sessions);
       this.completeEditReady=true;
+
+      const participantIds=[...new Set(
+        (this.sessions||[])
+          .flatMap(session=>(session.participants||[]).map(row=>String(row.player_id||'')))
+          .filter(Boolean)
+      )];
+      this.trainingPlayerIdentities.clear();
+      if(participantIds.length){
+        try {
+          const identities=await this.playerDirectoryService.resolve({
+            teamSeasonId:this.teamSeasonId,
+            playerIds:participantIds
+          });
+          (identities||[]).forEach(player=>{
+            const id=String(player.player_id||player.id||'');
+            if(id)this.trainingPlayerIdentities.set(id,{...player,id, _trainingDirectoryAuthorized:true});
+          });
+        } catch(identityError) {
+          console.warn('[Training V57] No se pudieron resolver identidades externas:',identityError?.message||identityError);
+        }
+      }
     } catch(error) {
       this.lastError=error;
       console.warn('[Training V54] Sin edición completa; lectura de bloques denegada o no disponible:',error);
