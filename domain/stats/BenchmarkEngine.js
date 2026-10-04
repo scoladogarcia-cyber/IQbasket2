@@ -80,6 +80,31 @@ export function buildSelfBenchmark({earlyStats=[],recentStats=[]}={}){
   }));
 }
 
+
+export function estimateNetworkPercentile(snapshot={},target,higher=true){
+  if(!Number.isFinite(Number(target)) || networkReliability(snapshot?.sample_size)==="HIDDEN") return null;
+  const points=[
+    [snapshot.minimum_value,0],[snapshot.p10,10],[snapshot.p25,25],[snapshot.p50,50],
+    [snapshot.p75,75],[snapshot.p90,90],[snapshot.maximum_value,100]
+  ].map(([value,p])=>[Number(value),p]).filter(([value])=>Number.isFinite(value)).sort((a,b)=>a[0]-b[0]);
+  if(points.length<2)return null;
+  const x=Number(target);
+  let raw;
+  if(x<=points[0][0]) raw=points[0][1];
+  else if(x>=points.at(-1)[0]) raw=points.at(-1)[1];
+  else {
+    raw=50;
+    for(let i=1;i<points.length;i++){
+      const [x1,p1]=points[i-1],[x2,p2]=points[i];
+      if(x>x2)continue;
+      raw=x2===x1 ? (p1+p2)/2 : p1+((x-x1)/(x2-x1))*(p2-p1);
+      break;
+    }
+  }
+  const performance=higher?raw:100-raw;
+  return Math.max(0,Math.min(100,round(performance,0)));
+}
+
 export function networkReliability(n){
   const size=Number(n)||0;
   if(size<20)return "HIDDEN";
@@ -87,4 +112,4 @@ export function networkReliability(n){
   if(size<100)return "REASONABLE";
   return "ROBUST";
 }
-export default {BENCHMARK_METRICS,aggregatePlayerStats,buildTeamBenchmark,buildSelfBenchmark,networkReliability};
+export default {BENCHMARK_METRICS,aggregatePlayerStats,buildTeamBenchmark,buildSelfBenchmark,estimateNetworkPercentile,networkReliability};
