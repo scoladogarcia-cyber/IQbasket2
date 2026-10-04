@@ -274,10 +274,19 @@ export class TrainingCompleteEditV54View extends TrainingView {
     if(!this.completeEditReady)return `<div class="p360-error">No se ha podido verificar el detalle de participantes y bloques. Recarga la pantalla antes de editar; no se guardará parcialmente.</div>`;
     const bounds=this._dateInputBounds();
     const directory=this._playerDirectory();
-    const roster=new Map([...this._eligiblePlayers(session.session_date),...directory.values()].filter(p=>p?.id).map(p=>[String(p.id),p]));
     const participants=new Map((session.participants||[]).map(p=>[String(p.player_id),p]));
-    // Preserve a historical participant in the editor even when their roster has since changed.
-    for(const pid of participants.keys())if(!roster.has(pid))roster.set(pid,{id:pid,name:'Jugador histórico · '+pid.slice(0,8)});
+    const participantPlayers=[...participants.entries()].map(([pid,participant])=>{
+      const player=this.trainingPlayerIdentities.get(pid)
+        || directory.get(pid)
+        || DataStore.getPlayerById?.(pid)
+        || {id:pid,name:'Jugador · '+pid.slice(0,8)};
+      return {
+        ...player,
+        id:String(player.id||player.player_id||pid),
+        _trainingDirectoryAuthorized:true,
+        _trainingGuest:String(participant?.participant_origin||'').toUpperCase()==='GUEST'
+      };
+    });
     const blocks=[...(session.blocks||[])].sort((a,b)=>Number(a.block_order)-Number(b.block_order));
     this.editRevisions.set(String(session.id),this.completeService.revision(session,this.blockAssignments));
     return `<form class="p360-form p360-inline-editor v54-complete-form v55-simplified-edit" data-session-id="${esc(session.id)}">
@@ -320,11 +329,15 @@ export class TrainingCompleteEditV54View extends TrainingView {
       </details>
 
       <details class="p360-advanced-details v55-edit-roster">
-        <summary>Jugadores · asistencia, minutos, RPE y Pasaporte (${participants.size} registrados)</summary>
+        <summary>Jugadores · asistencia, minutos, RPE y Pasaporte (<span class="v57-session-participant-count">${participants.size}</span> registrados)</summary>
         <section class="p360-subsection">
-          <div><strong>Asistencia y excepciones</strong><p class="p360-card-text">La sesión puede guardarse sin tocar esta sección. Ábrela solo para corregir asistencia, minutos, RPE, excepciones o valorar el Pasaporte desde este entrenamiento.</p></div>
-          <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">Seleccionar elegibles</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
-          <div class="v54-roster">${[...roster.values()].sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
+          <div><strong>Jugadores registrados en esta sesión</strong><p class="p360-card-text">Aquí solo aparecen quienes forman parte del entrenamiento. Para añadir otros usa el buscador inferior; los resultados se muestran de 15 en 15.</p></div>
+          <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
+          <div class="v54-roster">${participantPlayers.sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
+          <div class="v57-edit-add-player">
+            <strong>Añadir otro jugador</strong>
+            ${this._renderEditDirectoryShell(session,participants)}
+          </div>
         </section>
       </details>
 
