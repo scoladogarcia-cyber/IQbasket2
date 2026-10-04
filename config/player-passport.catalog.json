@@ -2614,7 +2614,8 @@
       "family": "mental",
       "valid_contexts": [
         "T",
-        "JR"
+        "JR",
+        "P5"
       ],
       "min_evidence": 5,
       "introduction_stage": "Según dominio",
