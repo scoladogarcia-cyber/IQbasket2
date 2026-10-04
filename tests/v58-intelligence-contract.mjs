@@ -130,7 +130,7 @@ class MemoryStorage {
     readFile(new URL("../security/entitlements.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8"),
     readFile(new URL("../views/games/ScopedGameBoxScoreLiveV58View.js",import.meta.url),"utf8"),
-    readFile(new URL("../supabase/migrations/20261004214500_game_event_attribution_v58.sql",import.meta.url),"utf8"),
+    readFile(new URL("../supabase/migrations/20261004215500_game_event_attribution_v58.sql",import.meta.url),"utf8"),
     readFile(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
