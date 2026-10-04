@@ -65,8 +65,9 @@ export function buildTeamBenchmark({targetPlayerId,statsByPlayer=new Map()}={}){
   const metrics=BENCHMARK_METRICS.map(metric=>{
     if(!eligible(metric,target))return {...metric,value:null,percentile:null,sampleSize:0,status:"INSUFFICIENT_PLAYER_SAMPLE"};
     const cohort=[...aggregates.values()].filter(a=>eligible(metric,a)).map(a=>a.values[metric.code]);
-    return {...metric,value:target.values[metric.code],percentile:percentile(cohort,target.values[metric.code],metric.higher),sampleSize:cohort.length,
-      status:cohort.length>=5?"READY":"SMALL_TEAM_SAMPLE"};
+    const cohortReady=cohort.length>=5;
+    return {...metric,value:target.values[metric.code],percentile:cohortReady?percentile(cohort,target.values[metric.code],metric.higher):null,sampleSize:cohort.length,
+      status:cohortReady?"READY":"SMALL_TEAM_SAMPLE"};
   });
   return {metrics,sampleSize:aggregates.size};
 }
