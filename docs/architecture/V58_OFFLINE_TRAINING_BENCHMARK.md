@@ -82,7 +82,7 @@ Future advanced training allocation can add explicit per-focus minutes without c
 
 ### Training → performance
 
-Player360 now emits `training_focus.FOCUS_<CODE>_MINUTES` observations and tests descriptive associations against:
+Player360 now emits `training.FOCUS_<CODE>_MINUTES` observations and tests descriptive associations against:
 
 - evaluation;
 - points;
