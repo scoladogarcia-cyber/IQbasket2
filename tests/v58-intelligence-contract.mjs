@@ -118,7 +118,7 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration,boxscoreV58,eventMigration,captureService]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
@@ -128,9 +128,13 @@ class MemoryStorage {
     readFile(new URL("../index.html",import.meta.url),"utf8"),
     readFile(new URL("../public/iqbasket-sw.js",import.meta.url),"utf8"),
     readFile(new URL("../security/entitlements.js",import.meta.url),"utf8"),
-    readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8")
+    readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8"),
+    readFile(new URL("../views/games/ScopedGameBoxScoreLiveV58View.js",import.meta.url),"utf8"),
+    readFile(new URL("../supabase/migrations/20261004214500_game_event_attribution_v58.sql",import.meta.url),"utf8"),
+    readFile(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
+  assert.match(registry,/ScopedGameBoxScoreLiveV58View/);
   assert.match(registry,/TrainingCompleteEditV54View/);
   assert.match(registry,/new Player360View\(supabase, authController\)/);
   assert.match(trainingView,/TrainingIntelligencePanelV58/);
@@ -156,6 +160,14 @@ class MemoryStorage {
   assert.match(commercialMigration,/FAMILY_PRO/);
   assert.match(commercialMigration,/INTERNAL_FULL/);
   assert.match(commercialMigration,/on conflict \(plan_id,entitlement_code\)/i);
+  assert.match(boxscoreV58,/captureService\.getSnapshot\(gameId\)/);
+  assert.doesNotMatch(boxscoreV58,/from\(["']play_by_play_events["']\)/);
+  assert.match(boxscoreV58,/data-v58-reassign-event/);
+  assert.match(captureService,/iq_v58_reassign_game_event_player/);
+  assert.match(eventMigration,/game_event_attribution_audit/i);
+  assert.match(eventMigration,/iq_v58_reassign_game_event_player/i);
+  assert.match(eventMigration,/apply_event_stat_delta/i);
+  assert.match(eventMigration,/GAME_EVENT_PLAYER_NOT_ELIGIBLE/i);
 }
 
 console.log("V58 offline + Training Intelligence + Benchmark contracts: OK");
