@@ -630,15 +630,21 @@ export class GameBoxScoreView {
             this.players = this.gameScopedSnapshot.players || this.players;
             this.gameStats = this.gameScopedSnapshot.stats || statsList;
           } else {
-            // Preserve the established team-scoped save path for normal staff.
-            // The V21 RPC is reserved for users whose only authorization is the
-            // explicit per-game delegation, avoiding a regression in existing
-            // trainer/admin workflows and keeping DataStore as their boundary.
-            const gameData = {
-              ...currentGame,
-              starter_ids: starterIds
-            };
-            await DataStore.saveGameAndStats(gameData, statsList);
+            // BoxScore editing is intentionally a partial write: starters and
+            // player statistics only. Rewriting the full game here can erase
+            // authoritative live-capture fields (score, period breakdown, PBP
+            // projection) when this view holds a stale team-scoped snapshot.
+            const snapshot = await this.captureService.saveCapture({
+              gameId: currentGame.id,
+              starterIds,
+              stats: statsList
+            });
+            if (snapshot?.game?.id) {
+              this.gameScopedSnapshot = snapshot;
+              this.games = [snapshot.game];
+              this.players = Array.isArray(snapshot.players) ? snapshot.players : this.players;
+              this.gameStats = Array.isArray(snapshot.stats) ? snapshot.stats : statsList;
+            }
           }
 
           alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));
