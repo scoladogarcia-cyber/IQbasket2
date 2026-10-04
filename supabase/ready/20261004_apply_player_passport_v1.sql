@@ -30,6 +30,17 @@ where p.code='INTERNAL_FULL'
 on conflict (plan_id,entitlement_code) do update
 set beneficiary_scope='ALL_AUTHORIZED',boolean_value=true,updated_at=now();
 
+-- Paid tiers carry the module when those plans are commercially activated.
+-- Account overrides/scoped grants remain able to enable or disable it independently.
+insert into public.saas_plan_entitlements(plan_id,entitlement_code,beneficiary_scope,boolean_value)
+select p.id,'PLAYER_PASSPORT',
+  case when p.account_type='FAMILY' then 'ACCOUNT_MEMBERS' else 'AUTHORIZED_STAFF' end,
+  true
+from public.saas_plans p
+where p.code in ('FAMILY','FAMILY_PRO','TEAM_PRO','CLUB','ACADEMY')
+on conflict (plan_id,entitlement_code) do update
+set beneficiary_scope=excluded.beneficiary_scope,boolean_value=true,updated_at=now();
+
 create table if not exists public.player360_evaluation_rubrics(
   id uuid primary key default gen_random_uuid(),
   metric_definition_id uuid not null references public.player360_evaluation_metrics(id) on delete restrict,
