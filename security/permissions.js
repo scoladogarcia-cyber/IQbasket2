@@ -482,6 +482,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.CREATE_OWN_PLAYER_SUBMISSION,
     Permission.SUBMIT_OWN_PLAYER_DATA,
     Permission.VIEW_OWN_PLAYER_360,
+    Permission.VIEW_PLAYER_PASSPORT,
     Permission.VIEW_DEVELOPMENT_CYCLE
   ],
 
@@ -519,6 +520,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     Permission.CREATE_LINKED_PLAYER_SUBMISSION,
     Permission.SUBMIT_LINKED_PLAYER_DATA,
     Permission.VIEW_LINKED_PLAYER_360,
+    Permission.VIEW_PLAYER_PASSPORT,
     Permission.VIEW_DEVELOPMENT_CYCLE
   ],
 
