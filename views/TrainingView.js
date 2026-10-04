@@ -1005,8 +1005,14 @@ export class TrainingView {
         <div class="p360-section-head">
           <div>
             <h2>${escapeHtml(this.t("player360.training.history", "Histórico de entrenamientos"))}</h2>
-            <p>La carga solo aparece cuando se registran minutos y RPE del jugador.</p>
+            <p>Los focos rápidos permiten documentar la temporada y preparar análisis longitudinales posteriores.</p>
           </div>
+          ${this._can(Permission.EXPORT_REPORT) && this.sessions.length ? `
+            <div class="p360-report-actions">
+              <button type="button" class="p360-secondary-btn p360-export-season-word">📄 Informe temporada</button>
+              <button type="button" class="p360-secondary-btn p360-export-season-csv">📊 CSV</button>
+            </div>
+          ` : ""}
         </div>
 
         <div class="p360-session-list">
