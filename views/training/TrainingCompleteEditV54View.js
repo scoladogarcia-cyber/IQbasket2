@@ -100,14 +100,20 @@ export class TrainingCompleteEditV54View extends TrainingView {
   }
 
   _participantRow(player,participant,blocks) {
-    const pid=String(player.id),current=Boolean(participant);
+    const pid=String(player.id||player.player_id||'');
+    const included=Boolean(participant);
+    const existing=Boolean(participant&&!participant._draft);
+    const directoryAuthorized=Boolean(player?._trainingDirectoryAuthorized);
     const assignments=this.blockAssignments.filter(row=>sameId(row.participant_id,participant?.id));
     const assigned=new Map(assignments.map(row=>[String(row.block_id),row]));
-    const status=current?participant.attendance_status:'PLANNED';
-    return `<div class="v54-person" data-player-id="${esc(pid)}">
-      <label class="v54-person-heading"><input class="v54-person-included" type="checkbox" ${current?'checked':''} />
-        <strong>#${esc(player.jersey ?? player.number ?? '—')} · ${esc(personName(player))}</strong></label>
-      <div class="v54-person-details" ${current?'':'hidden'}>
+    const status=included?(participant.attendance_status||'PLANNED'):'PLANNED';
+    const guest=String(participant?.participant_origin||'').toUpperCase()==='GUEST' || Boolean(player?._trainingGuest);
+    return `<div class="v54-person" data-player-id="${esc(pid)}" data-existing-participant="${existing?'true':'false'}" data-directory-authorized="${directoryAuthorized?'true':'false'}">
+      <label class="v54-person-heading"><input class="v54-person-included" type="checkbox" ${included?'checked':''} />
+        <strong>#${esc(player.jersey ?? player.number ?? '—')} · ${esc(personName(player))}</strong>
+        ${guest?'<span class="v57-guest-badge">Invitado</span>':''}
+      </label>
+      <div class="v54-person-details" ${included?'':'hidden'}>
         <div class="v54-person-fields">
           <label>Asistencia<select class="v54-person-status">${selected([
             ['PLANNED','Pendiente'],['PRESENT','Presente'],['PARTIAL','Parcial'],
@@ -122,12 +128,145 @@ export class TrainingCompleteEditV54View extends TrainingView {
         </div>
         <details class="v54-exceptions"><summary>Participación por bloque y excepcionalidades (opcional)</summary>
           <p>Sin detalle no equivale a asistencia completa. Registra únicamente lo que sepas. Evita anotar diagnósticos médicos.</p>
-          <div class="v54-assignment-list">${blocks.map(block=>this._assignmentRow(assigned.get(String(block.id)) || {},{...block,key:block.id})).join('')}</div>
+          <div class="v54-assignment-list">${blocks.map(block=>this._assignmentRow(assigned.get(String(block.id)) || {},{...block,key:block.key||block.id})).join('')}</div>
           <button class="p360-secondary-btn v54-calculate-minutes" type="button">Sumar minutos registrados de los bloques</button>
         </details>
       </div>
     </div>`;
   }
+
+  _editPlayerIdentity(playerId) {
+    const id=String(playerId||'');
+    return this.editPlayerDirectoryRows.get(id)
+      || this.trainingPlayerIdentities.get(id)
+      || this._playerDirectory().get(id)
+      || DataStore.getPlayerById?.(id)
+      || null;
+  }
+
+  _renderEditDirectoryRows(rows=[],includedIds=new Set()) {
+    this.editPlayerDirectoryRows.clear();
+    if(!rows.length)return '<p class="p360-empty-inline">No hay jugadores que coincidan con la búsqueda.</p>';
+
+    return rows.map(raw=>{
+      const id=String(raw.player_id||raw.id||'');
+      const player={
+        ...raw,
+        id,
+        name:[raw.first_name||raw.firstName,raw.last_name||raw.lastName].filter(Boolean).join(' '),
+        jersey:raw.jersey ?? raw.number ?? null,
+        primary_position:raw.primary_position||raw.primaryPosition||raw.position||null,
+        _trainingDirectoryAuthorized:true,
+        _trainingGuest:!raw.is_current_roster
+      };
+      this.editPlayerDirectoryRows.set(id,player);
+      const already=includedIds.has(id);
+      const context=raw.is_current_roster?'Plantilla actual':(raw.team_name||raw.is_current_team?'Histórico del equipo':'Otro jugador');
+      return `<div class="v57-edit-player-result" data-player-id="${esc(id)}">
+        <div class="v57-edit-player-copy">
+          <strong>#${esc(player.jersey ?? '—')} · ${esc(personName(player))}</strong>
+          <small>${esc(player.primary_position||'—')} · ${esc(context||'Jugador disponible')}</small>
+        </div>
+        <button type="button" class="p360-secondary-btn v57-add-edit-player" data-player-id="${esc(id)}" ${already?'disabled':''}>
+          ${already?'Ya incluido':'＋ Añadir'}
+        </button>
+      </div>`;
+    }).join('');
+  }
+
+  _renderEditDirectoryShell(session,participants) {
+    const fallback=this._trainingDirectoryFallback(session.session_date,'',1);
+    const included=new Set([...participants.keys()]);
+    const pages=fallback.pages||0;
+    return `<div class="v57-edit-directory">
+      <div class="v57-edit-search-row">
+        <label>Buscar otro jugador<input class="v57-edit-player-search" type="search" placeholder="Nombre, dorsal o equipo…" autocomplete="off" /></label>
+        <span class="v57-edit-directory-status" aria-live="polite">${fallback.total||0} disponibles</span>
+      </div>
+      <p class="p360-card-text">La plantilla actual aparece primero. Puedes buscar otros jugadores a los que tengas acceso; añadirlos al entrenamiento no los incorpora a la plantilla del equipo.</p>
+      <div class="v57-edit-player-results">${this._renderEditDirectoryRows(fallback.rows||[],included)}</div>
+      <div class="p360-player-pagination v57-edit-pagination">
+        <button type="button" class="p360-secondary-btn v57-edit-prev" ${(fallback.page||1)<=1?'disabled':''}>← Anterior</button>
+        <span class="v57-edit-page-label">Página ${pages?fallback.page:0} de ${pages} · máximo 15</span>
+        <button type="button" class="p360-secondary-btn v57-edit-next" ${!pages||(fallback.page||1)>=pages?'disabled':''}>Siguiente →</button>
+      </div>
+    </div>`;
+  }
+
+  async _refreshEditPlayerDirectory(form,session,{query=this.editPlayerQuery,page=this.editPlayerPage}={}) {
+    const results=form.querySelector('.v57-edit-player-results');
+    if(!results)return;
+
+    this.editPlayerQuery=String(query||'').trim();
+    this.editPlayerPage=Math.max(1,Number(page)||1);
+    const seq=++this.editPlayerRequestSeq;
+    let directory=null;
+    try {
+      directory=await this.playerDirectoryService.search({
+        teamSeasonId:this.teamSeasonId,
+        query:this.editPlayerQuery,
+        page:this.editPlayerPage,
+        pageSize:15
+      });
+    } catch(error) {
+      console.warn('[Training V57] Directorio de edición no disponible; usando memoria autorizada:',error?.message||error);
+    }
+    if(seq!==this.editPlayerRequestSeq)return;
+    if(!directory||(!directory.rows?.length&&!directory.total)){
+      directory=this._trainingDirectoryFallback(session.session_date,this.editPlayerQuery,this.editPlayerPage);
+    }
+    if(directory.pages>0&&this.editPlayerPage>directory.pages){
+      this.editPlayerPage=directory.pages;
+      return this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:this.editPlayerPage});
+    }
+
+    const included=new Set([...form.querySelectorAll('.v54-person')].map(row=>String(row.dataset.playerId)));
+    results.innerHTML=this._renderEditDirectoryRows(directory.rows||[],included);
+    const status=form.querySelector('.v57-edit-directory-status');
+    if(status)status.textContent=`${directory.total||0} disponible${Number(directory.total)===1?'':'s'}`;
+    const label=form.querySelector('.v57-edit-page-label');
+    if(label)label.textContent=`Página ${directory.pages?directory.page:0} de ${directory.pages||0} · máximo 15`;
+    const prev=form.querySelector('.v57-edit-prev');
+    const next=form.querySelector('.v57-edit-next');
+    if(prev)prev.disabled=(directory.page||1)<=1;
+    if(next)next.disabled=!directory.pages||(directory.page||1)>=directory.pages;
+  }
+
+  _addPlayerToEditForm(form,session,player) {
+    if(!player?.id)return;
+    let row=form.querySelector(`.v54-person[data-player-id="${CSS.escape(String(player.id))}"]`);
+    if(row){
+      const box=row.querySelector('.v54-person-included');
+      box.checked=true;
+      box.disabled=false;
+      row.querySelector('.v54-person-details').hidden=false;
+      row.dataset.directoryAuthorized='true';
+      this._eligibility(form);
+      return;
+    }
+
+    const blocks=[...form.querySelectorAll('.v54-block')].map(block=>({
+      id:block.dataset.blockId||null,
+      key:block.dataset.blockKey,
+      title:block.querySelector('.v54-block-title')?.value||'Bloque'
+    }));
+    const draft={
+      _draft:true,
+      attendance_status:String(session.session_date||'')<=new Date().toISOString().slice(0,10)?'PRESENT':'PLANNED',
+      participated_minutes:null,
+      rpe:null,
+      notes:''
+    };
+    const holder=document.createElement('div');
+    holder.innerHTML=this._participantRow({...player,_trainingDirectoryAuthorized:true},draft,blocks);
+    row=holder.firstElementChild;
+    row.dataset.directoryAuthorized='true';
+    form.querySelector('.v54-roster').append(row);
+    this._eligibility(form);
+    const count=form.querySelector('.v57-session-participant-count');
+    if(count)count.textContent=String(form.querySelectorAll('.v54-person').length);
+  }
+
 
   /** One complete editable form, replacing the fragmented metadata-only editor. */
   _renderTrainingEditForm(session={}) {
