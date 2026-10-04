@@ -17,5 +17,18 @@ export class TrainingIntelligenceService {
     if(error) throw error;
     return data;
   }
+  async setFocusAllocation({sessionId,teamSeasonId,allocations={}}={}){
+    this._assert();
+    if(!sessionId||!teamSeasonId) throw new Error("Sesión y equipo-temporada son obligatorios.");
+    const normalized=Object.fromEntries(Object.entries(allocations||{})
+      .map(([code,value])=>[String(code||"").trim().toUpperCase(),Number(value)])
+      .filter(([code,value])=>code&&Number.isFinite(value)&&value>=0));
+    const {data,error}=await this.client.rpc("iq_v58_set_training_focus_allocation",{
+      p_session_id:sessionId,p_team_season_id:teamSeasonId,p_allocations:normalized
+    });
+    if(error) throw error;
+    return data;
+  }
+
 }
 export default TrainingIntelligenceService;
