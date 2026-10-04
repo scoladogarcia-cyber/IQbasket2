@@ -182,16 +182,16 @@ export class Player360ObservationAssembler {
         focusCodes.forEach(focusCode => {
           const metricCode = `FOCUS_${focusCode}_MINUTES`;
           definitions.push({
-            module: "training_focus",
+            module: "training",
             metric_code: metricCode,
             unit: "MIN",
             aggregation: "SUM"
           });
-          labels[`training_focus.${metricCode}`] =
+          labels[`training.${metricCode}`] =
             `Exposición ${TRAINING_FOCUS_LABELS[focusCode] || focusCode}`;
 
           observations.push(normalizePlayer360Observation({
-            module: "training_focus",
+            module: "training",
             player_id: playerId,
             team_season_id: teamSeasonId,
             occurred_at: occurredAt,
@@ -299,7 +299,7 @@ export class Player360ObservationAssembler {
       .map(({ left, right, lag_buckets }) => ({ left, right, lag_buckets }));
 
     const focusMetricKeys = metricDefinitions
-      .filter(definition => definition.module === "training_focus")
+      .filter(definition => definition.module === "training" && String(definition.metric_code || "").startsWith("FOCUS_"))
       .map(definition => `${definition.module}.${definition.metric_code}`);
     const focusAssociations = [];
     focusMetricKeys.forEach(left => {
