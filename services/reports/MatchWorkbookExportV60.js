@@ -62,7 +62,10 @@ const ACTA_HEADERS=Object.freeze([
   "game_id","fecha","rival","estado","marcador_equipo","marcador_rival","parciales",
   "jugadores_con_acta","minutos","puntos","T2_C","T2_I","T2_%","T3_C","T3_I","T3_%",
   "TL_C","TL_I","TL_%","REB_O","REB_D","REB_T","AST","ROB","TAP","TAP_REC","PER","FC","FR",
-  "VAL","mas_menos","eFG_%","posesiones_est","pace","ORtg","DRtg","NetRtg"
+  "VAL","mas_menos","eFG_%","coherencia_puntos",
+  "rival_T2_C","rival_T2_I","rival_T3_C","rival_T3_I","rival_TL_C","rival_TL_I",
+  "rival_REB_O","rival_REB_D","rival_PER",
+  "posesiones_est","pace","ORtg","DRtg","NetRtg"
 ]);
 
 export const BOXSCORE_XLSX_HEADERS=Object.freeze([
@@ -102,6 +105,11 @@ export function buildActaRows(reports=[]) {
       totals.off_reb,totals.def_reb,totals.off_reb+totals.def_reb,totals.assists,totals.steals,
       totals.blocks_made,totals.blocks_received,totals.turnovers,totals.fouls_committed,
       totals.fouls_drawn,totals.evaluation,totals.plus_minus,efg,
+      totals.points===num(game.team_score)?"OK":("REVISAR · acta "+totals.points+" / marcador "+num(game.team_score)),
+      statsValue(team,"opp_fg2_made"),statsValue(team,"opp_fg2_attempted"),
+      statsValue(team,"opp_fg3_made"),statsValue(team,"opp_fg3_attempted"),
+      statsValue(team,"opp_ft_made"),statsValue(team,"opp_ft_attempted"),
+      statsValue(team,"opp_off_reb"),statsValue(team,"opp_def_reb"),statsValue(team,"opp_turnovers"),
       optional(team.estimated_possessions),optional(team.pace),optional(team.ortg),
       optional(team.drtg),optional(team.net_rating)
     ];
