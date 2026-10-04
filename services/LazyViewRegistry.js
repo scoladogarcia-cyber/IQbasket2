@@ -65,8 +65,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new PlayerNutritionRouterView(supabase, authController, staffView);
   },
   player360: async ({ supabase, authController }) => {
-    const { Player360View } = await import("../views/Player360View.js");
-    return new Player360View(supabase, authController);
+    const { Player360BenchmarkV58View } = await import("../views/player360/Player360BenchmarkV58View.js");
+    return new Player360BenchmarkV58View(supabase, authController);
   },
   passport: async ({ supabase, authController }) => {
     const { PlayerPassportView } = await import("../views/player360/passport/PlayerPassportView.js");
