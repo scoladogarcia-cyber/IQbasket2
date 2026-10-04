@@ -22,8 +22,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new AdvancedStatsView(gameController);
   },
   boxscore: async ({ supabase, authController }) => {
-    const { ScopedGameBoxScoreLiveV39View } = await import("../views/games/ScopedGameBoxScoreLiveV39View.js");
-    return new ScopedGameBoxScoreLiveV39View(supabase, authController);
+    const { ScopedGameBoxScoreLiveV58View } = await import("../views/games/ScopedGameBoxScoreLiveV58View.js");
+    return new ScopedGameBoxScoreLiveV58View(supabase, authController);
   },
   player: async ({ supabase, authController }) => {
     const { PlayerStatsView } = await import("../views/PlayerStatsView.js");
