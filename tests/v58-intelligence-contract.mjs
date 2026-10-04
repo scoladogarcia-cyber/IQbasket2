@@ -118,13 +118,15 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,trainingView,player360View,migration,permissions]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
     readFile(new URL("../views/Player360View.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql",import.meta.url),"utf8"),
-    readFile(new URL("../security/permissions.js",import.meta.url),"utf8")
+    readFile(new URL("../security/permissions.js",import.meta.url),"utf8"),
+    readFile(new URL("../index.html",import.meta.url),"utf8"),
+    readFile(new URL("../public/iqbasket-sw.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
   assert.match(registry,/TrainingCompleteEditV54View/);
@@ -142,6 +144,11 @@ class MemoryStorage {
   assert.match(migration,/from public, anon/i);
   assert.match(permissions,/VIEW_TRAINING_ANALYTICS/);
   assert.match(permissions,/VIEW_BENCHMARKS/);
+  assert.match(indexHtml,/OfflineAppShellBootstrap\.js/);
+  assert.match(serviceWorker,/request\.mode==="navigate"/);
+  assert.match(serviceWorker,/release\.json/);
+  assert.match(serviceWorker,/cache:"no-store"/);
+  assert.match(serviceWorker,/CACHE_NAME="iqbasket-shell-v58-1"/);
 }
 
 console.log("V58 offline + Training Intelligence + Benchmark contracts: OK");
