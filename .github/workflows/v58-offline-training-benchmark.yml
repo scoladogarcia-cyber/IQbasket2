@@ -24,6 +24,8 @@ on:
       - "views/training/TrainingIntelligencePanelV58.js"
       - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
+      - "supabase/migrations/20261004220500_v58_intelligence_integrity.sql"
+      - "domain/player360/TrainingFocusAnalytics.js"
       - "domain/stats/BenchmarkEngine.js"
       - "services/player360/TrainingIntelligenceService.js"
       - "services/player360/BenchmarkService.js"
@@ -83,6 +85,7 @@ jobs:
           node --check views/training/TrainingIntelligencePanelV58.js
           node --check views/player360/Player360BenchmarkPanelV58.js
           node --check domain/player360/TrainingIntelligenceAnalytics.js
+          node --check domain/player360/TrainingFocusAnalytics.js
           node --check domain/stats/BenchmarkEngine.js
           node --check services/player360/TrainingIntelligenceService.js
           node --check services/player360/BenchmarkService.js
