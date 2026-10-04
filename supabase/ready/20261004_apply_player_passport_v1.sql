@@ -641,8 +641,19 @@ begin
   if auth.uid() is null or not public.iq_account_is_active() then return false; end if;
   if not public.iq_v4_can_view_player360_team_season(p_team_season_id) then return false; end if;
   if not exists(
-    select 1 from public.roster_membership_stints s
-    where s.player_id=p_player_id and s.team_season_id=p_team_season_id
+    select 1
+    from public.roster_memberships rm
+    left join public.roster_membership_stints s on s.roster_membership_id=rm.id
+    where rm.player_id=p_player_id
+      and rm.team_season_id=p_team_season_id
+      and upper(coalesce(rm.status,'ACTIVE'))='ACTIVE'
+      and (
+        s.id is null
+        or (
+          s.valid_from <= current_date
+          and (s.valid_until is null or s.valid_until >= current_date)
+        )
+      )
   ) and not exists(
     select 1 from public.players p join public.team_seasons ts on ts.team_id=p.team_id
     where p.id=p_player_id and ts.id=p_team_season_id
