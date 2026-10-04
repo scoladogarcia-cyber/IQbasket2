@@ -115,9 +115,10 @@ export class ReportsViewV53 extends ReportsViewV50 {
     a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
-  async _exportSelection(kind,status) {
+  async _exportSelection(kind,status,gamesOverride=null) {
     if(this._exchangeBusy)return;
-    const games=this._selectionGames(),context=this._reportContext();
+    const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
+    const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
     const printWindow=kind==="pdf"?window.open("","_blank","width=1024,height=768"):null;
     if(kind==="pdf"&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
@@ -137,6 +138,43 @@ export class ReportsViewV53 extends ReportsViewV50 {
       status.textContent=`Preparados ${games.length} partido(s). ${kind==="pdf"?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
     }catch(error){status.textContent=`Exportación cancelada: ${error.message}`;if(printWindow&&!printWindow.closed)printWindow.document.body.textContent=status.textContent;}
     finally{this._exchangeBusy=false;}
+  }
+
+  _globalSelectionGames() {
+    if(this.reportMode==="game") return this._selectionGames();
+    const allowed=this._visibleGames();
+    const requested=new Set((this.dossierConfig?.selectedGameIds||[]).map(id));
+    return requested.size ? allowed.filter(game=>requested.has(id(game.id))) : allowed;
+  }
+
+  async _exportCompleteSeason(button) {
+    if (this._exchangeBusy) return;
+    const selected=this._globalSelectionGames();
+    if(!selected.length){button.disabled=true;button.title="Selecciona al menos un partido.";return;}
+    const status={textContent:""};
+    const previous=button.textContent;
+    button.textContent=`Preparando ${selected.length} partido(s)…`;
+    button.disabled=true;
+    try {
+      await this._exportSelection("pdf",status,selected);
+      button.title=status.textContent||"Informe generado con la selección actual.";
+    } finally {
+      if(button.isConnected){
+        button.textContent=previous;
+        button.disabled=this._globalSelectionGames().length===0;
+      }
+    }
+  }
+
+  _refreshCompleteSelectionButton(container) {
+    const button=container?.querySelector("#btn-export-complete-season");
+    if(!button)return;
+    const selected=this._globalSelectionGames();
+    button.textContent=`📥 Exportar selección actual · ${selected.length} partido(s) (PDF)`;
+    button.disabled=!selected.length||this._exchangeBusy;
+    button.title=selected.length
+      ? "El informe global, comparativas, mapas y acumulados se recalculan únicamente con los partidos seleccionados."
+      : "Selecciona uno, varios o todos los partidos.";
   }
 
   _canImport(game) {
@@ -204,10 +242,12 @@ export class ReportsViewV53 extends ReportsViewV50 {
   async render(containerId="dashboard-content-area") {
     ++this._overviewToken;
     await super.render(containerId);
-    if(this.reportMode!=="game")return;
     const container=document.getElementById(containerId)||document.getElementById("main-content");
+    if(this.reportMode==="game"||this.reportMode==="season_dossier") this._refreshCompleteSelectionButton(container);
+    if(this.reportMode!=="game")return;
     const content=container?.querySelector("#report-view-content-area");if(!content)return;
     this._syncSelection();
+    this._refreshCompleteSelectionButton(container);
     const panel=document.createElement("section");panel.style.cssText="background:white;border:1px solid #cbd5e1;border-radius:12px;padding:14px;margin:12px 0;display:grid;gap:9px";
     const title=document.createElement("h3");title.textContent="Selección de partidos y datos reutilizables";panel.append(title);
     const status=note("CSV y Excel XML 2003 (.xls) exportan las filas reales. Para importar: un partido editable, sin jugadas, con vista previa.");status.setAttribute("role","status");panel.append(status);
@@ -216,11 +256,11 @@ export class ReportsViewV53 extends ReportsViewV50 {
       const select=document.createElement("div");select.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px";
       games.forEach(game=>{const label=document.createElement("label");label.style.cssText="display:flex;gap:6px;align-items:center;font-size:12px";
         const box=document.createElement("input");box.type="checkbox";box.checked=this._selectedReportIds.has(id(game.id));
-        box.addEventListener("change",()=>{if(box.checked)this._selectedReportIds.add(id(game.id));else this._selectedReportIds.delete(id(game.id));void this._refreshOverview(overview);});
+        box.addEventListener("change",()=>{if(box.checked)this._selectedReportIds.add(id(game.id));else this._selectedReportIds.delete(id(game.id));this._refreshCompleteSelectionButton(container);void this._refreshOverview(overview);});
         label.append(box,document.createTextNode(`${game.date||"Sin fecha"} · ${game.opponent||"Rival"}`));select.append(label);
       });
       const actions=document.createElement("div");actions.style.cssText="display:flex;gap:8px;flex-wrap:wrap";
-      for(const [name,selected] of [["Seleccionar todos",true],["Ninguno",false]]){const btn=button(name,"#475569");btn.addEventListener("click",()=>{this._selectedReportIds=new Set(selected?games.map(g=>id(g.id)):[]);select.querySelectorAll('input').forEach(box=>box.checked=selected);void this._refreshOverview(overview);});actions.append(btn);}
+      for(const [name,selected] of [["Seleccionar todos",true],["Ninguno",false]]){const btn=button(name,"#475569");btn.addEventListener("click",()=>{this._selectedReportIds=new Set(selected?games.map(g=>id(g.id)):[]);select.querySelectorAll('input').forEach(box=>box.checked=selected);this._refreshCompleteSelectionButton(container);void this._refreshOverview(overview);});actions.append(btn);}
       panel.append(select,actions);
     }
     const toolbar=document.createElement("div");toolbar.style.cssText="display:flex;flex-wrap:wrap;gap:8px";

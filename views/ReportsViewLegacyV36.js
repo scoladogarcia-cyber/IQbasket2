@@ -267,12 +267,12 @@ export class ReportsView {
     return { game, teamPts, oppPts, diffPts, poss, offRtg, defRtg, netRtg, playersList, periodScores };
   }
 
-  _getSeasonStatsList() {
+  _getSeasonStatsList(gamesOverride = null) {
     const activeTeamId = DataStore.getActiveTeamId?.();
     const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
       || DataStore.getPlayers?.(activeTeamId)
       || [];
-    const games = this._getFilteredGames();
+    const games = Array.isArray(gamesOverride) ? gamesOverride : this._getFilteredGames();
     const gameIds = new Set(games.map(g => String(g.id)));
 
     return players.map(p => {
@@ -808,9 +808,9 @@ export class ReportsView {
     const allPlayers = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
       || DataStore.getPlayers?.(activeTeamId)
       || [];
-    const seasonList = this._getSeasonStatsList();
 
     const selectedGames = allGames.filter(g => this.dossierConfig.selectedGameIds.includes(String(g.id)));
+    const seasonList = this._getSeasonStatsList(selectedGames);
     const selectedPlayers = allPlayers.filter(p => this.dossierConfig.selectedPlayerIds.includes(String(p.id)));
 
     let pagesHtml = `
@@ -864,7 +864,7 @@ export class ReportsView {
       selectedPlayers.forEach(p => {
         pagesHtml += `
           <div style="page-break-after: always; padding-top: 10px;">
-            ${this._renderSinglePlayerCard(p, allGames)}
+            ${this._renderSinglePlayerCard(p, selectedGames)}
           </div>
         `;
       });

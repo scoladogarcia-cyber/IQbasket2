@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const sql=fs.readFileSync(new URL("../supabase/ready/20261004_apply_player_passport_training_link_v2.sql",import.meta.url),"utf8");
+assert.match(sql,/iq_v4_save_player_passport_evaluation_v2/);
+assert.match(sql,/training_session_id/);
+assert.match(sql,/PLAYER_PASSPORT_TRAINING_SCOPE_MISMATCH/);
+assert.match(sql,/PLAYER_PASSPORT_TRAINING_DATE_MISMATCH/);
+assert.match(sql,/player_evaluation_evidence/);
+assert.match(sql,/'TRAINING'/);
+assert.match(sql,/revoke all on function/);
+assert.match(sql,/grant execute on function[\s\S]*to authenticated/i);
+console.log("player-passport-training-link-sql OK");
