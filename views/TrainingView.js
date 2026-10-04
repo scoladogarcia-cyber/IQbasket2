@@ -901,6 +901,7 @@ export class TrainingView {
       (sum, participant) => sum + (Number(participant.internal_load) || 0),
       0
     );
+    const focuses = this._trainingFocusCodes(session);
 
     return `
       <article class="p360-session-card">
@@ -924,24 +925,35 @@ export class TrainingView {
           <span>📊 Carga ${displayNumber(load, 1)}</span>
         </div>
 
-        ${(session.blocks || []).length ? `
-          <div class="p360-block-list">
-            ${session.blocks.map(block => `
-              <div class="p360-block-chip">
-                <strong>${escapeHtml(block.title)}</strong>
-                <span>
-                  ${escapeHtml(block.activity_code || "GENERAL")}
-                  ${block.duration_minutes ? ` · ${displayNumber(block.duration_minutes)} min` : ""}
-                  ${block.intensity !== null && block.intensity !== undefined
-                    ? ` · I${displayNumber(block.intensity, 1)}`
-                    : ""}
-                </span>
-              </div>
-            `).join("")}
+        ${focuses.length ? `
+          <div class="p360-focus-summary">
+            ${focuses.map(code => `<span>✓ ${escapeHtml(this._trainingFocusLabel(code))}</span>`).join("")}
           </div>
         ` : `
-          <p class="p360-empty-inline">Sin bloques registrados.</p>
+          <div class="p360-legacy-focus-note">Sesión histórica sin clasificación rápida V55.</div>
         `}
+
+        ${session.notes ? `<p class="p360-card-text"><strong>Nota del entrenador:</strong> ${escapeHtml(session.notes)}</p>` : ""}
+
+        ${(session.blocks || []).length ? `
+          <details class="p360-block-details">
+            <summary>Ver ${(session.blocks || []).length} bloque${(session.blocks || []).length === 1 ? "" : "s"} detallado${(session.blocks || []).length === 1 ? "" : "s"}</summary>
+            <div class="p360-block-list">
+              ${session.blocks.map(block => `
+                <div class="p360-block-chip">
+                  <strong>${escapeHtml(block.title)}</strong>
+                  <span>
+                    ${escapeHtml(block.activity_code || "—")}
+                    ${block.duration_minutes ? ` · ${displayNumber(block.duration_minutes)} min` : ""}
+                    ${block.intensity !== null && block.intensity !== undefined
+                      ? ` · I${displayNumber(block.intensity, 1)}`
+                      : ""}
+                  </span>
+                </div>
+              `).join("")}
+            </div>
+          </details>
+        ` : ""}
 
         ${this._renderAttendanceEditor(session, directory)}
 
@@ -949,28 +961,28 @@ export class TrainingView {
           ? this._renderTrainingEditForm(session)
           : ""}
 
-        ${this._can(Permission.EDIT_TRAINING) || this._can(Permission.DELETE_TRAINING) ? `
-          <div class="p360-card-actions">
-            ${this._can(Permission.EDIT_TRAINING) ? `
-              <button
-                type="button"
-                class="p360-secondary-link p360-edit-session"
-                data-session-id="${escapeHtml(session.id)}"
-              >
-                ✏️ Editar sesión
-              </button>
-            ` : ""}
-            ${this._can(Permission.DELETE_TRAINING) ? `
-              <button
-                type="button"
-                class="p360-danger-link p360-archive-session"
-                data-session-id="${escapeHtml(session.id)}"
-              >
-                Archivar sesión
-              </button>
-            ` : ""}
-          </div>
-        ` : ""}
+        <div class="p360-card-actions">
+          ${this._can(Permission.CREATE_TRAINING) ? `
+            <button type="button" class="p360-secondary-link p360-repeat-session" data-session-id="${escapeHtml(session.id)}">
+              📋 Repetir / copiar
+            </button>
+          ` : ""}
+          ${this._can(Permission.EXPORT_REPORT) ? `
+            <button type="button" class="p360-secondary-link p360-export-session-word" data-session-id="${escapeHtml(session.id)}">
+              📄 Informe Word
+            </button>
+          ` : ""}
+          ${this._can(Permission.EDIT_TRAINING) ? `
+            <button type="button" class="p360-secondary-link p360-edit-session" data-session-id="${escapeHtml(session.id)}">
+              ✏️ Editar detalles
+            </button>
+          ` : ""}
+          ${this._can(Permission.DELETE_TRAINING) ? `
+            <button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">
+              Archivar sesión
+            </button>
+          ` : ""}
+        </div>
       </article>
     `;
   }
