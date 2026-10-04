@@ -46,6 +46,27 @@ export class TrainingIntelligencePanelV58 {
       ).join("")+'</div></details>';
   }
 
+  _allocationRows(){
+    if(!this.can(Permission.EDIT_TRAINING)) return "";
+    const sessions=(this.getSessions()||[])
+      .filter(s=>Array.isArray(s?.metadata?.training_focus_codes)&&s.metadata.training_focus_codes.length)
+      .slice(0,12);
+    if(!sessions.length)return "";
+    return '<details class="v58-classifier v58-dose"><summary>Dosis por foco · opcional</summary>'+
+      '<p>Si quieres más precisión analítica, reparte minutos aproximados entre los focos. La suma no puede superar la duración de la sesión. Si lo dejas vacío, se conserva la semántica ligera por exposición.</p>'+
+      '<div class="v58-classifier-list">'+sessions.map(session=>{
+        const codes=session.metadata.training_focus_codes||[];
+        const allocation=session.metadata.training_focus_minutes||{};
+        return '<div class="v58-class-row v58-dose-row" data-session-id="'+esc(session.id)+'" data-session-duration="'+esc(session.duration_minutes||0)+'">'+
+          '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||"Entrenamiento")+' · '+fmt(session.duration_minutes)+' min</span></div>'+
+          '<div class="v58-dose-inputs">'+codes.map(code=>
+            '<label><span>'+esc(this._focusLabel(code))+'</span><input type="number" min="0" max="'+esc(session.duration_minutes||600)+'" step="1" inputmode="numeric" data-focus-code="'+esc(code)+'" value="'+esc(allocation[code]??"")+'" placeholder="min"></label>'
+          ).join("")+'</div>'+
+          '<button type="button" data-v58-save-dose>Guardar dosis</button>'+
+        '</div>';
+      }).join("")+'</div></details>';
+  }
+
   html(){
     if(!this.can(Permission.VIEW_TRAINING_ANALYTICS)) return "";
     const a=buildTrainingIntelligence(this.getSessions()||[]);
@@ -73,24 +94,49 @@ export class TrainingIntelligencePanelV58 {
         '<article><span>RPE medio</span><strong>'+fmt(a.totals.avgRpe,1)+'</strong></article>'+
         '<article><span>Carga acumulada</span><strong>'+fmt(a.totals.totalLoad)+'</strong></article>'+
         '<article><span>Sin clasificar</span><strong>'+fmt((a.unclassifiedSessionIds||[]).length)+'</strong></article>'+
+        '<article><span>Dosis explícita</span><strong>'+fmt(a.totals.explicitFocusAllocationCoveragePct,1)+'%</strong></article>'+
+        '<article><span>Carga 7 d</span><strong>'+fmt(a.rolling?.last7?.totalLoad)+'</strong></article>'+
       '</div>'+
       '<div class="v58-focus-grid">'+focusCards+'</div>'+
       '<details class="v58-table-block" open><summary>Jugadores</summary><div class="v58-scroll"><table><thead><tr><th>Jugador</th><th>Asistencia</th><th>Min</th><th>RPE</th><th>Carga</th></tr></thead><tbody>'+
         (playerRows||'<tr><td colspan="5">Sin datos.</td></tr>')+'</tbody></table></div></details>'+
       '<details class="v58-table-block"><summary>Últimas semanas</summary><div class="v58-scroll"><table><thead><tr><th>Semana</th><th>Ses.</th><th>Min sesión</th><th>RPE</th><th>Carga</th></tr></thead><tbody>'+
         (weekRows||'<tr><td colspan="5">Sin datos.</td></tr>')+'</tbody></table></div></details>'+
-      '<p class="v58-method">Exposición a un foco = minutos participados en sesiones que contenían ese foco. No implica dedicación exclusiva ni demuestra causalidad con el rendimiento.</p>'+
-      this._classificationRows(a)+
+      '<p class="v58-method">La dosis de foco usa minutos explícitos cuando el entrenador los registra; en caso contrario mantiene la exposición por sesión. Las asociaciones son descriptivas y no demuestran causalidad.</p>'+
+      '<div class="v58-window-note"><strong>Ventanas:</strong> 7 d · '+fmt(a.rolling?.last7?.sessionMinutes)+' min sesión · '+fmt(a.rolling?.last7?.totalLoad)+' carga &nbsp;|&nbsp; 14 d · '+fmt(a.rolling?.last14?.sessionMinutes)+' min &nbsp;|&nbsp; 28 d · '+fmt(a.rolling?.last28?.sessionMinutes)+' min · '+fmt(a.rolling?.last28?.totalLoad)+' carga</div>'+
+      this._classificationRows(a)+this._allocationRows()+
     '</section>'+this.styles();
   }
 
   styles(){
     return '<style>'+
-      '.v58-training-intelligence{display:grid;gap:12px;padding:16px;border:1px solid #cbd5e1;border-radius:16px;background:linear-gradient(180deg,#f8fafc,#fff);margin:0 0 16px;color:#0f172a}.v58-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.v58-head span{font-size:10px;font-weight:900;color:#1d4ed8;letter-spacing:.06em}.v58-head h2{margin:3px 0 0;font-size:18px}.v58-head b{font-size:12px;background:#dbeafe;color:#1e40af;border-radius:999px;padding:6px 9px;white-space:nowrap}.v58-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.v58-kpis article{padding:10px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.v58-kpis span{display:block;font-size:9px;text-transform:uppercase;color:#64748b;font-weight:900}.v58-kpis strong{font-size:18px}.v58-focus-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.v58-focus-card{display:grid;gap:2px;padding:10px;border-radius:11px;background:#eef2ff;border:1px solid #c7d2fe}.v58-focus-card span{font-size:11px;font-weight:850}.v58-focus-card strong{font-size:20px}.v58-focus-card small{font-size:9px;color:#475569}.v58-table-block{border:1px solid #e2e8f0;border-radius:11px;background:#fff}.v58-table-block summary,.v58-classifier summary{cursor:pointer;padding:10px 12px;font-weight:850}.v58-scroll{overflow:auto}.v58-table-block table{width:100%;border-collapse:collapse;font-size:11px}.v58-table-block th,.v58-table-block td{padding:8px 10px;border-top:1px solid #f1f5f9;text-align:left;white-space:nowrap}.v58-method{margin:0;font-size:10px;color:#64748b;line-height:1.45}.v58-classifier{border:1px solid #fdba74;border-radius:11px;background:#fff7ed}.v58-classifier>p{font-size:10px;color:#9a3412;padding:0 12px;margin:0 0 8px}.v58-classifier-list{display:grid;gap:7px;padding:0 10px 10px}.v58-class-row{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;background:#fff;border:1px solid #fed7aa;border-radius:9px;padding:8px}.v58-class-row>div:first-child{display:grid}.v58-class-row span{font-size:10px;color:#475569}.v58-focus-mini{display:flex;gap:5px;flex-wrap:wrap}.v58-focus-mini label{display:flex;gap:4px;align-items:center;border:1px solid #cbd5e1;border-radius:999px;padding:4px 6px;font-size:9px}.v58-class-row button{min-height:36px;border:0;border-radius:8px;background:#ea580c;color:#fff;font-weight:850;padding:6px 10px}@media(max-width:900px){.v58-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.v58-focus-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v58-class-row{grid-template-columns:1fr}}@media(max-width:560px){.v58-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.v58-focus-grid{grid-template-columns:1fr}.v58-head{display:grid}}'+
+      '.v58-training-intelligence{display:grid;gap:12px;padding:16px;border:1px solid #cbd5e1;border-radius:16px;background:linear-gradient(180deg,#f8fafc,#fff);margin:0 0 16px;color:#0f172a}.v58-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.v58-head span{font-size:10px;font-weight:900;color:#1d4ed8;letter-spacing:.06em}.v58-head h2{margin:3px 0 0;font-size:18px}.v58-head b{font-size:12px;background:#dbeafe;color:#1e40af;border-radius:999px;padding:6px 9px;white-space:nowrap}.v58-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.v58-kpis article{padding:10px;border:1px solid #e2e8f0;border-radius:11px;background:#fff}.v58-kpis span{display:block;font-size:9px;text-transform:uppercase;color:#64748b;font-weight:900}.v58-kpis strong{font-size:18px}.v58-focus-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.v58-focus-card{display:grid;gap:2px;padding:10px;border-radius:11px;background:#eef2ff;border:1px solid #c7d2fe}.v58-focus-card span{font-size:11px;font-weight:850}.v58-focus-card strong{font-size:20px}.v58-focus-card small{font-size:9px;color:#475569}.v58-table-block{border:1px solid #e2e8f0;border-radius:11px;background:#fff}.v58-table-block summary,.v58-classifier summary{cursor:pointer;padding:10px 12px;font-weight:850}.v58-scroll{overflow:auto}.v58-table-block table{width:100%;border-collapse:collapse;font-size:11px}.v58-table-block th,.v58-table-block td{padding:8px 10px;border-top:1px solid #f1f5f9;text-align:left;white-space:nowrap}.v58-method{margin:0;font-size:10px;color:#64748b;line-height:1.45}.v58-window-note{font-size:10px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:8px 10px}.v58-dose-inputs{display:flex;gap:6px;flex-wrap:wrap}.v58-dose-inputs label{display:grid;gap:3px;font-size:9px;font-weight:800;color:#475569}.v58-dose-inputs input{width:82px;min-height:36px;border:1px solid #cbd5e1;border-radius:7px;padding:5px 7px;color:#0f172a;background:#fff}.v58-classifier{border:1px solid #fdba74;border-radius:11px;background:#fff7ed}.v58-classifier>p{font-size:10px;color:#9a3412;padding:0 12px;margin:0 0 8px}.v58-classifier-list{display:grid;gap:7px;padding:0 10px 10px}.v58-class-row{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;background:#fff;border:1px solid #fed7aa;border-radius:9px;padding:8px}.v58-class-row>div:first-child{display:grid}.v58-class-row span{font-size:10px;color:#475569}.v58-focus-mini{display:flex;gap:5px;flex-wrap:wrap}.v58-focus-mini label{display:flex;gap:4px;align-items:center;border:1px solid #cbd5e1;border-radius:999px;padding:4px 6px;font-size:9px}.v58-class-row button{min-height:36px;border:0;border-radius:8px;background:#ea580c;color:#fff;font-weight:850;padding:6px 10px}@media(max-width:900px){.v58-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.v58-focus-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v58-class-row{grid-template-columns:1fr}}@media(max-width:560px){.v58-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.v58-focus-grid{grid-template-columns:1fr}.v58-head{display:grid}}'+
     '</style>';
   }
 
   bind(root){
+    root?.querySelectorAll?.("[data-v58-save-dose]").forEach(button=>{
+      button.addEventListener("click",async()=>{
+        const row=button.closest(".v58-dose-row");if(!row)return;
+        const allocations={};
+        row.querySelectorAll("[data-focus-code]").forEach(input=>{
+          if(String(input.value||"").trim()==="")return;
+          const value=Number(input.value);
+          if(Number.isFinite(value)&&value>=0)allocations[String(input.dataset.focusCode||"").toUpperCase()]=value;
+        });
+        const total=Object.values(allocations).reduce((sum,value)=>sum+value,0);
+        const duration=Number(row.dataset.sessionDuration||0);
+        if(duration>0&&total>duration){globalThis.alert?.("La suma de minutos por foco no puede superar la duración de la sesión.");return;}
+        button.disabled=true;
+        try{
+          await this.service.setFocusAllocation({sessionId:row.dataset.sessionId,teamSeasonId:this.getTeamSeasonId(),allocations});
+          await this.onRefresh();
+        }catch(error){
+          globalThis.alert?.("No se pudo guardar la dosis: "+String(error?.message||error));
+          button.disabled=false;
+        }
+      });
+    });
     root?.querySelectorAll?.("[data-v58-save-focus]").forEach(button=>{
       button.addEventListener("click",async()=>{
         const row=button.closest(".v58-class-row"); if(!row)return;
