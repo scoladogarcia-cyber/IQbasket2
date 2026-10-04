@@ -78,7 +78,8 @@ export class PlayerPassportService {
     summary = null,
     strengths = null,
     developmentPriorities = null,
-    existingEvaluationId = null
+    existingEvaluationId = null,
+    trainingSessionId = null
   }) {
     this._assertClient();
     assertRequired(playerId, "playerId");
@@ -111,7 +112,7 @@ export class PlayerPassportService {
       p_strengths: strengths || null,
       p_development_priorities: developmentPriorities || null,
       p_existing_evaluation_id: existingEvaluationId || null,
-      p_training_session_id: arguments[0]?.trainingSessionId || null
+      p_training_session_id: trainingSessionId || null
     });
     if (error) throw error;
     return data;
