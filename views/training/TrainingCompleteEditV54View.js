@@ -587,6 +587,19 @@ export class TrainingCompleteEditV54View extends TrainingView {
       .v54-ineligible{border-color:#f59e0b}.v54-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
       .v54-save-status{font-size:12px;font-weight:700;color:#9a3412}
       .v54-passport-evaluate{align-self:end;min-height:44px;border-color:#c4b5fd!important;color:#5b21b6!important;background:#faf5ff!important}
+      .v57-edit-add-player{display:grid;gap:10px;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px}
+      .v57-edit-directory{display:grid;gap:10px}
+      .v57-edit-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+      .v57-edit-search-row label{display:grid;gap:5px;font-size:11px;font-weight:850}
+      .v57-edit-search-row input{width:100%;min-height:44px;border:1px solid #94a3b8;border-radius:9px;padding:9px;background:#fff;color:#0f172a}
+      .v57-edit-directory-status{min-height:44px;display:inline-flex;align-items:center;padding:8px 10px;border-radius:9px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:900}
+      .v57-edit-player-results{display:grid;gap:8px}
+      .v57-edit-player-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:9px}
+      .v57-edit-player-copy{display:grid;gap:2px;min-width:0}
+      .v57-edit-player-copy strong,.v57-edit-player-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .v57-edit-player-copy small{font-size:10px;color:#64748b}
+      .v57-guest-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:9px;font-weight:900}
+      .v57-training-guest{border-color:#fdba74}
       @media(max-width:640px){
         .v54-complete-form{padding:10px}
         .v55-edit-core{padding:10px}
@@ -595,6 +608,8 @@ export class TrainingCompleteEditV54View extends TrainingView {
         .v55-edit-core .p360-form-grid label:last-child{grid-column:1/-1}
         .v55-edit-advanced>summary,.v55-edit-roster>summary{line-height:1.35}
         .v54-block,.v54-person-fields,.v54-assignment{grid-template-columns:1fr}
+        .v57-edit-search-row,.v57-edit-player-result{grid-template-columns:1fr}
+        .v57-edit-player-result button{width:100%}
       }
       @media(max-width:430px){.v55-edit-core .p360-form-grid{grid-template-columns:1fr}.v55-edit-core .p360-form-grid label:first-child,.v55-edit-core .p360-form-grid label:last-child{grid-column:auto}}
     </style>`);
