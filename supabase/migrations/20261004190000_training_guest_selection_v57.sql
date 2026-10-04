@@ -406,6 +406,7 @@ begin
     values(p_session_id,p_team_season_id,v_player_id,v_status,v_minutes,v_rpe,nullif(trim(coalesce(v_person->>'notes','')),''),auth.uid())
     on conflict(training_session_id,player_id) do update set attendance_status=excluded.attendance_status,
       participated_minutes=excluded.participated_minutes,rpe=excluded.rpe,notes=excluded.notes,
+      participant_origin=excluded.participant_origin,
       captured_by=auth.uid(),updated_at=now()
     returning id into v_participant_id;
     delete from public.training_block_participation where participant_id=v_participant_id;
