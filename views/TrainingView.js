@@ -693,6 +693,18 @@ export class TrainingView {
             <textarea id="p360-training-notes" rows="2" maxlength="1000" placeholder="Ej. Mucho trabajo de salida de presión y finalizaciones con contacto."></textarea>
           </label>
 
+          <section class="p360-subsection p360-quick-players">
+            <div class="p360-subsection-head">
+              <div>
+                <strong>Jugadores del entrenamiento</strong>
+                <small>La plantilla de la temporada queda preseleccionada. Puedes desmarcar, buscar y añadir cualquier otro jugador disponible.</small>
+              </div>
+            </div>
+            <div id="p360-training-player-options">
+              ${this._renderParticipantChecklist(date)}
+            </div>
+          </section>
+
           <details class="p360-advanced-details" id="p360-training-advanced">
             <summary>Más detalles · opcional</summary>
             <div class="p360-form-grid">
@@ -721,17 +733,6 @@ export class TrainingView {
               <div id="p360-blocks-container"></div>
             </section>
 
-            <section class="p360-subsection">
-              <div class="p360-subsection-head">
-                <div>
-                  <strong>Jugadores del entrenamiento</strong>
-                  <small>Primero verás la plantilla de la temporada. Busca cualquier otro jugador disponible sin cargar listas interminables.</small>
-                </div>
-              </div>
-              <div id="p360-training-player-options">
-                ${this._renderParticipantChecklist(date)}
-              </div>
-            </section>
           </details>
 
           <div class="p360-form-actions">
@@ -1818,6 +1819,7 @@ export class TrainingView {
         .p360-block-details { border:1px solid #f1f5f9;border-radius:9px;background:#f8fafc; }
         .p360-block-details .p360-block-list { padding:0 10px 10px; }
         .p360-report-actions { display:flex;gap:8px;flex-wrap:wrap; }
+        .p360-quick-players { border:1px solid #ddd6fe;background:#faf9ff;border-radius:12px;padding:12px; }
         .p360-player-directory { display:grid;gap:10px;min-width:0; }
         .p360-player-search-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end; }
         .p360-player-search-row label { display:grid;gap:5px;font-size:11px;font-weight:850; }
