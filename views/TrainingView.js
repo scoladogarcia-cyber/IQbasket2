@@ -351,28 +351,28 @@ export class TrainingView {
     `;
   }
 
-  _renderBlockRow(index = 1) {
+  _renderBlockRow(index = 1, block = {}) {
     return `
       <div class="p360-block-row" data-block-index="${index}">
         <label>
           <span>${escapeHtml(this.t("player360.training.block_title", "Bloque"))}</span>
-          <input type="text" class="p360-block-title" placeholder="Ej. Tiro tras bote" />
+          <input type="text" class="p360-block-title" value="${escapeHtml(block.title || "")}" placeholder="Ej. Tiro tras bote" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.activity_code", "Código / tipo"))}</span>
-          <input type="text" class="p360-block-code" placeholder="Ej. SHOOTING" />
+          <input type="text" class="p360-block-code" value="${escapeHtml(block.activity_code || "")}" placeholder="Opcional" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.duration", "Minutos"))}</span>
-          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" />
+          <input type="number" class="p360-block-duration" min="1" max="300" inputmode="numeric" value="${escapeHtml(block.duration_minutes ?? "")}" />
         </label>
         <label>
           <span>${escapeHtml(this.t("player360.training.intensity", "Intensidad 0-10"))}</span>
-          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+          <input type="number" class="p360-block-intensity" min="0" max="10" step="0.5" inputmode="decimal" value="${escapeHtml(block.intensity ?? "")}" />
         </label>
         <label class="p360-block-objective">
           <span>${escapeHtml(this.t("player360.training.objective", "Objetivo"))}</span>
-          <input type="text" class="p360-block-objective-input" placeholder="Objetivo específico del bloque" />
+          <input type="text" class="p360-block-objective-input" value="${escapeHtml(block.objective || "")}" placeholder="Opcional" />
         </label>
         <button type="button" class="p360-remove-block" aria-label="Eliminar bloque">×</button>
       </div>
