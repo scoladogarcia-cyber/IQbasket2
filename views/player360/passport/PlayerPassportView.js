@@ -50,6 +50,10 @@ export class PlayerPassportView {
     this.helpOpen = false;
     this.trainingContext = null;
     this.exportBusy = false;
+    // Only explicit observations are appended. Existing values are shown as a baseline
+    // but are never duplicated unless the evaluator touches the attribute.
+    this.editorDraft = new Map();
+    this.editorMeta = { date:null, title:null, summary:"" };
   }
 
   _context() {
@@ -189,6 +193,47 @@ export class PlayerPassportView {
     return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">MEDICIONES OBJETIVAS</span><h2>Antropometría y rendimiento</h2></div><p>Datos medidos, no notas subjetivas.</p></div><div class="pp-measure-grid">'+rows+'</div></section>';
   }
 
+  _draftCount() {
+    return [...this.editorDraft.values()].filter(function(item){
+      return item && item.touched && Number.isInteger(item.score) && item.score>=1 && item.score<=5;
+    }).length;
+  }
+
+  _editorState(attribute, latest) {
+    var code=String(attribute?.code||"").toUpperCase();
+    var previous=latest?.get(code)||null;
+    var draft=this.editorDraft.get(code)||null;
+    return {
+      code:code,
+      previous:previous,
+      score:draft ? draft.score : (previous?.score ?? null),
+      touched:Boolean(draft?.touched),
+      evidenceCount:draft ? draft.evidenceCount : 0,
+      confidence:draft ? draft.confidence : (previous?.confidence || "MEDIUM"),
+      notes:draft ? draft.notes : ""
+    };
+  }
+
+  _setDraftFromRow(row, patch={}) {
+    if(!row)return;
+    var code=String(row.dataset.code||"").toUpperCase();
+    if(!code)return;
+    var previous=this._model().latest.get(code)||null;
+    var current=this.editorDraft.get(code)||{
+      score:previous?.score ?? null,
+      evidenceCount:0,
+      confidence:previous?.confidence || "MEDIUM",
+      notes:"",
+      touched:false
+    };
+    this.editorDraft.set(code,{...current,...patch,touched:true});
+    row.classList.add("pp-eval-changed");
+    var marker=row.querySelector(".pp-change-marker");
+    if(marker)marker.textContent="Cambio pendiente";
+    var status=document.getElementById("pp-status");
+    if(status)status.textContent=this._draftCount()+" atributo(s) pendientes de guardar.";
+  }
+
   _filteredAttributes() {
     var self=this;
     return ((this.data&&this.data.catalog&&this.data.catalog.attributes)||[]).filter(function(a){
@@ -197,13 +242,22 @@ export class PlayerPassportView {
     });
   }
 
-  _attributeEditor(a) {
+  _attributeEditor(a, latest) {
+    var state=this._editorState(a,latest);
+    var previous=state.previous;
     var anchors=(a.anchors||[]).map(function(x){return '<div><b>'+x.level+' · '+esc(x.label)+'</b><span>'+esc(x.criteria)+'</span></div>';}).join("");
-    var buttons='<button type="button" class="selected" data-score="">NE</button>';
-    for(var i=1;i<=5;i++) buttons+='<button type="button" data-score="'+i+'">'+i+'</button>';
-    return '<article class="pp-eval-card" data-code="'+esc(a.code)+'"><header><div><small>'+esc(a.code)+'</small><h3>'+esc(a.name)+'</h3></div><button type="button" class="pp-help" aria-label="Ver criterios de valoración">Criterios</button></header><p>'+esc(a.definition)+'</p>'+
-      '<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Evidencias<input class="pp-count" type="number" min="0" inputmode="numeric" value="0"></label><label>Confianza<select class="pp-confidence"><option value="LOW">Baja</option><option value="MEDIUM" selected>Media</option><option value="HIGH">Alta</option></select></label></div>'+
-      '<label>Nota<textarea class="pp-notes" rows="2"></textarea></label><div class="pp-rubric" hidden><strong>Qué observar</strong><p>'+esc(a.observation_guide||"")+'</p>'+anchors+'</div></article>';
+    var currentText=previous
+      ? '<div class="pp-current-value"><span>Valor actual</span><b>'+previous.score+'/5</b><small>'+esc(previous.context||"Contexto N/D")+' · '+esc(previous.evaluation_date||"Sin fecha")+' · '+Number(previous.evidence_count||0)+' evidencia(s)</small></div>'
+      : '<div class="pp-current-value pp-current-empty"><span>Valor actual</span><b>NE</b><small>Sin valoración previa</small></div>';
+    var buttons='<button type="button" data-score="" '+(state.score==null?'class="selected"':'')+' '+(previous?'disabled title="NE no borra una valoración histórica; selecciona 1–5 para corregirla."':'')+'>NE</button>';
+    for(var i=1;i<=5;i++) buttons+='<button type="button" data-score="'+i+'" '+(state.score===i?'class="selected"':'')+'>'+i+'</button>';
+    var confidence=["LOW","MEDIUM","HIGH"].map(function(value){
+      var label=value==="LOW"?"Baja":value==="HIGH"?"Alta":"Media";
+      return '<option value="'+value+'" '+(state.confidence===value?"selected":"")+'>'+label+'</option>';
+    }).join("");
+    return '<article class="pp-eval-card '+(state.touched?'pp-eval-changed':'')+'" data-code="'+esc(a.code)+'" data-current-score="'+esc(previous?.score??"")+'"><header><div><small>'+esc(a.code)+'</small><h3>'+esc(a.name)+'</h3><em class="pp-change-marker">'+(state.touched?'Cambio pendiente':'Sin cambios')+'</em></div><button type="button" class="pp-help" aria-label="Ver criterios de valoración">Criterios</button></header><p>'+esc(a.definition)+'</p>'+
+      currentText+'<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Evidencias nuevas<input class="pp-count" type="number" min="0" inputmode="numeric" value="'+esc(state.evidenceCount)+'"></label><label>Confianza de esta observación<select class="pp-confidence">'+confidence+'</select></label></div>'+
+      '<label>Nota de esta observación<textarea class="pp-notes" rows="2">'+esc(state.notes)+'</textarea></label><div class="pp-rubric" hidden><strong>Qué observar</strong><p>'+esc(a.observation_guide||"")+'</p>'+anchors+'</div></article>';
   }
 
   _editor() {
@@ -215,16 +269,18 @@ export class PlayerPassportView {
     var subs=[...new Set(attrs.filter(function(a){return !self.filterDimension || a.dimension===self.filterDimension;}).map(function(a){return a.subdimension;}))];
     var dimOptions=dims.map(function(x){return '<option value="'+esc(x)+'" '+(x===self.filterDimension?"selected":"")+'>'+esc(x)+'</option>';}).join("");
     var subOptions=subs.map(function(x){return '<option value="'+esc(x)+'" '+(x===self.filterSubdimension?"selected":"")+'>'+esc(x)+'</option>';}).join("");
-    var cards=this._filteredAttributes().map(function(a){return self._attributeEditor(a);}).join("") || '<div class="pp-empty">No hay atributos válidos para estos filtros.</div>';
-    var defaultDate=this.trainingContext?.sessionDate||today();
+    var latest=this._model().latest;
+    var cards=this._filteredAttributes().map(function(a){return self._attributeEditor(a,latest);}).join("") || '<div class="pp-empty">No hay atributos válidos para estos filtros.</div>';
+    var defaultDate=this.editorMeta.date||this.trainingContext?.sessionDate||today();
+    var defaultTitle=this.editorMeta.title||(this.trainingContext?.sessionTitle ? "Entrenamiento · "+this.trainingContext.sessionTitle : "Evaluación Pasaporte · "+today());
     var sourceNote=this.trainingContext
       ? '<div class="pp-source-note">🏋️ Esta valoración quedará vinculada como evidencia al entrenamiento <strong>'+esc(this.trainingContext.sessionTitle||"seleccionado")+'</strong>.</div>'
       : '';
     return '<section class="pp-panel pp-editor-shell"><button id="pp-toggle" class="pp-toggle"><span><b>Evaluación contextual</b><small>NE significa no evaluado. Guarda solo lo que realmente hayas observado.</small></span><b>−</b></button>'+
       '<form id="pp-form" class="pp-editor">'+sourceNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
       '<label>Dimensión<select id="pp-dimension"><option value="">Todas</option>'+dimOptions+'</select></label><label>Subdimensión<select id="pp-subdimension"><option value="">Todas</option>'+subOptions+'</select></label></div>'+
-      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(this.trainingContext?.sessionTitle ? "Entrenamiento · "+this.trainingContext.sessionTitle : "Evaluación Pasaporte · "+today())+'"></label><div class="pp-note"><strong>Cómo puntuar:</strong> NE = no observado; 1 = claramente insuficiente; 2 = aparece de forma inestable; 3 = funcional en contexto adecuado; 4 = consistente y transferible; 5 = dominio sobresaliente y estable. Abre “Criterios” en cada atributo porque sus anclajes concretos prevalecen sobre esta guía general.</div>'+
-      '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3"></textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite"></span><button type="submit">Guardar evaluación</button></div></form></section>';
+      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label><div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
+      '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
   }
 
   _helpPanel() {
@@ -257,17 +313,31 @@ export class PlayerPassportView {
   _bind() {
     var self=this;
     var toggle=document.getElementById("pp-toggle"); if(toggle)toggle.addEventListener("click",function(){self.editorOpen=!self.editorOpen;self._render();});
-    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorOpen=true;self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
+    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorDraft.clear();self.editorMeta={date:null,title:null,summary:""};self.editorOpen=true;self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
     var openHelp=document.getElementById("pp-open-help"); if(openHelp)openHelp.addEventListener("click",function(){self.helpOpen=true;self._render();});
     var closeHelp=document.getElementById("pp-close-help"); if(closeHelp)closeHelp.addEventListener("click",function(){self.helpOpen=false;self._render();});
     var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self._render();});
     var model=self._model();
     var word=document.getElementById("pp-export-word"); if(word)word.addEventListener("click",function(){exportPassportWord({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,asymmetries:model.asymmetries,measurements:self.data.measurements});});
     var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
-    var context=document.getElementById("pp-context"); if(context)context.addEventListener("change",function(e){self.filterContext=e.target.value;self._render();});
+    var date=document.getElementById("pp-date"); if(date)date.addEventListener("input",function(e){self.editorMeta.date=e.target.value;});
+    var title=document.getElementById("pp-title"); if(title)title.addEventListener("input",function(e){self.editorMeta.title=e.target.value;});
+    var summary=document.getElementById("pp-summary"); if(summary)summary.addEventListener("input",function(e){self.editorMeta.summary=e.target.value;});
+    var context=document.getElementById("pp-context"); if(context)context.addEventListener("change",function(e){
+      if(self._draftCount() && !confirm("Cambiar el contexto descartará los cambios de atributos todavía no guardados. ¿Continuar?")){e.target.value=self.filterContext;return;}
+      self.editorDraft.clear();self.filterContext=e.target.value;self._render();
+    });
     var dim=document.getElementById("pp-dimension"); if(dim)dim.addEventListener("change",function(e){self.filterDimension=e.target.value;self.filterSubdimension="";self._render();});
     var sub=document.getElementById("pp-subdimension"); if(sub)sub.addEventListener("change",function(e){self.filterSubdimension=e.target.value;self._render();});
-    document.querySelectorAll(".pp-score").forEach(function(group){group.querySelectorAll("button").forEach(function(btn){btn.addEventListener("click",function(){group.querySelectorAll("button").forEach(function(x){x.classList.remove("selected");});btn.classList.add("selected");});});});
+    document.querySelectorAll(".pp-score").forEach(function(group){group.querySelectorAll("button").forEach(function(btn){btn.addEventListener("click",function(){
+      if(btn.disabled)return;
+      var row=group.closest(".pp-eval-card");
+      group.querySelectorAll("button").forEach(function(x){x.classList.remove("selected");});btn.classList.add("selected");
+      self._setDraftFromRow(row,{score:btn.dataset.score===""?null:Number(btn.dataset.score)});
+    });});});
+    document.querySelectorAll(".pp-count").forEach(function(input){input.addEventListener("input",function(){self._setDraftFromRow(input.closest(".pp-eval-card"),{evidenceCount:Number(input.value||0)});});});
+    document.querySelectorAll(".pp-confidence").forEach(function(input){input.addEventListener("change",function(){self._setDraftFromRow(input.closest(".pp-eval-card"),{confidence:input.value});});});
+    document.querySelectorAll(".pp-notes").forEach(function(input){input.addEventListener("input",function(){self._setDraftFromRow(input.closest(".pp-eval-card"),{notes:input.value});});});
     document.querySelectorAll(".pp-help").forEach(function(btn){btn.addEventListener("click",function(){var r=btn.closest(".pp-eval-card").querySelector(".pp-rubric");r.hidden=!r.hidden;});});
     var form=document.getElementById("pp-form"); if(form)form.addEventListener("submit",function(e){self._save(e);});
   }
@@ -275,16 +345,17 @@ export class PlayerPassportView {
   async _save(event) {
     event.preventDefault();
     var status=document.getElementById("pp-status");
-    var scores=[...event.currentTarget.querySelectorAll(".pp-eval-card")].map(function(row){
-      var s=row.querySelector(".pp-score .selected");
-      if(!s || !s.dataset.score)return null;
-      return {metric_code:row.dataset.code,score:Number(s.dataset.score),evidence_count:Number(row.querySelector(".pp-count").value||0),confidence:row.querySelector(".pp-confidence").value,notes:row.querySelector(".pp-notes").value.trim()||null,rubric_version:"1.0"};
+    var scores=[...this.editorDraft.entries()].map(function(entry){
+      var code=entry[0],draft=entry[1];
+      if(!draft?.touched || !Number.isInteger(draft.score) || draft.score<1 || draft.score>5)return null;
+      return {metric_code:code,score:draft.score,evidence_count:Math.max(0,Number(draft.evidenceCount)||0),confidence:draft.confidence||"MEDIUM",notes:String(draft.notes||"").trim()||null,rubric_version:"1.0"};
     }).filter(Boolean);
-    if(!scores.length){if(status)status.textContent="Selecciona al menos un atributo observado.";return;}
+    if(!scores.length){if(status)status.textContent="No has modificado ni añadido ninguna valoración. Los valores actuales no se duplican.";return;}
     try{
       if(status)status.textContent="Guardando…";
       await this.service.saveEvaluation({playerId:this.playerId,teamSeasonId:this.teamSeasonId,evaluationDate:document.getElementById("pp-date").value,title:document.getElementById("pp-title").value.trim(),context:this.filterContext,scores:scores,summary:document.getElementById("pp-summary").value.trim()||null,trainingSessionId:this.trainingContext?.trainingSessionId||null});
       if(this.trainingContext){sessionStorage.removeItem("iq_passport_training_context");this.trainingContext=null;}
+      this.editorDraft.clear();this.editorMeta={date:null,title:null,summary:""};
       this.editorOpen=false; await this._load(); this._render();
     }catch(e){console.error("[PlayerPassportView] save",e);if(status)status.textContent=e.message||"No se pudo guardar.";}
   }
@@ -294,7 +365,7 @@ export class PlayerPassportView {
       '.pp-page{max-width:1380px;margin:0 auto;padding:18px;display:grid;gap:18px;color:#0f172a;font-family:var(--font-family-base,system-ui,-apple-system,sans-serif)}.pp-page *{box-sizing:border-box}.pp-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.pp-top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.pp-top-action{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;padding:8px 12px;font-weight:800;cursor:pointer}.pp-back{min-height:44px;display:inline-flex;align-items:center;color:#475569;text-decoration:none;font-weight:800}'+
       '.pp-hero{position:relative;overflow:hidden;min-height:410px;border:1px solid #473487;border-radius:22px;padding:28px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.75fr) minmax(250px,.8fr);gap:22px;align-items:center;background:radial-gradient(circle at 52% 40%,rgba(124,58,237,.45),transparent 28%),linear-gradient(135deg,#070914,#11183a 58%,#250a42);color:#fff;box-shadow:0 24px 60px rgba(15,23,42,.22)}.pp-hero:before{content:"";position:absolute;inset:10px;border:1px solid rgba(196,181,253,.27);border-radius:16px}.pp-identity,.pp-art,.pp-badges{position:relative;z-index:1}.pp-eyebrow{display:block;color:#c4b5fd;font-size:10px;font-weight:950;letter-spacing:.14em;margin-bottom:8px}.pp-eyebrow.dark{color:#6d28d9}.pp-identity h1{margin:0;font-size:clamp(34px,5vw,64px);line-height:.92;text-transform:uppercase;letter-spacing:-.04em;color:#fff}.pp-identity>p{color:#ddd6fe}.pp-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.pp-meta span{border:1px solid rgba(255,255,255,.16);background:rgba(15,23,42,.58);border-radius:999px;padding:7px 9px;font-size:11px}.pp-meta b{color:#a78bfa}.pp-hero-action{margin-top:14px;min-height:46px;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:900;cursor:pointer}.pp-art{min-height:300px;align-self:end;display:flex;justify-content:center;align-items:flex-end}.pp-art img{max-width:100%;max-height:370px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.45))}.pp-silhouette{width:200px;height:260px;border-radius:100px 100px 26px 26px;display:grid;place-items:center;background:linear-gradient(160deg,#7c3aed,#1e293b);font-size:68px;font-weight:950}.pp-watermark{position:absolute;right:-5px;bottom:0;font-size:120px;line-height:.75;font-weight:950;color:rgba(255,255,255,.06);z-index:-1}.pp-badges{display:grid;gap:10px}.pp-shield,.pp-mini{border:1px solid rgba(196,181,253,.32);background:rgba(3,7,22,.64);border-radius:15px;padding:14px}.pp-shield{text-align:center}.pp-shield small,.pp-mini small{display:block;color:#c4b5fd;font-size:9px;font-weight:950;letter-spacing:.1em;margin-bottom:6px}.pp-shield strong{display:block;font-size:40px}.pp-shield strong span{font-size:15px;color:#94a3b8}.pp-shield em{font-style:normal;color:#ddd6fe}.pp-mini span{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.08);padding:6px 0;font-size:11px}.pp-mini span:first-of-type{border-top:0}.pp-mini b{color:#c4b5fd}'+
       '.pp-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 5px 18px rgba(15,23,42,.04)}.pp-panel h2{margin:0 0 12px;font-size:20px}.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pp-list{display:grid;gap:7px}.pp-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px;align-items:center;border:1px solid #ede9fe;background:#faf9ff;border-radius:10px;padding:9px;font-size:12px}.pp-list small{color:#64748b}.pp-head{display:flex;justify-content:space-between;gap:12px}.pp-head p{margin:0;color:#64748b;font-size:12px}.pp-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pp-dimension{border:1px solid #e2e8f0;border-radius:13px;padding:13px;background:#fbfcff}.pp-dimension header{display:flex;justify-content:space-between}.pp-dimension h3{margin:0;font-size:14px}.pp-dimension header>div small{color:#64748b}.pp-dimension header>b{width:44px;height:44px;border:1px solid #c4b5fd;border-radius:11px;display:grid;place-items:center;color:#6d28d9}.pp-bar{height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin:9px 0}.pp-bar span{display:block;height:100%;background:linear-gradient(90deg,#7c3aed,#2563eb)}.pp-attribute{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eef2f7;font-size:11px}.pp-pips{display:flex;gap:3px}.pp-pips i{width:10px;height:10px;border:1px solid #cbd5e1;border-radius:3px}.pp-pips i.on{background:#7c3aed;border-color:#7c3aed}.pp-ne{font-size:10px;font-weight:900;color:#94a3b8}.pp-measure-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.pp-measure{border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:grid;gap:3px}.pp-measure>span{font-size:9px;text-transform:uppercase;color:#64748b;font-weight:900}.pp-measure strong{font-size:18px}.pp-measure em{font-size:9px;color:#94a3b8;font-style:normal}'+
-      '.pp-editor-shell{padding:0;overflow:hidden}.pp-source-note{border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:9px;padding:10px;font-size:12px}.pp-toggle{width:100%;min-height:64px;border:0;background:#111827;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;text-align:left;cursor:pointer}.pp-toggle span{display:grid;gap:3px}.pp-toggle small{color:#cbd5e1}.pp-editor{padding:18px;display:grid;gap:13px}.pp-editor label{display:grid;gap:5px;font-size:11px;font-weight:850}.pp-editor input,.pp-editor select,.pp-editor textarea{width:100%;min-height:44px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;background:#fff}.pp-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.pp-title{max-width:720px}.pp-note{border:1px solid #ddd6fe;background:#faf5ff;color:#5b21b6;border-radius:9px;padding:10px;font-size:11px}.pp-eval-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.pp-eval-card{border:1px solid #e2e8f0;border-radius:11px;padding:11px;display:grid;gap:9px}.pp-eval-card header{display:flex;justify-content:space-between}.pp-eval-card header small{color:#7c3aed;font-weight:900}.pp-eval-card h3{margin:2px 0 0;font-size:13px}.pp-eval-card>p{margin:0;color:#64748b;font-size:10px;line-height:1.45}.pp-help{min-width:82px;height:44px;padding:0 10px;border:1px solid #c4b5fd;border-radius:9px;background:#f5f3ff;color:#6d28d9;font-weight:950}.pp-score{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}.pp-score button{min-height:44px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:900}.pp-score button.selected{background:#6d28d9;border-color:#6d28d9;color:#fff}.pp-evidence{display:grid;grid-template-columns:1fr 1fr;gap:7px}.pp-rubric{border-top:1px solid #e2e8f0;padding-top:8px}.pp-rubric>p{font-size:10px;color:#475569}.pp-rubric>div{display:grid;gap:2px;padding:6px 0;border-top:1px solid #f1f5f9}.pp-rubric b{font-size:10px;color:#6d28d9}.pp-rubric span{font-size:9px;color:#475569}.pp-save{display:flex;justify-content:flex-end;align-items:center;gap:10px}.pp-save span{font-size:11px;color:#b45309}.pp-save button{min-height:44px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:9px 15px;font-weight:900}'+
+      '.pp-editor-shell{padding:0;overflow:hidden}.pp-source-note{border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:9px;padding:10px;font-size:12px}.pp-toggle{width:100%;min-height:64px;border:0;background:#111827;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;text-align:left;cursor:pointer}.pp-toggle span{display:grid;gap:3px}.pp-toggle small{color:#cbd5e1}.pp-editor{padding:18px;display:grid;gap:13px}.pp-editor label{display:grid;gap:5px;font-size:11px;font-weight:850}.pp-editor input,.pp-editor select,.pp-editor textarea{width:100%;min-height:44px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;background:#fff}.pp-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.pp-title{max-width:720px}.pp-note{border:1px solid #ddd6fe;background:#faf5ff;color:#5b21b6;border-radius:9px;padding:10px;font-size:11px}.pp-eval-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.pp-eval-card{border:1px solid #e2e8f0;border-radius:11px;padding:11px;display:grid;gap:9px}.pp-eval-card.pp-eval-changed{border-color:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.10)}.pp-eval-card header{display:flex;justify-content:space-between}.pp-eval-card header small{color:#7c3aed;font-weight:900}.pp-change-marker{display:block;margin-top:3px;font-size:9px;font-style:normal;color:#94a3b8;font-weight:800}.pp-eval-changed .pp-change-marker{color:#6d28d9}.pp-current-value{display:grid;grid-template-columns:auto auto 1fr;gap:7px;align-items:center;border:1px solid #ddd6fe;background:#faf5ff;border-radius:8px;padding:8px}.pp-current-value span{font-size:9px;text-transform:uppercase;font-weight:900;color:#6d28d9}.pp-current-value b{font-size:14px;color:#4c1d95}.pp-current-value small{font-size:9px;color:#64748b;text-align:right}.pp-current-empty{background:#f8fafc;border-color:#e2e8f0}.pp-current-empty span,.pp-current-empty b{color:#64748b}.pp-eval-card h3{margin:2px 0 0;font-size:13px}.pp-eval-card>p{margin:0;color:#64748b;font-size:10px;line-height:1.45}.pp-help{min-width:82px;height:44px;padding:0 10px;border:1px solid #c4b5fd;border-radius:9px;background:#f5f3ff;color:#6d28d9;font-weight:950}.pp-score{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}.pp-score button{min-height:44px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:900}.pp-score button.selected{background:#6d28d9;border-color:#6d28d9;color:#fff}.pp-score button:disabled{opacity:.45;cursor:not-allowed}.pp-evidence{display:grid;grid-template-columns:1fr 1fr;gap:7px}.pp-rubric{border-top:1px solid #e2e8f0;padding-top:8px}.pp-rubric>p{font-size:10px;color:#475569}.pp-rubric>div{display:grid;gap:2px;padding:6px 0;border-top:1px solid #f1f5f9}.pp-rubric b{font-size:10px;color:#6d28d9}.pp-rubric span{font-size:9px;color:#475569}.pp-save{display:flex;justify-content:flex-end;align-items:center;gap:10px}.pp-save span{font-size:11px;color:#b45309}.pp-save button{min-height:44px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:9px 15px;font-weight:900}'+
       '.pp-primary-action{min-height:44px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:10px 14px;font-weight:900;cursor:pointer}.pp-modal{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.72);display:grid;place-items:center;padding:16px}.pp-modal-card{width:min(680px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;color:#0f172a}.pp-modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.pp-modal-head h2{margin:0}.pp-modal-head button{width:44px;height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-size:18px}.pp-modal-card p{font-size:13px;line-height:1.55;color:#475569}.pp-picker{background:linear-gradient(135deg,#0f172a,#312e81);color:#fff;border-radius:18px;padding:24px}.pp-picker h1{margin:0;font-size:32px}.pp-picker p{color:#ddd6fe}.pp-pick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.pp-pick{min-height:76px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:11px;background:#fff;color:#0f172a;text-decoration:none}.pp-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#ede9fe;color:#6d28d9;font-weight:950}.pp-pick>span:nth-child(2){display:grid;gap:3px}.pp-pick small{color:#64748b}.pp-empty,.pp-error{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:11px;padding:16px;color:#475569}.pp-error{border-style:solid;border-color:#fecaca;background:#fff7f7;color:#991b1b}.pp-loading{min-height:340px;display:flex;gap:12px;align-items:center;justify-content:center;color:#475569}.pp-spinner{width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#7c3aed;border-radius:50%;animation:ppspin .8s linear infinite}@keyframes ppspin{to{transform:rotate(360deg)}}'+
       '@media(max-width:1050px){.pp-hero{grid-template-columns:1fr .7fr}.pp-badges{grid-column:1/-1;grid-template-columns:repeat(3,1fr)}.pp-measure-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.pp-page{padding:12px;gap:12px}.pp-hero{min-height:0;padding:17px;grid-template-columns:1fr;border-radius:16px}.pp-art{min-height:210px}.pp-art img{max-height:260px}.pp-silhouette{width:160px;height:210px;font-size:52px}.pp-badges{grid-column:auto;grid-template-columns:1fr}.pp-two,.pp-dim-grid,.pp-eval-grid{grid-template-columns:1fr}.pp-measure-grid{grid-template-columns:repeat(2,1fr)}.pp-filters{grid-template-columns:1fr 1fr}.pp-pick-grid{grid-template-columns:1fr}.pp-head{display:grid}.pp-list>div{grid-template-columns:1fr auto}.pp-list small{grid-column:1/-1}.pp-save{display:grid}.pp-save button{width:100%}}@media(max-width:430px){.pp-filters,.pp-evidence,.pp-measure-grid{grid-template-columns:1fr}.pp-score{grid-template-columns:repeat(3,1fr)}.pp-meta{display:grid;grid-template-columns:1fr 1fr}.pp-identity h1{font-size:34px}}'+
     '</style>';
