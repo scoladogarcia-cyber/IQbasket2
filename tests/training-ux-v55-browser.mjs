@@ -77,6 +77,8 @@ try {
   await page.locator("#p360-create-training-panel > summary").click();
   assert.equal(await page.locator('input[name="p360-training-focus"]').count(),6);
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),3);
+  assert.equal(await page.locator("#p360-training-player-options").isVisible(),true);
+  assert.equal(await page.locator("#p360-training-advanced").getAttribute("open"),null);
   assert.equal(await page.locator('input[name="p360-training-player"]').count(),15);
   assert.match(await page.locator(".p360-player-pagination").textContent(),/máximo 15/);
 
