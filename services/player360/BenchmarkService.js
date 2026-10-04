@@ -5,7 +5,7 @@
  */
 
 import { DataStore } from "../DataStore.js";
-import { BENCHMARK_METRICS, buildTeamBenchmark, buildSelfBenchmark } from "../../domain/stats/BenchmarkEngine.js";
+import { BENCHMARK_METRICS, buildTeamBenchmark, buildSelfBenchmark, estimateNetworkPercentile } from "../../domain/stats/BenchmarkEngine.js";
 
 function id(v){return String(v||"");}
 function gameDate(game={}){return String(game.date||game.game_date||"").slice(0,10);}
@@ -42,8 +42,9 @@ export class BenchmarkService {
     const mid=dates.length?dates[Math.floor(dates.length/2)]:new Date().toISOString().slice(0,10);
     const age=ageOn(mid,player?.birth_date);
     const category=String(team?.category||"ALL").trim().toUpperCase().replace(/\s+/g,"_");
+    const competition=String(team?.competition||"ALL").trim().toUpperCase().replace(/\s+/g,"_");
     const pos=String(player?.primary_position||player?.position||"ALL").trim().toUpperCase().replace(/\s+/g,"_");
-    return `CATEGORY:${category}|POS:${pos}|AGE:${age??"NA"}`;
+    return `CATEGORY:${category}|COMP:${competition}|POS:${pos}|AGE:${age??"NA"}`;
   }
 
   async getPlayerBenchmark({playerId,teamId,teamSeasonId}={}){
@@ -66,7 +67,22 @@ export class BenchmarkService {
       const {data,error}=await this.client.rpc("iq_v58_network_benchmark_snapshot",{
         p_team_season_id:teamSeasonId,p_cohort_key:cohortKey,p_metric_codes:BENCHMARK_METRICS.map(m=>m.code)
       });
-      if(!error&&Array.isArray(data))network=data;
+      if(!error&&Array.isArray(data)){
+        const targetMetrics=new Map((teamBenchmark.metrics||[]).map(metric=>[metric.code,metric]));
+        network=data.map(snapshot=>{
+          const definition=BENCHMARK_METRICS.find(metric=>metric.code===snapshot.metric_code);
+          const targetMetric=targetMetrics.get(snapshot.metric_code);
+          const value=Number(targetMetric?.value);
+          return {
+            ...snapshot,
+            label:definition?.label||snapshot.metric_code,
+            value:Number.isFinite(value)?value:null,
+            percentile:Number.isFinite(value)
+              ? estimateNetworkPercentile(snapshot,value,definition?.higher!==false)
+              : null
+          };
+        });
+      }
     }
 
     return {player:target,team,gamesCount:games.length,teamBenchmark,selfBenchmark,network,cohortKey};
