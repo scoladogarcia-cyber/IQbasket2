@@ -89,6 +89,9 @@ export class TrainingCompleteEditV54View extends TrainingView {
           <label>Minutos reales<input class="v54-person-minutes" type="number" min="0" max="600" step="1" value="${esc(participant?.participated_minutes ?? '')}" placeholder="Sin registrar" /></label>
           <label>RPE individual<input class="v54-person-rpe" type="number" min="0" max="10" step="0.5" value="${esc(participant?.rpe ?? '')}" placeholder="Sin registrar" /></label>
           <label>Observación breve<input class="v54-person-note" maxlength="240" value="${esc(participant?.notes || '')}" placeholder="Ej. Llegó tarde; sin datos médicos" /></label>
+          ${this._can(Permission.CREATE_PLAYER_EVALUATION) && this._can(Permission.VIEW_PLAYER_PASSPORT)
+            ? `<button type="button" class="p360-secondary-btn v54-passport-evaluate" data-player-id="${esc(pid)}">🪪 Valorar pasaporte desde esta sesión</button>`
+            : ''}
         </div>
         <details class="v54-exceptions"><summary>Participación por bloque y excepcionalidades (opcional)</summary>
           <p>Sin detalle no equivale a asistencia completa. Registra únicamente lo que sepas. Evita anotar diagnósticos médicos.</p>
@@ -221,6 +224,22 @@ export class TrainingCompleteEditV54View extends TrainingView {
       form.querySelectorAll('.v54-person').forEach(row=>{row.querySelector('.v54-person-included').checked=false;visible(row);});this._eligibility(form);
     });
     form.addEventListener('click',event=>{
+      const passportButton=event.target.closest('.v54-passport-evaluate');
+      if(passportButton){
+        const playerId=passportButton.dataset.playerId;
+        const player=this._playerDirectory().get(String(playerId));
+        sessionStorage.setItem('iq_passport_training_context',JSON.stringify({
+          trainingSessionId:session.id,
+          sessionDate:session.session_date,
+          sessionTitle:session.title || 'Entrenamiento',
+          teamSeasonId:this.teamSeasonId,
+          playerId,
+          playerName:personName(player),
+          context:'T'
+        }));
+        window.location.hash=`#/passport/${encodeURIComponent(String(playerId))}`;
+        return;
+      }
       if(event.target.closest('.v54-add-block')) {
         const index=form.querySelectorAll('.v54-block').length+1;
         const placeholder=document.createElement('div');placeholder.innerHTML=this._blockRow({},index);
@@ -294,6 +313,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
       .v54-assignment-title{font-weight:800;font-size:12px;overflow-wrap:anywhere}
       .v54-ineligible{border-color:#f59e0b}.v54-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
       .v54-save-status{font-size:12px;font-weight:700;color:#9a3412}
+      .v54-passport-evaluate{align-self:end;min-height:44px;border-color:#c4b5fd!important;color:#5b21b6!important;background:#faf5ff!important}
       @media(max-width:640px){.v54-complete-form{padding:10px}.v54-block,.v54-person-fields,.v54-assignment{grid-template-columns:1fr}}
     </style>`);
   }
