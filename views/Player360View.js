@@ -18,6 +18,7 @@ import { LongitudinalAnalyticsService } from "../services/player360/Longitudinal
 import { Player360AiGatewayService } from "../services/player360/Player360AiGatewayService.js";
 import { LongitudinalAnalyticsOrchestrator } from "../services/player360/LongitudinalAnalyticsOrchestrator.js";
 import { LongitudinalAnalyticsPanel } from "./player360/LongitudinalAnalyticsPanel.js";
+import { Player360BenchmarkPanelV58 } from "./player360/Player360BenchmarkPanelV58.js";
 import { WellnessService } from "../services/player360/WellnessService.js";
 import { WellnessSupportPanel } from "./player360/WellnessSupportPanel.js";
 import { PlayerDataSubmissionService } from "../services/player360/PlayerDataSubmissionService.js";
@@ -119,6 +120,15 @@ export class Player360View {
     this.developmentPanel = new DevelopmentCyclePanel({
       service: this.developmentService,
       can: permission => this._can(permission)
+    });
+    this.benchmarkPanel = new Player360BenchmarkPanelV58({
+      client: this.supabase,
+      can: permission => this._can(permission),
+      getContext: () => ({
+        playerId: this.playerId,
+        teamId: this.teamId,
+        teamSeasonId: this.teamSeasonId
+      })
     });
 
     this.containerId = "dashboard-content-area";
@@ -1455,6 +1465,7 @@ export class Player360View {
 
     await this._load();
     this._renderLoaded(container);
+    await this.benchmarkPanel.mount(container.querySelector(".p360c-view") || container);
   }
 }
 
