@@ -36,7 +36,7 @@ export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth,
   let events = [], eventsAvailable = true;
   try {
     const response = await client.from("game_events")
-      .select("game_id,player_id,period,action_type,points,made,coord_x,coord_y,shot_zone")
+      .select("id,game_id,player_id,period,game_clock,action_type,points,made,coord_x,coord_y,shot_zone,event_sequence,client_event_key,created_at")
       .eq("game_id",gameId).limit(5000);
     if (response.error || !Array.isArray(response.data) || response.data.length === 5000) throw new Error("Eventos no disponibles o incompletos");
     events = response.data;
@@ -51,5 +51,16 @@ export async function loadAuthorizedFinalGameReport({ supabase, dataStore, auth,
   });
   // Solo filas autorizadas. El consumidor debe volver a verificar permiso antes
   // de exportar/importar; los eventos pueden faltar y se indican como tales.
-  return { html, game, context: gameContext, policy, stats, players, periods: periods || [], events, eventsAvailable };
+  return {
+    html,
+    game,
+    context: gameContext,
+    policy,
+    stats,
+    players,
+    teamStats: aggregate || null,
+    periods: periods || [],
+    events,
+    eventsAvailable
+  };
 }
