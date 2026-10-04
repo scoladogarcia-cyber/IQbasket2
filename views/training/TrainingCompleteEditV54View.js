@@ -114,27 +114,55 @@ export class TrainingCompleteEditV54View extends TrainingView {
     for(const pid of participants.keys())if(!roster.has(pid))roster.set(pid,{id:pid,name:'Jugador histórico · '+pid.slice(0,8)});
     const blocks=[...(session.blocks||[])].sort((a,b)=>Number(a.block_order)-Number(b.block_order));
     this.editRevisions.set(String(session.id),this.completeService.revision(session,this.blockAssignments));
-    return `<form class="p360-form p360-inline-editor v54-complete-form" data-session-id="${esc(session.id)}">
-      <div class="p360-info-note"><strong>Edición completa.</strong> Los focos rápidos son la clasificación principal; bloques y excepciones quedan como detalle opcional. Si otro usuario editó algo, el guardado se cancela para que recargues.</div>
-      <div class="p360-form-grid">
-        <label>Fecha<input class="v54-date" type="date" required value="${esc(session.session_date)}" ${bounds.min?`min="${esc(bounds.min)}"`:''} ${bounds.max?`max="${esc(bounds.max)}"`:''}/></label>
-        <div class="p360-span-2 v55-edit-focuses"><strong>¿Qué se trabajó?</strong>${this._renderTrainingFocusChecks(this._trainingFocusCodes(session),'v55-edit-focus')}</div>
-        <label class="p360-span-2">Nombre<input class="v54-title" required maxlength="140" value="${esc(session.title)}" /></label>
-        <label>Inicio<input class="v54-start" type="time" required value="${esc(String(session.start_time||'').slice(0,5))}" /></label>
-        <label>Fin<input class="v54-end" type="time" required value="${esc(String(session.end_time||'').slice(0,5))}" /></label>
-        <label>Duración automática (min)<input class="v54-duration" type="number" readonly aria-readonly="true" value="${esc(this._sessionDuration(session) ?? '')}" /></label>
-        <label>Intensidad 0–10<input class="v54-intensity" type="number" min="0" max="10" step="0.5" value="${esc(session.intensity ?? '')}" /></label>
-        <label class="p360-span-2">Objetivo<textarea class="v54-objective" maxlength="500" rows="2">${esc(session.objective||'')}</textarea></label>
-        <label class="p360-span-2">Notas de la sesión<textarea class="v54-notes" maxlength="1000" rows="2">${esc(session.notes||'')}</textarea></label>
-      </div>
-      <section class="p360-subsection"><div class="p360-subsection-head"><div><strong>Bloques · editar, añadir o quitar</strong><small>Los bloques existentes conservan su identidad. Las eliminaciones se confirman al guardar.</small></div><button type="button" class="p360-secondary-btn v54-add-block">＋ Añadir bloque</button></div>
-        <div class="v54-block-list">${blocks.map((block,i)=>this._blockRow(block,i+1)).join('')}</div></section>
-      <section class="p360-subsection"><div><strong>Jugadores · asistencia y excepciones</strong><p class="p360-card-text">Desmarca a quien añadiste por error. Para ausencias reales utiliza «Ausente» o «Justificada». Las correcciones que eliminan participantes requieren confirmación.</p></div>
-        <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">Seleccionar elegibles</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
-        <p class="v54-eligibility-warning p360-error" role="alert" hidden></p>
-        <div class="v54-roster">${[...roster.values()].sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
+    return `<form class="p360-form p360-inline-editor v54-complete-form v55-simplified-edit" data-session-id="${esc(session.id)}">
+      <div class="p360-info-note"><strong>Edición rápida.</strong> Corrige fecha, focos, horario o nota en pocos toques. Los campos detallados, bloques, asistencia y Pasaporte siguen disponibles sin obligarte a recorrerlos.</div>
+
+      <section class="v55-edit-core" aria-label="Datos principales del entrenamiento">
+        <div class="p360-form-grid">
+          <label>Fecha<input class="v54-date" type="date" required value="${esc(session.session_date)}" ${bounds.min?`min="${esc(bounds.min)}"`:''} ${bounds.max?`max="${esc(bounds.max)}"`:''}/></label>
+          <label>Inicio<input class="v54-start" type="time" required value="${esc(String(session.start_time||'').slice(0,5))}" /></label>
+          <label>Fin<input class="v54-end" type="time" required value="${esc(String(session.end_time||'').slice(0,5))}" /></label>
+          <label>Duración automática<input class="v54-duration" type="number" readonly aria-readonly="true" value="${esc(this._sessionDuration(session) ?? '')}" /></label>
+        </div>
+
+        <div class="v55-edit-focuses">
+          <div class="v55-edit-section-copy">
+            <strong>¿Qué se trabajó?</strong>
+            <small>Marca solo los focos de esta sesión. Son los datos principales que IQBasket podrá cruzar después con evolución y rendimiento.</small>
+          </div>
+          ${this._renderTrainingFocusChecks(this._trainingFocusCodes(session),'v55-edit-focus')}
+        </div>
+
+        <label class="p360-free-note">
+          <span>Nota libre <small>(opcional)</small></span>
+          <textarea class="v54-notes" maxlength="1000" rows="2" placeholder="Solo aquello que merezca quedar documentado.">${esc(session.notes||'')}</textarea>
+        </label>
       </section>
-      <div class="p360-form-actions"><button type="button" class="p360-secondary-btn p360-cancel-training-edit">Cancelar sin cambios</button><button type="submit" class="p360-primary-btn">Guardar entrenamiento completo</button></div>
+
+      <p class="v54-eligibility-warning p360-error" role="alert" hidden></p>
+
+      <details class="p360-advanced-details v55-edit-advanced">
+        <summary>Más detalles · nombre, intensidad, objetivo y bloques ${blocks.length?`(${blocks.length} bloques)`:''}</summary>
+        <div class="p360-form-grid">
+          <label class="p360-span-2">Nombre<input class="v54-title" required maxlength="140" value="${esc(session.title)}" /></label>
+          <label>Intensidad general 0–10<input class="v54-intensity" type="number" min="0" max="10" step="0.5" value="${esc(session.intensity ?? '')}" /></label>
+          <label class="p360-span-2">Objetivo<textarea class="v54-objective" maxlength="500" rows="2">${esc(session.objective||'')}</textarea></label>
+        </div>
+        <section class="p360-subsection"><div class="p360-subsection-head"><div><strong>Bloques de trabajo</strong><small>Opcional. Úsalos cuando quieras distribuir contenidos/minutos con precisión.</small></div><button type="button" class="p360-secondary-btn v54-add-block">＋ Añadir bloque</button></div>
+          <div class="v54-block-list">${blocks.map((block,i)=>this._blockRow(block,i+1)).join('')}</div>
+        </section>
+      </details>
+
+      <details class="p360-advanced-details v55-edit-roster">
+        <summary>Jugadores · asistencia, minutos, RPE y Pasaporte (${participants.size} registrados)</summary>
+        <section class="p360-subsection">
+          <div><strong>Asistencia y excepciones</strong><p class="p360-card-text">La sesión puede guardarse sin tocar esta sección. Ábrela solo para corregir asistencia, minutos, RPE, excepciones o valorar el Pasaporte desde este entrenamiento.</p></div>
+          <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">Seleccionar elegibles</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
+          <div class="v54-roster">${[...roster.values()].sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
+        </section>
+      </details>
+
+      <div class="p360-form-actions"><button type="button" class="p360-secondary-btn p360-cancel-training-edit">Cancelar</button><button type="submit" class="p360-primary-btn">Guardar cambios</button></div>
       <p class="v54-save-status" role="status" aria-live="polite"></p>
     </form>`;
   }
@@ -217,6 +245,11 @@ export class TrainingCompleteEditV54View extends TrainingView {
     form.querySelector('.v54-date').addEventListener('change',()=>this._eligibility(form));
     form.querySelector('.v54-start').addEventListener('input',sync);
     form.querySelector('.v54-end').addEventListener('input',sync);
+    form.querySelectorAll('input[name="v55-edit-focus"]').forEach(input=>{
+      input.addEventListener('change',()=>{
+        input.closest('.p360-focus-chip')?.classList.toggle('is-selected',input.checked);
+      });
+    });
     const visible=row=>{row.querySelector('.v54-person-details').hidden=!row.querySelector('.v54-person-included').checked;};
     form.querySelectorAll('.v54-person').forEach(row=>row.querySelector('.v54-person-included').addEventListener('change',()=>{visible(row);this._eligibility(form);}));
     form.querySelector('.v54-all-players').addEventListener('click',()=>{
@@ -300,6 +333,13 @@ export class TrainingCompleteEditV54View extends TrainingView {
   _renderStyles() {
     return super._renderStyles().replace('</style>',`
       .v54-complete-form{border:2px solid #1d4ed8;border-radius:14px;margin:12px 0;padding:16px;min-width:0;background:#fff}
+      .v55-simplified-edit{display:grid;gap:14px}
+      .v55-edit-core{display:grid;gap:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:12px}
+      .v55-edit-focuses{display:grid;gap:9px}
+      .v55-edit-section-copy{display:grid;gap:3px}
+      .v55-edit-section-copy small{font-size:11px;color:#64748b;line-height:1.45}
+      .v55-edit-advanced,.v55-edit-roster{margin:0}
+      .v55-edit-advanced>.p360-subsection,.v55-edit-roster>.p360-subsection{margin:12px}
       .v54-block-list,.v54-roster,.v54-assignment-list{display:grid;gap:10px;min-width:0}
       .v54-block,.v54-person{border:1px solid #cbd5e1;border-radius:11px;padding:12px;background:#f8fafc;min-width:0}
       .v54-block,.v54-person-fields,.v54-assignment{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;align-items:end}
@@ -317,7 +357,16 @@ export class TrainingCompleteEditV54View extends TrainingView {
       .v54-ineligible{border-color:#f59e0b}.v54-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
       .v54-save-status{font-size:12px;font-weight:700;color:#9a3412}
       .v54-passport-evaluate{align-self:end;min-height:44px;border-color:#c4b5fd!important;color:#5b21b6!important;background:#faf5ff!important}
-      @media(max-width:640px){.v54-complete-form{padding:10px}.v54-block,.v54-person-fields,.v54-assignment{grid-template-columns:1fr}}
+      @media(max-width:640px){
+        .v54-complete-form{padding:10px}
+        .v55-edit-core{padding:10px}
+        .v55-edit-core .p360-form-grid{grid-template-columns:1fr 1fr}
+        .v55-edit-core .p360-form-grid label:first-child{grid-column:1/-1}
+        .v55-edit-core .p360-form-grid label:last-child{grid-column:1/-1}
+        .v55-edit-advanced>summary,.v55-edit-roster>summary{line-height:1.35}
+        .v54-block,.v54-person-fields,.v54-assignment{grid-template-columns:1fr}
+      }
+      @media(max-width:430px){.v55-edit-core .p360-form-grid{grid-template-columns:1fr}.v55-edit-core .p360-form-grid label:first-child,.v55-edit-core .p360-form-grid label:last-child{grid-column:auto}}
     </style>`);
   }
 }

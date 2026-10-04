@@ -48,6 +48,8 @@ try {
   const form=page.locator('.v54-complete-form');
   await form.waitFor();
   assert.equal(await form.locator('.v54-date').inputValue(),'2026-09-17');
+  assert.equal(await form.locator('.v55-edit-advanced').getAttribute('open'),null);
+  assert.equal(await form.locator('.v55-edit-roster').getAttribute('open'),null);
   assert.equal(await form.locator('.v54-person').count(),3);
   // Changing the date must warn rather than silently discard a confirmed player.
   await form.locator('.v54-date').fill('2026-09-08');
@@ -56,8 +58,10 @@ try {
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
   await form.locator('input[name="v55-edit-focus"][value="TECHNICAL"]').evaluate(el=>{el.checked=false;el.dispatchEvent(new Event("change",{bubbles:true}));});
   await form.locator('input[name="v55-edit-focus"][value="TACTICAL_TEAM"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
+  await form.locator('.v55-edit-advanced > summary').click();
   await form.locator('.v54-title').fill('Entrenamiento corregido');
   await form.locator('.v54-intensity').fill('5.5');
+  await form.locator('.v55-edit-roster > summary').click();
   const person1=form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000001"]');
   await person1.locator('.v54-person-status').selectOption('PARTIAL');
   await person1.locator('.v54-person-minutes').fill('30');
