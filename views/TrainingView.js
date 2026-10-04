@@ -539,7 +539,7 @@ export class TrainingView {
 
         <div class="p360-participant-tools">
           <span class="p360-default-hint">La plantilla de la temporada actual aparece primero. Puedes buscar y añadir otros jugadores accesibles.</span>
-          <button type="button" class="p360-link-btn" id="p360-select-current-roster">Plantilla actual</button>
+          <button type="button" class="p360-link-btn" id="p360-select-all-players">Plantilla actual</button>
           <button type="button" class="p360-link-btn" id="p360-select-visible-players">Seleccionar visibles</button>
           <button type="button" class="p360-link-btn" id="p360-clear-all-players">
             ${escapeHtml(this.t("player360.training.clear_all", "Ninguno"))}
@@ -1931,7 +1931,7 @@ export class TrainingView {
       });
     });
 
-    directory.querySelector("#p360-select-current-roster")?.addEventListener("click", () => {
+    directory.querySelector("#p360-select-all-players")?.addEventListener("click", () => {
       this._resetTrainingPlayerSelection(date);
       this._refreshTrainingPlayerOptions(container, date, {
         query: this.trainingPlayerQuery,
