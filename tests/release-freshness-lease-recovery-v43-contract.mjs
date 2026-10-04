@@ -52,7 +52,7 @@ assert.match(leaseController, /attachLiveWriterLeaseV43/);
 
 // V43 owns the lease/freshness boundary, not one frozen sporting-view filename.
 // Later scorer adapters may evolve while retaining the V43 single-writer layer.
-assert.match(registry, /LiveScoreHUDViewV(?:42Safe|4[3-9])/);
+assert.match(registry, /LiveScoreHUDViewV(?:42Safe|4[3-9]|5[0-9])/);
 assert.match(registry, /attachLiveWriterLeaseV43/);
 assert.doesNotMatch(registry, /import\("\.\.\/features\/game-live\/LiveWriterLeaseController\.js"\)/);
 
