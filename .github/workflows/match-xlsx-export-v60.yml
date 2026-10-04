@@ -1,0 +1,51 @@
+name: IQBasket V60 Match XLSX Export
+
+on:
+  push:
+    branches:
+      - fix/xlsx-match-export-v60
+      - main
+    paths:
+      - "services/reports/SimpleXlsxWorkbook.js"
+      - "services/reports/MatchWorkbookExportV60.js"
+      - "services/games/GameFinalReportReadService.js"
+      - "views/ReportsViewV53.js"
+      - "tests/match-xlsx-export-v60.mjs"
+      - ".github/workflows/match-xlsx-export-v60.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/reports/SimpleXlsxWorkbook.js"
+      - "services/reports/MatchWorkbookExportV60.js"
+      - "services/games/GameFinalReportReadService.js"
+      - "views/ReportsViewV53.js"
+      - "tests/match-xlsx-export-v60.mjs"
+      - ".github/workflows/match-xlsx-export-v60.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check export syntax
+        run: |
+          node --check services/reports/SimpleXlsxWorkbook.js
+          node --check services/reports/MatchWorkbookExportV60.js
+          node --check services/games/GameFinalReportReadService.js
+          node --check views/ReportsViewV53.js
+      - name: Real XLSX contract
+        run: node tests/match-xlsx-export-v60.mjs
+      - name: Preserve V53 reports contract
+        run: node tests/selected-reports-v53.mjs
+      - name: Production build
+        run: npm run build
