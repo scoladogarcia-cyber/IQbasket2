@@ -109,6 +109,9 @@ jobs:
       - name: Training update duration boundary V1
         run: node tests/training-update-duration-boundary-v1-contract.mjs
 
+      - name: Training UX V55
+        run: node tests/training-ux-v55-contract.mjs
+
       - name: Player Development Loop V2 contract
         run: node tests/player-development-loop-v2-contract.mjs
 
