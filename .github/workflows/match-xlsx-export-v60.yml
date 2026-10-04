@@ -1,0 +1,95 @@
+name: IQBasket V60 Match XLSX Export
+
+on:
+  push:
+    branches:
+      - fix/xlsx-match-export-v60
+      - main
+    paths:
+      - "services/reports/SimpleXlsxWorkbook.js"
+      - "services/reports/MatchWorkbookExportV60.js"
+      - "services/games/GameFinalReportReadService.js"
+      - "views/ReportsViewV53.js"
+      - "tests/match-xlsx-export-v60.mjs"
+      - "tests/match-xlsx-export-v60-browser-smoke.mjs"
+      - "docs/architecture/SELECTED_REPORTS_V53.md"
+      - ".github/workflows/match-xlsx-export-v60.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/reports/SimpleXlsxWorkbook.js"
+      - "services/reports/MatchWorkbookExportV60.js"
+      - "services/games/GameFinalReportReadService.js"
+      - "views/ReportsViewV53.js"
+      - "tests/match-xlsx-export-v60.mjs"
+      - "tests/match-xlsx-export-v60-browser-smoke.mjs"
+      - "docs/architecture/SELECTED_REPORTS_V53.md"
+      - ".github/workflows/match-xlsx-export-v60.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  contract-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check export syntax
+        run: |
+          node --check services/reports/SimpleXlsxWorkbook.js
+          node --check services/reports/MatchWorkbookExportV60.js
+          node --check services/games/GameFinalReportReadService.js
+          node --check views/ReportsViewV53.js
+      - name: Real XLSX contract
+        run: node tests/match-xlsx-export-v60.mjs
+      - name: Preserve V53 reports contract
+        run: node tests/selected-reports-v53.mjs
+      - name: Production build
+        run: npm run build
+
+
+  browser-download:
+    name: XLSX download · ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/v60-${{ matrix.browser }}-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/v60-${{ matrix.browser }}-vite.log
+          exit 1
+      - name: Download real XLSX
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/match-xlsx-export-v60-browser-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/v60-${{ matrix.browser }}-vite.log || true
