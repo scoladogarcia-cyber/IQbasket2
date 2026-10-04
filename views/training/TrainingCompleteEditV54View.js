@@ -139,6 +139,8 @@ export class TrainingCompleteEditV54View extends TrainingView {
         </label>
       </section>
 
+      <p class="v54-eligibility-warning p360-error" role="alert" hidden></p>
+
       <details class="p360-advanced-details v55-edit-advanced">
         <summary>Más detalles · nombre, intensidad, objetivo y bloques ${blocks.length?`(${blocks.length} bloques)`:''}</summary>
         <div class="p360-form-grid">
@@ -156,7 +158,6 @@ export class TrainingCompleteEditV54View extends TrainingView {
         <section class="p360-subsection">
           <div><strong>Asistencia y excepciones</strong><p class="p360-card-text">La sesión puede guardarse sin tocar esta sección. Ábrela solo para corregir asistencia, minutos, RPE, excepciones o valorar el Pasaporte desde este entrenamiento.</p></div>
           <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">Seleccionar elegibles</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
-          <p class="v54-eligibility-warning p360-error" role="alert" hidden></p>
           <div class="v54-roster">${[...roster.values()].sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
         </section>
       </details>
