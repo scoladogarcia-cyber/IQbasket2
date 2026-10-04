@@ -11,7 +11,7 @@ function id(v){return String(v||"");}
 function gameDate(game={}){return String(game.date||game.game_date||"").slice(0,10);}
 function ageOn(date,birth){
   if(!date||!birth)return null;const d=new Date(date+"T12:00:00Z"),b=new Date(String(birth).slice(0,10)+"T12:00:00Z");
-  if(Number.isNaN(d)||Number.isNaN(b))return null;
+  if(Number.isNaN(d.getTime())||Number.isNaN(b.getTime()))return null;
   let a=d.getUTCFullYear()-b.getUTCFullYear();const md=d.getUTCMonth()-b.getUTCMonth();
   if(md<0||(md===0&&d.getUTCDate()<b.getUTCDate()))a--;return a;
 }
