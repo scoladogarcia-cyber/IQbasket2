@@ -1611,7 +1611,8 @@ export class TrainingView {
           cursor:pointer;font-size:12px!important;font-weight:800!important;
         }
         .p360-focus-chip input { position:absolute;opacity:0;pointer-events:none;width:1px!important;height:1px!important;min-height:0!important; }
-        .p360-focus-chip.is-selected { border-color:#2563eb;background:#dbeafe;color:#1e3a8a;box-shadow:0 0 0 1px #2563eb inset; }
+        .p360-focus-chip.is-selected,
+        .p360-focus-chip:has(input:checked) { border-color:#2563eb;background:#dbeafe;color:#1e3a8a;box-shadow:0 0 0 1px #2563eb inset; }
         .p360-focus-icon { font-size:18px; }
         .p360-free-note small { color:#94a3b8;font-weight:600; }
         .p360-advanced-details { border:1px solid #e2e8f0;border-radius:11px;background:#fff;overflow:hidden; }
