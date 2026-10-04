@@ -839,7 +839,9 @@ export class PlayerStatsView {
 
     // CASO A: DETALLE DE JUGADOR (#/player/UUID)
     if (playerId) {
-      this.selectedPlayer = DataStore.getPlayerById(playerId);
+      this.selectedPlayer = (this.players || []).find(
+        player => String(player.id) === String(playerId)
+      ) || DataStore.getPlayerById(playerId);
 
       if (!this.selectedPlayer) {
         container.innerHTML = `<div style="padding: 20px; color: #dc2626; font-weight: 700; background: white; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">${this.t("player_not_found", "Jugador no encontrado.")}</div>`;
@@ -986,7 +988,12 @@ export class PlayerStatsView {
             };
 
             await DataStore.updatePlayer(playerId, updates);
-            this.selectedPlayer = { ...this.selectedPlayer, ...updates };
+            this.players = DataStore.getSeasonParticipantPlayers?.(this.teamId)
+              || DataStore.getPlayers(this.teamId)
+              || [];
+            this.selectedPlayer = (this.players || []).find(
+              player => String(player.id) === String(playerId)
+            ) || { ...this.selectedPlayer, ...updates };
             this.activeTab = "resumen";
             renderDetail();
           });
