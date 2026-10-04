@@ -563,7 +563,10 @@ export class LiveScoreHUDViewV38 extends LiveScoreHUDView {
     this.container.querySelector("#btn-hud-finish")?.addEventListener("click", async event => {
       event.preventDefault();
       this._stopClock();
-      if (this.isExistingGame) {
+      if (typeof this._beforeFinishLiveCapture === "function") {
+        const allowed = await this._beforeFinishLiveCapture();
+        if (!allowed) return;
+      } else if (this.isExistingGame) {
         await this._flushLiveSync().catch(() => {});
       }
       this._closeModalLayer();
