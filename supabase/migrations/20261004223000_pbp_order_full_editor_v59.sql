@@ -1,6 +1,9 @@
 -- IQBasket V59 · ordered canonical PBP + full event editor
 -- Adds deterministic sports order and one audited transaction for player/action edits.
 
+create schema if not exists iq_v59_private;
+revoke all on schema iq_v59_private from public,anon,authenticated;
+
 alter table public.game_events
   add column if not exists event_sequence integer,
   add column if not exists client_event_key text;
