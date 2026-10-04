@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TrainingCompleteEditV54Service } from '../services/player360/TrainingCompleteEditV54Service.js';
-import { TRAINING_TYPE_OPTIONS, BLOCK_PARTICIPATION_OPTIONS } from '../config/trainingEditV54.config.js';
+import { TRAINING_FOCUS_OPTIONS, BLOCK_PARTICIPATION_OPTIONS } from '../config/trainingEditV54.config.js';
 
 const text = path => readFileSync(new URL(path,import.meta.url),'utf8');
 const sql=text('../supabase/migrations/20260921090000_training_complete_edit_v54.sql');
@@ -12,13 +12,13 @@ const registry=text('../services/LazyViewRegistry.js');
 assert.match(registry,/TrainingCompleteEditV54View/);
 assert.match(ui,/completeService\.saveComplete/);
 assert.match(ui,/p360-cancel-training-edit/);
-for(const item of ['v54-date','v54-type','v54-intensity','v54-block','v54-person','v54-part-status','v54-part-block-minutes','v54-part-reason','v54-eligibility-warning']) assert.ok(ui.includes(item),`Missing field ${item}`);
+for(const item of ['v54-date','v55-edit-focus','v54-intensity','v54-block','v54-person','v54-part-status','v54-part-block-minutes','v54-part-reason','v54-eligibility-warning']) assert.ok(ui.includes(item),`Missing field ${item}`);
 assert.match(ui,/confirm\(`/);
 assert.match(ui,/this\._eligiblePlayers\(/);
 assert.match(ui,/this\.editRevisions/);
 assert.match(ui,/this\._can\(Permission\.EDIT_TRAINING\)/);
 assert.match(ui,/Sin detalle no equivale/);
-assert.equal(TRAINING_TYPE_OPTIONS.some(([type])=>type==='TACTICAL'),true);
+assert.equal(TRAINING_FOCUS_OPTIONS.some(item=>item.code==='TACTICAL_TEAM'),true);
 assert.equal(BLOCK_PARTICIPATION_OPTIONS.some(([type])=>type==='NOT_ATTENDED'),true);
 
 // DDL is additive, scoped to staff; destructive correction only inside a gated RPC.
@@ -33,13 +33,13 @@ const session={ id:'game-training',updated_at:'2026-09-21T06:00:00+00:00',
   participants:[{id:'p',updated_at:'2026-09-21T06:02:00+00:00'}]};
 const assignment={id:'assignment',participant_id:'p',block_id:'b',updated_at:'2026-09-21T06:03:00+00:00'};
 let rpcArgs;
-const client={rpc:async(name,args)=>{assert.equal(name,'iq_v54_update_training_complete');rpcArgs=args;return {data:'game-training',error:null};}};
+const client={rpc:async(name,args)=>{assert.equal(name,'iq_v55_update_training_complete');rpcArgs=args;return {data:'game-training',error:null};}};
 const service=new TrainingCompleteEditV54Service(client);
 const revision=service.revision(session,[assignment,{id:'other',participant_id:'other',updated_at:'2026-09-21T00:00:00Z'}]);
 assert.equal(revision.blocks.length,1);
 assert.equal(revision.participants.length,1);
 assert.equal(revision.assignments.length,1);
-const payload={session,teamSeasonId:'season',revision,date:'2026-09-21',title:'Entreno corregido',trainingType:'TACTICAL',
+const payload={session,teamSeasonId:'season',revision,date:'2026-09-21',title:'Entreno corregido',focusCodes:['TACTICAL_TEAM'],
   objective:'Objetivo',notes:'Nota',start:'20:00',end:'21:00',intensity:5,
   blocks:[{key:'b',id:'b',order:1,title:'Tiro',duration_minutes:60}],
   participants:[{player_id:'player',status:'PARTIAL',minutes:30,blocks:[{key:'b',status:'PARTIAL',minutes:30,reason:'LIMITED'}]}],confirmedRemovals:true};
@@ -48,7 +48,7 @@ assert.equal(rpcArgs.p_confirm_removals,true);
 assert.deepEqual(rpcArgs.p_participants,payload.participants);
 assert.deepEqual(rpcArgs.p_revision,revision);
 assert.equal(rpcArgs.p_session_date,'2026-09-21');
-assert.equal(rpcArgs.p_training_type,'TACTICAL');
+assert.deepEqual(rpcArgs.p_focus_codes,['TACTICAL_TEAM']);
 await assert.rejects(()=>new TrainingCompleteEditV54Service({rpc:async()=>({data:null,error:{message:'TRAINING_CHANGED_RELOAD_REQUIRED'}})}).saveComplete(payload),/TRAINING_CHANGED_RELOAD_REQUIRED/);
 
 const allowed=new Set(['b']);
