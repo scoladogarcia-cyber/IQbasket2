@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { LiveOfflineStore } from "../services/games/LiveOfflineStore.js";
 import { buildTrainingIntelligence } from "../domain/player360/TrainingIntelligenceAnalytics.js";
 import { buildTeamBenchmark, buildSelfBenchmark, networkReliability } from "../domain/stats/BenchmarkEngine.js";
+import { Player360ObservationAssembler } from "../services/player360/Player360ObservationAssembler.js";
 
 class MemoryStorage {
   constructor(){this.map=new Map();}
@@ -85,6 +86,34 @@ class MemoryStorage {
   assert.equal(networkReliability(19),"HIDDEN");
   assert.equal(networkReliability(20),"PROVISIONAL");
   assert.equal(networkReliability(100),"ROBUST");
+}
+
+
+// V55 focus exposure must become longitudinal evidence with 0/1/2/4-week outcome lags.
+{
+  const playerId="11111111-1111-4111-8111-111111111111";
+  const teamSeasonId="22222222-2222-4222-8222-222222222222";
+  const gameId="33333333-3333-4333-8333-333333333333";
+  const assembled=Player360ObservationAssembler.assemble({
+    playerId,teamSeasonId,
+    eligibleGames:[{id:gameId,date:"2026-09-14"}],
+    playerGameStats:[{
+      player_id:playerId,game_id:gameId,minutes:30,points:12,evaluation:10,
+      assists:4,turnovers:2,efg_pct:52.5,true_shooting_pct:55
+    }],
+    trainingSessions:[{
+      id:"44444444-4444-4444-8444-444444444444",session_date:"2026-09-07",
+      metadata:{training_focus_codes:["SHOOT_FINISH"]},
+      participants:[{player_id:playerId,participated_minutes:60,rpe:5,internal_load:300}]
+    }],
+    externalSessions:[],evaluations:[],evaluationMetrics:[]
+  });
+  assert.ok(assembled.metricDefinitions.some(x=>x.module==="training_focus"&&x.metric_code==="FOCUS_SHOOT_FINISH_MINUTES"));
+  assert.ok(assembled.observations.some(x=>x.module==="training_focus"&&x.value===60));
+  const focusToEfg=assembled.associationDefinitions.filter(x=>
+    x.left==="training_focus.FOCUS_SHOOT_FINISH_MINUTES"&&x.right==="competition.EFG_PCT"
+  );
+  assert.deepEqual(focusToEfg.map(x=>x.lag_buckets),[0,1,2,4]);
 }
 
 // Wiring and SQL safety contracts.
