@@ -514,11 +514,11 @@ create or replace function public.iq_v58_reassign_game_event_player(
 language sql
 security definer
 set search_path=''
-as $
+as $wrapper$
   select iq_v58_private.reassign_game_event_player(
     p_game_id,p_event_id,p_new_player_id,p_reason
   );
-$;
+$wrapper$;
 revoke all on function public.iq_v58_reassign_game_event_player(uuid,uuid,uuid,text) from public,anon;
 grant execute on function public.iq_v58_reassign_game_event_player(uuid,uuid,uuid,text) to authenticated;
 
@@ -532,10 +532,10 @@ create or replace function public.iq_v59_edit_game_event(
 language sql
 security definer
 set search_path=''
-as $
+as $wrapper$
   select iq_v59_private.edit_game_event(
     p_game_id,p_event_id,p_new_player_id,p_new_action_type,p_reason
   );
-$;
+$wrapper$;
 revoke all on function public.iq_v59_edit_game_event(uuid,uuid,uuid,text,text) from public,anon;
 grant execute on function public.iq_v59_edit_game_event(uuid,uuid,uuid,text,text) to authenticated;
