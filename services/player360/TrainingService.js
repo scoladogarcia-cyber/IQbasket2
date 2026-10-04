@@ -164,8 +164,27 @@ export class TrainingService {
     assertRequired(teamSeasonId, "teamSeasonId");
     assertRequired(sessionDate, "sessionDate");
     assertRequired(title, "title");
+    // V55 UI always sends at least one focus. Keep the legacy service contract
+    // available for older callers/tests and unclassified historical workflows:
+    // absence of focus data must not be silently invented.
     if (!Array.isArray(focusCodes) || focusCodes.length === 0) {
-      throw new Error("TrainingService: selecciona al menos un foco de entrenamiento.");
+      const { data, error } = await this.supabase.rpc(
+        "iq_v4_create_training_session",
+        {
+          p_team_season_id: teamSeasonId,
+          p_session_date: sessionDate,
+          p_title: title,
+          p_objective: objective,
+          p_duration_minutes: durationMinutes,
+          p_intensity: intensity,
+          p_start_time: startTime,
+          p_end_time: endTime,
+          p_blocks: normalizeArray(blocks),
+          p_participants: normalizeArray(participants)
+        }
+      );
+      if (error) throw error;
+      return data;
     }
 
     const { data, error } = await this.supabase.rpc(
