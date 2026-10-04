@@ -13,6 +13,20 @@ export class TrainingPlayerDirectoryService {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
   }
 
+  async resolve({ teamSeasonId, playerIds = [] } = {}) {
+    if (!teamSeasonId) throw new Error("TEAM_SEASON_REQUIRED");
+    const ids = [...new Set((playerIds || []).map(String).filter(Boolean))];
+    if (!ids.length || !this.supabase) return [];
+
+    const { data, error } = await this.supabase.rpc("iq_v57_resolve_training_players", {
+      p_team_season_id: teamSeasonId,
+      p_player_ids: ids
+    });
+
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  }
+
   async search({
     teamSeasonId,
     query = "",
