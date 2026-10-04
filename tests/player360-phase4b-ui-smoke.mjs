@@ -494,12 +494,13 @@ async function runViewport(browser, name, viewport) {
   assertCondition(core.heroPillColor === "rgb(255, 255, 255)", name, "Contexto hero sin contraste suficiente");
   assertCondition(core.durationReadOnly, name, "Duración debe ser derivada y no editable");
 
-  // Cancelling a training draft must discard local state and never persist.
+  // Cancelling a V55 quick draft must discard optional detail state and never persist.
   await page.locator("#p360-create-training-panel").evaluate(el => { el.open = true; });
+  await page.locator("#p360-training-advanced").evaluate(el => { el.open = true; });
   await page.fill("#p360-training-title", "Borrador cancelado");
   await page.click("#p360-select-all-players");
   await page.click("#p360-add-block");
-  await page.locator(".p360-block-row").nth(1).locator(".p360-block-title").fill("Bloque temporal");
+  await page.locator(".p360-block-row").nth(0).locator(".p360-block-title").fill("Bloque temporal");
   await page.click("#p360-cancel-training");
 
   const cancelledTraining = await page.evaluate(() => ({
@@ -510,9 +511,9 @@ async function runViewport(browser, name, viewport) {
     createCalls: window.__p360.createCalls.length
   }));
   assertCondition(!cancelledTraining.panelOpen, name, "Cancelar entrenamiento no cierra el panel");
-  assertCondition(cancelledTraining.title === "", name, "Cancelar entrenamiento no limpia el título");
-  assertCondition(cancelledTraining.blocks === 1, name, "Cancelar entrenamiento no restaura un único bloque vacío");
-  assertCondition(cancelledTraining.checkedPlayers === 0, name, "Cancelar entrenamiento no limpia jugadores seleccionados");
+  assertCondition(cancelledTraining.title === "Entrenamiento", name, "Cancelar entrenamiento no restaura el título rápido");
+  assertCondition(cancelledTraining.blocks === 0, name, "Cancelar entrenamiento no limpia los bloques opcionales");
+  assertCondition(cancelledTraining.checkedPlayers === 2, name, "Cancelar entrenamiento no restaura la plantilla elegible");
   assertCondition(cancelledTraining.createCalls === 0, name, "Cancelar entrenamiento provoca una escritura");
 
   // Create session: exact-date eligibility should change the player checklist.
@@ -528,10 +529,16 @@ async function runViewport(browser, name, viewport) {
   assertCondition(playerOptions === 2, name, "La elegibilidad posterior no incorpora al jugador");
 
   await page.click("#p360-select-all-players");
-  await page.fill("#p360-training-title", "Sesión creada por UI smoke");
+  await page.locator('input[name="p360-training-focus"][value="TECHNICAL"]').evaluate(el => {
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
   await page.fill("#p360-training-start-time", "18:00");
   await page.fill("#p360-training-end-time", "19:30");
+  await page.locator("#p360-training-advanced").evaluate(el => { el.open = true; });
+  await page.fill("#p360-training-title", "Sesión creada por UI smoke");
   await page.fill("#p360-training-intensity", "7.5");
+  await page.click("#p360-add-block");
 
   const derivedDuration = await page.locator("#p360-training-duration").inputValue();
   assertCondition(derivedDuration === "90", name, "La duración no se calcula desde inicio/fin");
