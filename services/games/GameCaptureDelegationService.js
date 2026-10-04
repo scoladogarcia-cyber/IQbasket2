@@ -82,8 +82,16 @@ export class GameCaptureDelegationService {
 
   async getSnapshot(gameId) {
     this._requireClient();
+    const id = requireUuid(gameId, "gameId");
+    const v59Rpc = "iq_v59_game_capture_snapshot";
+    const v59 = await this.supabase.rpc(v59Rpc, { p_game_id: id });
+    if (!v59.error) return v59.data || null;
+    if (!isMissingRpc(v59.error, v59Rpc)) {
+      throw rpcError(v59.error, "No se pudo cargar el registro ordenado del partido.");
+    }
+
     const { data, error } = await this.supabase.rpc("iq_v21_game_capture_snapshot", {
-      p_game_id: requireUuid(gameId, "gameId")
+      p_game_id: id
     });
     if (error) throw rpcError(error, "No se pudo cargar el partido delegado.");
     return data || null;
@@ -191,6 +199,21 @@ export class GameCaptureDelegationService {
     if (error) throw rpcError(error, "No se pudo guardar la captura del partido.");
     return data || null;
   }
+  async editEvent({ gameId, eventId, newPlayerId = null, newActionType, reason = null } = {}) {
+    this._requireClient();
+    const normalizedAction = String(newActionType || "").trim().toLowerCase();
+    if (!normalizedAction) throw new Error("Selecciona un tipo de jugada.");
+    const { data, error } = await this.supabase.rpc("iq_v59_edit_game_event", {
+      p_game_id: requireUuid(gameId, "gameId"),
+      p_event_id: requireUuid(eventId, "eventId"),
+      p_new_player_id: newPlayerId ? requireUuid(newPlayerId, "newPlayerId") : null,
+      p_new_action_type: normalizedAction,
+      p_reason: reason ? String(reason).trim().slice(0, 500) : null
+    });
+    if (error) throw rpcError(error, "No se pudo editar la jugada.");
+    return data || null;
+  }
+
   async reassignEventPlayer({ gameId, eventId, newPlayerId, reason = null } = {}) {
     this._requireClient();
     const { data, error } = await this.supabase.rpc("iq_v58_reassign_game_event_player", {

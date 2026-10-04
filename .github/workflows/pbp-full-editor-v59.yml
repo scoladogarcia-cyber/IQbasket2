@@ -1,0 +1,105 @@
+name: IQBasket V59 PBP Audit Editor
+
+on:
+  push:
+    branches:
+      - feat/pbp-audit-editor-v59
+      - main
+    paths:
+      - "domain/games/GameEventCatalog.js"
+      - "views/games/ScopedGameBoxScoreLiveV59View.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20261004223000_pbp_order_full_editor_v59.sql"
+      - "tests/pbp-full-editor-v59-contract.mjs"
+      - "tests/pbp-full-editor-v59-browser-smoke.mjs"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "tests/v58-intelligence-contract.mjs"
+      - ".github/workflows/pbp-full-editor-v59.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "domain/games/GameEventCatalog.js"
+      - "views/games/ScopedGameBoxScoreLiveV59View.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20261004223000_pbp_order_full_editor_v59.sql"
+      - "tests/pbp-full-editor-v59-contract.mjs"
+      - "tests/pbp-full-editor-v59-browser-smoke.mjs"
+      - "tests/live-capture-onboarding-streaming-v39-contract.mjs"
+      - "tests/v58-intelligence-contract.mjs"
+      - ".github/workflows/pbp-full-editor-v59.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pbp-full-editor-v59-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
+
+jobs:
+  contract-build:
+    name: Contracts + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check V59 syntax
+        run: |
+          node --check domain/games/GameEventCatalog.js
+          node --check views/games/ScopedGameBoxScoreLiveV59View.js
+          node --check services/games/GameCaptureDelegationService.js
+          node --check services/LazyViewRegistry.js
+      - name: V59 contract
+        run: node tests/pbp-full-editor-v59-contract.mjs
+      - name: Preserve V39 stream contract
+        run: node tests/live-capture-onboarding-streaming-v39-contract.mjs
+      - name: Preserve V58 contract
+        run: node tests/v58-intelligence-contract.mjs
+      - name: Production build
+        run: npm run build
+
+  browser-editor:
+    name: PBP editor · ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start isolated Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/v59-${{ matrix.browser }}-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS "$CORE_USER_FLOWS_BASE_URL" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/v59-${{ matrix.browser }}-vite.log
+          exit 1
+      - name: Edit player and action
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/pbp-full-editor-v59-browser-smoke.mjs
+      - name: Print Vite log on failure
+        if: failure()
+        run: cat /tmp/v59-${{ matrix.browser }}-vite.log || true
