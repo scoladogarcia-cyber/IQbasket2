@@ -122,6 +122,26 @@ export class LiveOfflineStore {
     return this._delete(DRAFT_STORE, id);
   }
 
+  _loadLocalOutbox(gameId) {
+    const id = String(gameId || "");
+    if (!id || !this.localStorage) return [];
+    try {
+      const raw = this.localStorage.getItem(this._lsKey("outbox", id));
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  _saveLocalOutbox(gameId, rows = []) {
+    const id = String(gameId || "");
+    if (!id || !this.localStorage) return false;
+    try {
+      if (!rows.length) this.localStorage.removeItem(this._lsKey("outbox", id));
+      else this.localStorage.setItem(this._lsKey("outbox", id), JSON.stringify(rows));
+      return true;
+    } catch { return false; }
+  }
+
   async enqueue(gameId, payload, { baseRevision = null, operationId = uuid() } = {}) {
     const id = String(gameId || "");
     if (!id) throw new Error("gameId requerido para outbox.");
@@ -135,6 +155,9 @@ export class LiveOfflineStore {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+    const localRows = this._loadLocalOutbox(id).filter(item => item.operationId !== row.operationId);
+    localRows.push(row);
+    this._saveLocalOutbox(id, localRows);
     await this._put(OUTBOX_STORE, row);
     await this.saveDraft(id, payload, { baseRevision: row.baseRevision, operationId });
     return row;
@@ -142,28 +165,60 @@ export class LiveOfflineStore {
 
   async list(gameId) {
     const id = String(gameId || "");
+    if (!id) return [];
+    const localRows = this._loadLocalOutbox(id);
     const db = await this._db();
-    if (!db || !id) return [];
-    return new Promise(resolve => {
+    if (!db) return localRows.sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const indexedRows = await new Promise(resolve => {
       const tx = db.transaction(OUTBOX_STORE, "readonly");
-      const store = tx.objectStore(OUTBOX_STORE);
-      const req = store.getAll();
-      req.onsuccess = () => resolve((req.result || [])
-        .filter(row => String(row.gameId) === id)
-        .sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt))));
+      const req = tx.objectStore(OUTBOX_STORE).getAll();
+      req.onsuccess = () => resolve((req.result || []).filter(row => String(row.gameId) === id));
       req.onerror = () => resolve([]);
     });
+    const merged = new Map();
+    [...localRows, ...indexedRows].forEach(row => {
+      if (row?.operationId) merged.set(String(row.operationId), row);
+    });
+    return [...merged.values()].sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   }
 
   async markAttempt(operation, error = null) {
     const row = { ...operation, attempts: Number(operation.attempts || 0) + 1, updatedAt: new Date().toISOString(),
       status: error ? "FAILED" : "SYNCING", error: error ? String(error?.message || error) : null };
+    const localRows = this._loadLocalOutbox(row.gameId).filter(item => item.operationId !== row.operationId);
+    localRows.push(row);
+    this._saveLocalOutbox(row.gameId, localRows);
     await this._put(OUTBOX_STORE, row);
     return row;
   }
 
   async remove(operationId) {
-    return this._delete(OUTBOX_STORE, operationId);
+    const op = String(operationId || "");
+    if (!op) return false;
+    const db = await this._db();
+    let gameId = null;
+    if (db) {
+      const indexed = await this._get(OUTBOX_STORE, op);
+      gameId = indexed?.gameId || null;
+    }
+    if (!gameId) {
+      // Local fallback cannot index by operation, so inspect known draft game.
+      try {
+        for (let i = 0; i < (this.localStorage?.length || 0); i += 1) {
+          const key = this.localStorage.key(i);
+          if (!key?.startsWith(`${LS_PREFIX}outbox:`)) continue;
+          const candidate = key.slice(`${LS_PREFIX}outbox:`.length);
+          if (this._loadLocalOutbox(candidate).some(row => String(row.operationId) === op)) {
+            gameId = candidate;
+            break;
+          }
+        }
+      } catch {}
+    }
+    if (gameId) {
+      this._saveLocalOutbox(gameId, this._loadLocalOutbox(gameId).filter(row => String(row.operationId) !== op));
+    }
+    return this._delete(OUTBOX_STORE, op);
   }
 
   async pendingCount(gameId) {
