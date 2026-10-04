@@ -138,7 +138,9 @@ export class GameCaptureDelegationService {
     stats = null,
     periods = null,
     events = null,
-    leaseToken = null
+    leaseToken = null,
+    clientOperationId = null,
+    baseRevision = null
   }) {
     this._requireClient();
     const id = requireUuid(gameId, "gameId");
@@ -158,6 +160,22 @@ export class GameCaptureDelegationService {
       leaseToken || this.liveSessionService.getStoredToken(id) || ""
     ).trim() || null;
 
+    // V58 adds idempotent offline operations and optimistic capture revision.
+    // Older deployments still fall back to V28/V21 without changing callers.
+    if (clientOperationId) {
+      const v58Rpc = "iq_v58_save_game_capture";
+      const v58Result = await this.supabase.rpc(v58Rpc, {
+        ...baseArgs,
+        p_lease_token: token,
+        p_client_operation_id: clientOperationId,
+        p_base_revision: Number.isFinite(Number(baseRevision)) ? Number(baseRevision) : null
+      });
+      if (!v58Result.error) return v58Result.data || null;
+      if (!isMissingRpc(v58Result.error, v58Rpc)) {
+        throw rpcError(v58Result.error, "No se pudo sincronizar la captura offline del partido.");
+      }
+    }
+
     const v28Rpc = "iq_v28_save_game_capture";
     const v28Result = await this.supabase.rpc(v28Rpc, {
       ...baseArgs,
@@ -173,6 +191,18 @@ export class GameCaptureDelegationService {
     if (error) throw rpcError(error, "No se pudo guardar la captura del partido.");
     return data || null;
   }
+  async getCaptureSyncStatus(gameId) {
+    this._requireClient();
+    const id = requireUuid(gameId, "gameId");
+    const rpc = "iq_v58_game_capture_sync_status";
+    const { data, error } = await this.supabase.rpc(rpc, { p_game_id: id });
+    if (error) {
+      if (isMissingRpc(error, rpc)) return { capture_revision: null, legacy: true };
+      throw rpcError(error, "No se pudo consultar la revisión de sincronización.");
+    }
+    return data || { capture_revision: 0 };
+  }
+
 }
 
 export default GameCaptureDelegationService;
