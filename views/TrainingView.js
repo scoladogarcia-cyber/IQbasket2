@@ -239,6 +239,63 @@ export class TrainingView {
     );
   }
 
+  _trainingFocusCodes(session = {}) {
+    const raw = session?.metadata?.training_focus_codes;
+    if (Array.isArray(raw) && raw.length) {
+      return [...new Set(raw.map(code => String(code || "").trim().toUpperCase()).filter(Boolean))];
+    }
+    const legacy = String(session?.metadata?.training_type || "").toUpperCase();
+    const legacyMap = {
+      TECHNICAL: "TECHNICAL",
+      SHOOTING: "SHOOT_FINISH",
+      TACTICAL: "TACTICAL_TEAM",
+      SCRIMMAGE: "GAME_5V5",
+      PHYSICAL: "PHYSICAL",
+      RECOVERY: "RECOVERY_PREMATCH"
+    };
+    return legacyMap[legacy] ? [legacyMap[legacy]] : [];
+  }
+
+  _trainingFocusLabel(code) {
+    return TRAINING_FOCUS_LABELS[String(code || "").toUpperCase()] || String(code || "");
+  }
+
+  _renderTrainingFocusChecks(selectedCodes = [], inputName = "p360-training-focus") {
+    const selected = new Set((selectedCodes || []).map(code => String(code).toUpperCase()));
+    return `
+      <div class="p360-focus-grid" role="group" aria-label="Focos de entrenamiento">
+        ${TRAINING_FOCUS_OPTIONS.map(item => `
+          <label class="p360-focus-chip ${selected.has(item.code) ? "is-selected" : ""}">
+            <input
+              type="checkbox"
+              name="${escapeHtml(inputName)}"
+              value="${escapeHtml(item.code)}"
+              ${selected.has(item.code) ? "checked" : ""}
+            />
+            <span class="p360-focus-icon">${escapeHtml(item.icon)}</span>
+            <span>${escapeHtml(item.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  _quickTrainingTitle(codes = []) {
+    const labels = (codes || []).map(code => this._trainingFocusLabel(code)).filter(Boolean);
+    if (!labels.length) return "Entrenamiento";
+    return `Entrenamiento · ${labels.slice(0, 3).join(" + ")}${labels.length > 3 ? " +" : ""}`;
+  }
+
+  _latestSessionDefaults() {
+    const session = (this.sessions || []).find(row => String(row?.status || "").toUpperCase() !== "ARCHIVED") || null;
+    return {
+      start: String(session?.start_time || "").slice(0, 5),
+      end: String(session?.end_time || "").slice(0, 5),
+      intensity: session?.intensity ?? "",
+      focuses: this._trainingFocusCodes(session)
+    };
+  }
+
   _sessionSummary() {
     const sessions = this.sessions.filter(session => session.status !== "ARCHIVED");
     const totalMinutes = sessions.reduce(
