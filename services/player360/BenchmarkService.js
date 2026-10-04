@@ -64,7 +64,7 @@ export class BenchmarkService {
     let network=[];
     if(this.client?.rpc){
       const {data,error}=await this.client.rpc("iq_v58_network_benchmark_snapshot",{
-        p_cohort_key:cohortKey,p_metric_codes:BENCHMARK_METRICS.map(m=>m.code)
+        p_team_season_id:teamSeasonId,p_cohort_key:cohortKey,p_metric_codes:BENCHMARK_METRICS.map(m=>m.code)
       });
       if(!error&&Array.isArray(data))network=data;
     }
