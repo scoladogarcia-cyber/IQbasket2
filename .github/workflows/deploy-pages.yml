@@ -34,6 +34,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -91,10 +92,53 @@ jobs:
         with:
           path: ./dist
 
+  wait-for-legacy-pages:
+    name: Wait for branch Pages deploy
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+
+    steps:
+      - name: Let legacy branch Pages finish first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          found=0
+          for attempt in $(seq 1 60); do
+            response="$(curl -fsSL               -H "Accept: application/vnd.github+json"               -H "Authorization: Bearer $GH_TOKEN"               -H "X-GitHub-Api-Version: 2022-11-28"               "https://api.github.com/repos/$REPOSITORY/actions/runs?head_sha=$SHA&per_page=100")"
+            state="$(printf '%s' "$response" | node -e '
+              let raw="";
+              process.stdin.on("data",c=>raw+=c);
+              process.stdin.on("end",()=>{
+                const data=JSON.parse(raw);
+                const run=(data.workflow_runs||[]).find(r=>r.name==="pages build and deployment");
+                process.stdout.write(run ? (run.status+"|"+(run.conclusion||"")) : "missing|");
+              });
+            ')"
+            status="${state%%|*}"
+            conclusion="${state#*|}"
+            if [ "$status" = "completed" ]; then
+              echo "Legacy Pages finished: $conclusion. Custom Vite deploy can publish last."
+              exit 0
+            fi
+            if [ "$status" != "missing" ]; then
+              found=1
+              echo "Legacy Pages is $status; waiting so it cannot overwrite the Vite build..."
+            elif [ "$found" -eq 0 ] && [ "$attempt" -ge 6 ]; then
+              echo "No legacy Pages run detected; continuing (repository may already use Actions-only Pages)."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Legacy Pages did not finish within the wait window; continuing with the custom deploy as the final attempt."
+
   deploy:
     name: Publish GitHub Pages
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: [build, wait-for-legacy-pages]
     runs-on: ubuntu-latest
     # GitHub Pages CDN propagation can occasionally exceed the action default
     # of 10 minutes. Keep the job deadline above the action deadline so the
