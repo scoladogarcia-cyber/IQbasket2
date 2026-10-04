@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const legacy=fs.readFileSync(new URL("../views/ReportsViewLegacyV36.js",import.meta.url),"utf8");
+const v53=fs.readFileSync(new URL("../views/ReportsViewV53.js",import.meta.url),"utf8");
+assert.match(legacy,/_getSeasonStatsList\(gamesOverride = null\)/);
+assert.match(legacy,/const seasonList = this\._getSeasonStatsList\(selectedGames\)/);
+assert.match(legacy,/_renderSinglePlayerCard\(p, selectedGames\)/);
+assert.match(v53,/async _exportCompleteSeason\(button\)/);
+assert.match(v53,/const selected=this\._selectionGames\(\)/);
+assert.match(v53,/Exportar selección actual/);
+assert.match(v53,/_refreshCompleteSelectionButton\(container\)/);
+console.log("reports-game-selection-v54-contract OK");
