@@ -149,31 +149,42 @@ export class TrainingService {
     sessionDate,
     title,
     objective = null,
+    notes = null,
     durationMinutes = null,
     intensity = null,
     startTime = null,
     endTime = null,
     blocks = [],
-    participants = []
+    participants = [],
+    focusCodes = [],
+    cloneSourceId = null,
+    entryMode = "QUICK"
   } = {}) {
     this._assertReady();
     assertRequired(teamSeasonId, "teamSeasonId");
     assertRequired(sessionDate, "sessionDate");
     assertRequired(title, "title");
+    if (!Array.isArray(focusCodes) || focusCodes.length === 0) {
+      throw new Error("TrainingService: selecciona al menos un foco de entrenamiento.");
+    }
 
     const { data, error } = await this.supabase.rpc(
-      "iq_v4_create_training_session",
+      "iq_v55_create_training_session",
       {
         p_team_season_id: teamSeasonId,
         p_session_date: sessionDate,
         p_title: title,
         p_objective: objective,
+        p_notes: notes,
         p_duration_minutes: durationMinutes,
         p_intensity: intensity,
         p_start_time: startTime,
         p_end_time: endTime,
         p_blocks: normalizeArray(blocks),
-        p_participants: normalizeArray(participants)
+        p_participants: normalizeArray(participants),
+        p_focus_codes: focusCodes,
+        p_clone_source_id: cloneSourceId,
+        p_entry_mode: String(entryMode || "QUICK").toUpperCase()
       }
     );
 
