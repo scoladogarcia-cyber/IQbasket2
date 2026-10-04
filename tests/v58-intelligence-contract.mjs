@@ -89,15 +89,19 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,migration,permissions]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
+    readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
+    readFile(new URL("../views/Player360View.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql",import.meta.url),"utf8"),
     readFile(new URL("../security/permissions.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
-  assert.match(registry,/TrainingIntelligenceV58View/);
-  assert.match(registry,/Player360BenchmarkV58View/);
+  assert.match(registry,/TrainingCompleteEditV54View/);
+  assert.match(registry,/new Player360View\(supabase, authController\)/);
+  assert.match(trainingView,/TrainingIntelligencePanelV58/);
+  assert.match(player360View,/Player360BenchmarkPanelV58/);
   assert.match(liveView,/_beforeFinishLiveCapture/);
   assert.match(liveView,/liveConflict/);
   assert.match(migration,/create schema if not exists iq_v58_private/i);
@@ -105,6 +109,8 @@ class MemoryStorage {
   assert.match(migration,/GAME_CAPTURE_CONFLICT/i);
   assert.match(migration,/revoke all on schema iq_v58_private from public, anon, authenticated/i);
   assert.match(migration,/sample_size < 20 then 'HIDDEN'/i);
+  assert.match(migration,/iq_v4_can_view_longitudinal_analytics\(p_team_season_id\)/i);
+  assert.match(migration,/from public, anon/i);
   assert.match(permissions,/VIEW_TRAINING_ANALYTICS/);
   assert.match(permissions,/VIEW_BENCHMARKS/);
 }
