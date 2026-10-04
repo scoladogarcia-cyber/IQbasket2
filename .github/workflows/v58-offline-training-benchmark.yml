@@ -11,6 +11,12 @@ on:
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
+      - "views/TrainingView.js"
+      - "views/training/TrainingCompleteEditV54View.js"
+      - "views/Player360View.js"
+      - "views/player360/LongitudinalAnalyticsPanel.js"
+      - "services/player360/Player360ObservationAssembler.js"
+      - "config/player360-analytics.config.js"
       - "views/training/TrainingIntelligencePanelV58.js"
       - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
@@ -69,6 +75,11 @@ jobs:
           node --check domain/stats/BenchmarkEngine.js
           node --check services/player360/TrainingIntelligenceService.js
           node --check services/player360/BenchmarkService.js
+          node --check services/player360/Player360ObservationAssembler.js
+          node --check config/player360-analytics.config.js
+          node --check views/training/TrainingCompleteEditV54View.js
+          node --check views/Player360View.js
+          node --check views/player360/LongitudinalAnalyticsPanel.js
           node --check services/LazyViewRegistry.js
       - name: V58 contracts
         run: node tests/v58-intelligence-contract.mjs
