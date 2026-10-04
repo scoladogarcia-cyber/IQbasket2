@@ -9,8 +9,10 @@
 import { normalizePlayer360Observation } from "../../domain/player360/contracts.js";
 import {
   PLAYER360_LONGITUDINAL_ASSOCIATIONS,
-  PLAYER360_LONGITUDINAL_SOURCE_METRICS
+  PLAYER360_LONGITUDINAL_SOURCE_METRICS,
+  PLAYER360_TRAINING_FOCUS_ASSOCIATIONS
 } from "../../config/player360-analytics.config.js";
+import { TRAINING_FOCUS_LABELS } from "../../config/trainingEditV54.config.js";
 import {
   PLAYER360_SOURCE_TYPE,
   PLAYER360_SENSITIVITY
@@ -148,11 +150,12 @@ export class Player360ObservationAssembler {
       );
       if (!participant) return;
 
+      const occurredAt = isoInstant(session.session_date);
       addMappedObservations({
         target: observations,
         source: participant,
         sourceId: session.id,
-        occurredAt: isoInstant(session.session_date),
+        occurredAt,
         playerId,
         teamSeasonId,
         module: "training",
@@ -165,6 +168,68 @@ export class Player360ObservationAssembler {
           attendance_status: participant.attendance_status || null
         }
       });
+
+      const participatedMinutes = finite(participant?.participated_minutes);
+      const focusCodes = [...new Set(
+        (Array.isArray(session?.metadata?.training_focus_codes)
+          ? session.metadata.training_focus_codes
+          : [])
+          .map(code => String(code || "").trim().toUpperCase())
+          .filter(Boolean)
+      )];
+
+      if (occurredAt && participatedMinutes !== null && participatedMinutes > 0) {
+        const sessionMinutes = finite(session?.duration_minutes);
+        const allocation = session?.metadata?.training_focus_minutes;
+        const allocationObject = allocation && typeof allocation === "object" && !Array.isArray(allocation)
+          ? allocation
+          : {};
+        const participationRatio = sessionMinutes && sessionMinutes > 0
+          ? Math.min(1, Math.max(0, participatedMinutes / sessionMinutes))
+          : 1;
+
+        focusCodes.forEach(focusCode => {
+          const metricCode = `FOCUS_${focusCode}_MINUTES`;
+          const explicitFocusMinutes = finite(allocationObject?.[focusCode]);
+          const exposureMinutes = explicitFocusMinutes !== null
+            ? explicitFocusMinutes * participationRatio
+            : participatedMinutes;
+          const semantics = explicitFocusMinutes !== null
+            ? "PROPORTIONAL_EXPLICIT_FOCUS_DOSE"
+            : "PLAYER_MINUTES_IN_SESSION_CONTAINING_FOCUS";
+
+          definitions.push({
+            module: "training",
+            metric_code: metricCode,
+            unit: "MIN",
+            aggregation: "SUM"
+          });
+          labels[`training.${metricCode}`] =
+            `Exposición ${TRAINING_FOCUS_LABELS[focusCode] || focusCode}`;
+
+          observations.push(normalizePlayer360Observation({
+            module: "training",
+            player_id: playerId,
+            team_season_id: teamSeasonId,
+            occurred_at: occurredAt,
+            source_type: PLAYER360_SOURCE_TYPE.CLUB_COACH,
+            source_id: session.id,
+            metric_code: metricCode,
+            value: exposureMinutes,
+            unit: "MIN",
+            quality: explicitFocusMinutes !== null ? 1 : 0.75,
+            sensitivity: PLAYER360_SENSITIVITY.STANDARD,
+            provenance: {
+              source_table: "training_sessions",
+              training_session_id: session.id,
+              focus_code: focusCode,
+              semantics,
+              explicit_focus_minutes: explicitFocusMinutes,
+              participation_ratio: participationRatio
+            }
+          }));
+        });
+      }
     });
 
     (externalSessions || [])
@@ -245,12 +310,27 @@ export class Player360ObservationAssembler {
     const definitionKeys = new Set(metricDefinitions.map(
       definition => `${definition.module}.${definition.metric_code}`
     ));
-    const associationDefinitions = PLAYER360_LONGITUDINAL_ASSOCIATIONS
+    const configuredAssociations = PLAYER360_LONGITUDINAL_ASSOCIATIONS
       .filter(definition =>
         definitionKeys.has(definition.left)
         && definitionKeys.has(definition.right)
       )
       .map(({ left, right, lag_buckets }) => ({ left, right, lag_buckets }));
+
+    const focusMetricKeys = metricDefinitions
+      .filter(definition => definition.module === "training" && String(definition.metric_code || "").startsWith("FOCUS_"))
+      .map(definition => `${definition.module}.${definition.metric_code}`);
+    const focusAssociations = [];
+    focusMetricKeys.forEach(left => {
+      PLAYER360_TRAINING_FOCUS_ASSOCIATIONS.outcomes.forEach(right => {
+        if (!definitionKeys.has(right)) return;
+        PLAYER360_TRAINING_FOCUS_ASSOCIATIONS.lags.forEach(lag_buckets => {
+          focusAssociations.push({ left, right, lag_buckets });
+        });
+      });
+    });
+
+    const associationDefinitions = [...configuredAssociations, ...focusAssociations];
 
     return Object.freeze({
       observations: Object.freeze(observations),

@@ -22,8 +22,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new AdvancedStatsView(gameController);
   },
   boxscore: async ({ supabase, authController }) => {
-    const { ScopedGameBoxScoreLiveV39View } = await import("../views/games/ScopedGameBoxScoreLiveV39View.js");
-    return new ScopedGameBoxScoreLiveV39View(supabase, authController);
+    const { ScopedGameBoxScoreLiveV58View } = await import("../views/games/ScopedGameBoxScoreLiveV58View.js");
+    return new ScopedGameBoxScoreLiveV58View(supabase, authController);
   },
   player: async ({ supabase, authController }) => {
     const { PlayerStatsView } = await import("../views/PlayerStatsView.js");
@@ -141,13 +141,13 @@ const FACTORY_LOADERS = Object.freeze({
 
     const { supabase, authController } = dependencies;
     const [
-      { LiveScoreHUDViewV44 },
+      { LiveScoreHUDViewV58 },
       { attachLiveWriterLeaseV43 },
       { attachLiveCaptureStartGate },
       { GameCaptureDelegationService },
       { GamePlayStateService }
     ] = await Promise.all([
-      import("../views/LiveScoreHUDViewV44.js"),
+      import("../views/LiveScoreHUDViewV58.js"),
       import("../features/game-live/LiveWriterLeaseV43Controller.js"),
       import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
@@ -155,7 +155,7 @@ const FACTORY_LOADERS = Object.freeze({
     ]);
 
     const runtimeClient = supabase || authController?.supabase || null;
-    const view = new LiveScoreHUDViewV44(authController, gameId);
+    const view = new LiveScoreHUDViewV58(authController, gameId);
     view.captureService = new GameCaptureDelegationService(runtimeClient);
     view.playStateService = new GamePlayStateService(runtimeClient);
 

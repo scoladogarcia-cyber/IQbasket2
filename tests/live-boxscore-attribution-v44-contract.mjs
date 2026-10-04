@@ -84,8 +84,9 @@ assert.equal(counters.get(playerB).fg3_attempted, 2);
 assert.equal(counters.get(playerB).off_reb, 1);
 assert.equal(counters.get(playerB).fouls_committed, 1);
 
-const [viewSource, registrySource, v38Source, releaseText] = await Promise.all([
+const [viewSource, v58Source, registrySource, v38Source, releaseText] = await Promise.all([
   read("views/LiveScoreHUDViewV44.js"),
+  read("views/LiveScoreHUDViewV58.js"),
   read("services/LazyViewRegistry.js"),
   read("views/LiveScoreHUDViewV38.js"),
   read("release.json")
@@ -101,7 +102,9 @@ assert.match(viewSource, /players\.length === 5/);
 assert.match(viewSource, /position:fixed/);
 assert.match(viewSource, /_applyProjectedStatsToActaMap/);
 assert.match(viewSource, /super\._bindActaEvents/);
-assert.match(registrySource, /LiveScoreHUDViewV44/);
+// V58 is the production adapter but must preserve V44 attribution by inheritance.
+assert.match(v58Source, /extends\s+LiveScoreHUDViewV44/);
+assert.match(registrySource, /LiveScoreHUDViewV58/);
 assert.match(registrySource, /attachLiveWriterLeaseV43/);
 assert.match(registrySource, /attachLiveCaptureStartGate/);
 

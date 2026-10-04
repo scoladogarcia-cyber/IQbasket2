@@ -67,6 +67,6 @@ const p1=analytics.players.find(x=>x.playerId==="p1");
 assert.equal(p1.participatedMinutes,140);
 assert.equal(p1.focuses.find(x=>x.code==="GAME_5V5").playerExposureMinutes,80);
 assert.equal(analytics.semantics.causalClaimAllowed,false);
-assert.match(analytics.semantics.playerExposureMinutes,/NOT_FOCUS_ALLOCATION/);
+assert.match(analytics.semantics.playerExposureMinutes,/ELSE_PLAYER_MINUTES_IN_SESSION_WITH_FOCUS/);
 
 console.log("PASS Training V55: quick focus taxonomy, clone, exports and non-causal longitudinal exposure.");

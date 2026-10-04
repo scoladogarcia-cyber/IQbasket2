@@ -14,6 +14,7 @@ import {
   PLAYER360_LONGITUDINAL_ASSOCIATIONS,
   PLAYER360_LONGITUDINAL_SOURCE_METRICS
 } from "../../config/player360-analytics.config.js";
+import { TRAINING_FOCUS_LABELS } from "../../config/trainingEditV54.config.js";
 
 function escapeHtml(value = "") {
   return String(value ?? "")
@@ -109,6 +110,13 @@ export class LongitudinalAnalyticsPanel {
         String(row?.code || row?.metric_code || "").toUpperCase() === code.toUpperCase()
       );
       return metric?.name || code;
+    }
+
+    if (normalized.startsWith("training.FOCUS_") && normalized.endsWith("_MINUTES")) {
+      const code = normalized
+        .replace("training.FOCUS_", "")
+        .replace(/_MINUTES$/, "");
+      return "Exposición " + (TRAINING_FOCUS_LABELS[code] || code);
     }
 
     return normalized || "Métrica";

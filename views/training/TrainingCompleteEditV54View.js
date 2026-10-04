@@ -7,6 +7,7 @@ import { TrainingView } from '../TrainingView.js';
 import { DataStore } from '../../services/DataStore.js';
 import { Permission } from '../../security/PermissionService.js';
 import { TrainingCompleteEditV54Service } from '../../services/player360/TrainingCompleteEditV54Service.js';
+import { TrainingIntelligencePanelV58 } from './TrainingIntelligencePanelV58.js';
 import { BLOCK_PARTICIPATION_OPTIONS, BLOCK_EXCEPTION_OPTIONS } from '../../config/trainingEditV54.config.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -35,6 +36,13 @@ export class TrainingCompleteEditV54View extends TrainingView {
     this.editPlayerPage=1;
     this.editPlayerRequestSeq=0;
     this.editPlayerSearchTimer=null;
+    this.intelligencePanel=new TrainingIntelligencePanelV58({
+      client:this.supabase,
+      can:permission=>this._can(permission),
+      getSessions:()=>this.sessions||[],
+      getTeamSeasonId:()=>this.teamSeasonId,
+      onRefresh:()=>this.render(this.containerId,this.teamId)
+    });
   }
 
   async _load() {
@@ -558,6 +566,14 @@ export class TrainingCompleteEditV54View extends TrainingView {
         await this.render(this.containerId,this.teamId);
       }catch(error){console.error('[Training V54] Guardado cancelado:',error);status.textContent=`No se ha guardado nada: ${error.message||error}`;save.disabled=false;}
     });
+  }
+
+  async render(containerId='dashboard-content-area',teamId=null) {
+    await super.render(containerId,teamId);
+    const container=document.getElementById(containerId);
+    if(!container)return;
+    const root=container.querySelector('.p360-training-view')||container;
+    this.intelligencePanel.mount(root);
   }
 
   _renderStyles() {
