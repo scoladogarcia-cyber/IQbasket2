@@ -179,8 +179,25 @@ export class Player360ObservationAssembler {
       )];
 
       if (occurredAt && participatedMinutes !== null && participatedMinutes > 0) {
+        const sessionMinutes = finite(session?.duration_minutes);
+        const allocation = session?.metadata?.training_focus_minutes;
+        const allocationObject = allocation && typeof allocation === "object" && !Array.isArray(allocation)
+          ? allocation
+          : {};
+        const participationRatio = sessionMinutes && sessionMinutes > 0
+          ? Math.min(1, Math.max(0, participatedMinutes / sessionMinutes))
+          : 1;
+
         focusCodes.forEach(focusCode => {
           const metricCode = `FOCUS_${focusCode}_MINUTES`;
+          const explicitFocusMinutes = finite(allocationObject?.[focusCode]);
+          const exposureMinutes = explicitFocusMinutes !== null
+            ? explicitFocusMinutes * participationRatio
+            : participatedMinutes;
+          const semantics = explicitFocusMinutes !== null
+            ? "PROPORTIONAL_EXPLICIT_FOCUS_DOSE"
+            : "PLAYER_MINUTES_IN_SESSION_CONTAINING_FOCUS";
+
           definitions.push({
             module: "training",
             metric_code: metricCode,
@@ -198,15 +215,17 @@ export class Player360ObservationAssembler {
             source_type: PLAYER360_SOURCE_TYPE.CLUB_COACH,
             source_id: session.id,
             metric_code: metricCode,
-            value: participatedMinutes,
+            value: exposureMinutes,
             unit: "MIN",
-            quality: 1,
+            quality: explicitFocusMinutes !== null ? 1 : 0.75,
             sensitivity: PLAYER360_SENSITIVITY.STANDARD,
             provenance: {
               source_table: "training_sessions",
               training_session_id: session.id,
               focus_code: focusCode,
-              semantics: "PLAYER_MINUTES_IN_SESSION_CONTAINING_FOCUS"
+              semantics,
+              explicit_focus_minutes: explicitFocusMinutes,
+              participation_ratio: participationRatio
             }
           }));
         });
