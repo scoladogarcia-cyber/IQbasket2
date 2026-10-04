@@ -16,6 +16,23 @@ try {
     const teamId="11111111-1111-4111-8111-111111111111";
     const seasonId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const players=[1,2,3].map(i=>({id:`10000000-0000-4000-8000-00000000000${i}`,first_name:`Jugador ${i}`,last_name:"Test",jersey:i}));
+    const otherPlayers=Array.from({length:17},(_,index)=>({
+      id:`90000000-0000-4000-8000-${String(index+1).padStart(12,"0")}`,
+      first_name:`Invitado ${index+1}`,
+      last_name:"Memoria",
+      jersey:20+index,
+      primary_position:"Alero",
+      team_name:"Otro equipo",
+      is_current_roster:false,
+      is_current_team:false
+    }));
+    const directoryPlayers=[
+      ...players.map(p=>({
+        player_id:p.id,first_name:p.first_name,last_name:p.last_name,jersey:p.jersey,
+        primary_position:"Base",team_name:"Equipo prueba",is_current_roster:true,is_current_team:true
+      })),
+      ...otherPlayers.map(p=>({player_id:p.id,...p}))
+    ];
     const source={
       id:"20000000-0000-4000-8000-000000000001",team_season_id:seasonId,session_date:"2026-10-02",
       title:"Trabajo previo",start_time:"19:00:00",end_time:"20:20:00",duration_minutes:80,intensity:6,status:"COMPLETED",
@@ -40,6 +57,17 @@ try {
       this.completeEditReady=true;this.lastError=null;
     };
     view.service.createSession=async payload=>{window.__v55CreateCalls.push(structuredClone(payload));return "new-session";};
+    view.playerDirectoryService.search=async ({query="",page=1,pageSize=15})=>{
+      const q=String(query||"").trim().toLowerCase();
+      const filtered=q
+        ? directoryPlayers.filter(p=>[`${p.first_name} ${p.last_name}`,p.team_name,p.jersey].join(" ").toLowerCase().includes(q))
+        : directoryPlayers;
+      const start=(page-1)*pageSize;
+      return {
+        rows:filtered.slice(start,start+pageSize).map(p=>({...p,total_count:filtered.length})),
+        page,pageSize,total:filtered.length,pages:filtered.length?Math.ceil(filtered.length/pageSize):0
+      };
+    };
     document.body.innerHTML='<main id="v55-test"></main>';
     window.__v55CreateCalls=[];
     window.__v55View=view;
@@ -49,6 +77,8 @@ try {
   await page.locator("#p360-create-training-panel > summary").click();
   assert.equal(await page.locator('input[name="p360-training-focus"]').count(),6);
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),3);
+  assert.equal(await page.locator('input[name="p360-training-player"]').count(),15);
+  assert.match(await page.locator(".p360-player-pagination").textContent(),/máximo 15/);
 
   await page.locator("#p360-clone-source").selectOption("20000000-0000-4000-8000-000000000001");
   await page.locator("#p360-clone-training").click();
@@ -62,6 +92,16 @@ try {
   assert.equal(await page.locator(".p360-block-row").count(),1);
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),3);
 
+  await page.locator("#p360-player-search").fill("Invitado 17");
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator('input[name="p360-training-player"]').count(),1);
+  await page.locator('input[name="p360-training-player"]').check();
+  assert.match(await page.locator(".p360-selected-count").textContent(),/4 seleccionado/);
+  await page.locator("#p360-player-search").fill("");
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator('input[name="p360-training-player"]').count(),15);
+  assert.match(await page.locator(".p360-selected-count").textContent(),/4 seleccionado/);
+
   await page.locator("#p360-training-date").fill("2026-10-04");
   await page.locator("#p360-training-notes").fill("Salida de presión y finalizaciones con contacto.");
   await page.locator('input[name="p360-training-focus"][value="SHOOT_FINISH"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
@@ -74,7 +114,8 @@ try {
   assert.equal(saved.entryMode,"CLONE");
   assert.equal(saved.notes,"Salida de presión y finalizaciones con contacto.");
   assert.equal(saved.durationMinutes,80);
-  assert.equal(saved.participants.length,3);
+  assert.equal(saved.participants.length,4);
+  assert.ok(saved.participants.some(row=>row.player_id==="90000000-0000-4000-8000-000000000017"));
   assert.equal(saved.blocks.length,1);
   assert.ok(saved.title.includes("Técnica"));
   console.log(`PASS Training V55 browser ${process.env.QA_BROWSER||"chromium"}: quick checks, default roster and safe clone.`);
