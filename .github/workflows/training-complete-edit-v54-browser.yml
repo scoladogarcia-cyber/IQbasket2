@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'views/TrainingView.js'
       - 'views/training/**'
       - 'services/player360/TrainingService.js'
       - 'services/player360/TrainingCompleteEditV54Service.js'
@@ -13,12 +14,15 @@ on:
       - 'config/trainingEditV54.config.js'
       - 'supabase/migrations/20261004173000_training_ux_v55.sql'
       - 'tests/training-complete-edit-v54-browser.mjs'
+      - 'tests/training-ux-v55-browser.mjs'
       - '.github/workflows/training-complete-edit-v54-browser.yml'
   push:
     branches: [main]
     paths:
+      - 'views/TrainingView.js'
       - 'views/training/**'
       - 'tests/training-complete-edit-v54-browser.mjs'
+      - 'tests/training-ux-v55-browser.mjs'
 
 permissions:
   contents: read
@@ -55,6 +59,10 @@ jobs:
         env:
           QA_BROWSER: ${{ matrix.browser }}
         run: node tests/training-complete-edit-v54-browser.mjs
+      - name: Verify Training V55 quick flow on browser
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/training-ux-v55-browser.mjs
       - name: Debug Vite on failure
         if: failure()
         run: cat /tmp/training-v54-vite.log || true
