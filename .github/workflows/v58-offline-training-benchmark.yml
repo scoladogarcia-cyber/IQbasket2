@@ -11,8 +11,8 @@ on:
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
-      - "views/training/TrainingIntelligenceV58View.js"
-      - "views/player360/Player360BenchmarkV58View.js"
+      - "views/training/TrainingIntelligencePanelV58.js"
+      - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
       - "domain/stats/BenchmarkEngine.js"
       - "services/player360/TrainingIntelligenceService.js"
@@ -30,8 +30,8 @@ on:
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
-      - "views/training/TrainingIntelligenceV58View.js"
-      - "views/player360/Player360BenchmarkV58View.js"
+      - "views/training/TrainingIntelligencePanelV58.js"
+      - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
       - "domain/stats/BenchmarkEngine.js"
       - "services/player360/TrainingIntelligenceService.js"
@@ -63,8 +63,8 @@ jobs:
           node --check services/games/LiveCaptureSyncService.js
           node --check services/games/GameCaptureDelegationService.js
           node --check views/LiveScoreHUDViewV58.js
-          node --check views/training/TrainingIntelligenceV58View.js
-          node --check views/player360/Player360BenchmarkV58View.js
+          node --check views/training/TrainingIntelligencePanelV58.js
+          node --check views/player360/Player360BenchmarkPanelV58.js
           node --check domain/player360/TrainingIntelligenceAnalytics.js
           node --check domain/stats/BenchmarkEngine.js
           node --check services/player360/TrainingIntelligenceService.js
