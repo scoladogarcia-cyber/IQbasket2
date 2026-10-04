@@ -112,9 +112,9 @@ export class LongitudinalAnalyticsPanel {
       return metric?.name || code;
     }
 
-    if (normalized.startsWith("training_focus.FOCUS_") && normalized.endsWith("_MINUTES")) {
+    if (normalized.startsWith("training.FOCUS_") && normalized.endsWith("_MINUTES")) {
       const code = normalized
-        .replace("training_focus.FOCUS_", "")
+        .replace("training.FOCUS_", "")
         .replace(/_MINUTES$/, "");
       return "Exposición " + (TRAINING_FOCUS_LABELS[code] || code);
     }
