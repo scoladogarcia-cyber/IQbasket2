@@ -14,6 +14,7 @@ try {
     const teamId='11111111-1111-4111-8111-111111111111';
     const seasonId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const players=[1,2,3].map(i=>({id:`10000000-0000-4000-8000-00000000000${i}`,first_name:`Jugador ${i}`,last_name:'Test',jersey:i}));
+    const guest={id:'90000000-0000-4000-8000-000000000001',first_name:'Invitado',last_name:'Memoria',jersey:44,primary_position:'Base',team_name:'Otro equipo'};
     const session={id:'20000000-0000-4000-8000-000000000001',team_season_id:seasonId,session_date:'2026-09-17',
       title:'Entreno inicial',start_time:'20:00:00',end_time:'21:00:00',duration_minutes:60,intensity:7,status:'PLANNED',
       notes:null,objective:'Tiro',metadata:{training_type:'TECHNICAL',training_focus_codes:['TECHNICAL']},updated_at:'2026-09-21T06:00:00+00:00',
@@ -39,6 +40,16 @@ try {
       this.capabilities={ready:true,training_core:true};this.blockAssignments=assignments;
       this.completeEditReady=true;this.lastError=null;};
     view.completeService.saveComplete=async payload=>{window.__v54Calls.push(payload);return session.id;};
+    view.playerDirectoryService.search=async ({query='',page=1,pageSize=15})=>{
+      const rows=[
+        ...players.map(p=>({player_id:p.id,first_name:p.first_name,last_name:p.last_name,jersey:p.jersey,primary_position:'Base',team_name:'Equipo prueba',is_current_roster:true,is_current_team:true})),
+        {player_id:guest.id,first_name:guest.first_name,last_name:guest.last_name,jersey:guest.jersey,primary_position:guest.primary_position,team_name:guest.team_name,is_current_roster:false,is_current_team:false}
+      ];
+      const q=String(query||'').toLowerCase();
+      const filtered=q?rows.filter(p=>[`${p.first_name} ${p.last_name}`,p.team_name,p.jersey].join(' ').toLowerCase().includes(q)):rows;
+      const start=(page-1)*pageSize;
+      return {rows:filtered.slice(start,start+pageSize),page,pageSize,total:filtered.length,pages:filtered.length?Math.ceil(filtered.length/pageSize):0};
+    };
     document.body.innerHTML='<main id="v54-test"></main>';
     window.__v54Calls=[];
     window.__v54View=view;
@@ -50,10 +61,10 @@ try {
   assert.equal(await form.locator('.v54-date').inputValue(),'2026-09-17');
   assert.equal(await form.locator('.v55-edit-advanced').getAttribute('open'),null);
   assert.equal(await form.locator('.v55-edit-roster').getAttribute('open'),null);
-  assert.equal(await form.locator('.v54-person').count(),3);
-  // Changing the date must warn rather than silently discard a confirmed player.
+  assert.equal(await form.locator('.v54-person').count(),2);
+  // Existing participants remain explicit historical facts even if the date is corrected.
   await form.locator('.v54-date').fill('2026-09-08');
-  assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),true);
+  assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
   await form.locator('.v54-date').fill('2026-09-18');
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
   await form.locator('input[name="v55-edit-focus"][value="TECHNICAL"]').evaluate(el=>{el.checked=false;el.dispatchEvent(new Event("change",{bubbles:true}));});
@@ -69,9 +80,15 @@ try {
   await person1.locator('.v54-assignment').nth(0).locator('.v54-part-status').selectOption('FULL');
   await person1.locator('.v54-assignment').nth(1).locator('.v54-part-status').selectOption('NOT_ATTENDED');
   await person1.locator('.v54-assignment').nth(1).locator('.v54-part-reason').selectOption('LIMITED');
-  // Remove another participant explicitly, add a missing one, and add/delete a draft block.
+  // Remove another participant explicitly and add a guest from the paginated directory.
   await form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000002"] .v54-person-included').uncheck();
-  await form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000003"] .v54-person-included').check();
+  await form.locator('.v57-edit-player-search').fill('Invitado Memoria');
+  await page.waitForTimeout(350);
+  assert.equal(await form.locator('.v57-edit-player-result').count(),1);
+  await form.locator('.v57-add-edit-player').click();
+  const guestRow=form.locator('.v54-person[data-player-id="90000000-0000-4000-8000-000000000001"]');
+  await guestRow.waitFor();
+  assert.equal(await guestRow.locator('.v54-person-included').isChecked(),true);
   await form.locator('.v54-add-block').click();
   await form.locator('.v54-block').nth(2).locator('.v54-remove-block').click();
   await form.locator('.v54-add-block').click();
@@ -87,6 +104,7 @@ try {
   assert.equal(saved.blocks.length,3);
   assert.equal(saved.blocks[2].title,'Bloque añadido');
   assert.equal(saved.participants.length,2);
+  assert.ok(saved.participants.some(row=>row.player_id==='90000000-0000-4000-8000-000000000001'));
   assert.equal(saved.removed.length,1);
   assert.equal(saved.confirmedRemovals,true);
   assert.equal(saved.participants[0].blocks[1].status,'NOT_ATTENDED');
