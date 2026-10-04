@@ -423,18 +423,43 @@ export class TrainingView {
 
     const date = this._defaultDate();
     const bounds = this._dateInputBounds();
+    const defaults = this._latestSessionDefaults();
+    const recent = (this.sessions || [])
+      .filter(session => String(session?.status || "").toUpperCase() !== "ARCHIVED")
+      .slice(0, 8);
 
     return `
-      <details class="p360-create-panel" id="p360-create-training-panel">
+      <details class="p360-create-panel p360-quick-create" id="p360-create-training-panel">
         <summary>
-          <span>＋</span>
-          ${escapeHtml(this.t("player360.training.create", "Crear sesión de entrenamiento"))}
+          <span>⚡</span>
+          ${escapeHtml(this.t("player360.training.create", "Entreno rápido"))}
+          <small>Fecha + focos + guardar. El resto es opcional.</small>
         </summary>
 
         <form id="p360-training-form" class="p360-form">
-          <div class="p360-form-grid">
+          ${recent.length ? `
+            <div class="p360-clone-bar">
+              <div>
+                <strong>📋 ¿Se parece a uno anterior?</strong>
+                <span>Copia estructura, horario y focos. Nunca copia asistencia real, RPE ni evidencias.</span>
+              </div>
+              <select id="p360-clone-source" aria-label="Entrenamiento a copiar">
+                <option value="">Selecciona uno anterior…</option>
+                ${recent.map(session => `
+                  <option value="${escapeHtml(session.id)}">
+                    ${escapeHtml(session.session_date)} · ${escapeHtml(session.title || "Entrenamiento")}
+                  </option>
+                `).join("")}
+              </select>
+              <button type="button" class="p360-secondary-btn" id="p360-clone-training">Usar como base</button>
+            </div>
+          ` : ""}
+
+          <input type="hidden" id="p360-training-clone-source-id" value="" />
+
+          <div class="p360-quick-grid">
             <label>
-              <span>${escapeHtml(this.t("player360.training.date", "Fecha"))}</span>
+              <span>Fecha</span>
               <input
                 type="date"
                 id="p360-training-date"
@@ -444,91 +469,84 @@ export class TrainingView {
                 required
               />
             </label>
-
-            <label class="p360-span-2">
-              <span>${escapeHtml(this.t("player360.training.title", "Nombre de la sesión"))}</span>
-              <input type="text" id="p360-training-title" maxlength="140" placeholder="Ej. Técnica individual + ventajas 2c1" required />
-            </label>
-
             <label>
-              <span>${escapeHtml(this.t("player360.training.start_time", "Inicio"))}</span>
-              <input type="time" id="p360-training-start-time" required />
+              <span>Inicio</span>
+              <input type="time" id="p360-training-start-time" value="${escapeHtml(defaults.start)}" required />
             </label>
-
             <label>
-              <span>${escapeHtml(this.t("player360.training.end_time", "Fin"))}</span>
-              <input type="time" id="p360-training-end-time" required />
+              <span>Fin</span>
+              <input type="time" id="p360-training-end-time" value="${escapeHtml(defaults.end)}" required />
             </label>
-
-            <label>
-              <span>${escapeHtml(this.t("player360.training.duration", "Duración calculada (min)"))}</span>
+            <label class="p360-duration-readonly">
+              <span>Duración</span>
               <input
                 type="number"
                 id="p360-training-duration"
-                min="1"
-                max="600"
-                inputmode="numeric"
                 readonly
                 aria-readonly="true"
-                placeholder="Inicio + fin"
+                value="${escapeHtml(minutesBetweenTimes(defaults.start, defaults.end) ?? "")}"
+                placeholder="—"
               />
             </label>
-
-            <label>
-              <span>${escapeHtml(this.t("player360.training.intensity", "Intensidad prevista 0-10"))}</span>
-              <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
-            </label>
-
-            <label class="p360-span-2">
-              <span>${escapeHtml(this.t("player360.training.objective", "Objetivo principal"))}</span>
-              <textarea id="p360-training-objective" rows="2" maxlength="500" placeholder="Qué queremos provocar o mejorar"></textarea>
-            </label>
           </div>
 
-          <div class="p360-subsection">
-            <div class="p360-subsection-head">
-              <div>
-                <strong>${escapeHtml(this.t("player360.training.blocks", "Bloques de trabajo"))}</strong>
-                <small>${escapeHtml(this.t(
-                  "player360.training.blocks_help",
-                  "Divide la sesión en contenidos independientes para poder analizar después qué se entrenó."
-                ))}</small>
+          <section class="p360-focus-section">
+            <div>
+              <strong>¿Qué se trabajó?</strong>
+              <small>Marca uno o varios. Son categorías amplias para registrar la sesión sin pensar demasiado.</small>
+            </div>
+            ${this._renderTrainingFocusChecks([])}
+          </section>
+
+          <label class="p360-free-note">
+            <span>Algo más que quieras dejar escrito <small>(opcional)</small></span>
+            <textarea id="p360-training-notes" rows="2" maxlength="1000" placeholder="Ej. Mucho trabajo de salida de presión y finalizaciones con contacto."></textarea>
+          </label>
+
+          <details class="p360-advanced-details" id="p360-training-advanced">
+            <summary>Más detalles · opcional</summary>
+            <div class="p360-form-grid">
+              <label class="p360-span-2">
+                <span>Nombre de la sesión</span>
+                <input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" />
+              </label>
+              <label>
+                <span>Intensidad general 0–10</span>
+                <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
+              </label>
+              <label class="p360-span-2">
+                <span>Objetivo principal</span>
+                <textarea id="p360-training-objective" rows="2" maxlength="500" placeholder="Solo si quieres concretarlo"></textarea>
+              </label>
+            </div>
+
+            <section class="p360-subsection">
+              <div class="p360-subsection-head">
+                <div>
+                  <strong>Bloques de trabajo</strong>
+                  <small>Opcional. Úsalos solo cuando te interese repartir contenidos/minutos con más precisión.</small>
+                </div>
+                <button type="button" class="p360-secondary-btn" id="p360-add-block">＋ Añadir bloque</button>
               </div>
-              <button type="button" class="p360-secondary-btn" id="p360-add-block">
-                ＋ ${escapeHtml(this.t("player360.training.add_block", "Añadir bloque"))}
-              </button>
-            </div>
-            <div id="p360-blocks-container">
-              ${this._renderBlockRow(1)}
-            </div>
-          </div>
+              <div id="p360-blocks-container"></div>
+            </section>
 
-          <div class="p360-subsection">
-            <div class="p360-subsection-head">
-              <div>
-                <strong>${escapeHtml(this.t("player360.training.planned_roster", "Jugadores planificados"))}</strong>
-                <small>${escapeHtml(this.t(
-                  "player360.training.planned_roster_help",
-                  "Solo se muestran jugadores elegibles en esa fecha. La asistencia real y el RPE se registran después."
-                ))}</small>
+            <section class="p360-subsection">
+              <div class="p360-subsection-head">
+                <div>
+                  <strong>Plantilla / excepciones</strong>
+                  <small>Todos los jugadores elegibles aparecen marcados por defecto. Desmarca solo a quien no corresponda.</small>
+                </div>
               </div>
-            </div>
-            <div id="p360-training-player-options">
-              ${this._renderParticipantChecklist(date)}
-            </div>
-          </div>
+              <div id="p360-training-player-options">
+                ${this._renderParticipantChecklist(date)}
+              </div>
+            </section>
+          </details>
 
           <div class="p360-form-actions">
-            <button
-              type="button"
-              class="p360-secondary-btn p360-cancel-create"
-              id="p360-cancel-training"
-            >
-              ${escapeHtml(this.t("common.cancel", "Cancelar"))}
-            </button>
-            <button type="submit" class="p360-primary-btn">
-              ${escapeHtml(this.t("player360.training.save_session", "Guardar sesión"))}
-            </button>
+            <button type="button" class="p360-secondary-btn p360-cancel-create" id="p360-cancel-training">Cancelar</button>
+            <button type="submit" class="p360-primary-btn">Guardar entrenamiento</button>
           </div>
         </form>
       </details>
