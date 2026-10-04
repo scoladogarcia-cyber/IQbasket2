@@ -115,9 +115,10 @@ export class ReportsViewV53 extends ReportsViewV50 {
     a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
-  async _exportSelection(kind,status) {
+  async _exportSelection(kind,status,gamesOverride=null) {
     if(this._exchangeBusy)return;
-    const games=this._selectionGames(),context=this._reportContext();
+    const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
+    const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
     const printWindow=kind==="pdf"?window.open("","_blank","width=1024,height=768"):null;
     if(kind==="pdf"&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
@@ -155,7 +156,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     button.textContent=`Preparando ${selected.length} partido(s)…`;
     button.disabled=true;
     try {
-      await this._exportSelection("pdf",status);
+      await this._exportSelection("pdf",status,selected);
       button.title=status.textContent||"Informe generado con la selección actual.";
     } finally {
       if(button.isConnected){
