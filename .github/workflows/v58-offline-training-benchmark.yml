@@ -27,6 +27,9 @@ on:
       - "services/player360/TrainingIntelligenceService.js"
       - "services/player360/BenchmarkService.js"
       - "security/permissions.js"
+      - "docs/architecture/V58_OFFLINE_TRAINING_BENCHMARK.md"
+      - "supabase/migrations/20261004214500_v58_commercial_entitlements.sql"
+      - "security/entitlements.js"
       - "services/LazyViewRegistry.js"
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
       - "tests/v58-intelligence-contract.mjs"
@@ -85,6 +88,7 @@ jobs:
           node --check views/training/TrainingCompleteEditV54View.js
           node --check views/Player360View.js
           node --check views/player360/LongitudinalAnalyticsPanel.js
+          node --check security/entitlements.js
           node --check services/LazyViewRegistry.js
       - name: V58 contracts
         run: node tests/v58-intelligence-contract.mjs
