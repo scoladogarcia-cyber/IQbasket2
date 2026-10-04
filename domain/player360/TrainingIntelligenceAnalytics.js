@@ -26,6 +26,23 @@ function weekStart(value){
 }
 function mean(values){const v=values.filter(Number.isFinite);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
 function round(v,d=1){if(!Number.isFinite(v))return null;const f=10**d;return Math.round(v*f)/f;}
+function rollingSummary(sessions=[],days=7,anchorDate=null){
+  const anchor=anchorDate?new Date(String(anchorDate)+"T23:59:59Z"):null;
+  if(!anchor||Number.isNaN(anchor.getTime()))return {days,sessions:0,sessionMinutes:0,participantMinutes:0,totalLoad:0,avgRpe:null};
+  const from=new Date(anchor.getTime()-(Math.max(1,days)-1)*86400000);
+  let sessionMinutes=0,participantMinutes=0,totalLoad=0;const rpes=[];let count=0;
+  for(const session of sessions){
+    const at=new Date(String(session.session_date||"")+"T12:00:00Z");
+    if(Number.isNaN(at.getTime())||at<from||at>anchor)continue;
+    count+=1;const mins=duration(session);sessionMinutes+=mins;
+    for(const p of rows(session.participants)){
+      const pmins=minutes(p,mins);participantMinutes+=pmins;
+      const rpe=n(p.rpe),load=n(p.internal_load)??(rpe!==null?pmins*rpe:null);
+      if(rpe!==null)rpes.push(rpe);if(load!==null)totalLoad+=load;
+    }
+  }
+  return {days,sessions:count,sessionMinutes,participantMinutes,totalLoad:round(totalLoad,0),avgRpe:round(mean(rpes),1)};
+}
 
 export function buildTrainingIntelligence(sessions=[]){
   const active=rows(sessions).filter(s=>String(s?.status||"").toUpperCase()!=="ARCHIVED");
@@ -96,11 +113,22 @@ export function buildTrainingIntelligence(sessions=[]){
       avgRpe:round(mean(rpes),1),
       totalLoad:round(totalLoad,0),
       focusClassified,
-      focusCoveragePct:active.length?round((focusClassified/active.length)*100):0
+      focusCoveragePct:active.length?round((focusClassified/active.length)*100):0,
+      explicitFocusAllocationCoveragePct:focus.totals.explicitAllocationCoveragePct
     }),
     focuses:focus.focuses,
     players:Object.freeze(playerRows),
     weeks:Object.freeze(weeks),
+    rolling:Object.freeze((()=>{
+      const dates=active.map(s=>String(s.session_date||"")).filter(Boolean).sort();
+      const anchor=dates.at(-1)||null;
+      return {
+        anchorDate:anchor,
+        last7:Object.freeze(rollingSummary(active,7,anchor)),
+        last14:Object.freeze(rollingSummary(active,14,anchor)),
+        last28:Object.freeze(rollingSummary(active,28,anchor))
+      };
+    })()),
     unclassifiedSessionIds:Object.freeze(active.filter(s=>!Array.isArray(s?.metadata?.training_focus_codes)||!s.metadata.training_focus_codes.length).map(s=>String(s.id)))
   });
 }
