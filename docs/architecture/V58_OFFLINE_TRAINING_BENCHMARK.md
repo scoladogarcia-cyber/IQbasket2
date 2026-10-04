@@ -64,7 +64,7 @@ The stable training CRUD remains `TrainingCompleteEditV54View`. V58 composes a s
 - participant minutes;
 - RPE;
 - accumulated internal load;
-- weekly trends;
+- weekly trends and descriptive 7/14/28-day windows;
 - V55 focus distribution;
 - player exposure to each focus;
 - classification coverage;
@@ -74,11 +74,9 @@ Historical focus codes are never inferred and persisted automatically. A coach m
 
 ### Focus semantics
 
-A session tagged `SHOOT_FINISH` for 80 minutes does **not** mean that 80 minutes were exclusively shooting. V58 stores and displays:
+A normal quick session keeps the lightweight contract: a session tagged `SHOOT_FINISH` for 80 minutes means the player was exposed to an 80-minute session containing that focus, **not** that all 80 minutes were exclusively shooting.
 
-> player minutes in a session containing the focus.
-
-Future advanced training allocation can add explicit per-focus minutes without changing this contract.
+V58 now also offers an optional advanced allocation. A coach can distribute approximate minutes among the selected focuses; the total cannot exceed session duration. When present, longitudinal analytics prefer this explicit dose and scale it proportionally for partial attendance. When absent, the lightweight exposure fallback remains unchanged.
 
 ### Training → performance
 
@@ -129,7 +127,7 @@ Reliability policy:
 - 50–99: reasonable;
 - >=100: robust.
 
-The public RPC returns only aggregate quantiles after sports-access authorization. It never exposes cohort members.
+The public RPC returns only aggregate quantiles after sports-access authorization. It never exposes cohort members. When a valid cohort exists, the player percentile is estimated from the aggregate min/P10/P25/P50/P75/P90/max curve; lower-is-better metrics are converted to a performance-oriented percentile.
 
 The current production database does not yet have enough external network cohorts to claim national/regional percentiles. V58 therefore shows no network percentile until a valid aggregate snapshot exists.
 
@@ -202,3 +200,15 @@ V58 is code-complete only when:
 - Supabase migrations and security verification pass.
 
 Field validation remains a separate production-readiness gate for claiming offline capture as fully proven in live competition.
+
+
+## 8. Canonical PBP attribution audit
+
+V58 also closes the post-live attribution gap:
+
+- Game Center and BoxScore read canonical `game_events`, not the legacy `play_by_play_events` projection.
+- Every own-team action displays jersey and player.
+- During Live, the scorer may change the attributed player before finalization.
+- After the match, an authorized editor may reassign one canonical event while the game and season remain open.
+- The server atomically moves the event-derived raw statistic from the old player to the new player, recalculates PIR/Game Score/eFG%/TS%, and records an immutable attribution audit row.
+- Real game data is never modified by deployment or migration; correction occurs only after an explicit user action.
