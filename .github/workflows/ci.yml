@@ -49,6 +49,18 @@ jobs:
       - name: Player 360 Phase 4C route and RBAC integration
         run: node tests/player360-phase4c-route-integration.mjs
 
+      - name: Player Passport catalog contract
+        run: node tests/player-passport-catalog.mjs
+
+      - name: Player Passport domain smoke
+        run: node tests/player-passport-domain-smoke.mjs
+
+      - name: Player Passport route and RBAC
+        run: node tests/player-passport-route-rbac.mjs
+
+      - name: Player Passport SQL structure
+        run: node tests/player-passport-sql-structure.mjs
+
       - name: Player 360 Phase 4D longitudinal foundation
         run: node tests/player360-phase4d-foundation-smoke.mjs
 
