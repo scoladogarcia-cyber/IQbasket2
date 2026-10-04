@@ -19,6 +19,7 @@ import { Permission } from "../security/PermissionService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { AdvancedPlayerStatsCalculator } from "../domain/stats/AdvancedPlayerStatsCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+import { preparePlayerPhoto } from "../services/player/PlayerPhotoService.js";
 
 export class PlayerStatsView {
   /**
@@ -61,6 +62,18 @@ export class PlayerStatsView {
 
   _canEditNotes() {
     return Boolean(this.auth?.canPreview?.(Permission.EDIT_TACTICAL_NOTES));
+  }
+
+  _canViewPlayerPassport(player = this.selectedPlayer) {
+    if (!player?.id) return false;
+    const teamId = this.teamId || player.team_id || player.teamId || null;
+    const context = {
+      teamId,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.(teamId) || null,
+      playerId: player.id,
+      playerTeamId: teamId
+    };
+    return Boolean(this.auth?.canPreview?.(Permission.VIEW_PLAYER_PASSPORT, context));
   }
 
   _canViewPlayer360(player = this.selectedPlayer) {
@@ -304,6 +317,7 @@ export class PlayerStatsView {
     const photo = p.photo_url || p.photoUrl || "";
     const canEditFull = this._canEditFullProfile();
     const canViewPlayer360 = this._canViewPlayer360(p);
+    const canViewPassport = this._canViewPlayerPassport(p);
     const secPosArray = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
     const secPos = secPosArray.map(pos => `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;">${pos}</span>`).join(" ");
 
@@ -335,6 +349,11 @@ export class PlayerStatsView {
           ${canViewPlayer360 ? `
             <a href="#/player360/${encodeURIComponent(String(p.id))}" style="background: #1e3a8a; color: white; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
               🎯 Player 360
+            </a>
+          ` : ""}
+          ${canViewPassport ? `
+            <a href="#/passport/${encodeURIComponent(String(p.id))}" style="background: linear-gradient(135deg,#6d28d9,#4338ca); color: white; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">
+              🪪 Pasaporte
             </a>
           ` : ""}
           ${canEditFull ? `
@@ -694,8 +713,13 @@ export class PlayerStatsView {
               ${photo ? `<img src="${photo}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 2px solid #cbd5e1;" />` : `<div style="width: 96px; height: 96px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 28px;">#${p.jersey ?? p.number ?? '-'}</div>`}
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 260px;">
-              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block;">URL de la Foto de Perfil (photo_url)</label>
-              <input type="text" id="input-photo-url" name="photo_url" value="${photo}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" placeholder="https://... o base64" />
+              <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block;">Fotografía del jugador</label>
+              <input type="file" id="input-photo-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" style="width: 100%; min-height: 44px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; background:white;" />
+              <small style="font-size:10px;color:#64748b;">JPG, PNG o WebP · máximo 6 MB. IQBasket optimiza la imagen antes de guardarla.</small>
+              <details style="font-size:11px;color:#64748b;"><summary style="cursor:pointer;min-height:32px;">Usar una URL en su lugar</summary>
+                <input type="text" id="input-photo-url" name="photo_url" value="${photo}" style="width: 100%; height: 44px; margin-top:6px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;" placeholder="https://..." />
+              </details>
+              <span id="photo-upload-status" role="status" aria-live="polite" style="font-size:11px;color:#7c3aed;font-weight:700;"></span>
             </div>
           </div>
 
@@ -912,18 +936,21 @@ export class PlayerStatsView {
           const photoPreviewBox = container.querySelector("#photo-preview-box");
 
           if (photoInputFile) {
-            photoInputFile.addEventListener("change", (e) => {
-              const file = e.target.files[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  const base64Url = event.target.result;
-                  if (photoInputUrl) photoInputUrl.value = base64Url;
-                  if (photoPreviewBox) {
-                    photoPreviewBox.innerHTML = `<img src="${base64Url}" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 2px solid #cbd5e1;" />`;
-                  }
-                };
-                reader.readAsDataURL(file);
+            photoInputFile.addEventListener("change", async (e) => {
+              const file = e.target.files?.[0];
+              const status = container.querySelector("#photo-upload-status");
+              if (!file) return;
+              try {
+                if (status) status.textContent = "Preparando fotografía…";
+                const preparedUrl = await preparePlayerPhoto(file);
+                if (photoInputUrl) photoInputUrl.value = preparedUrl;
+                if (photoPreviewBox) {
+                  photoPreviewBox.innerHTML = `<img src="${preparedUrl}" alt="Vista previa" style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 2px solid #cbd5e1;" />`;
+                }
+                if (status) status.textContent = "Fotografía preparada. Pulsa Guardar cambios.";
+              } catch (error) {
+                e.target.value = "";
+                if (status) status.textContent = error?.message || "No se ha podido preparar la fotografía.";
               }
             });
           }
