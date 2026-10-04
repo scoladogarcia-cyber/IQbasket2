@@ -1,0 +1,80 @@
+name: IQBasket V58 Offline + Training Intelligence + Benchmark
+
+on:
+  push:
+    branches:
+      - feat/offline-training-benchmark-v58
+      - main
+    paths:
+      - "services/games/LiveOfflineStore.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "views/LiveScoreHUDViewV38.js"
+      - "views/LiveScoreHUDViewV58.js"
+      - "views/training/TrainingIntelligenceV58View.js"
+      - "views/player360/Player360BenchmarkV58View.js"
+      - "domain/player360/TrainingIntelligenceAnalytics.js"
+      - "domain/stats/BenchmarkEngine.js"
+      - "services/player360/TrainingIntelligenceService.js"
+      - "services/player360/BenchmarkService.js"
+      - "security/permissions.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
+      - "tests/v58-intelligence-contract.mjs"
+      - ".github/workflows/v58-offline-training-benchmark.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/games/LiveOfflineStore.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "views/LiveScoreHUDViewV38.js"
+      - "views/LiveScoreHUDViewV58.js"
+      - "views/training/TrainingIntelligenceV58View.js"
+      - "views/player360/Player360BenchmarkV58View.js"
+      - "domain/player360/TrainingIntelligenceAnalytics.js"
+      - "domain/stats/BenchmarkEngine.js"
+      - "services/player360/TrainingIntelligenceService.js"
+      - "services/player360/BenchmarkService.js"
+      - "security/permissions.js"
+      - "services/LazyViewRegistry.js"
+      - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
+      - "tests/v58-intelligence-contract.mjs"
+      - ".github/workflows/v58-offline-training-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check V58 syntax
+        run: |
+          node --check services/games/LiveOfflineStore.js
+          node --check services/games/LiveCaptureSyncService.js
+          node --check services/games/GameCaptureDelegationService.js
+          node --check views/LiveScoreHUDViewV58.js
+          node --check views/training/TrainingIntelligenceV58View.js
+          node --check views/player360/Player360BenchmarkV58View.js
+          node --check domain/player360/TrainingIntelligenceAnalytics.js
+          node --check domain/stats/BenchmarkEngine.js
+          node --check services/player360/TrainingIntelligenceService.js
+          node --check services/player360/BenchmarkService.js
+          node --check services/LazyViewRegistry.js
+      - name: V58 contracts
+        run: node tests/v58-intelligence-contract.mjs
+      - name: Preserve live V38 contract
+        run: node tests/mobile-fast-pbp-v38-contract.mjs
+      - name: Preserve Training V55 contract
+        run: node tests/training-ux-v55-contract.mjs
+      - name: Production build
+        run: npm run build
