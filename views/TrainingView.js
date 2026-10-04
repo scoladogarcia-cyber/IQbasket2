@@ -1690,38 +1690,113 @@ export class TrainingView {
 
     this._bindParticipantSelectionTools(container);
 
+    const trainingForm = container.querySelector("#p360-training-form");
     const trainingDate = container.querySelector("#p360-training-date");
+    const trainingStart = container.querySelector("#p360-training-start-time");
+    const trainingEnd = container.querySelector("#p360-training-end-time");
+    const trainingDuration = container.querySelector("#p360-training-duration");
+    const trainingTitle = container.querySelector("#p360-training-title");
+    const cloneSourceId = container.querySelector("#p360-training-clone-source-id");
+
+    const focusInputs = () => [...container.querySelectorAll('input[name="p360-training-focus"]')];
+    const selectedFocusCodes = () => focusInputs().filter(input => input.checked).map(input => input.value);
+    const syncFocusVisuals = () => {
+      focusInputs().forEach(input => input.closest(".p360-focus-chip")?.classList.toggle("is-selected", input.checked));
+      if (trainingTitle && (!trainingTitle.dataset.manualTitle || trainingTitle.value === "Entrenamiento")) {
+        trainingTitle.value = this._quickTrainingTitle(selectedFocusCodes());
+      }
+    };
+
+    focusInputs().forEach(input => input.addEventListener("change", syncFocusVisuals));
+
     trainingDate?.addEventListener("change", () => {
       this._refreshTrainingPlayerOptions(container, trainingDate.value);
     });
 
-    const trainingStart = container.querySelector("#p360-training-start-time");
-    const trainingEnd = container.querySelector("#p360-training-end-time");
-    const trainingDuration = container.querySelector("#p360-training-duration");
     const syncTrainingDuration = () => {
       if (!trainingDuration) return null;
-      const duration = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
-      trainingDuration.value = duration === null ? "" : String(duration);
-      return duration;
+      const value = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
+      trainingDuration.value = value === null ? "" : String(value);
+      return value;
     };
     trainingStart?.addEventListener("input", syncTrainingDuration);
     trainingEnd?.addEventListener("input", syncTrainingDuration);
+    trainingTitle?.addEventListener("input", () => {
+      trainingTitle.dataset.manualTitle = trainingTitle.value.trim() && trainingTitle.value.trim() !== this._quickTrainingTitle(selectedFocusCodes()) ? "1" : "";
+    });
 
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
 
-    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
-      const panel = container.querySelector("#p360-create-training-panel");
-      const form = container.querySelector("#p360-training-form");
-      if (!form) return;
+    const applyClone = session => {
+      if (!session || !trainingForm) return;
+      const focuses = this._trainingFocusCodes(session);
+      focusInputs().forEach(input => { input.checked = focuses.includes(String(input.value).toUpperCase()); });
+      syncFocusVisuals();
 
-      form.reset();
+      if (trainingStart) trainingStart.value = String(session.start_time || "").slice(0, 5);
+      if (trainingEnd) trainingEnd.value = String(session.end_time || "").slice(0, 5);
+      syncTrainingDuration();
+
+      const intensity = trainingForm.querySelector("#p360-training-intensity");
+      if (intensity) intensity.value = session.intensity ?? "";
+      const objective = trainingForm.querySelector("#p360-training-objective");
+      if (objective) objective.value = session.objective || "";
+      const notes = trainingForm.querySelector("#p360-training-notes");
+      if (notes) notes.value = "";
+
+      if (trainingTitle) {
+        trainingTitle.dataset.manualTitle = "";
+        trainingTitle.value = this._quickTrainingTitle(focuses);
+      }
+      if (cloneSourceId) cloneSourceId.value = session.id || "";
 
       const blocks = container.querySelector("#p360-blocks-container");
-      if (blocks) blocks.innerHTML = this._renderBlockRow(1);
-      blockCounter = 1;
+      if (blocks) {
+        blocks.innerHTML = (session.blocks || []).map((block, index) => this._renderBlockRow(index + 1, block)).join("");
+        blockCounter = (session.blocks || []).length;
+      }
 
-      const date = form.querySelector("#p360-training-date")?.value || this._defaultDate();
+      const advanced = container.querySelector("#p360-training-advanced");
+      if ((session.blocks || []).length && advanced) advanced.open = true;
+
+      const selected = this._eligiblePlayers(trainingDate?.value || this._defaultDate()).map(player => String(player.id));
+      const roster = container.querySelector("#p360-training-player-options");
+      if (roster) {
+        roster.innerHTML = this._renderParticipantChecklist(trainingDate?.value || this._defaultDate(), selected);
+        this._bindParticipantSelectionTools(container);
+      }
+    };
+
+    container.querySelector("#p360-clone-training")?.addEventListener("click", () => {
+      const id = container.querySelector("#p360-clone-source")?.value;
+      const source = (this.sessions || []).find(session => String(session.id) === String(id));
+      if (!source) {
+        alert("Selecciona primero un entrenamiento anterior.");
+        return;
+      }
+      applyClone(source);
+      const panel = container.querySelector("#p360-create-training-panel");
+      if (panel) panel.open = true;
+    });
+
+    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
+      const panel = container.querySelector("#p360-create-training-panel");
+      if (!trainingForm) return;
+
+      trainingForm.reset();
+      if (cloneSourceId) cloneSourceId.value = "";
+      if (trainingTitle) {
+        trainingTitle.dataset.manualTitle = "";
+        trainingTitle.value = "Entrenamiento";
+      }
+      const blocks = container.querySelector("#p360-blocks-container");
+      if (blocks) blocks.innerHTML = "";
+      blockCounter = 0;
+
+      const date = trainingForm.querySelector("#p360-training-date")?.value || this._defaultDate();
       this._refreshTrainingPlayerOptions(container, date);
+      syncTrainingDuration();
+      syncFocusVisuals();
 
       if (panel) panel.open = false;
     });
