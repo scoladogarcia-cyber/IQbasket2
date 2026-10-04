@@ -34,6 +34,7 @@ export class LayoutView {
     if (['training', 'entrenamientos', 'development', 'desarrollo'].includes(r)) return 'training';
     if (['nutrition', 'nutricion'].includes(r)) return 'nutrition';
     if (['player360', 'player-360', 'desarrollo-jugador'].includes(r)) return 'player360';
+    if (['passport', 'player-passport', 'pasaporte'].includes(r)) return 'passport';
     if (['privacy', 'privacy-center', 'privacidad', 'autorizaciones'].includes(r)) return 'privacy';
     if (['feedback', 'beta-feedback', 'tester-feedback'].includes(r)) return 'feedback';
     if (['settings', 'configuracion', 'translations'].includes(r)) return 'settings';
@@ -216,6 +217,7 @@ export class LayoutView {
     const isAiRestricted = !hasRolePermission(Permission.USE_AI);
     const isTrainingRestricted = !hasRolePermission(Permission.VIEW_TRAINING);
     const isNutritionRestricted = !hasRolePermission(Permission.VIEW_NUTRITION);
+    const isPassportRestricted = !hasRolePermission(Permission.VIEW_PLAYER_PASSPORT);
     const canViewPrivacy = hasRolePermission(Permission.VIEW_PRIVACY_AUTHORIZATIONS);
     const canViewBusiness = hasRolePermission(Permission.VIEW_BUSINESS_METRICS);
     const isFamilyCentricRole = ['FAMILIA_TUTOR','JUGADOR','INVITADO'].includes(String(userRole || '').toUpperCase());
@@ -227,6 +229,7 @@ export class LayoutView {
     const myPlayerKey = isPlayerSelfRole ? 'player360' : 'family';
     const myPlayerLabelKey = isFamilyRole ? 'family_workspace_multiple' : 'family_workspace';
     const myPlayerFallback = isFamilyRole ? 'Mis jugadores' : 'Mi desarrollo';
+    const passportRoute = isPlayerSelfRole && ownPlayerId ? `passport/${ownPlayerId}` : 'passport';
 
     const navGroups = [
       {
@@ -267,6 +270,14 @@ export class LayoutView {
             route: "nutrition",
             disabled: isNutritionRestricted,
             svg: '<path d="M12 2v20"></path><path d="M4 7c4 0 8 2 8 6"></path><path d="M20 5c-4 0-8 2-8 7"></path><path d="M6 18h12"></path>'
+          },
+          {
+            key: "passport",
+            labelKey: "player_passport",
+            fallback: "Pasaporte del jugador",
+            route: passportRoute,
+            disabled: isPassportRestricted,
+            svg: '<path d="M5 3h14v18H5z"></path><path d="M9 8h6"></path><circle cx="12" cy="13" r="2"></circle><path d="M8 18h8"></path>'
           }
         ]
       },
@@ -488,6 +499,10 @@ export class LayoutView {
               <a href="${isNutritionRestricted ? 'javascript:void(0);' : '#/nutrition'}" class="drawer-item ${isNutritionRestricted ? 'disabled-link' : ''}" data-route-key="nutrition">
                 <span class="drawer-icon">🥤</span>
                 <span>${LayoutView.t("player360.nutrition.nav", "Nutrición")}${isNutritionRestricted ? ' 🔒' : ''}</span>
+              </a>
+              <a href="${isPassportRestricted ? 'javascript:void(0);' : '#/' + passportRoute}" class="drawer-item ${isPassportRestricted ? 'disabled-link' : ''}" data-route-key="passport">
+                <span class="drawer-icon">🪪</span>
+                <span>${LayoutView.t("player_passport", "Pasaporte")}${isPassportRestricted ? ' 🔒' : ''}</span>
               </a>
               <a href="#/lineups" class="drawer-item">
                 <span class="drawer-icon">🏀</span>
