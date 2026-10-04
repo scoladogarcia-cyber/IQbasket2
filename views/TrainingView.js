@@ -1630,6 +1630,9 @@ export class TrainingView {
 
         @media (max-width: 980px) {
           .p360-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .p360-clone-bar { grid-template-columns: 1fr; }
+          .p360-quick-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+          .p360-focus-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
           .p360-block-row {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
@@ -1652,6 +1655,13 @@ export class TrainingView {
           .p360-hero { display: grid; border-radius: 12px; }
           .p360-context-pill { justify-self: start; white-space: normal; }
           .p360-kpi-grid { grid-template-columns: 1fr 1fr; }
+          .p360-quick-create > summary { flex-wrap:wrap; }
+          .p360-quick-create > summary small { width:100%;margin-left:28px; }
+          .p360-clone-bar,.p360-quick-grid { grid-template-columns: 1fr; }
+          .p360-focus-grid { grid-template-columns: 1fr 1fr; }
+          .p360-section-head { align-items:stretch;flex-direction:column; }
+          .p360-report-actions { display:grid;grid-template-columns:1fr 1fr; }
+          .p360-report-actions .p360-secondary-btn { width:100%; }
           .p360-form-grid { grid-template-columns: 1fr; }
           .p360-span-2 { grid-column: auto; }
           .p360-block-row { grid-template-columns: 1fr; padding-top: 46px; }
