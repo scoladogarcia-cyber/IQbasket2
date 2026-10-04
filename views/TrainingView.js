@@ -30,6 +30,10 @@ import {
   exportTrainingSeasonDocx,
   exportTrainingSeasonCsv
 } from "../services/player360/TrainingExportService.js";
+import {
+  TrainingPlayerDirectoryService,
+  TRAINING_PLAYER_PAGE_SIZE
+} from "../services/player360/TrainingPlayerDirectoryService.js";
 
 function escapeHtml(value = "") {
   return String(value ?? "")
@@ -100,6 +104,7 @@ export class TrainingView {
     this.supabase = supabaseClient?.supabase || supabaseClient?.default || supabaseClient;
     this.auth = authController;
     this.service = new TrainingService(this.supabase);
+    this.playerDirectoryService = new TrainingPlayerDirectoryService(this.supabase);
 
     this.activeTab = "training";
     this.sessions = [];
@@ -113,6 +118,15 @@ export class TrainingView {
     this.containerId = "dashboard-content-area";
     this.editingTrainingId = null;
     this.editingExternalId = null;
+
+    // V56 training player selector state. Selection is independent from the
+    // visible page so searching/pagination never drops already selected players.
+    this.trainingPlayerSelection = new Set();
+    this.trainingPlayerSelectionKey = "";
+    this.trainingPlayerQuery = "";
+    this.trainingPlayerPage = 1;
+    this.trainingPlayerRequestSeq = 0;
+    this.trainingPlayerSearchTimer = null;
   }
 
   t(key, fallback = "") {
@@ -379,43 +393,219 @@ export class TrainingView {
     `;
   }
 
-  _renderParticipantChecklist(date, selectedIds = null) {
-    const players = this._eligiblePlayers(date);
-    if (!players.length) {
-      return `
-        <p class="p360-empty-inline">
-          ${escapeHtml(this.t(
-            "player360.training.no_eligible_players",
-            "No hay jugadores elegibles para la fecha seleccionada."
-          ))}
-        </p>
-      `;
+  _trainingSelectionKey(date = "") {
+    return `${this.teamSeasonId || ""}:${String(date || "")}`;
+  }
+
+  _resetTrainingPlayerSelection(date, selectedIds = null) {
+    const ids = selectedIds
+      ? (selectedIds || []).map(String)
+      : this._eligiblePlayers(date).map(player => String(player.id));
+    this.trainingPlayerSelection = new Set(ids.filter(Boolean));
+    this.trainingPlayerSelectionKey = this._trainingSelectionKey(date);
+    this.trainingPlayerQuery = "";
+    this.trainingPlayerPage = 1;
+  }
+
+  _ensureTrainingPlayerSelection(date) {
+    const key = this._trainingSelectionKey(date);
+    if (this.trainingPlayerSelectionKey !== key) {
+      this._resetTrainingPlayerSelection(date);
+    }
+  }
+
+  _trainingDirectoryFallback(date, query = "", page = 1) {
+    const current = this._eligiblePlayers(date);
+    const currentById = new Map(current.map(player => [String(player.id), player]));
+    const all = DataStore.getPlayerDirectory?.()
+      || DataStore.getTeamPlayers?.(this.teamId)
+      || current;
+    const seen = new Set();
+    const rows = [];
+
+    [...current, ...all].forEach(player => {
+      const id = String(player?.id || "");
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      const contextual = currentById.get(id) || player;
+      const teamId = contextual.team_id || contextual.teamId || player.team_id || player.teamId || null;
+      rows.push({
+        player_id: id,
+        first_name: contextual.first_name || contextual.firstName || player.first_name || player.firstName || "",
+        last_name: contextual.last_name || contextual.lastName || player.last_name || player.lastName || "",
+        photo_url: contextual.photo_url || contextual.photoUrl || player.photo_url || player.photoUrl || null,
+        jersey: contextual.jersey ?? contextual.number ?? player.jersey ?? player.number ?? null,
+        primary_position: contextual.primary_position || contextual.primaryPosition || contextual.position || player.primary_position || player.primaryPosition || player.position || null,
+        team_id: teamId,
+        team_name: DataStore.getTeamById?.(teamId)?.name || "",
+        is_current_roster: currentById.has(id),
+        is_current_team: currentById.has(id) || String(teamId || "") === String(this.teamId || "")
+      });
+    });
+
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    const filtered = normalizedQuery
+      ? rows.filter(row => {
+          const haystack = [
+            row.first_name,
+            row.last_name,
+            `${row.first_name} ${row.last_name}`,
+            `${row.last_name} ${row.first_name}`,
+            row.jersey,
+            row.primary_position,
+            row.team_name
+          ].join(" ").toLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
+      : rows;
+
+    filtered.sort((a, b) => {
+      const priorityA = a.is_current_roster ? 0 : (a.is_current_team ? 1 : 2);
+      const priorityB = b.is_current_roster ? 0 : (b.is_current_team ? 1 : 2);
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      const jerseyA = Number(a.jersey);
+      const jerseyB = Number(b.jersey);
+      if (Number.isFinite(jerseyA) && Number.isFinite(jerseyB) && jerseyA !== jerseyB) return jerseyA - jerseyB;
+      return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, undefined, { sensitivity: "base" });
+    });
+
+    const safePage = Math.max(1, Number(page) || 1);
+    const start = (safePage - 1) * TRAINING_PLAYER_PAGE_SIZE;
+    return {
+      rows: filtered.slice(start, start + TRAINING_PLAYER_PAGE_SIZE),
+      page: safePage,
+      pageSize: TRAINING_PLAYER_PAGE_SIZE,
+      total: filtered.length,
+      pages: filtered.length ? Math.ceil(filtered.length / TRAINING_PLAYER_PAGE_SIZE) : 0,
+      fallback: true
+    };
+  }
+
+  _renderTrainingPlayerRows(rows = []) {
+    if (!rows.length) {
+      return '<p class="p360-empty-inline">No hay jugadores que coincidan con la búsqueda.</p>';
     }
 
-    const selected = selectedIds
-      ? new Set((selectedIds || []).map(String))
-      : new Set(players.map(player => String(player.id)));
+    return rows.map(player => {
+      const id = String(player.player_id || player.id || "");
+      const name = [player.first_name, player.last_name].filter(Boolean).join(" ") || playerName(player);
+      const checked = this.trainingPlayerSelection.has(id);
+      const contextLabel = player.is_current_roster
+        ? "Plantilla actual"
+        : (player.team_name || (player.is_current_team ? "Histórico del equipo" : "Otro jugador"));
+      return `
+        <label class="p360-player-check ${player.is_current_roster ? "is-current-roster" : ""}">
+          <input type="checkbox" name="p360-training-player" value="${escapeHtml(id)}" ${checked ? "checked" : ""} />
+          <span class="p360-player-number">#${escapeHtml(player.jersey ?? "—")}</span>
+          <span class="p360-player-main">
+            <strong>${escapeHtml(name)}</strong>
+            <small>${escapeHtml(player.primary_position || "—")} · ${escapeHtml(contextLabel)}</small>
+          </span>
+        </label>
+      `;
+    }).join("");
+  }
+
+  _renderParticipantChecklist(date, selectedIds = null, state = null) {
+    if (selectedIds) this._resetTrainingPlayerSelection(date, selectedIds);
+    else this._ensureTrainingPlayerSelection(date);
+
+    const directory = state || this._trainingDirectoryFallback(
+      date,
+      this.trainingPlayerQuery,
+      this.trainingPlayerPage
+    );
+    const page = directory.page || 1;
+    const pages = directory.pages || 0;
+    const total = directory.total || 0;
 
     return `
-      <div class="p360-participant-tools">
-        <span class="p360-default-hint">✓ Plantilla elegible seleccionada por defecto. Cambia solo las excepciones.</span>
-        <button type="button" class="p360-link-btn" id="p360-select-all-players">
-          ${escapeHtml(this.t("player360.training.select_all", "Todos"))}
-        </button>
-        <button type="button" class="p360-link-btn" id="p360-clear-all-players">
-          ${escapeHtml(this.t("player360.training.clear_all", "Ninguno"))}
-        </button>
-      </div>
-      <div class="p360-player-check-grid">
-        ${players.map(player => `
-          <label class="p360-player-check">
-            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" ${selected.has(String(player.id)) ? "checked" : ""} />
-            <span class="p360-player-number">#${escapeHtml(player.jersey ?? player.number ?? "—")}</span>
-            <span>${escapeHtml(playerName(player))}</span>
+      <div class="p360-player-directory" data-date="${escapeHtml(date)}">
+        <div class="p360-player-search-row">
+          <label>
+            <span>Buscar jugadores</span>
+            <input
+              type="search"
+              id="p360-player-search"
+              value="${escapeHtml(this.trainingPlayerQuery)}"
+              placeholder="Nombre, dorsal o equipo…"
+              autocomplete="off"
+            />
           </label>
-        `).join("")}
+          <span class="p360-selected-count" aria-live="polite">
+            ${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        <div class="p360-participant-tools">
+          <span class="p360-default-hint">La plantilla de la temporada actual aparece primero. Puedes buscar y añadir otros jugadores accesibles.</span>
+          <button type="button" class="p360-link-btn" id="p360-select-current-roster">Plantilla actual</button>
+          <button type="button" class="p360-link-btn" id="p360-select-visible-players">Seleccionar visibles</button>
+          <button type="button" class="p360-link-btn" id="p360-clear-all-players">
+            ${escapeHtml(this.t("player360.training.clear_all", "Ninguno"))}
+          </button>
+        </div>
+
+        <div class="p360-player-check-grid">
+          ${this._renderTrainingPlayerRows(directory.rows || [])}
+        </div>
+
+        <div class="p360-player-pagination" aria-label="Paginación de jugadores">
+          <button type="button" class="p360-secondary-btn p360-player-prev" ${page <= 1 ? "disabled" : ""}>← Anterior</button>
+          <span>Página ${pages ? page : 0} de ${pages} · ${total} jugador${total === 1 ? "" : "es"} · máximo 15</span>
+          <button type="button" class="p360-secondary-btn p360-player-next" ${!pages || page >= pages ? "disabled" : ""}>Siguiente →</button>
+        </div>
       </div>
     `;
+  }
+
+  async _refreshTrainingPlayerOptions(container, date, {
+    query = this.trainingPlayerQuery,
+    page = this.trainingPlayerPage,
+    resetSelection = false,
+    selectedIds = null
+  } = {}) {
+    const target = container.querySelector("#p360-training-player-options");
+    if (!target) return;
+
+    if (resetSelection || selectedIds) {
+      this._resetTrainingPlayerSelection(date, selectedIds);
+    } else {
+      this._ensureTrainingPlayerSelection(date);
+    }
+
+    this.trainingPlayerQuery = String(query || "").trim();
+    this.trainingPlayerPage = Math.max(1, Number(page) || 1);
+    const requestSeq = ++this.trainingPlayerRequestSeq;
+
+    let directory = null;
+    try {
+      directory = await this.playerDirectoryService.search({
+        teamSeasonId: this.teamSeasonId,
+        query: this.trainingPlayerQuery,
+        page: this.trainingPlayerPage,
+        pageSize: TRAINING_PLAYER_PAGE_SIZE
+      });
+    } catch (error) {
+      console.warn("[Training V56] Directorio remoto no disponible; usando memoria autorizada:", error?.message || error);
+    }
+
+    if (requestSeq !== this.trainingPlayerRequestSeq) return;
+
+    if (!directory || (!directory.rows?.length && !directory.total)) {
+      directory = this._trainingDirectoryFallback(date, this.trainingPlayerQuery, this.trainingPlayerPage);
+    }
+
+    if (directory.pages > 0 && this.trainingPlayerPage > directory.pages) {
+      this.trainingPlayerPage = directory.pages;
+      return this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery,
+        page: this.trainingPlayerPage
+      });
+    }
+
+    target.innerHTML = this._renderParticipantChecklist(date, null, directory);
+    this._bindParticipantSelectionTools(container);
   }
 
   _renderTrainingForm() {
@@ -534,8 +724,8 @@ export class TrainingView {
             <section class="p360-subsection">
               <div class="p360-subsection-head">
                 <div>
-                  <strong>Plantilla / excepciones</strong>
-                  <small>Todos los jugadores elegibles aparecen marcados por defecto. Desmarca solo a quien no corresponda.</small>
+                  <strong>Jugadores del entrenamiento</strong>
+                  <small>Primero verás la plantilla de la temporada. Busca cualquier otro jugador disponible sin cargar listas interminables.</small>
                 </div>
               </div>
               <div id="p360-training-player-options">
@@ -1628,6 +1818,19 @@ export class TrainingView {
         .p360-block-details { border:1px solid #f1f5f9;border-radius:9px;background:#f8fafc; }
         .p360-block-details .p360-block-list { padding:0 10px 10px; }
         .p360-report-actions { display:flex;gap:8px;flex-wrap:wrap; }
+        .p360-player-directory { display:grid;gap:10px;min-width:0; }
+        .p360-player-search-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end; }
+        .p360-player-search-row label { display:grid;gap:5px;font-size:11px;font-weight:850; }
+        .p360-player-search-row input { min-height:44px;width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;background:#fff;color:#0f172a; }
+        .p360-selected-count { min-height:44px;display:inline-flex;align-items:center;padding:8px 11px;border-radius:9px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:900;white-space:nowrap; }
+        .p360-player-check.is-current-roster { border-color:#c4b5fd;background:#faf9ff; }
+        .p360-player-main { min-width:0;display:grid;gap:2px; }
+        .p360-player-main strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        .p360-player-main small { color:#64748b;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        .p360-player-pagination { display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center; }
+        .p360-player-pagination span { text-align:center;color:#64748b;font-size:11px; }
+        .p360-player-pagination button { min-height:44px; }
+        .p360-player-pagination button:disabled { opacity:.45;cursor:not-allowed; }
 
         @media (max-width: 980px) {
           .p360-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1671,7 +1874,11 @@ export class TrainingView {
           .p360-edit-block-actions { display: grid; grid-template-columns: 1fr; }
           .p360-edit-block-actions .p360-secondary-btn,
           .p360-edit-block-actions .p360-danger-link { width: 100%; }
-          .p360-player-check-grid { grid-template-columns: 1fr; max-height: 240px; }
+          .p360-player-check-grid { grid-template-columns: 1fr; max-height:none; }
+          .p360-player-search-row { grid-template-columns:1fr; }
+          .p360-selected-count { justify-self:start; }
+          .p360-player-pagination { grid-template-columns:1fr 1fr; }
+          .p360-player-pagination span { grid-column:1/-1;grid-row:1;text-align:left; }
           .p360-subsection-head { display: grid; }
           .p360-subsection-head .p360-secondary-btn { width: 100%; }
           .p360-form-actions {
@@ -1704,23 +1911,73 @@ export class TrainingView {
     if (externalTab) externalTab.setAttribute("aria-selected", String(external));
   }
 
-  _refreshTrainingPlayerOptions(container, date) {
-    const target = container.querySelector("#p360-training-player-options");
-    if (!target) return;
-    target.innerHTML = this._renderParticipantChecklist(date);
-    this._bindParticipantSelectionTools(container);
-  }
-
   _bindParticipantSelectionTools(container) {
-    container.querySelector("#p360-select-all-players")?.addEventListener("click", () => {
-      container.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
-        input.checked = true;
+    const directory = container.querySelector("#p360-training-player-options");
+    if (!directory) return;
+    const date = directory.querySelector(".p360-player-directory")?.dataset.date
+      || container.querySelector("#p360-training-date")?.value
+      || this._defaultDate();
+
+    directory.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
+      input.addEventListener("change", () => {
+        const id = String(input.value || "");
+        if (!id) return;
+        if (input.checked) this.trainingPlayerSelection.add(id);
+        else this.trainingPlayerSelection.delete(id);
+        const count = directory.querySelector(".p360-selected-count");
+        if (count) {
+          count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
+        }
       });
     });
 
-    container.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
-      container.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
+    directory.querySelector("#p360-select-current-roster")?.addEventListener("click", () => {
+      this._resetTrainingPlayerSelection(date);
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery,
+        page: this.trainingPlayerPage
+      });
+    });
+
+    directory.querySelector("#p360-select-visible-players")?.addEventListener("click", () => {
+      directory.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
+        input.checked = true;
+        if (input.value) this.trainingPlayerSelection.add(String(input.value));
+      });
+      const count = directory.querySelector(".p360-selected-count");
+      if (count) {
+        count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
+      }
+    });
+
+    directory.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
+      this.trainingPlayerSelection.clear();
+      directory.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
         input.checked = false;
+      });
+      const count = directory.querySelector(".p360-selected-count");
+      if (count) count.textContent = "0 seleccionados";
+    });
+
+    const search = directory.querySelector("#p360-player-search");
+    search?.addEventListener("input", () => {
+      clearTimeout(this.trainingPlayerSearchTimer);
+      const value = search.value;
+      this.trainingPlayerSearchTimer = setTimeout(() => {
+        this._refreshTrainingPlayerOptions(container, date, { query: value, page: 1 });
+      }, 220);
+    });
+
+    directory.querySelector(".p360-player-prev")?.addEventListener("click", () => {
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery,
+        page: Math.max(1, this.trainingPlayerPage - 1)
+      });
+    });
+    directory.querySelector(".p360-player-next")?.addEventListener("click", () => {
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery,
+        page: this.trainingPlayerPage + 1
       });
     });
   }
@@ -1780,7 +2037,11 @@ export class TrainingView {
     focusInputs().forEach(input => input.addEventListener("change", syncFocusVisuals));
 
     trainingDate?.addEventListener("change", () => {
-      this._refreshTrainingPlayerOptions(container, trainingDate.value);
+      this._refreshTrainingPlayerOptions(container, trainingDate.value, {
+        resetSelection: true,
+        query: "",
+        page: 1
+      });
     });
 
     const syncTrainingDuration = () => {
@@ -1797,7 +2058,7 @@ export class TrainingView {
 
     let blockCounter = container.querySelectorAll(".p360-block-row").length;
 
-    const applyClone = session => {
+    const applyClone = async session => {
       if (!session || !trainingForm) return;
       const focuses = this._trainingFocusCodes(session);
       focusInputs().forEach(input => { input.checked = focuses.includes(String(input.value).toUpperCase()); });
@@ -1829,27 +2090,28 @@ export class TrainingView {
       const advanced = container.querySelector("#p360-training-advanced");
       if ((session.blocks || []).length && advanced) advanced.open = true;
 
-      const selected = this._eligiblePlayers(trainingDate?.value || this._defaultDate()).map(player => String(player.id));
-      const roster = container.querySelector("#p360-training-player-options");
-      if (roster) {
-        roster.innerHTML = this._renderParticipantChecklist(trainingDate?.value || this._defaultDate(), selected);
-        this._bindParticipantSelectionTools(container);
-      }
+      const cloneDate = trainingDate?.value || this._defaultDate();
+      const selected = this._eligiblePlayers(cloneDate).map(player => String(player.id));
+      await this._refreshTrainingPlayerOptions(container, cloneDate, {
+        selectedIds: selected,
+        query: "",
+        page: 1
+      });
     };
 
-    container.querySelector("#p360-clone-training")?.addEventListener("click", () => {
+    container.querySelector("#p360-clone-training")?.addEventListener("click", async () => {
       const id = container.querySelector("#p360-clone-source")?.value;
       const source = (this.sessions || []).find(session => String(session.id) === String(id));
       if (!source) {
         alert("Selecciona primero un entrenamiento anterior.");
         return;
       }
-      applyClone(source);
+      await applyClone(source);
       const panel = container.querySelector("#p360-create-training-panel");
       if (panel) panel.open = true;
     });
 
-    container.querySelector("#p360-cancel-training")?.addEventListener("click", () => {
+    container.querySelector("#p360-cancel-training")?.addEventListener("click", async () => {
       const panel = container.querySelector("#p360-create-training-panel");
       if (!trainingForm) return;
 
@@ -1864,7 +2126,11 @@ export class TrainingView {
       blockCounter = 0;
 
       const date = trainingForm.querySelector("#p360-training-date")?.value || this._defaultDate();
-      this._refreshTrainingPlayerOptions(container, date);
+      await this._refreshTrainingPlayerOptions(container, date, {
+        resetSelection: true,
+        query: "",
+        page: 1
+      });
       syncTrainingDuration();
       syncFocusVisuals();
 
@@ -2292,9 +2558,7 @@ export class TrainingView {
         return;
       }
 
-      const selectedPlayers = [...form.querySelectorAll('input[name="p360-training-player"]:checked')]
-        .map(input => input.value)
-        .filter(Boolean);
+      const selectedPlayers = [...this.trainingPlayerSelection].filter(Boolean);
       if (!selectedPlayers.length) {
         alert("⚠️ Selecciona al menos un jugador. La plantilla elegible aparece marcada por defecto.");
         return;
@@ -2337,6 +2601,7 @@ export class TrainingView {
           cloneSourceId: cloneSourceIdValue,
           entryMode
         });
+        this._resetTrainingPlayerSelection(date);
         await this.render(this.containerId, this.teamId);
       } catch (error) {
         console.error("[TrainingView] Error creando entrenamiento:", error);
@@ -2436,6 +2701,7 @@ export class TrainingView {
     }
 
     await this._load();
+    this._ensureTrainingPlayerSelection(this._defaultDate());
 
     const seasonName = DataStore.getActiveSeasonDisplayName?.(this.teamId)
       || this._seasonContext()?.name
@@ -2504,6 +2770,10 @@ export class TrainingView {
 
     this._applyTab(container);
     await this._bindEvents(container);
+    await this._refreshTrainingPlayerOptions(container, this._defaultDate(), {
+      query: this.trainingPlayerQuery,
+      page: this.trainingPlayerPage
+    });
   }
 }
 
