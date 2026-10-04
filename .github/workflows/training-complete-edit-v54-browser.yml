@@ -5,9 +5,13 @@ on:
     branches: [main]
     paths:
       - 'views/training/**'
+      - 'services/player360/TrainingService.js'
       - 'services/player360/TrainingCompleteEditV54Service.js'
+      - 'services/player360/TrainingExportService.js'
+      - 'domain/player360/TrainingFocusAnalytics.js'
       - 'services/LazyViewRegistry.js'
       - 'config/trainingEditV54.config.js'
+      - 'supabase/migrations/20261004173000_training_ux_v55.sql'
       - 'tests/training-complete-edit-v54-browser.mjs'
       - '.github/workflows/training-complete-edit-v54-browser.yml'
   push:
