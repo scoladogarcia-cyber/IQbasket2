@@ -226,11 +226,11 @@ async function renderValuesCard({player={},team={},summary={}}={}) {
     y+=125;
   }
   const strengths=(summary.strengths||[]).slice(0,3), limiters=(summary.limiters||[]).slice(0,3);
-  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("FORTALEZAS",98,1015);
-  ctx.fillStyle="#fff";ctx.font="700 21px Arial";strengths.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1055+i*40));
-  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("PRIORIDADES DE DESARROLLO",98,1200);
-  ctx.fillStyle="#fff";ctx.font="700 21px Arial";limiters.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1240+i*34));
-  ctx.fillStyle="#94a3b8";ctx.font="600 17px Arial";ctx.fillText("Perfil longitudinal · escala 1–5 · valores calculados con la valoración más reciente de cada atributo",64,1310);
+  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("FORTALEZAS",98,1005);
+  ctx.fillStyle="#fff";ctx.font="700 21px Arial";strengths.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1045+i*36));
+  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("PRIORIDADES DE DESARROLLO",98,1165);
+  ctx.fillStyle="#fff";ctx.font="700 21px Arial";limiters.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1205+i*34));
+  ctx.fillStyle="#94a3b8";ctx.font="600 17px Arial";ctx.fillText("Perfil longitudinal · escala 1–5 · valores calculados con la valoración más reciente de cada atributo",64,1305);
   return canvas;
 }
 export async function exportPassportCardPng(payload={}) {
