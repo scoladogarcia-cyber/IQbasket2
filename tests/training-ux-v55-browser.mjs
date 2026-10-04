@@ -92,6 +92,10 @@ try {
   assert.equal(await page.locator(".p360-block-row").count(),1);
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),3);
 
+  await page.locator("#p360-training-date").fill("2026-10-04");
+  await page.dispatchEvent("#p360-training-date", "change");
+  await page.waitForTimeout(120);
+
   await page.locator("#p360-player-search").fill("Invitado 17");
   await page.waitForTimeout(350);
   assert.equal(await page.locator('input[name="p360-training-player"]').count(),1);
@@ -101,8 +105,6 @@ try {
   await page.waitForTimeout(350);
   assert.equal(await page.locator('input[name="p360-training-player"]').count(),15);
   assert.match(await page.locator(".p360-selected-count").textContent(),/4 seleccionado/);
-
-  await page.locator("#p360-training-date").fill("2026-10-04");
   await page.locator("#p360-training-notes").fill("Salida de presión y finalizaciones con contacto.");
   await page.locator('input[name="p360-training-focus"][value="SHOOT_FINISH"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.locator('#p360-training-form button[type="submit"]').click();
