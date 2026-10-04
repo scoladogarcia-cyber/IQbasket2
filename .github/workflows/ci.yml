@@ -61,6 +61,15 @@ jobs:
       - name: Player Passport SQL structure
         run: node tests/player-passport-sql-structure.mjs
 
+      - name: Player Passport V2 UX
+        run: node tests/player-passport-v2-ux-contract.mjs
+
+      - name: Player Passport training evidence link
+        run: node tests/player-passport-training-link-sql.mjs
+
+      - name: Report one-many-all game selection
+        run: node tests/reports-game-selection-v54-contract.mjs
+
       - name: Player 360 Phase 4D longitudinal foundation
         run: node tests/player360-phase4d-foundation-smoke.mjs
 
