@@ -100,7 +100,7 @@ export class PlayerPassportService {
 
     if (!normalizedScores.length) throw new Error("PLAYER_PASSPORT_NO_OBSERVED_ATTRIBUTES");
 
-    const { data, error } = await this.supabase.rpc("iq_v4_save_player_passport_evaluation", {
+    const { data, error } = await this.supabase.rpc("iq_v4_save_player_passport_evaluation_v2", {
       p_team_season_id: teamSeasonId,
       p_player_id: playerId,
       p_evaluation_date: evaluationDate,
@@ -110,7 +110,8 @@ export class PlayerPassportService {
       p_summary: summary || null,
       p_strengths: strengths || null,
       p_development_priorities: developmentPriorities || null,
-      p_existing_evaluation_id: existingEvaluationId || null
+      p_existing_evaluation_id: existingEvaluationId || null,
+      p_training_session_id: arguments[0]?.trainingSessionId || null
     });
     if (error) throw error;
     return data;
