@@ -714,7 +714,7 @@ export class IQBasketApp {
       if (authenticatedRole === UserRole.FAMILIA_TUTOR) requiredPermission = Permission.VIEW_LINKED_PLAYER_360;
     }
     const routePlayerId = [
-      "player360", "player-360", "desarrollo-jugador", "nutrition", "nutricion"
+      "player360", "player-360", "desarrollo-jugador", "passport", "player-passport", "pasaporte", "nutrition", "nutricion"
     ].includes(targetRoute)
       ? parts[1] || null
       : null;
@@ -936,6 +936,14 @@ export class IQBasketApp {
       case "player-360":
       case "desarrollo-jugador": {
         const view = await this.lazyViews.get("player360");
+        await view.render(contentArea, this.routeParams.id, this.teamId);
+        break;
+      }
+
+      case "passport":
+      case "player-passport":
+      case "pasaporte": {
+        const view = await this.lazyViews.get("passport");
         await view.render(contentArea, this.routeParams.id, this.teamId);
         break;
       }
