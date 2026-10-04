@@ -64,6 +64,9 @@ jobs:
       - name: Player Passport V2 UX
         run: node tests/player-passport-v2-ux-contract.mjs
 
+      - name: Player Passport current values
+        run: node tests/player-passport-prefill-current-values.mjs
+
       - name: Player Passport training evidence link
         run: node tests/player-passport-training-link-sql.mjs
 
