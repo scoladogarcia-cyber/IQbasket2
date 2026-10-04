@@ -145,6 +145,7 @@ const FACTORY_LOADERS = Object.freeze({
     ] = await Promise.all([
       import("../views/LiveScoreHUDViewV44.js"),
       import("../features/game-live/LiveWriterLeaseV43Controller.js"),
+      import("../features/game-live/LiveCaptureStartController.js"),
       import("./games/GameCaptureDelegationService.js"),
       import("./games/GamePlayStateService.js")
     ]);
