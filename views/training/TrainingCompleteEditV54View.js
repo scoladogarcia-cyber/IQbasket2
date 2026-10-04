@@ -198,7 +198,10 @@ export class TrainingCompleteEditV54View extends TrainingView {
     const removed=[...existing].filter(pid=>!kept.has(pid));
     const intensity=num(form.querySelector('.v54-intensity').value);
     if(intensity!==null&&(!Number.isFinite(intensity)||intensity<0||intensity>10))throw new Error('Intensidad fuera de 0–10.');
-    return {date,title,trainingType:form.querySelector('.v54-type').value,
+    const focusCodes=[...form.querySelectorAll('input[name="v55-edit-focus"]:checked')]
+      .map(input=>String(input.value||'').toUpperCase()).filter(Boolean);
+    if(!focusCodes.length)throw new Error('Marca al menos un tipo de trabajo.');
+    return {date,title,focusCodes,
       objective:form.querySelector('.v54-objective').value.trim(),notes:form.querySelector('.v54-notes').value.trim(),
       start,end,intensity,blocks,participants,removed};
   }
