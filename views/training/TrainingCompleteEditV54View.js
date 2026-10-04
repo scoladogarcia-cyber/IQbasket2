@@ -161,7 +161,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
       };
       this.editPlayerDirectoryRows.set(id,player);
       const already=includedIds.has(id);
-      const context=raw.is_current_roster?'Plantilla actual':(raw.team_name||raw.is_current_team?'Histórico del equipo':'Otro jugador');
+      const context=raw.is_current_roster?'Plantilla actual':(raw.team_name || (raw.is_current_team?'Histórico del equipo':'Otro jugador'));
       return `<div class="v57-edit-player-result" data-player-id="${esc(id)}">
         <div class="v57-edit-player-copy">
           <strong>#${esc(player.jersey ?? '—')} · ${esc(personName(player))}</strong>
@@ -350,14 +350,19 @@ export class TrainingCompleteEditV54View extends TrainingView {
     const eligible=new Set(this._eligiblePlayers(form.querySelector('.v54-date')?.value).map(p=>String(p.id)));
     const invalid=[];
     form.querySelectorAll('.v54-person').forEach(row=>{
-      const box=row.querySelector('.v54-person-included'),allowed=eligible.has(row.dataset.playerId);
+      const box=row.querySelector('.v54-person-included');
+      const rosterEligible=eligible.has(row.dataset.playerId);
+      const directoryAuthorized=row.dataset.directoryAuthorized==='true';
+      const existingParticipant=row.dataset.existingParticipant==='true';
+      const allowed=rosterEligible||directoryAuthorized||existingParticipant;
       box.disabled=!allowed&&!box.checked;
       row.classList.toggle('v54-ineligible',!allowed);
+      row.classList.toggle('v57-training-guest',allowed&&!rosterEligible);
       if(box.checked&&!allowed)invalid.push(row.querySelector('strong')?.textContent||row.dataset.playerId);
     });
     const warning=form.querySelector('.v54-eligibility-warning');
     warning.hidden=!invalid.length;
-    warning.textContent=invalid.length?`La nueva fecha no corresponde a la inscripción de: ${invalid.join(', ')}. Desmárcalos o escoge una fecha válida antes de guardar.`:'';
+    warning.textContent=invalid.length?`No tienes alcance para incluir en esta sesión a: ${invalid.join(', ')}.`:'';
     return !invalid.length;
   }
 
