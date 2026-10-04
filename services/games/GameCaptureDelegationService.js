@@ -191,6 +191,18 @@ export class GameCaptureDelegationService {
     if (error) throw rpcError(error, "No se pudo guardar la captura del partido.");
     return data || null;
   }
+  async reassignEventPlayer({ gameId, eventId, newPlayerId, reason = null } = {}) {
+    this._requireClient();
+    const { data, error } = await this.supabase.rpc("iq_v58_reassign_game_event_player", {
+      p_game_id: requireUuid(gameId, "gameId"),
+      p_event_id: requireUuid(eventId, "eventId"),
+      p_new_player_id: requireUuid(newPlayerId, "newPlayerId"),
+      p_reason: reason ? String(reason).trim().slice(0, 500) : null
+    });
+    if (error) throw rpcError(error, "No se pudo cambiar el jugador de la jugada.");
+    return data || null;
+  }
+
   async getCaptureSyncStatus(gameId) {
     this._requireClient();
     const id = requireUuid(gameId, "gameId");
