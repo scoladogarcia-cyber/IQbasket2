@@ -16,7 +16,7 @@ try {
     const players=[1,2,3].map(i=>({id:`10000000-0000-4000-8000-00000000000${i}`,first_name:`Jugador ${i}`,last_name:'Test',jersey:i}));
     const session={id:'20000000-0000-4000-8000-000000000001',team_season_id:seasonId,session_date:'2026-09-17',
       title:'Entreno inicial',start_time:'20:00:00',end_time:'21:00:00',duration_minutes:60,intensity:7,status:'PLANNED',
-      notes:null,objective:'Tiro',metadata:{training_type:'TECHNICAL'},updated_at:'2026-09-21T06:00:00+00:00',
+      notes:null,objective:'Tiro',metadata:{training_type:'TECHNICAL',training_focus_codes:['TECHNICAL']},updated_at:'2026-09-21T06:00:00+00:00',
       blocks:[
         {id:'30000000-0000-4000-8000-000000000001',block_order:1,title:'Primer bloque',duration_minutes:30,activity_code:'SHOOT',updated_at:'2026-09-21T06:01:00+00:00'},
         {id:'30000000-0000-4000-8000-000000000002',block_order:2,title:'Segundo bloque',duration_minutes:30,activity_code:'FIT',updated_at:'2026-09-21T06:02:00+00:00'}
@@ -54,7 +54,8 @@ try {
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),true);
   await form.locator('.v54-date').fill('2026-09-18');
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
-  await form.locator('.v54-type').selectOption('TACTICAL');
+  await form.locator('input[name="v55-edit-focus"][value="TECHNICAL"]').uncheck();
+  await form.locator('input[name="v55-edit-focus"][value="TACTICAL_TEAM"]').check();
   await form.locator('.v54-title').fill('Entrenamiento corregido');
   await form.locator('.v54-intensity').fill('5.5');
   const person1=form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000001"]');
@@ -77,7 +78,7 @@ try {
   await page.waitForFunction(()=>window.__v54Calls.length===1,{},{timeout:12000});
   const saved=await page.evaluate(()=>window.__v54Calls[0]);
   assert.equal(saved.date,'2026-09-18');
-  assert.equal(saved.trainingType,'TACTICAL');
+  assert.deepEqual(saved.focusCodes,['TACTICAL_TEAM']);
   assert.equal(saved.intensity,5.5);
   assert.equal(saved.blocks.length,3);
   assert.equal(saved.blocks[2].title,'Bloque añadido');
@@ -87,5 +88,5 @@ try {
   assert.equal(saved.participants[0].blocks[1].status,'NOT_ATTENDED');
   assert.equal(saved.participants[0].blocks[1].reason,'LIMITED');
   assert.equal(saved.revision.assignments.length,1);
-  console.log(`PASS Training V54 browser ${process.env.QA_BROWSER||'chromium'}: date, type, intensity, blocks, roster and exceptional participation.`);
+  console.log(`PASS Training V54 browser ${process.env.QA_BROWSER||'chromium'}: date, focus checks, intensity, blocks, roster and exceptional participation.`);
 } finally { await browser.close(); }
