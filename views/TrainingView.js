@@ -21,6 +21,15 @@ import {
   PLAYER360_SOURCE_TYPE,
   TRAINING_ATTENDANCE_LABELS
 } from "../config/player360.config.js";
+import {
+  TRAINING_FOCUS_OPTIONS,
+  TRAINING_FOCUS_LABELS
+} from "../config/trainingEditV54.config.js";
+import {
+  exportTrainingSessionDocx,
+  exportTrainingSeasonDocx,
+  exportTrainingSeasonCsv
+} from "../services/player360/TrainingExportService.js";
 
 function escapeHtml(value = "") {
   return String(value ?? "")
