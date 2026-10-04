@@ -224,18 +224,23 @@ create table if not exists iq_v58_private.benchmark_network_snapshots (
 );
 
 create or replace function public.iq_v58_network_benchmark_snapshot(
+  p_team_season_id uuid,
   p_cohort_key text,
   p_metric_codes text[]
 ) returns jsonb
 language plpgsql
 security definer
 set search_path=''
-as $$
+as $
 declare
   v_uid uuid := auth.uid();
   v_result jsonb;
 begin
   if v_uid is null then raise exception 'AUTH_REQUIRED' using errcode='42501'; end if;
+  if not public.iq_v4_can_view_longitudinal_analytics(p_team_season_id) then
+    raise exception 'BENCHMARK_VIEW_FORBIDDEN' using errcode='42501';
+  end if;
+
   select coalesce(jsonb_agg(jsonb_build_object(
     'cohort_key',s.cohort_key,
     'metric_code',s.metric_code,
@@ -259,6 +264,10 @@ begin
     and s.metric_code=any(coalesce(p_metric_codes,array[]::text[]));
   return v_result;
 end;
-$$;
-revoke all on function public.iq_v58_network_benchmark_snapshot(text,text[]) from public;
-grant execute on function public.iq_v58_network_benchmark_snapshot(text,text[]) to authenticated;
+$;
+revoke all on function public.iq_v58_network_benchmark_snapshot(uuid,text,text[]) from public, anon;
+grant execute on function public.iq_v58_network_benchmark_snapshot(uuid,text,text[]) to authenticated;
+
+revoke all on function public.iq_v58_save_game_capture(uuid,integer,integer,uuid[],jsonb,jsonb,jsonb,text,uuid,bigint) from anon;
+revoke all on function public.iq_v58_game_capture_sync_status(uuid) from anon;
+revoke all on function public.iq_v58_set_training_focus_codes(uuid,uuid,text[]) from anon;
