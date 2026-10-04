@@ -115,6 +115,9 @@ jobs:
       - name: Training player directory V56
         run: node tests/training-player-directory-v56-contract.mjs
 
+      - name: Training player selection V57
+        run: node tests/training-player-selection-v57-contract.mjs
+
       - name: Player Development Loop V2 contract
         run: node tests/player-development-loop-v2-contract.mjs
 
