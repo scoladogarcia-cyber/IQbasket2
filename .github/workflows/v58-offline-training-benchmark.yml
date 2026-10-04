@@ -33,7 +33,7 @@ on:
       - "security/entitlements.js"
       - "services/LazyViewRegistry.js"
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
-      - "supabase/migrations/20261004214500_game_event_attribution_v58.sql"
+      - "supabase/migrations/20261004215500_game_event_attribution_v58.sql"
       - "tests/v58-intelligence-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
