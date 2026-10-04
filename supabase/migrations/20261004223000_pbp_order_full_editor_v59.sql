@@ -536,6 +536,6 @@ as $
   select iq_v59_private.edit_game_event(
     p_game_id,p_event_id,p_new_player_id,p_new_action_type,p_reason
   );
-$$;
+$;
 revoke all on function public.iq_v59_edit_game_event(uuid,uuid,uuid,text,text) from public,anon;
 grant execute on function public.iq_v59_edit_game_event(uuid,uuid,uuid,text,text) to authenticated;
