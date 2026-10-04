@@ -118,7 +118,7 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
@@ -126,7 +126,9 @@ class MemoryStorage {
     readFile(new URL("../supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql",import.meta.url),"utf8"),
     readFile(new URL("../security/permissions.js",import.meta.url),"utf8"),
     readFile(new URL("../index.html",import.meta.url),"utf8"),
-    readFile(new URL("../public/iqbasket-sw.js",import.meta.url),"utf8")
+    readFile(new URL("../public/iqbasket-sw.js",import.meta.url),"utf8"),
+    readFile(new URL("../security/entitlements.js",import.meta.url),"utf8"),
+    readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
   assert.match(registry,/TrainingCompleteEditV54View/);
@@ -149,6 +151,11 @@ class MemoryStorage {
   assert.match(serviceWorker,/release\.json/);
   assert.match(serviceWorker,/cache:"no-store"/);
   assert.match(serviceWorker,/CACHE_NAME="iqbasket-shell-v58-1"/);
+  assert.match(entitlements,/TRAINING_ANALYTICS/);
+  assert.match(entitlements,/BENCHMARKING/);
+  assert.match(commercialMigration,/FAMILY_PRO/);
+  assert.match(commercialMigration,/INTERNAL_FULL/);
+  assert.match(commercialMigration,/on conflict \(plan_id,entitlement_code\)/i);
 }
 
 console.log("V58 offline + Training Intelligence + Benchmark contracts: OK");
