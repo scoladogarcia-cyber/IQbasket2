@@ -136,6 +136,91 @@ revoke all on function public.iq_v57_can_select_training_player(uuid,uuid)
 grant execute on function public.iq_v57_can_select_training_player(uuid,uuid)
   to authenticated;
 
+create or replace function public.iq_v57_resolve_training_players(
+  p_team_season_id uuid,
+  p_player_ids uuid[]
+)
+returns table(
+  player_id uuid,
+  first_name text,
+  last_name text,
+  photo_url text,
+  jersey integer,
+  primary_position text,
+  team_id uuid,
+  team_name text,
+  is_current_roster boolean,
+  is_current_team boolean
+)
+language plpgsql
+stable
+security definer
+set search_path=''
+as $fn$
+declare
+  v_team_id uuid;
+begin
+  if auth.uid() is null or not public.iq_account_is_active() then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+  if not public.iq_v4_can_manage_training(p_team_season_id) then
+    raise exception 'TRAINING_MANAGE_DENIED';
+  end if;
+
+  select ts.team_id into v_team_id
+  from public.team_seasons ts
+  where ts.id=p_team_season_id;
+
+  return query
+  with current_roster as (
+    select distinct on (rm.player_id)
+      rm.player_id,rm.jersey,rm.primary_position
+    from public.roster_memberships rm
+    where rm.team_season_id=p_team_season_id
+    order by rm.player_id,rm.updated_at desc nulls last,rm.created_at desc nulls last
+  )
+  select
+    p.id,
+    p.first_name,
+    p.last_name,
+    p.photo_url,
+    coalesce(cr.jersey,p.jersey),
+    coalesce(nullif(cr.primary_position,''),p.primary_position),
+    p.team_id,
+    pt.name,
+    (cr.player_id is not null),
+    (
+      cr.player_id is not null
+      or p.team_id=v_team_id
+      or exists (
+        select 1
+        from public.roster_memberships rm_hist
+        join public.team_seasons ts_hist on ts_hist.id=rm_hist.team_season_id
+        where rm_hist.player_id=p.id and ts_hist.team_id=v_team_id
+      )
+    )
+  from public.players p
+  left join current_roster cr on cr.player_id=p.id
+  left join public.teams pt on pt.id=p.team_id
+  where p.id=any(coalesce(p_player_ids,'{}'::uuid[]))
+    and (
+      public.iq_v57_can_select_training_player(p.id,p_team_season_id)
+      or exists (
+        select 1
+        from public.training_participants tp
+        join public.training_sessions s on s.id=tp.training_session_id
+        where tp.player_id=p.id
+          and s.team_season_id=p_team_season_id
+      )
+    );
+end
+$fn$;
+
+revoke all on function public.iq_v57_resolve_training_players(uuid,uuid[])
+  from public,anon;
+grant execute on function public.iq_v57_resolve_training_players(uuid,uuid[])
+  to authenticated;
+
 create or replace function public.iq_v4_validate_training_participant()
 returns trigger
 language plpgsql
