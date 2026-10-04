@@ -41,17 +41,22 @@ IQBasket already has substantial foundations in Player360, Family, training, tec
 | Family workspace and passport | DONE/PARTIAL | Continue pilot validation | P0 |
 | Goals + development plan | DONE/PARTIAL | Turn into measurable weekly loop | P0 |
 | Technification connection | DONE/PARTIAL | Connect actions to evidence and outcomes | P0 |
-| Training sessions + attendance/load | DONE | Refine UX and analytics | P1 |
+| Training sessions + attendance/load | DONE | Preserve V55 quick capture | P1 |
+| Training Intelligence (focus/RPE/load/exposure) | DONE/PARTIAL | V58 implemented; increase historical focus coverage | P0 |
+| Training ↔ competition longitudinal associations | DONE/PARTIAL | V58 implemented; validate with sufficient longitudinal samples | P0 |
+| Self/team benchmarking | DONE/PARTIAL | V58 objective metrics implemented; validate cohorts | P1 |
+| IQBasket Network percentiles | PARTIAL | Aggregate contract implemented; activate only with sufficient cohort n | P2 |
 | Nutrition/recovery catalog | DONE | Preserve configurable model | P1 |
 | Wellness/recovery express check-in <=30s | PARTIAL | Add athlete-first micro-flow | P1 |
 | Fast match capture <=2 interactions for common actions | PARTIAL | Redesign/measure match capture UX | P0 |
 | Universal visible Undo | DONE/PARTIAL | Make dominant in live mode | P0 |
 | Game single source of truth | DONE | Preserve | P0 |
 | Historical game locking | DONE | Preserve | P0 |
-| Live scorekeeper exclusive lease | GAP | Add safe live-write lease | P1 |
-| Scorekeeper handoff | GAP | Add controlled handoff, QR later if useful | P1 |
-| Offline event outbox | GAP | Implement incrementally | P1 |
-| Full native offline stack | FUTURE | Only if PWA/browser model proves insufficient | P3 |
+| Live scorekeeper exclusive lease | DONE | Preserve V28 lease/heartbeat | P1 |
+| Scorekeeper handoff | DONE/PARTIAL | Controlled handoff implemented; QR remains optional | P1 |
+| Offline live outbox | DONE/PARTIAL | V58 IndexedDB/idempotency/revision recovery implemented; field-validate | P0 |
+| Offline application shell | DONE/PARTIAL | V58 network-first service worker; field-validate iOS/Android | P0 |
+| Full native offline stack | FUTURE | Only if browser pilots expose a real limitation | P3 |
 | Competition/category rule packs | PARTIAL/GAP | Add configurable rule engine | P2 |
 | Staff readiness aggregate | PARTIAL | Add privacy-safe readiness surface | P1 |
 | ACWR as injury predictor | REJECT | Do not implement deterministic injury risk claims | - |
@@ -141,11 +146,21 @@ QR can be added as a convenience presentation of the same token later.
 
 # 3. Offline-first without a rewrite
 
-## Current state
+## Current state — updated by V58
 
-No repository evidence was found for a complete IndexedDB/service-worker/offline mutation queue covering live game events. This is a real gap because venue connectivity is an operational risk.
+V58 now implements the staged browser architecture that was previously a gap:
 
-## Recommended staged architecture
+- durable IndexedDB live outbox with localStorage fallback;
+- recoverable local draft;
+- UUID idempotency receipts on the backend;
+- optimistic `capture_revision` conflict protection;
+- automatic reconnect flush;
+- finalization guard while data remains pending;
+- conservative network-first service-worker application shell.
+
+The remaining gap is **field validation**, not absence of the architecture. A full-production claim still requires complete iOS/Android match tests covering airplane mode, app/tab termination, reconnect and competing writer/handoff.
+
+## Implemented staged architecture
 
 ### Stage 1 — Browser outbox
 
