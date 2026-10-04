@@ -7,6 +7,7 @@ const gate = await readFile(new URL("../features/game-live/LiveCaptureStartContr
 const scorer = await readFile(new URL("../views/LiveScoreHUDViewV39.js", import.meta.url), "utf8");
 const viewer = await readFile(new URL("../views/games/ScopedGameBoxScoreLiveV39View.js", import.meta.url), "utf8");
 const viewerV58 = await readFile(new URL("../views/games/ScopedGameBoxScoreLiveV58View.js", import.meta.url), "utf8");
+const viewerV59 = await readFile(new URL("../views/games/ScopedGameBoxScoreLiveV59View.js", import.meta.url), "utf8");
 const modes = await readFile(new URL("../views/games/GameCaptureModesView.js", import.meta.url), "utf8");
 const registry = await readFile(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
 const release = JSON.parse(await readFile(new URL("../release.json", import.meta.url), "utf8"));
@@ -57,7 +58,8 @@ assert.match(registry, /import\("\.\.\/features\/game-live\/LiveCaptureStartCont
 assert.match(registry, /import\("\.\/games\/GamePlayStateService\.js"\)/, "live HUD registry must load the play-state service module");
 assert.match(registry, /attachLiveWriterLease/);
 assert.match(viewerV58, /extends\s+ScopedGameBoxScoreLiveV39View/);
-assert.match(registry, /ScopedGameBoxScoreLiveV58View/);
+assert.match(viewerV59, /extends\s+ScopedGameBoxScoreLiveV58View/);
+assert.match(registry, /ScopedGameBoxScoreLiveV59View/);
 
 const current = release.release.split(".").map(Number);
 const baseline = "2026.09.08.22".split(".").map(Number);
