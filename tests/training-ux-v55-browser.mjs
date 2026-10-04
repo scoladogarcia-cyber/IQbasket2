@@ -64,7 +64,7 @@ try {
 
   await page.locator("#p360-training-date").fill("2026-10-04");
   await page.locator("#p360-training-notes").fill("Salida de presión y finalizaciones con contacto.");
-  await page.locator('input[name="p360-training-focus"][value="SHOOT_FINISH"]').check();
+  await page.locator('input[name="p360-training-focus"][value="SHOOT_FINISH"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.locator('#p360-training-form button[type="submit"]').click();
   await page.waitForFunction(()=>window.__v55CreateCalls.length===1,null,{timeout:12000});
 
