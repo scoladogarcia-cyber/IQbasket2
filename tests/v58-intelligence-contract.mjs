@@ -1,0 +1,112 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+import { LiveOfflineStore } from "../services/games/LiveOfflineStore.js";
+import { buildTrainingIntelligence } from "../domain/player360/TrainingIntelligenceAnalytics.js";
+import { buildTeamBenchmark, buildSelfBenchmark, networkReliability } from "../domain/stats/BenchmarkEngine.js";
+
+class MemoryStorage {
+  constructor(){this.map=new Map();}
+  get length(){return this.map.size;}
+  key(index){return [...this.map.keys()][index] ?? null;}
+  getItem(key){return this.map.has(key)?this.map.get(key):null;}
+  setItem(key,value){this.map.set(key,String(value));}
+  removeItem(key){this.map.delete(key);}
+}
+
+// Offline outbox must survive without IndexedDB through the localStorage fallback.
+{
+  const storage=new MemoryStorage();
+  const first=new LiveOfflineStore({indexedDB:null,localStorage:storage});
+  const op1=await first.enqueue("g1",{events:[{id:"e1"}]},{baseRevision:4,operationId:"11111111-1111-4111-8111-111111111111"});
+  await first.enqueue("g1",{events:[{id:"e1"},{id:"e2"}]},{baseRevision:4,operationId:"22222222-2222-4222-8222-222222222222"});
+  assert.equal(op1.baseRevision,4);
+  assert.equal((await first.list("g1")).length,2);
+
+  const reopened=new LiveOfflineStore({indexedDB:null,localStorage:storage});
+  const recovered=await reopened.list("g1");
+  assert.equal(recovered.length,2);
+  assert.equal(recovered.at(-1).payload.events.length,2);
+  assert.equal((await reopened.loadDraft("g1")).payload.events.length,2);
+
+  await reopened.remove(recovered[0].operationId);
+  assert.equal((await reopened.list("g1")).length,1);
+}
+
+// Training intelligence: deterministic totals, attendance, RPE/load and focus coverage.
+{
+  const sessions=[
+    {
+      id:"s1",session_date:"2026-09-07",status:"COMPLETED",duration_minutes:60,
+      metadata:{training_focus_codes:["TECHNICAL","SHOOT_FINISH"]},
+      participants:[
+        {player_id:"p1",attendance_status:"PRESENT",participated_minutes:60,rpe:5,internal_load:300},
+        {player_id:"p2",attendance_status:"ABSENT",participated_minutes:0,rpe:null,internal_load:null}
+      ]
+    },
+    {
+      id:"s2",session_date:"2026-09-14",status:"COMPLETED",duration_minutes:80,
+      metadata:{},
+      participants:[
+        {player_id:"p1",attendance_status:"PARTIAL",participated_minutes:40,rpe:6,internal_load:240},
+        {player_id:"p2",attendance_status:"PRESENT",participated_minutes:80,rpe:4,internal_load:320}
+      ]
+    }
+  ];
+  const analytics=buildTrainingIntelligence(sessions);
+  assert.equal(analytics.totals.sessions,2);
+  assert.equal(analytics.totals.sessionMinutes,140);
+  assert.equal(analytics.totals.focusClassified,1);
+  assert.equal(analytics.totals.focusCoveragePct,50);
+  assert.equal(analytics.totals.attendancePct,75);
+  assert.equal(analytics.unclassifiedSessionIds[0],"s2");
+  const p1=analytics.players.find(p=>p.playerId==="p1");
+  assert.equal(p1.participatedMinutes,100);
+  assert.equal(p1.totalLoad,540);
+}
+
+// Team benchmarking: no percentile below five eligible players; P50 for median target.
+{
+  const game=(player,points,tov=2)=>[
+    {player_id:player,game_id:"g1",minutes:40,points,turnovers:tov,fg2_made:5,fg2_attempted:10,fg3_made:1,fg3_attempted:3,ft_made:0,ft_attempted:0},
+    {player_id:player,game_id:"g2",minutes:40,points,turnovers:tov,fg2_made:5,fg2_attempted:10,fg3_made:1,fg3_attempted:3,ft_made:0,ft_attempted:0},
+    {player_id:player,game_id:"g3",minutes:40,points,turnovers:tov,fg2_made:5,fg2_attempted:10,fg3_made:1,fg3_attempted:3,ft_made:0,ft_attempted:0}
+  ];
+  const four=new Map([["p1",game("p1",10)],["p2",game("p2",20)],["p3",game("p3",30)],["p4",game("p4",40)]]);
+  assert.equal(buildTeamBenchmark({targetPlayerId:"p3",statsByPlayer:four}).metrics.find(m=>m.code==="PTS_PER40").percentile,null);
+
+  const five=new Map([...four,["p5",game("p5",50)]]);
+  const points=buildTeamBenchmark({targetPlayerId:"p3",statsByPlayer:five}).metrics.find(m=>m.code==="PTS_PER40");
+  assert.equal(points.percentile,50);
+  assert.equal(points.sampleSize,5);
+
+  const self=buildSelfBenchmark({earlyStats:game("p3",20),recentStats:game("p3",30)});
+  assert.equal(self.find(m=>m.code==="PTS_PER40").change,10);
+  assert.equal(networkReliability(19),"HIDDEN");
+  assert.equal(networkReliability(20),"PROVISIONAL");
+  assert.equal(networkReliability(100),"ROBUST");
+}
+
+// Wiring and SQL safety contracts.
+{
+  const [registry,liveView,migration,permissions]=await Promise.all([
+    readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
+    readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
+    readFile(new URL("../supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql",import.meta.url),"utf8"),
+    readFile(new URL("../security/permissions.js",import.meta.url),"utf8")
+  ]);
+  assert.match(registry,/LiveScoreHUDViewV58/);
+  assert.match(registry,/TrainingIntelligenceV58View/);
+  assert.match(registry,/Player360BenchmarkV58View/);
+  assert.match(liveView,/_beforeFinishLiveCapture/);
+  assert.match(liveView,/liveConflict/);
+  assert.match(migration,/create schema if not exists iq_v58_private/i);
+  assert.match(migration,/client_operation_id uuid not null/i);
+  assert.match(migration,/GAME_CAPTURE_CONFLICT/i);
+  assert.match(migration,/revoke all on schema iq_v58_private from public, anon, authenticated/i);
+  assert.match(migration,/sample_size < 20 then 'HIDDEN'/i);
+  assert.match(permissions,/VIEW_TRAINING_ANALYTICS/);
+  assert.match(permissions,/VIEW_BENCHMARKS/);
+}
+
+console.log("V58 offline + Training Intelligence + Benchmark contracts: OK");
