@@ -1833,6 +1833,54 @@ export class TrainingView {
     }
 
     this._delegatedClickHandler = async event => {
+      const repeatSession = event.target.closest(".p360-repeat-session");
+      if (repeatSession) {
+        const select = container.querySelector("#p360-clone-source");
+        const button = container.querySelector("#p360-clone-training");
+        const panel = container.querySelector("#p360-create-training-panel");
+        if (select && button) {
+          select.value = repeatSession.dataset.sessionId || "";
+          if (panel) panel.open = true;
+          button.click();
+          panel?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
+
+      const exportSession = event.target.closest(".p360-export-session-word");
+      if (exportSession) {
+        const session = (this.sessions || []).find(item => String(item.id) === String(exportSession.dataset.sessionId));
+        if (!session || !this._can(Permission.EXPORT_REPORT)) return;
+        exportTrainingSessionDocx({
+          session,
+          teamName: DataStore.getTeamById?.(this.teamId)?.name || "Equipo",
+          seasonName: DataStore.getActiveSeasonDisplayName?.(this.teamId) || this._seasonContext()?.name || "Temporada",
+          directory: this._playerDirectory()
+        });
+        return;
+      }
+
+      if (event.target.closest(".p360-export-season-word")) {
+        if (!this._can(Permission.EXPORT_REPORT)) return;
+        exportTrainingSeasonDocx({
+          sessions: this.sessions || [],
+          teamName: DataStore.getTeamById?.(this.teamId)?.name || "Equipo",
+          seasonName: DataStore.getActiveSeasonDisplayName?.(this.teamId) || this._seasonContext()?.name || "Temporada",
+          directory: this._playerDirectory()
+        });
+        return;
+      }
+
+      if (event.target.closest(".p360-export-season-csv")) {
+        if (!this._can(Permission.EXPORT_REPORT)) return;
+        exportTrainingSeasonCsv({
+          sessions: this.sessions || [],
+          teamName: DataStore.getTeamById?.(this.teamId)?.name || "Equipo",
+          seasonName: DataStore.getActiveSeasonDisplayName?.(this.teamId) || this._seasonContext()?.name || "Temporada"
+        });
+        return;
+      }
+
       const removeBlock = event.target.closest(".p360-remove-block");
       if (removeBlock) {
         const rows = container.querySelectorAll(".p360-block-row");
