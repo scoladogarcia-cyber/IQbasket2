@@ -7,6 +7,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("../views/TrainingView.js");
 const service = read("../services/player360/TrainingService.js");
 const complete = read("../services/player360/TrainingCompleteEditV54Service.js");
+const completeView = read("../views/training/TrainingCompleteEditV54View.js");
 const exportService = read("../services/player360/TrainingExportService.js");
 const sql = read("../supabase/migrations/20261004173000_training_ux_v55.sql");
 
@@ -25,6 +26,11 @@ assert.match(sql,/cloned_from_session_id/);
 assert.match(sql,/TRAINING_CLONE_SOURCE_SCOPE_MISMATCH/);
 assert.match(service,/iq_v55_create_training_session/);
 assert.match(complete,/iq_v55_update_training_complete/);
+assert.match(completeView,/Edición rápida/);
+assert.match(completeView,/v55-simplified-edit/);
+assert.match(completeView,/Más detalles · nombre, intensidad, objetivo y bloques/);
+assert.match(completeView,/Jugadores · asistencia, minutos, RPE y Pasaporte/);
+assert.match(completeView,/La sesión puede guardarse sin tocar esta sección/);
 
 for (const marker of [
   "Entreno rápido",
