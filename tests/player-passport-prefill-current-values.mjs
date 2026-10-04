@@ -9,7 +9,7 @@ assert.match(source,/Valor actual/);
 assert.match(source,/Sin valoración previa/);
 assert.match(source,/data-current-score/);
 assert.match(source,/Solo se crea una nueva observación para los atributos que toques/);
-assert.match(source,/this\._setDraftFromRow\(row,\{score:/);
+assert.match(source,/self\._setDraftFromRow\(row,\{score:/);
 assert.match(source,/this\.editorDraft\.entries\(\)/);
 assert.match(source,/No has modificado ni añadido ninguna valoración/);
 assert.match(source,/NE no borra una valoración histórica/);
