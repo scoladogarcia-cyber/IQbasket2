@@ -15,7 +15,22 @@ with ranked as (
            order by
              e.period asc,
              case
-               when e.game_clock ~ '^[0-9]{1,2}:[0-9]{2}
+               when e.game_clock similar to '[0-9]{1,2}:[0-9]{2}'
+                 then split_part(e.game_clock,':',1)::integer*60 + split_part(e.game_clock,':',2)::integer
+               else 0
+             end desc,
+             e.created_at asc,
+             e.id asc
+         )::integer as seq
+  from public.game_events e
+  join public.games g on g.id=e.game_id
+  where upper(coalesce(g.edit_state,'OPEN'))='OPEN'
+)
+update public.game_events e
+set event_sequence=r.seq
+from ranked r
+where r.id=e.id
+  and e.event_sequence is null;
 
 create unique index if not exists game_events_game_sequence_uq
   on public.game_events(game_id,event_sequence)
