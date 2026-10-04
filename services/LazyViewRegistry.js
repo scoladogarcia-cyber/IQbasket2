@@ -55,8 +55,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new FamilyAdvisorAccessView(supabase, authController);
   },
   training: async ({ supabase, authController }) => {
-    const { TrainingIntelligenceV58View } = await import("../views/training/TrainingIntelligenceV58View.js");
-    return new TrainingIntelligenceV58View(supabase, authController);
+    const { TrainingCompleteEditV54View } = await import("../views/training/TrainingCompleteEditV54View.js");
+    return new TrainingCompleteEditV54View(supabase, authController);
   },
   nutrition: async ({ supabase, authController }) => {
     const { NutritionView } = await import("../views/NutritionView.js");
@@ -65,8 +65,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new PlayerNutritionRouterView(supabase, authController, staffView);
   },
   player360: async ({ supabase, authController }) => {
-    const { Player360BenchmarkV58View } = await import("../views/player360/Player360BenchmarkV58View.js");
-    return new Player360BenchmarkV58View(supabase, authController);
+    const { Player360View } = await import("../views/Player360View.js");
+    return new Player360View(supabase, authController);
   },
   passport: async ({ supabase, authController }) => {
     const { PlayerPassportView } = await import("../views/player360/passport/PlayerPassportView.js");
