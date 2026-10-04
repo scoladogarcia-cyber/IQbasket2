@@ -36,6 +36,9 @@ export const PLAYER360_LONGITUDINAL_SOURCE_METRICS = Object.freeze({
     Object.freeze({ metric_code: "MINUTES", source_field: "minutes", unit: "MIN", aggregation: "AVERAGE", label: "Minutos" }),
     Object.freeze({ metric_code: "REBOUNDS", source_field: "rebounds", unit: "COUNT", aggregation: "AVERAGE", label: "Rebotes" }),
     Object.freeze({ metric_code: "ASSISTS", source_field: "assists", unit: "COUNT", aggregation: "AVERAGE", label: "Asistencias" }),
+    Object.freeze({ metric_code: "TURNOVERS", source_field: "turnovers", unit: "COUNT", aggregation: "AVERAGE", label: "Pérdidas" }),
+    Object.freeze({ metric_code: "EFG_PCT", source_field: "efg_pct", unit: "PERCENT", aggregation: "AVERAGE", label: "eFG%" }),
+    Object.freeze({ metric_code: "TS_PCT", source_field: "true_shooting_pct", unit: "PERCENT", aggregation: "AVERAGE", label: "TS%" }),
     Object.freeze({ metric_code: "PLUS_MINUS", source_field: "plus_minus", unit: "POINT_DIFF", aggregation: "AVERAGE", label: "+/-" })
   ]),
   training: Object.freeze([
@@ -47,6 +50,24 @@ export const PLAYER360_LONGITUDINAL_SOURCE_METRICS = Object.freeze({
     Object.freeze({ metric_code: "EXTERNAL_LOAD", source_field: "internal_load", unit: "AU", aggregation: "SUM", label: "Carga de tecnificación" }),
     Object.freeze({ metric_code: "EXTERNAL_MINUTES", source_field: "duration_minutes", unit: "MIN", aggregation: "SUM", label: "Minutos de tecnificación" }),
     Object.freeze({ metric_code: "EXTERNAL_RPE", source_field: "rpe", unit: "RPE_0_10", aggregation: "AVERAGE", label: "RPE de tecnificación" })
+  ])
+});
+
+
+/**
+ * Focus-to-performance association policy for V58.
+ * Focus exposure is descriptive: player minutes in sessions containing a V55
+ * focus. It is not interpreted as exclusive minutes devoted to that content.
+ */
+export const PLAYER360_TRAINING_FOCUS_ASSOCIATIONS = Object.freeze({
+  lags: Object.freeze([0, 1, 2, 4]),
+  outcomes: Object.freeze([
+    "competition.EVALUATION",
+    "competition.POINTS",
+    "competition.EFG_PCT",
+    "competition.TS_PCT",
+    "competition.ASSISTS",
+    "competition.TURNOVERS"
   ])
 });
 
