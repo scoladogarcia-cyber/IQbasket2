@@ -172,6 +172,9 @@ export function buildEventRows(reports=[]) {
 
 export function buildMatchWorkbookModel(reports=[],{eventsOnly=false}={}) {
   if(!Array.isArray(reports)||!reports.length) throw new Error("No hay partidos para exportar.");
+  if(reports.some(report=>report?.eventsAvailable===false)) {
+    throw new Error("No se exportará un Excel incompleto: no se han podido recuperar todas las jugadas.");
+  }
   if(eventsOnly){
     return [{name:"Jugadas",rows:buildEventRows(reports),widths:[38,12,24,12,12,9,12,10,10,38,9,24,24,26,9,10,10,10,18,38,26,24]}];
   }
