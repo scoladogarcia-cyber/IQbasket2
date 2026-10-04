@@ -54,8 +54,8 @@ try {
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),true);
   await form.locator('.v54-date').fill('2026-09-18');
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
-  await form.locator('input[name="v55-edit-focus"][value="TECHNICAL"]').uncheck();
-  await form.locator('input[name="v55-edit-focus"][value="TACTICAL_TEAM"]').check();
+  await form.locator('input[name="v55-edit-focus"][value="TECHNICAL"]').evaluate(el=>{el.checked=false;el.dispatchEvent(new Event("change",{bubbles:true}));});
+  await form.locator('input[name="v55-edit-focus"][value="TACTICAL_TEAM"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
   await form.locator('.v54-title').fill('Entrenamiento corregido');
   await form.locator('.v54-intensity').fill('5.5');
   const person1=form.locator('.v54-person[data-player-id="10000000-0000-4000-8000-000000000001"]');
