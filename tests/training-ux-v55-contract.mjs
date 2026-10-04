@@ -30,7 +30,8 @@ assert.match(completeView,/Edición rápida/);
 assert.match(completeView,/v55-simplified-edit/);
 assert.match(completeView,/Más detalles · nombre, intensidad, objetivo y bloques/);
 assert.match(completeView,/Jugadores · asistencia, minutos, RPE y Pasaporte/);
-assert.match(completeView,/La sesión puede guardarse sin tocar esta sección/);
+assert.match(completeView,/Jugadores registrados en esta sesión/);
+assert.match(completeView,/añadirlos al entrenamiento no los incorpora a la plantilla/);
 
 for (const marker of [
   "Entreno rápido",
