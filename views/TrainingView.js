@@ -379,7 +379,7 @@ export class TrainingView {
     `;
   }
 
-  _renderParticipantChecklist(date) {
+  _renderParticipantChecklist(date, selectedIds = null) {
     const players = this._eligiblePlayers(date);
     if (!players.length) {
       return `
@@ -392,19 +392,24 @@ export class TrainingView {
       `;
     }
 
+    const selected = selectedIds
+      ? new Set((selectedIds || []).map(String))
+      : new Set(players.map(player => String(player.id)));
+
     return `
       <div class="p360-participant-tools">
+        <span class="p360-default-hint">✓ Plantilla elegible seleccionada por defecto. Cambia solo las excepciones.</span>
         <button type="button" class="p360-link-btn" id="p360-select-all-players">
-          ${escapeHtml(this.t("player360.training.select_all", "Seleccionar plantilla"))}
+          ${escapeHtml(this.t("player360.training.select_all", "Todos"))}
         </button>
         <button type="button" class="p360-link-btn" id="p360-clear-all-players">
-          ${escapeHtml(this.t("player360.training.clear_all", "Limpiar"))}
+          ${escapeHtml(this.t("player360.training.clear_all", "Ninguno"))}
         </button>
       </div>
       <div class="p360-player-check-grid">
         ${players.map(player => `
           <label class="p360-player-check">
-            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" />
+            <input type="checkbox" name="p360-training-player" value="${escapeHtml(player.id)}" ${selected.has(String(player.id)) ? "checked" : ""} />
             <span class="p360-player-number">#${escapeHtml(player.jersey ?? player.number ?? "—")}</span>
             <span>${escapeHtml(playerName(player))}</span>
           </label>
