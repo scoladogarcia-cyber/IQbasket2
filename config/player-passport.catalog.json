@@ -1,0 +1,3096 @@
+{
+  "schema_version": "1.0",
+  "product": "IQBasket Player Passport",
+  "rules": {
+    "birth_date_field": "players.birth_date",
+    "age_is_derived": true,
+    "persist_age": false,
+    "no_overall_required": true,
+    "legacy_0_10_auto_conversion": false
+  },
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "step": 1,
+    "not_evaluated": "NE",
+    "labels": {
+      "1": "Adquisición",
+      "2": "Funcional controlado",
+      "3": "Competitivo",
+      "4": "Avanzado",
+      "5": "Dominio / rendimiento"
+    }
+  },
+  "contexts": {
+    "T": "Tarea controlada",
+    "JR": "Juego reducido con oposición",
+    "P5": "Partido / juego 5x5",
+    "VIDEO": "Evaluación sobre vídeo conservando el contexto original"
+  },
+  "attributes": [
+    {
+      "code": "TEC-BOT-01",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Bote mano derecha",
+      "definition": "Capacidad para controlar y utilizar funcionalmente la mano derecha durante el bote.",
+      "observation_guide": "Progresión, cambios de trayectoria, conservación del balón y continuidad de la acción con la derecha.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable bote mano derecha ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza bote mano derecha de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta bote mano derecha de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: usa la derecha con naturalidad para crear, mantener o manipular ventajas. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-02",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Bote mano izquierda",
+      "definition": "Capacidad para controlar y utilizar funcionalmente la mano izquierda durante el bote.",
+      "observation_guide": "Progresión, cambios de trayectoria, conservación del balón y continuidad de la acción con la izquierda.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable bote mano izquierda ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza bote mano izquierda de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta bote mano izquierda de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: usa la izquierda sin pérdida funcional respecto a su mano dominante para crear o mantener ventajas. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-03",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Control a velocidad",
+      "definition": "Capacidad para mantener control técnico del balón al desplazarse a alta velocidad.",
+      "observation_guide": "Altura y distancia del bote, pérdidas de control, capacidad para levantar la vista y enlazar la siguiente acción sin frenar innecesariamente.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable control a velocidad ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza control a velocidad de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta control a velocidad de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene velocidad de desplazamiento, información visual y control incluso ante recuperación defensiva. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-04",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Protección de balón",
+      "definition": "Capacidad para conservar la posesión frente a presión, contacto y manos defensivas activas.",
+      "observation_guide": "Uso del cuerpo, brazo libre legal, orientación del bote, cambios de mano, giros y capacidad de salir de traps o presión.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable protección de balón ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza protección de balón de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta protección de balón de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: convierte la presión defensiva en una oportunidad para mejorar ángulo, espacio o ventaja. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-05",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Cambio de dirección",
+      "definition": "Capacidad para modificar eficazmente la trayectoria de desplazamiento con balón.",
+      "observation_guide": "Control del balón, apoyos, centro de gravedad, separación creada y continuidad tras crossover, entre piernas, espalda u otras soluciones.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable cambio de dirección ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza cambio de dirección de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta cambio de dirección de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: elige y ejecuta el cambio mínimo necesario para desplazar al defensor y atacar el nuevo espacio. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-06",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Cambio de ritmo",
+      "definition": "Capacidad para variar velocidad y cadencia del bote para generar o ampliar ventaja.",
+      "observation_guide": "Pausas, aceleraciones, desaceleraciones, hesitations y capacidad de volver a acelerar sin perder control.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable cambio de ritmo ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza cambio de ritmo de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta cambio de ritmo de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: condiciona el timing del defensor mediante ritmo antes de atacar la ventaja. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-BOT-07",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Bote",
+      "name": "Manipulación con bote",
+      "definition": "Capacidad para utilizar bote, mirada, cuerpo, ángulos y ritmo para provocar una respuesta defensiva.",
+      "observation_guide": "Si el jugador obliga al defensor o a la ayuda a desplazarse antes de ejecutar la acción deseada.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable manipulación con bote ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza manipulación con bote de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta manipulación con bote de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: induce respuestas defensivas concretas para abrir línea de pase, tiro o penetración. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-01",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Pase mano derecha",
+      "definition": "Capacidad para ejecutar pases funcionales con la mano derecha desde diferentes posiciones y ángulos.",
+      "observation_guide": "Velocidad, trayectoria, control corporal y capacidad para pasar sin reorganizaciones innecesarias.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable pase mano derecha ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza pase mano derecha de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta pase mano derecha de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: ejecuta con la derecha pases variados, precisos y rápidos incluso en ventanas pequeñas. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-02",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Pase mano izquierda",
+      "definition": "Capacidad para ejecutar pases funcionales con la mano izquierda desde diferentes posiciones y ángulos.",
+      "observation_guide": "Velocidad, trayectoria, control corporal y capacidad para pasar sin volver sistemáticamente a la mano dominante.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable pase mano izquierda ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza pase mano izquierda de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta pase mano izquierda de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: ejecuta con la izquierda pases variados, precisos y rápidos incluso en ventanas pequeñas. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-03",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Precisión del pase",
+      "definition": "Capacidad para entregar el balón en el punto que facilita la siguiente acción del receptor.",
+      "observation_guide": "Altura, lado del cuerpo, velocidad y anticipación del pase; si obliga o no al receptor a reajustarse.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable precisión del pase ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza precisión del pase de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta precisión del pase de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: coloca sistemáticamente el balón en la ventana óptima para la acción siguiente. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-04",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Pase sobre bote",
+      "definition": "Capacidad para pasar directamente desde el bote sin detener o reorganizar innecesariamente la acción.",
+      "observation_guide": "Tiempo entre último bote y pase, equilibrio, variedad de ángulos y conservación de la ventana de ventaja.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable pase sobre bote ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza pase sobre bote de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta pase sobre bote de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene la ventaja creada pasando desde bote con ambas manos y distintos ángulos. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-05",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Pase bajo presión",
+      "definition": "Capacidad para mantener calidad técnica de pase ante presión física, manos activas y espacios reducidos.",
+      "observation_guide": "Pérdidas por precipitación, flotación de pases, telegráficos, calidad del pase ante traps y contacto.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable pase bajo presión ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza pase bajo presión de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta pase bajo presión de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene precisión y variedad ante presión intensa y utiliza la presión para encontrar al jugador liberado. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-PAS-06",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Pase y recepción",
+      "name": "Recepción y preparación",
+      "definition": "Capacidad para recibir asegurando el balón y quedar preparado para la siguiente acción.",
+      "observation_guide": "Presentación de manos, orientación corporal, equilibrio, recepción en movimiento y rapidez para enlazar tiro, pase o bote.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable recepción y preparación ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza recepción y preparación de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta recepción y preparación de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: recibe ya orientado y convierte la recepción en parte de la siguiente acción sin tiempo perdido. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-01",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Finalización mano derecha",
+      "definition": "Capacidad para finalizar cerca del aro utilizando la mano derecha de forma funcional.",
+      "observation_guide": "Control corporal, extensión, uso del tablero/aro, distintos apoyos y eficacia ante oposición.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable finalización mano derecha ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza finalización mano derecha de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta finalización mano derecha de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: finaliza con derecha desde distintos ángulos, apoyos y alturas ante protección real del aro. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-02",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Finalización mano izquierda",
+      "definition": "Capacidad para finalizar cerca del aro utilizando la mano izquierda de forma funcional.",
+      "observation_guide": "Control corporal, extensión, uso del tablero/aro, distintos apoyos y eficacia ante oposición.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable finalización mano izquierda ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza finalización mano izquierda de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta finalización mano izquierda de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: finaliza con izquierda desde distintos ángulos, apoyos y alturas sin dependencia funcional de la derecha. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-03",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Finalización con contacto",
+      "definition": "Capacidad para mantener control y calidad de finalización cuando existe contacto legal o desequilibrio provocado por el defensor.",
+      "observation_guide": "Estabilidad de tronco, absorción del contacto, protección del balón, elección de apoyos y continuidad hasta el aro.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable finalización con contacto ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza finalización con contacto de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta finalización con contacto de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: usa o absorbe el contacto para proteger línea de finalización y mantener eficacia. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-04",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Ángulos y evitación de contacto",
+      "definition": "Capacidad para utilizar extensión, aro, tablero, altura y trayectoria para evitar al protector del aro.",
+      "observation_guide": "Reverse, inside/outside hand, extensiones, cambios de lado, uso del aro como protección y ajuste del ángulo.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable ángulos y evitación de contacto ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza ángulos y evitación de contacto de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta ángulos y evitación de contacto de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: modifica el ángulo de finalización según posición del defensor sin perder control. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-05",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Juego de pies en finalización",
+      "definition": "Capacidad para organizar apoyos, paradas y pasos de forma legal y eficiente al finalizar.",
+      "observation_guide": "Uno-dos, dos tiempos, stride stop, eurostep, pivotes, cambio de último paso y equilibrio.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable juego de pies en finalización ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza juego de pies en finalización de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta juego de pies en finalización de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: selecciona y adapta los apoyos para alterar timing y ángulo sin perder equilibrio. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-FIN-06",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Finalización",
+      "name": "Finalización en transición",
+      "definition": "Capacidad para resolver cerca del aro a alta velocidad y con defensores en recuperación.",
+      "observation_guide": "Control del último bote, lectura de ángulo, desaceleración, protección, uso de ambas manos y estabilidad a máxima velocidad.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable finalización en transición ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza finalización en transición de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta finalización en transición de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene control y opciones múltiples a máxima velocidad frente a defensores que recuperan. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-01",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Mecánica y repetibilidad",
+      "definition": "Capacidad para reproducir un patrón de tiro estable y eficiente compatible con su desarrollo individual.",
+      "observation_guide": "Equilibrio, alineación funcional, secuencia de fuerza, salida, seguimiento y consistencia entre repeticiones.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable mecánica y repetibilidad ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza mecánica y repetibilidad de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta mecánica y repetibilidad de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene un patrón reproducible y puede ajustarlo a distancia o contexto sin degradarlo. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-02",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Preparación de tiro",
+      "definition": "Capacidad para estar física y perceptivamente preparado antes de recibir.",
+      "observation_guide": "Pies, manos, orientación, bajar centro de gravedad, lectura previa y reducción de movimientos innecesarios.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable preparación de tiro ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza preparación de tiro de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta preparación de tiro de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: llega a la recepción preparado para lanzar o atacar inmediatamente según respuesta defensiva. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-03",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Catch & shoot",
+      "definition": "Capacidad para lanzar tras recepción con equilibrio, velocidad y estabilidad técnica.",
+      "observation_guide": "Tiempo recepción-lanzamiento, necesidad de reajustes, calidad ante closeout y repetibilidad.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable catch & shoot ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza catch & shoot de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta catch & shoot de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: convierte ventanas breves de tiro en lanzamientos estables sin sacrificar selección. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-04",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Tiro tras bote",
+      "definition": "Capacidad para generar y ejecutar un lanzamiento estable después de botar.",
+      "observation_guide": "Paradas, equilibrio, separación, control del eje corporal y transición bote-tiro.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable tiro tras bote ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza tiro tras bote de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta tiro tras bote de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: crea su propia ventana y mantiene mecánica ante cambios de ritmo, dirección y presión. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-05",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Tiro en movimiento",
+      "definition": "Capacidad para lanzar tras desplazamientos sin balón o recepciones dinámicas.",
+      "observation_guide": "Relocation, curls, fades, salidas de bloqueos, frenada, orientación y ajuste de pies.",
+      "family": "technical",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable tiro en movimiento ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza tiro en movimiento de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta tiro en movimiento de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: se orienta y estabiliza rápidamente desde trayectorias variadas sin perder velocidad de ejecución. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TEC-TIR-06",
+      "dimension": "Técnica ofensiva",
+      "subdimension": "Tiro",
+      "name": "Estabilidad del tiro bajo presión",
+      "definition": "Capacidad para conservar calidad técnica y selección cuando existe oposición, fatiga o presión competitiva.",
+      "observation_guide": "Cambios de mecánica, aceleración excesiva, equilibrio, arco, selección y respuesta ante closeout.",
+      "family": "technical",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No demuestra de forma estable estabilidad del tiro bajo presión ni siquiera en condiciones sencillas. Son frecuentes errores que interrumpen la acción o le obligan a evitar ese recurso."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La habilidad aparece en tareas controladas o con presión baja, pero pierde claramente calidad cuando aumentan velocidad, oposición, contacto o incertidumbre."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Utiliza estabilidad del tiro bajo presión de manera funcional en juego real frente a oposición de nivel similar en la mayoría de situaciones habituales; los errores no le obligan sistemáticamente a evitar la acción."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Ejecuta estabilidad del tiro bajo presión de forma consistente a alta velocidad y bajo presión, con pocas pérdidas de calidad, y adapta la ejecución a ángulos, distancias o respuestas defensivas distintas."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta dominio transferible: mantiene su patrón y velocidad de ejecución frente a closeouts de calidad y presión competitiva. Mantiene eficacia ante oposición exigente y el recurso condiciona positivamente las opciones del rival o del equipo."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-01",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Escaneo previo",
+      "definition": "Capacidad para obtener información relevante antes de recibir o intervenir.",
+      "observation_guide": "Movimientos de cabeza/ojos, conocimiento de defensor, ayudas, compañeros y espacio antes de la recepción.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a escaneo previo; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve escaneo previo adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y actualiza información repetidamente antes y durante la acción para anticipar opciones. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-02",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Percepción de ventaja",
+      "definition": "Capacidad para detectar una ventaja ofensiva existente o incipiente a tiempo de explotarla.",
+      "observation_guide": "Reconoce desequilibrios, closeouts largos, superioridades, desajustes y defensores fuera de posición.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a percepción de ventaja; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve percepción de ventaja adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y detecta ventajas pequeñas antes de que sean evidentes y actúa antes de la recuperación defensiva. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-03",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Reconocimiento y ocupación del espacio",
+      "definition": "Capacidad para identificar, ocupar y liberar espacios que mejoran el ataque.",
+      "observation_guide": "Spacing, esquinas, 45°, dunker, cortes, vaciados y no congestionar líneas de penetración.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a reconocimiento y ocupación del espacio; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve reconocimiento y ocupación del espacio adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y modifica su posición para crear simultáneamente espacio propio y ventajas para compañeros. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-04",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Selección de pase",
+      "definition": "Capacidad para escoger receptor, momento y tipo de pase adecuados.",
+      "observation_guide": "Si ve al jugador prioritario, evita pases de bajo valor y ajusta decisión a ayudas, rotaciones y riesgo.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a selección de pase; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve selección de pase adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y anticipa la rotación siguiente y pasa al lugar donde estará la ventaja. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-05",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Selección de tiro",
+      "definition": "Capacidad para diferenciar un lanzamiento de alto valor de uno simplemente disponible.",
+      "observation_guide": "Calidad de espacio, equilibrio, rango real, reloj, rebote, ventaja creada y alternativas mejores.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a selección de tiro; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve selección de tiro adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y ajusta selección al contexto competitivo y castiga consistentemente la respuesta defensiva óptima. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-06",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Decisión penetrar–pasar–tirar",
+      "definition": "Capacidad para seleccionar rápidamente entre atacar aro, pasar o lanzar.",
+      "observation_guide": "Respuesta al closeout, posición de ayudas, balance riesgo-beneficio y continuidad de la ventaja.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a decisión penetrar–pasar–tirar; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve decisión penetrar–pasar–tirar adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y elige correctamente con información incompleta y cambia de opción si cambia la defensa. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-07",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Decisiones en transición",
+      "definition": "Capacidad para resolver ventajas y desventajas en campo abierto.",
+      "observation_guide": "Carriles, profundidad, pase adelantado, fijar defensor, superioridad numérica y cuándo frenar.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a decisiones en transición; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve decisiones en transición adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y manipula al último defensor y mantiene la superioridad hasta generar tiro de alto valor. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-08",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Lectura de bloqueo directo",
+      "definition": "Capacidad para reconocer y atacar coberturas de pick-and-roll/pick-and-pop.",
+      "observation_guide": "Drop, switch, show/hedge, blitz, under, reject; lectura de roller, popper, short roll y lado débil.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a lectura de bloqueo directo; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve lectura de bloqueo directo adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y reconoce cobertura temprano, manipula dos defensores y conecta con la ventaja secundaria. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-09",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Lectura de bloqueos indirectos",
+      "definition": "Capacidad para interpretar la defensa en acciones sin balón con bloqueos.",
+      "observation_guide": "Curl, fade, backdoor, straight cut, rechazo, cambio de ritmo y lectura de top-lock/switch/trail.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a lectura de bloqueos indirectos; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve lectura de bloqueos indirectos adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y lee al defensor y al segundo defensor antes de elegir trayectoria y timing. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-10",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Juego sin balón",
+      "definition": "Capacidad para generar valor ofensivo cuando no posee el balón.",
+      "observation_guide": "Cortes, reemplazos, relocations, sellos, ocupación de dunker, screens y timing respecto a penetraciones.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a juego sin balón; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve juego sin balón adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y genera ventajas para sí o para terceros sin necesitar tocar el balón. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-11",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Creación y mantenimiento de ventaja",
+      "definition": "Capacidad para crear una ventaja o evitar que una ventaja existente desaparezca.",
+      "observation_guide": "Fijar defensor, atacar closeout, paint touch, extra pass, re-drive y decisiones que obligan a nueva rotación.",
+      "family": "decision",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a creación y mantenimiento de ventaja; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve creación y mantenimiento de ventaja adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y encadena acciones para mantener a la defensa en rotación hasta obtener una finalización de alto valor. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "TAC-OF-12",
+      "dimension": "Perceptivo-táctica",
+      "subdimension": "Ataque",
+      "name": "Gestión del ritmo y adaptación",
+      "definition": "Capacidad para acelerar, pausar, reorganizar o cambiar solución según el estado de la posesión.",
+      "observation_guide": "Control del tempo, reloj, ventaja, fatiga, emparejamientos y cambios defensivos durante la misma acción.",
+      "family": "decision",
+      "valid_contexts": [
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "Rara vez identifica o selecciona correctamente la conducta asociada a gestión del ritmo y adaptación; suele reaccionar tarde o elegir una opción que elimina la ventaja."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "Reconoce situaciones evidentes y decide bien con tiempo o poca presión, pero la calidad cae con incertidumbre, velocidad o múltiples opciones."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Resuelve gestión del ritmo y adaptación adecuadamente en la mayoría de situaciones habituales de juego real frente a oposición similar y dentro de un tiempo útil para conservar la ventaja."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Lee situaciones menos evidentes, decide pronto y adapta la respuesta cuando cambia la defensa; mantiene calidad bajo presión y en contextos variados."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Anticipa el desarrollo de la acción y controla el ritmo de la posesión y adapta el plan antes de que la defensa recupere iniciativa. Sus decisiones no solo responden a la defensa: ayudan a provocarla o mantenerla en desventaja."
+        }
+      ]
+    },
+    {
+      "code": "DEF-01",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Base y desplazamiento defensivo",
+      "definition": "Capacidad para mantener una posición corporal que permita reaccionar eficientemente.",
+      "observation_guide": "Centro de gravedad, equilibrio, apoyos, orientación, cruces innecesarios y capacidad de frenar/cambiar dirección.",
+      "family": "defense",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable base y desplazamiento defensivo; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple base y desplazamiento defensivo de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: ajusta distancia, ángulo y pies sin perder equilibrio ante cambios de ritmo ofensivos. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-02",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Defensa 1x1 exterior",
+      "definition": "Capacidad para contener al atacante con balón en espacio exterior.",
+      "observation_guide": "Primer paso defensivo, orientación, distancia, pecho frente al balón y necesidad de ayudas.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable defensa 1x1 exterior; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple defensa 1x1 exterior de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: influye en la dirección y opciones del atacante sin conceder ventaja primaria. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-03",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Contención de penetración",
+      "definition": "Capacidad para detener o desviar una penetración antes de que genere ventaja profunda.",
+      "observation_guide": "Ángulo de cadera, recuperación, verticalidad, uso de línea lateral/fondo y protección del aro.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable contención de penetración; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple contención de penetración de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: reduce profundidad de penetración y fuerza finalizaciones/pases de menor valor. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-04",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Presión al balón y uso de manos",
+      "definition": "Capacidad para incomodar al manejador sin perder equilibrio ni cometer faltas evitables.",
+      "observation_guide": "Actividad de manos, distancia, deflections, reach-ins, orientación y recuperación tras fintas.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable presión al balón y uso de manos; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple presión al balón y uso de manos de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: aumenta presión sobre bote/pase sin comprometer la contención. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-05",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Closeout",
+      "definition": "Capacidad para recuperar hasta un tirador controlando simultáneamente tiro y penetración.",
+      "observation_guide": "Sprint inicial, desaceleración, mano de contest, distancia, orientación y reacción al primer bote.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable closeout; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple closeout de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: ajusta closeout al perfil del atacante y al plan defensivo sin regalar segunda ventaja. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-06",
+      "dimension": "Defensa",
+      "subdimension": "Sin balón",
+      "name": "Posición defensiva sin balón",
+      "definition": "Capacidad para mantener una relación útil entre balón, atacante propio, aro y espacio.",
+      "observation_guide": "Visión balón-hombre, distancia de ayuda, deny, body positioning y ajustes cuando se mueve el balón.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable posición defensiva sin balón; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple posición defensiva sin balón de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: se reposiciona antes de cada nueva amenaza y reduce opciones sin perder a su asignación. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-07",
+      "dimension": "Defensa",
+      "subdimension": "Colectiva",
+      "name": "Ayuda defensiva",
+      "definition": "Capacidad para intervenir sobre una ventaja rival en el momento y profundidad adecuados.",
+      "observation_guide": "Posición de ayuda, timing, verticalidad, stunt/dig y si la ayuda resuelve sin crear una ventaja mayor.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable ayuda defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple ayuda defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: llega temprano, detiene la ventaja y conserva opciones de recuperación o rotación. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-08",
+      "dimension": "Defensa",
+      "subdimension": "Colectiva",
+      "name": "Rotación defensiva",
+      "definition": "Capacidad para asumir la siguiente responsabilidad cuando un compañero ayuda o es superado.",
+      "observation_guide": "Lectura de la cadena de ayudas, low man, x-out, bump y asignación del siguiente atacante peligroso.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable rotación defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple rotación defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: anticipa la rotación posterior y llega con tiempo para evitar una segunda ventaja. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-09",
+      "dimension": "Defensa",
+      "subdimension": "Colectiva",
+      "name": "Recuperación defensiva",
+      "definition": "Capacidad para volver a una responsabilidad útil después de ayudar, presionar o quedar desplazado.",
+      "observation_guide": "Trayectoria de recuperación, prioridad de amenazas, balance entre sprint y control, comunicación.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable recuperación defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple recuperación defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: recupera al jugador/espacio correcto, no necesariamente al emparejamiento original. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-10",
+      "dimension": "Defensa",
+      "subdimension": "Bloqueos",
+      "name": "Navegación de bloqueos",
+      "definition": "Capacidad para atravesar o rodear bloqueos manteniendo conexión con la acción.",
+      "observation_guide": "Top-lock, chase, over/under, body lock, evitar contactos innecesarios y volver a línea defensiva.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable navegación de bloqueos; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple navegación de bloqueos de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: elige la ruta según tirador, ángulo y cobertura colectiva y minimiza la ventaja creada. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-11",
+      "dimension": "Defensa",
+      "subdimension": "Bloqueos",
+      "name": "Defensa del bloqueo directo",
+      "definition": "Capacidad para ejecutar su responsabilidad en las distintas coberturas de pick-and-roll.",
+      "observation_guide": "Drop, switch, hedge/show, blitz, ice, under; comunicación, ángulos y conexión con roller/handler.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable defensa del bloqueo directo; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple defensa del bloqueo directo de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: reconoce acción y cobertura antes del contacto y coordina dos o más responsabilidades. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-12",
+      "dimension": "Defensa",
+      "subdimension": "Transición",
+      "name": "Defensa en transición",
+      "definition": "Capacidad para organizarse al perder la posesión y reducir ventaja rival.",
+      "observation_guide": "Sprint de retorno, protección de aro, parar balón, emparejamiento, comunicación y balance entre balón/aro/triples.",
+      "family": "defense",
+      "valid_contexts": [
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable defensa en transición; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple defensa en transición de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: prioriza amenazas correctamente y transforma una inferioridad inicial en defensa organizada. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-13",
+      "dimension": "Defensa",
+      "subdimension": "Individual",
+      "name": "Versatilidad defensiva",
+      "definition": "Capacidad para defender eficazmente perfiles ofensivos diferentes.",
+      "observation_guide": "Rendimiento frente a tamaños, velocidades, roles y acciones distintas; capacidad de cambiar asignaciones.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable versatilidad defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple versatilidad defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: mantiene impacto defensivo positivo ante múltiples perfiles sin requerir protección táctica constante. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-14",
+      "dimension": "Defensa",
+      "subdimension": "Rebote",
+      "name": "Box-out",
+      "definition": "Capacidad para localizar, contactar y controlar al rival antes de perseguir el rebote.",
+      "observation_guide": "Búsqueda del atacante, primer contacto, base, giro/sello y continuidad hasta asegurar balón.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable box-out; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple box-out de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: neutraliza sistemáticamente a su rival y libera el rebote para sí o para un compañero. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-15",
+      "dimension": "Defensa",
+      "subdimension": "Rebote",
+      "name": "Rebote defensivo",
+      "definition": "Capacidad para finalizar la posesión capturando o asegurando el rebote defensivo.",
+      "observation_guide": "Lectura de trayectoria, ataque al balón, dos manos cuando procede, seguridad y primer pase/salida.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable rebote defensivo; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple rebote defensivo de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: controla su zona de rebote y convierte recuperación en salida ofensiva segura. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-16",
+      "dimension": "Defensa",
+      "subdimension": "Colectiva",
+      "name": "Comunicación defensiva",
+      "definition": "Capacidad para proporcionar información defensiva útil, anticipada y accionable.",
+      "observation_guide": "Avisos de bloqueos, ayudas, cambios, cutters, reloj y tono/claridad de la información.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable comunicación defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple comunicación defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: organiza preventivamente a compañeros y reduce errores antes de que ocurran. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "DEF-17",
+      "dimension": "Defensa",
+      "subdimension": "Colectiva",
+      "name": "Anticipación defensiva",
+      "definition": "Capacidad para prever la acción probable a partir de señales del juego sin abandonar responsabilidades.",
+      "observation_guide": "Lectura de ojos, spacing, patrones, timing de cortes y pases; intercepciones sin gambling sistemático.",
+      "family": "defense",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 8,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "No ejecuta de forma estable anticipación defensiva; llega tarde, pierde responsabilidad o genera ayudas adicionales de manera frecuente."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La ejecuta correctamente en situaciones simples o previsibles, pero pierde posición/timing al aumentar velocidad, espacio, bloqueos o coordinación."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Cumple anticipación defensiva de manera funcional en la mayoría de situaciones habituales de juego real frente a oposición similar y respeta el plan defensivo."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Mantiene calidad frente a atacantes exigentes y acciones variadas, ajustando distancia, timing y responsabilidad sin requerir protección constante."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Presenta impacto defensivo diferencial: anticipa acciones de alto valor y llega antes sin desestructurar el sistema defensivo. Anticipa sin asumir riesgos innecesarios y mejora la eficacia defensiva de compañeros."
+        }
+      ]
+    },
+    {
+      "code": "MEN-01",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Aprendizaje",
+      "name": "Atención a información relevante",
+      "definition": "Capacidad para mantener y dirigir la atención hacia las claves útiles de tarea y juego.",
+      "observation_guide": "Escucha de consignas, foco durante repeticiones, lectura del juego y reducción de distracciones.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a atención a información relevante aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; selecciona rápidamente las claves relevantes y mantiene foco incluso bajo carga o presión. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-02",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Autorregulación",
+      "name": "Reacción al error",
+      "definition": "Calidad de la conducta inmediatamente posterior a un error propio.",
+      "observation_guide": "Tiempo para reengancharse, siguiente acción, lenguaje corporal, protesta, evitación o pérdida de concentración.",
+      "family": "mental",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a reacción al error aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; procesa el error sin arrastrarlo y ajusta la siguiente acción cuando existe información útil. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-03",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Autorregulación",
+      "name": "Compostura bajo presión",
+      "definition": "Capacidad para conservar calidad conductual y decisional en situaciones de presión competitiva.",
+      "observation_guide": "Cambios de decisión, precipitación, comunicación, control corporal y conducta en finales/aprietos.",
+      "family": "mental",
+      "valid_contexts": [
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a compostura bajo presión aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; mantiene o mejora claridad decisional cuando aumenta la presión contextual. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-04",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Aprendizaje",
+      "name": "Persistencia ante dificultad",
+      "definition": "Capacidad para sostener esfuerzo deliberado cuando una tarea o rival presenta dificultad.",
+      "observation_guide": "Abandono, repetición con propósito, búsqueda de soluciones y tolerancia a no lograr éxito inmediato.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a persistencia ante dificultad aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; mantiene esfuerzo y modifica estrategia en lugar de repetir de forma rígida. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-05",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Feedback",
+      "name": "Receptividad al feedback",
+      "definition": "Disposición y capacidad para recibir correcciones sin respuestas defensivas que impidan aprender.",
+      "observation_guide": "Escucha, preguntas aclaratorias, atención al mensaje y respuesta inmediata.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a receptividad al feedback aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; recibe feedback crítico, extrae la clave y lo integra sin perder autonomía. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-06",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Feedback",
+      "name": "Implementación del feedback",
+      "definition": "Capacidad para transformar una indicación comprendida en un cambio observable de conducta.",
+      "observation_guide": "Diferencia entre entender verbalmente y modificar ejecución/decisión en repeticiones posteriores.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a implementación del feedback aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; aplica el feedback, lo estabiliza y lo transfiere a contextos nuevos. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-07",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Feedback",
+      "name": "Búsqueda de feedback y autonomía",
+      "definition": "Capacidad para identificar necesidades propias, solicitar información útil y trabajar sobre ella.",
+      "observation_guide": "Preguntas específicas, autoevaluación, objetivos personales y trabajo sin dependencia constante del entrenador.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a búsqueda de feedback y autonomía aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; formula hipótesis sobre su rendimiento, busca feedback relevante y prueba soluciones de forma autónoma. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-08",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Adaptación",
+      "name": "Adaptabilidad",
+      "definition": "Capacidad para modificar conducta ante cambios de rol, tarea, rival, reglas o estrategia.",
+      "observation_guide": "Rigidez, tiempo de adaptación, transferencia de principios y respuesta a consignas nuevas.",
+      "family": "mental",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a adaptabilidad aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; transfiere principios y encuentra soluciones eficaces ante situaciones nuevas. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "MEN-09",
+      "dimension": "Mental y aprendizaje",
+      "subdimension": "Conducta competitiva",
+      "name": "Esfuerzo consistente y autocontrol",
+      "definition": "Capacidad para mantener esfuerzo útil y regular impulsos que perjudican al rendimiento o al equipo.",
+      "observation_guide": "Retorno defensivo, acciones sin balón, protestas, faltas evitables, intensidad y estabilidad entre situaciones favorables/adversas.",
+      "family": "mental",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a esfuerzo consistente y autocontrol aparece rara vez o de forma inestable y dificulta de manera recurrente aprendizaje, autorregulación o continuidad."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando el contexto es favorable o existe supervisión directa, pero se pierde ante error, presión, dificultad o menor control externo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "La conducta es funcional y observable de forma habitual en entrenamiento y/o competición; permite aprender y competir sin interferencias recurrentes."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "La mantiene en situaciones difíciles, la aplica con autonomía y es capaz de recuperarla rápidamente después de momentos adversos."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "La conducta está consolidada y autorregulada; mantiene esfuerzo funcional y control conductual sin necesidad de supervisión externa. Contribuye a acelerar el propio aprendizaje y estabilizar su rendimiento."
+        }
+      ]
+    },
+    {
+      "code": "COL-01",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Comunicación",
+      "name": "Comunicación colectiva",
+      "definition": "Capacidad para compartir información útil con compañeros en ataque, defensa y pausas.",
+      "observation_guide": "Claridad, oportunidad, contenido, escucha y si la comunicación ayuda a resolver una acción.",
+      "family": "collective",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a comunicación colectiva es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante comunicación colectiva en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: mejora la coordinación colectiva con información anticipada, breve y específica. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    },
+    {
+      "code": "COL-02",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Cooperación",
+      "name": "Cooperación funcional",
+      "definition": "Capacidad para realizar acciones que facilitan el rendimiento de compañeros aunque no generen estadística personal.",
+      "observation_guide": "Bloqueos, cortes de arrastre, spacing, ayudas, box-outs, extra pass y disposición a ejecutar tareas no protagonistas.",
+      "family": "collective",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a cooperación funcional es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante cooperación funcional en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: identifica espontáneamente qué acción mejora al conjunto y la ejecuta con timing. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    },
+    {
+      "code": "COL-03",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Rol",
+      "name": "Comprensión y aceptación del rol",
+      "definition": "Capacidad para entender qué necesita el equipo de él/ella en un contexto y actuar de acuerdo con ello.",
+      "observation_guide": "Selección de acciones, reacción a cambios de minutos/rol, disciplina táctica y coherencia con fortalezas del equipo.",
+      "family": "collective",
+      "valid_contexts": [
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a comprensión y aceptación del rol es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante comprensión y aceptación del rol en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: adapta su rol a las necesidades del partido sin perder impacto ni compromiso. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    },
+    {
+      "code": "COL-04",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Conexión",
+      "name": "Conexión colectiva",
+      "definition": "Capacidad para mantener continuidad entre acciones propias y del equipo.",
+      "observation_guide": "Extra pass, re-space, segunda ayuda, salida tras rebote, continuidad después de bloquear/cortar y acciones encadenadas.",
+      "family": "collective",
+      "valid_contexts": [
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a conexión colectiva es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante conexión colectiva en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: anticipa la acción siguiente y conecta fases del juego sin romper el flujo colectivo. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    },
+    {
+      "code": "COL-05",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Liderazgo",
+      "name": "Liderazgo funcional",
+      "definition": "Capacidad para elevar organización, esfuerzo, claridad o confianza del grupo mediante conductas observables.",
+      "observation_guide": "Organiza sin monopolizar, corrige de forma útil, da ejemplo, estabiliza al grupo y facilita decisiones.",
+      "family": "collective",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 6,
+      "introduction_stage": "Foundational · Advanced · Performance",
+      "do_not_rate_by": "No valorar por una acción aislada ni por resultado estadístico sin contexto.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a liderazgo funcional es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante liderazgo funcional en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: hace mejores a los demás y adapta su forma de liderar a la necesidad del grupo. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    },
+    {
+      "code": "COL-06",
+      "dimension": "Colectiva y comportamiento",
+      "subdimension": "Responsabilidad",
+      "name": "Responsabilidad y fiabilidad",
+      "definition": "Capacidad para cumplir compromisos deportivos y asumir las consecuencias de sus acciones.",
+      "observation_guide": "Preparación, puntualidad en tareas internas, cuidado del material, cumplimiento de planes y asunción de errores sin desplazar responsabilidad.",
+      "family": "collective",
+      "valid_contexts": [
+        "T",
+        "JR",
+        "P5"
+      ],
+      "min_evidence": 5,
+      "introduction_stage": "Según dominio",
+      "do_not_rate_by": "No mezclar con circunstancias personales ajenas al contexto deportivo ni usar para sancionar rasgos de personalidad.",
+      "rubric_version": "1.0",
+      "anchors": [
+        {
+          "level": 1,
+          "label": "Adquisición",
+          "criteria": "La conducta asociada a responsabilidad y fiabilidad es escasa o genera con frecuencia fricción, desconexión o pérdida de eficacia colectiva."
+        },
+        {
+          "level": 2,
+          "label": "Funcional controlado",
+          "criteria": "La muestra cuando se le solicita o en contextos sencillos, pero es poco consistente cuando cambia el rol, aumenta la presión o no recibe protagonismo."
+        },
+        {
+          "level": 3,
+          "label": "Competitivo",
+          "criteria": "Contribuye de forma funcional y estable al equipo mediante responsabilidad y fiabilidad en la mayoría de situaciones habituales."
+        },
+        {
+          "level": 4,
+          "label": "Avanzado",
+          "criteria": "Adapta su conducta a compañeros, rol y contexto; su aportación mejora de forma consistente la coordinación o eficacia colectiva."
+        },
+        {
+          "level": 5,
+          "label": "Dominio / rendimiento",
+          "criteria": "Su impacto trasciende su propia acción: es fiable de forma sostenida y favorece estándares colectivos mediante su conducta. Eleva de forma observable el funcionamiento de compañeros o del grupo."
+        }
+      ]
+    }
+  ]
+}
