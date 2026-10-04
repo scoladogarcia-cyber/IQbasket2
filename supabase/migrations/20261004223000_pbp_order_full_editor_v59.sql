@@ -111,6 +111,7 @@ create or replace function public.iq_v59_game_capture_snapshot(p_game_id uuid)
 returns jsonb
 language sql
 stable
+security definer
 set search_path=''
 as $$
   select iq_v59_private.snapshot(p_game_id);
@@ -504,6 +505,23 @@ begin
 end;
 $$;
 
+create or replace function public.iq_v58_reassign_game_event_player(
+  p_game_id uuid,
+  p_event_id uuid,
+  p_new_player_id uuid,
+  p_reason text default null
+) returns jsonb
+language sql
+security definer
+set search_path=''
+as $
+  select iq_v58_private.reassign_game_event_player(
+    p_game_id,p_event_id,p_new_player_id,p_reason
+  );
+$;
+revoke all on function public.iq_v58_reassign_game_event_player(uuid,uuid,uuid,text) from public,anon;
+grant execute on function public.iq_v58_reassign_game_event_player(uuid,uuid,uuid,text) to authenticated;
+
 create or replace function public.iq_v59_edit_game_event(
   p_game_id uuid,
   p_event_id uuid,
@@ -512,8 +530,9 @@ create or replace function public.iq_v59_edit_game_event(
   p_reason text default null
 ) returns jsonb
 language sql
+security definer
 set search_path=''
-as $$
+as $
   select iq_v59_private.edit_game_event(
     p_game_id,p_event_id,p_new_player_id,p_new_action_type,p_reason
   );
