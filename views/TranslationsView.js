@@ -27,6 +27,7 @@ import { SeasonFreezeService } from "../services/seasons/SeasonFreezeService.js"
 import { RosterManagementService } from "../services/roster/RosterManagementService.js";
 import { TransferRequestService } from "../services/transfers/TransferRequestService.js";
 import { FamilyProfileControls } from "../components/admin/FamilyProfileControls.js";
+import { preparePlayerPhoto } from "../services/player/PlayerPhotoService.js";
 
 function normalizeIsoDate(value = "") {
   const raw = String(value || "").trim();
@@ -1316,6 +1317,17 @@ export class TranslationsView {
                       </select>
                     </div>
                     <div class="form-group" style="grid-column: 1 / -1;">
+                      <label>Fotografía</label>
+                      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <div id="edit-p-photo-preview" style="width:72px;height:72px;border-radius:14px;background:#e2e8f0;display:grid;place-items:center;overflow:hidden;font-weight:900;color:#475569;">IMG</div>
+                        <div style="flex:1;min-width:220px;display:grid;gap:6px;">
+                          <input type="file" id="edit-p-photo-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" ${isReadOnly ? 'disabled' : ''} />
+                          <input type="hidden" id="edit-p-photo-url" />
+                          <small id="edit-p-photo-status" style="font-size:10px;color:#64748b;">JPG, PNG o WebP · máximo 6 MB. Se optimiza antes de guardar.</small>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
                       <label>Estado general del jugador</label>
                       <select id="edit-p-status" ${isReadOnly ? 'disabled' : ''}>
                         <option value="Activo">Activo</option>
@@ -1988,6 +2000,17 @@ export class TranslationsView {
         container.querySelector("#edit-p-number").value = player.jersey ?? player.number ?? "";
         container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
         container.querySelector("#edit-p-status").value = player.status || "Activo";
+        const currentPhoto = player.photo_url || player.photoUrl || "";
+        const photoUrlInput = container.querySelector("#edit-p-photo-url");
+        const photoPreview = container.querySelector("#edit-p-photo-preview");
+        const photoStatus = container.querySelector("#edit-p-photo-status");
+        const photoFile = container.querySelector("#edit-p-photo-file");
+        if (photoUrlInput) photoUrlInput.value = currentPhoto;
+        if (photoFile) photoFile.value = "";
+        if (photoStatus) photoStatus.textContent = "JPG, PNG o WebP · máximo 6 MB. Se optimiza antes de guardar.";
+        if (photoPreview) photoPreview.innerHTML = currentPhoto
+          ? `<img src="${currentPhoto}" alt="Foto actual" style="width:100%;height:100%;object-fit:cover;">`
+          : "IMG";
 
         const modal = container.querySelector("#modal-edit-player");
         if (modal) modal.style.display = "flex";
@@ -2001,6 +2024,27 @@ export class TranslationsView {
       container.querySelector("#modal-edit-player").style.display = "none";
     });
 
+    const editPhotoFile = container.querySelector("#edit-p-photo-file");
+    if (editPhotoFile) {
+      editPhotoFile.addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const status = container.querySelector("#edit-p-photo-status");
+        try {
+          if (status) status.textContent = "Preparando fotografía…";
+          const prepared = await preparePlayerPhoto(file);
+          const hidden = container.querySelector("#edit-p-photo-url");
+          const preview = container.querySelector("#edit-p-photo-preview");
+          if (hidden) hidden.value = prepared;
+          if (preview) preview.innerHTML = `<img src="${prepared}" alt="Vista previa" style="width:100%;height:100%;object-fit:cover;">`;
+          if (status) status.textContent = "Fotografía preparada. Pulsa Guardar cambios.";
+        } catch (error) {
+          event.target.value = "";
+          if (status) status.textContent = error?.message || "No se ha podido preparar la fotografía.";
+        }
+      });
+    }
+
     const formEditPlayer = container.querySelector("#form-edit-player-modal");
     if (formEditPlayer) {
       formEditPlayer.addEventListener("submit", async (e) => {
@@ -2011,6 +2055,7 @@ export class TranslationsView {
         const jersey = Number(container.querySelector("#edit-p-number")?.value || 0);
         const position = container.querySelector("#edit-p-position")?.value;
         const status = container.querySelector("#edit-p-status")?.value;
+        const photoUrl = container.querySelector("#edit-p-photo-url")?.value || null;
         if (!this.auth?.can?.(Permission.MANAGE_ROSTER, { teamId: activeTeamId, teamSeasonId: rosterTeamSeasonId })) return alert("⚠️ No tienes permiso para modificar esta plantilla.");
 
         this.showSyncOverlay("💾 Guardando cambios del jugador...");
@@ -2021,7 +2066,8 @@ export class TranslationsView {
           await DataStore.updatePlayer(pId, {
             first_name: firstName,
             last_name: lastName,
-            status
+            status,
+            photo_url: photoUrl
           }, Permission.EDIT_PLAYER_MASTER);
 
           if (rosterBackendReady && rosterTeamSeasonId) {
