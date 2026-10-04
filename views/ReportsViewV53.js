@@ -139,9 +139,16 @@ export class ReportsViewV53 extends ReportsViewV50 {
     finally{this._exchangeBusy=false;}
   }
 
+  _globalSelectionGames() {
+    if(this.reportMode==="game") return this._selectionGames();
+    const allowed=this._visibleGames();
+    const requested=new Set((this.dossierConfig?.selectedGameIds||[]).map(id));
+    return requested.size ? allowed.filter(game=>requested.has(id(game.id))) : allowed;
+  }
+
   async _exportCompleteSeason(button) {
     if (this._exchangeBusy) return;
-    const selected=this._selectionGames();
+    const selected=this._globalSelectionGames();
     if(!selected.length){button.disabled=true;button.title="Selecciona al menos un partido.";return;}
     const status={textContent:""};
     const previous=button.textContent;
@@ -153,7 +160,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     } finally {
       if(button.isConnected){
         button.textContent=previous;
-        button.disabled=this._selectionGames().length===0;
+        button.disabled=this._globalSelectionGames().length===0;
       }
     }
   }
@@ -161,7 +168,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
   _refreshCompleteSelectionButton(container) {
     const button=container?.querySelector("#btn-export-complete-season");
     if(!button)return;
-    const selected=this._selectionGames();
+    const selected=this._globalSelectionGames();
     button.textContent=`📥 Exportar selección actual · ${selected.length} partido(s) (PDF)`;
     button.disabled=!selected.length||this._exchangeBusy;
     button.title=selected.length
@@ -234,8 +241,9 @@ export class ReportsViewV53 extends ReportsViewV50 {
   async render(containerId="dashboard-content-area") {
     ++this._overviewToken;
     await super.render(containerId);
-    if(this.reportMode!=="game")return;
     const container=document.getElementById(containerId)||document.getElementById("main-content");
+    if(this.reportMode==="game"||this.reportMode==="season_dossier") this._refreshCompleteSelectionButton(container);
+    if(this.reportMode!=="game")return;
     const content=container?.querySelector("#report-view-content-area");if(!content)return;
     this._syncSelection();
     this._refreshCompleteSelectionButton(container);
