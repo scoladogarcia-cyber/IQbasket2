@@ -77,8 +77,12 @@
 
       addEventListener('focus', check);
       addEventListener('online', check);
+      // iOS Safari puede restaurar una pestaña desde BFCache sin recargar módulos.
+      // pageshow cubre esa reentrada y hashchange cubre navegación SPA entre vistas.
+      addEventListener('pageshow', check);
+      addEventListener('hashchange', check);
       document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
-      setInterval(check, 60000);
+      setInterval(check, 15000);
       check();
     })();
   </script>

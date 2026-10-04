@@ -30,6 +30,9 @@ assert.match(indexHtml, /latest !== buildRelease/);
 assert.match(indexHtml, /cache: 'no-store'/);
 assert.match(indexHtml, /searchParams\.set\('iqrelease'/);
 assert.match(indexHtml, /Actualizar IQBasket/);
+assert.match(indexHtml, /addEventListener\('pageshow', check\)/);
+assert.match(indexHtml, /addEventListener\('hashchange', check\)/);
+assert.match(indexHtml, /setInterval\(check, 15000\)/);
 
 assert.match(deployWorkflow, /Stamp exact commit release into HTML and metadata/);
 assert.match(deployWorkflow, /node scripts\/stamp-build-release\.mjs/);
