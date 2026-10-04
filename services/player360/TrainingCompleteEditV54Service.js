@@ -40,15 +40,18 @@ export class TrainingCompleteEditV54Service {
     };
   }
 
-  async saveComplete({ session, teamSeasonId, revision, date, title, trainingType,
+  async saveComplete({ session, teamSeasonId, revision, date, title, focusCodes = [],
     objective, notes, start, end, intensity, blocks, participants, confirmedRemovals = false }) {
     if (!this.client?.rpc || !session?.id || !teamSeasonId || !revision || !date || !title) {
       throw new Error('Datos obligatorios del entrenamiento no disponibles.');
     }
-    const { data, error } = await this.client.rpc('iq_v54_update_training_complete', {
+    if (!Array.isArray(focusCodes) || focusCodes.length === 0) {
+      throw new Error('Selecciona al menos un foco de entrenamiento.');
+    }
+    const { data, error } = await this.client.rpc('iq_v55_update_training_complete', {
       p_session_id: session.id, p_team_season_id: teamSeasonId,
       p_revision: revision, p_session_date: date, p_title: title,
-      p_training_type: trainingType || 'GENERAL', p_objective: objective || null,
+      p_focus_codes: focusCodes, p_objective: objective || null,
       p_notes: notes || null, p_start_time: start, p_end_time: end,
       p_intensity: intensity, p_blocks: blocks, p_participants: participants,
       p_confirm_removals: Boolean(confirmedRemovals)
