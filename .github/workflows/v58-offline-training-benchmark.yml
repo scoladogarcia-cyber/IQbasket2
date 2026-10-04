@@ -6,6 +6,9 @@ on:
       - feat/offline-training-benchmark-v58
       - main
     paths:
+      - "public/iqbasket-sw.js"
+      - "features/offline/OfflineAppShellBootstrap.js"
+      - "index.html"
       - "services/games/LiveOfflineStore.js"
       - "services/games/LiveCaptureSyncService.js"
       - "services/games/GameCaptureDelegationService.js"
@@ -65,6 +68,8 @@ jobs:
       - run: npm ci
       - name: Check V58 syntax
         run: |
+          node --check features/offline/OfflineAppShellBootstrap.js
+          node --check public/iqbasket-sw.js
           node --check services/games/LiveOfflineStore.js
           node --check services/games/LiveCaptureSyncService.js
           node --check services/games/GameCaptureDelegationService.js
