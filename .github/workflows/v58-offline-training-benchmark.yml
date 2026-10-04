@@ -14,6 +14,7 @@ on:
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
+      - "views/games/ScopedGameBoxScoreLiveV58View.js"
       - "views/TrainingView.js"
       - "views/training/TrainingCompleteEditV54View.js"
       - "views/Player360View.js"
@@ -32,6 +33,7 @@ on:
       - "security/entitlements.js"
       - "services/LazyViewRegistry.js"
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
+      - "supabase/migrations/20261004214500_game_event_attribution_v58.sql"
       - "tests/v58-intelligence-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
@@ -77,6 +79,7 @@ jobs:
           node --check services/games/LiveCaptureSyncService.js
           node --check services/games/GameCaptureDelegationService.js
           node --check views/LiveScoreHUDViewV58.js
+          node --check views/games/ScopedGameBoxScoreLiveV58View.js
           node --check views/training/TrainingIntelligencePanelV58.js
           node --check views/player360/Player360BenchmarkPanelV58.js
           node --check domain/player360/TrainingIntelligenceAnalytics.js
