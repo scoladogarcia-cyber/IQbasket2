@@ -7,7 +7,7 @@ import { TrainingView } from '../TrainingView.js';
 import { DataStore } from '../../services/DataStore.js';
 import { Permission } from '../../security/PermissionService.js';
 import { TrainingCompleteEditV54Service } from '../../services/player360/TrainingCompleteEditV54Service.js';
-import { TRAINING_TYPE_OPTIONS, BLOCK_PARTICIPATION_OPTIONS, BLOCK_EXCEPTION_OPTIONS } from '../../config/trainingEditV54.config.js';
+import { BLOCK_PARTICIPATION_OPTIONS, BLOCK_EXCEPTION_OPTIONS } from '../../config/trainingEditV54.config.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const num = value => value === '' || value === null || value === undefined ? null : Number(value);
@@ -115,10 +115,10 @@ export class TrainingCompleteEditV54View extends TrainingView {
     const blocks=[...(session.blocks||[])].sort((a,b)=>Number(a.block_order)-Number(b.block_order));
     this.editRevisions.set(String(session.id),this.completeService.revision(session,this.blockAssignments));
     return `<form class="p360-form p360-inline-editor v54-complete-form" data-session-id="${esc(session.id)}">
-      <div class="p360-info-note"><strong>Edición completa en una sola operación.</strong> Corrige fecha, tipo, horarios, bloques y jugadores. Los cambios solo se aplican al pulsar Guardar. Si otro usuario editó algo, se cancela para que recargues.</div>
+      <div class="p360-info-note"><strong>Edición completa.</strong> Los focos rápidos son la clasificación principal; bloques y excepciones quedan como detalle opcional. Si otro usuario editó algo, el guardado se cancela para que recargues.</div>
       <div class="p360-form-grid">
         <label>Fecha<input class="v54-date" type="date" required value="${esc(session.session_date)}" ${bounds.min?`min="${esc(bounds.min)}"`:''} ${bounds.max?`max="${esc(bounds.max)}"`:''}/></label>
-        <label>Tipo de entrenamiento<select class="v54-type">${selected(TRAINING_TYPE_OPTIONS,session.metadata?.training_type || 'GENERAL')}</select></label>
+        <div class="p360-span-2 v55-edit-focuses"><strong>¿Qué se trabajó?</strong>${this._renderTrainingFocusChecks(this._trainingFocusCodes(session),'v55-edit-focus')}</div>
         <label class="p360-span-2">Nombre<input class="v54-title" required maxlength="140" value="${esc(session.title)}" /></label>
         <label>Inicio<input class="v54-start" type="time" required value="${esc(String(session.start_time||'').slice(0,5))}" /></label>
         <label>Fin<input class="v54-end" type="time" required value="${esc(String(session.end_time||'').slice(0,5))}" /></label>
