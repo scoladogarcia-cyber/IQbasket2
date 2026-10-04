@@ -128,7 +128,7 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration,boxscoreV58,eventMigration,captureService,integrityMigration,trainingPanel]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration,boxscoreV58,boxscoreV59,eventMigration,captureService,integrityMigration,trainingPanel]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
@@ -140,13 +140,15 @@ class MemoryStorage {
     readFile(new URL("../security/entitlements.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8"),
     readFile(new URL("../views/games/ScopedGameBoxScoreLiveV58View.js",import.meta.url),"utf8"),
+    readFile(new URL("../views/games/ScopedGameBoxScoreLiveV59View.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004215500_game_event_attribution_v58.sql",import.meta.url),"utf8"),
     readFile(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004220500_v58_intelligence_integrity.sql",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingIntelligencePanelV58.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
-  assert.match(registry,/ScopedGameBoxScoreLiveV58View/);
+  assert.match(registry,/ScopedGameBoxScoreLiveV59View/);
+  assert.match(boxscoreV59,/extends\s+ScopedGameBoxScoreLiveV58View/);
   assert.match(registry,/TrainingCompleteEditV54View/);
   assert.match(registry,/new Player360View\(supabase, authController\)/);
   assert.match(trainingView,/TrainingIntelligencePanelV58/);
