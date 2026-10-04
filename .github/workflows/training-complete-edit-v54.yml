@@ -4,13 +4,19 @@ on:
   push:
     branches: [main, feat/training-full-edit-block-participation-v54-20260921]
     paths:
+      - 'views/TrainingView.js'
       - 'views/training/TrainingCompleteEditV54View.js'
+      - 'services/player360/TrainingService.js'
       - 'services/player360/TrainingCompleteEditV54Service.js'
+      - 'services/player360/TrainingExportService.js'
+      - 'domain/player360/TrainingFocusAnalytics.js'
       - 'services/LazyViewRegistry.js'
       - 'config/trainingEditV54.config.js'
       - 'supabase/migrations/20260921090000_training_complete_edit_v54.sql'
       - 'supabase/migrations/20260921090500_training_block_integrity_v54.sql'
       - 'supabase/migrations/20260921091000_training_minutes_integrity_v54.sql'
+      - 'supabase/migrations/20261004173000_training_ux_v55.sql'
+      - 'tests/training-ux-v55-contract.mjs'
       - 'tests/training-complete-edit-v54.mjs'
       - 'tests/training-minutes-integrity-v54.mjs'
       - '.github/workflows/training-complete-edit-v54.yml'
@@ -34,10 +40,15 @@ jobs:
       - name: Check JS syntax
         run: |
           node --check views/training/TrainingCompleteEditV54View.js
+          node --check views/TrainingView.js
+          node --check services/player360/TrainingService.js
           node --check services/player360/TrainingCompleteEditV54Service.js
+          node --check services/player360/TrainingExportService.js
+          node --check domain/player360/TrainingFocusAnalytics.js
       - name: Verify V54 complete-edit and security boundary
         run: |
           node tests/training-complete-edit-v54.mjs
           node tests/training-minutes-integrity-v54.mjs
+          node tests/training-ux-v55-contract.mjs
       - name: Build production bundle
         run: npm run build
