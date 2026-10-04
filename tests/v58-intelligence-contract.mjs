@@ -108,10 +108,10 @@ class MemoryStorage {
     }],
     externalSessions:[],evaluations:[],evaluationMetrics:[]
   });
-  assert.ok(assembled.metricDefinitions.some(x=>x.module==="training_focus"&&x.metric_code==="FOCUS_SHOOT_FINISH_MINUTES"));
-  assert.ok(assembled.observations.some(x=>x.module==="training_focus"&&x.value===60));
+  assert.ok(assembled.metricDefinitions.some(x=>x.module==="training"&&x.metric_code==="FOCUS_SHOOT_FINISH_MINUTES"));
+  assert.ok(assembled.observations.some(x=>x.module==="training"&&x.metric_code==="FOCUS_SHOOT_FINISH_MINUTES"&&x.value===60));
   const focusToEfg=assembled.associationDefinitions.filter(x=>
-    x.left==="training_focus.FOCUS_SHOOT_FINISH_MINUTES"&&x.right==="competition.EFG_PCT"
+    x.left==="training.FOCUS_SHOOT_FINISH_MINUTES"&&x.right==="competition.EFG_PCT"
   );
   assert.deepEqual(focusToEfg.map(x=>x.lag_buckets),[0,1,2,4]);
 }
