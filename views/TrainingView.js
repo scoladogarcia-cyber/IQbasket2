@@ -2159,16 +2159,28 @@ export class TrainingView {
       const form = event.currentTarget;
       const submit = form.querySelector('button[type="submit"]');
       const date = form.querySelector("#p360-training-date")?.value;
-      const title = form.querySelector("#p360-training-title")?.value.trim();
+      const focusCodes = [...form.querySelectorAll('input[name="p360-training-focus"]:checked')]
+        .map(input => String(input.value || "").toUpperCase())
+        .filter(Boolean);
+      const titleInput = form.querySelector("#p360-training-title");
+      const title = (titleInput?.value.trim() || this._quickTrainingTitle(focusCodes)).slice(0, 140);
 
-      if (!date || !title) {
-        alert("⚠️ Indica fecha y nombre de la sesión.");
+      if (!date) {
+        alert("⚠️ Indica la fecha del entrenamiento.");
+        return;
+      }
+      if (!focusCodes.length) {
+        alert("⚠️ Marca al menos un tipo de trabajo. Con uno o dos toques es suficiente.");
         return;
       }
 
       const selectedPlayers = [...form.querySelectorAll('input[name="p360-training-player"]:checked')]
         .map(input => input.value)
         .filter(Boolean);
+      if (!selectedPlayers.length) {
+        alert("⚠️ Selecciona al menos un jugador. La plantilla elegible aparece marcada por defecto.");
+        return;
+      }
 
       const startTime = form.querySelector("#p360-training-start-time")?.value || "";
       const endTime = form.querySelector("#p360-training-end-time")?.value || "";
@@ -2185,6 +2197,9 @@ export class TrainingView {
         attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
         participated_minutes: alreadyOccurred ? durationMinutes : null
       }));
+      const cloneSourceIdValue = form.querySelector("#p360-training-clone-source-id")?.value || null;
+      const advanced = form.querySelector("#p360-training-advanced");
+      const entryMode = cloneSourceIdValue ? "CLONE" : (advanced?.open ? "ADVANCED" : "QUICK");
 
       submit.disabled = true;
       try {
@@ -2193,12 +2208,16 @@ export class TrainingView {
           sessionDate: date,
           title,
           objective: form.querySelector("#p360-training-objective")?.value.trim() || null,
+          notes: form.querySelector("#p360-training-notes")?.value.trim() || null,
           durationMinutes,
           intensity: numberOrNull(form.querySelector("#p360-training-intensity")?.value),
           startTime,
           endTime,
           blocks: this._collectBlocks(form),
-          participants
+          participants,
+          focusCodes,
+          cloneSourceId: cloneSourceIdValue,
+          entryMode
         });
         await this.render(this.containerId, this.teamId);
       } catch (error) {
