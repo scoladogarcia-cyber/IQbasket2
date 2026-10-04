@@ -55,8 +55,8 @@ const SINGLETON_LOADERS = Object.freeze({
     return new FamilyAdvisorAccessView(supabase, authController);
   },
   training: async ({ supabase, authController }) => {
-    const { TrainingCompleteEditV54View } = await import("../views/training/TrainingCompleteEditV54View.js");
-    return new TrainingCompleteEditV54View(supabase, authController);
+    const { TrainingIntelligenceV58View } = await import("../views/training/TrainingIntelligenceV58View.js");
+    return new TrainingIntelligenceV58View(supabase, authController);
   },
   nutrition: async ({ supabase, authController }) => {
     const { NutritionView } = await import("../views/NutritionView.js");
