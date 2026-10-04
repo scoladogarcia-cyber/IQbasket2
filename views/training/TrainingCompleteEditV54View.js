@@ -426,7 +426,10 @@ export class TrainingCompleteEditV54View extends TrainingView {
     if(!session)return;
     const sync=()=>{const value=duration(form.querySelector('.v54-start').value,form.querySelector('.v54-end').value);
       form.querySelector('.v54-duration').value=value===null?'':String(value);};
-    form.querySelector('.v54-date').addEventListener('change',()=>this._eligibility(form));
+    form.querySelector('.v54-date').addEventListener('change',async()=>{
+      this._eligibility(form);
+      await this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:1});
+    });
     form.querySelector('.v54-start').addEventListener('input',sync);
     form.querySelector('.v54-end').addEventListener('input',sync);
     form.querySelectorAll('input[name="v55-edit-focus"]').forEach(input=>{
@@ -434,20 +437,51 @@ export class TrainingCompleteEditV54View extends TrainingView {
         input.closest('.p360-focus-chip')?.classList.toggle('is-selected',input.checked);
       });
     });
-    const visible=row=>{row.querySelector('.v54-person-details').hidden=!row.querySelector('.v54-person-included').checked;};
-    form.querySelectorAll('.v54-person').forEach(row=>row.querySelector('.v54-person-included').addEventListener('change',()=>{visible(row);this._eligibility(form);}));
-    form.querySelector('.v54-all-players').addEventListener('click',()=>{
-      form.querySelectorAll('.v54-person').forEach(row=>{const input=row.querySelector('.v54-person-included');if(!input.disabled){input.checked=true;visible(row);}});
+    const visible=row=>{
+      const details=row?.querySelector('.v54-person-details');
+      const box=row?.querySelector('.v54-person-included');
+      if(details&&box)details.hidden=!box.checked;
+    };
+    form.addEventListener('change',event=>{
+      if(event.target.matches('.v54-person-included')){
+        const row=event.target.closest('.v54-person');
+        visible(row);
+        this._eligibility(form);
+      }
+    });
+    form.querySelector('.v54-all-players').addEventListener('click',async()=>{
+      this._eligiblePlayers(form.querySelector('.v54-date')?.value).forEach(player=>{
+        this._addPlayerToEditForm(form,session,{...player,_trainingDirectoryAuthorized:true});
+      });
       this._eligibility(form);
+      await this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:this.editPlayerPage});
     });
     form.querySelector('.v54-no-players').addEventListener('click',()=>{
-      form.querySelectorAll('.v54-person').forEach(row=>{row.querySelector('.v54-person-included').checked=false;visible(row);});this._eligibility(form);
+      form.querySelectorAll('.v54-person').forEach(row=>{row.querySelector('.v54-person-included').checked=false;visible(row);});
+      this._eligibility(form);
     });
     form.addEventListener('click',event=>{
+      const addPlayer=event.target.closest('.v57-add-edit-player');
+      if(addPlayer){
+        const player=this.editPlayerDirectoryRows.get(String(addPlayer.dataset.playerId||''));
+        if(player){
+          this._addPlayerToEditForm(form,session,player);
+          this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:this.editPlayerPage});
+        }
+        return;
+      }
+      if(event.target.closest('.v57-edit-prev')){
+        this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:Math.max(1,this.editPlayerPage-1)});
+        return;
+      }
+      if(event.target.closest('.v57-edit-next')){
+        this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:this.editPlayerPage+1});
+        return;
+      }
       const passportButton=event.target.closest('.v54-passport-evaluate');
       if(passportButton){
         const playerId=passportButton.dataset.playerId;
-        const player=this._playerDirectory().get(String(playerId));
+        const player=this._editPlayerIdentity(playerId);
         sessionStorage.setItem('iq_passport_training_context',JSON.stringify({
           trainingSessionId:session.id,
           sessionDate:session.session_date,
@@ -494,15 +528,27 @@ export class TrainingCompleteEditV54View extends TrainingView {
           if(item.dataset.blockKey===block.dataset.blockKey)item.querySelector('.v54-assignment-title').textContent=event.target.value||'Bloque nuevo';
         });
       }
+      if(event.target.matches('.v57-edit-player-search')){
+        clearTimeout(this.editPlayerSearchTimer);
+        const query=event.target.value;
+        this.editPlayerSearchTimer=setTimeout(()=>{
+          this._refreshEditPlayerDirectory(form,session,{query,page:1});
+        },220);
+      }
     });
     this._eligibility(form);
+    await this._refreshEditPlayerDirectory(form,session,{query:'',page:1});
     form.addEventListener('submit',async event=>{
       event.preventDefault();
       const status=form.querySelector('.v54-save-status'),save=form.querySelector('button[type="submit"]');
       if(save.disabled)return;
       try {
         const input=this._collectComplete(form,session);
-        const names=new Map([...this._playerDirectory().values()].map(player=>[String(player.id),personName(player)]));
+        const names=new Map([
+          ...[...this._playerDirectory().values()].map(player=>[String(player.id),personName(player)]),
+          ...[...this.trainingPlayerIdentities.values()].map(player=>[String(player.id||player.player_id),personName(player)]),
+          ...[...this.editPlayerDirectoryRows.values()].map(player=>[String(player.id||player.player_id),personName(player)])
+        ]);
         if(input.removed.length&&!confirm(`Vas a quitar del entrenamiento a ${input.removed.map(pid=>names.get(pid)||pid).join(', ')}. Se eliminarán sus registros de asistencia y participación por bloque de ESTA sesión. ¿Confirmas expresamente la corrección?`))return;
         save.disabled=true;status.textContent='Guardando entrenamiento completo…';
         if(!this._can(Permission.EDIT_TRAINING)||!sameId(this.teamSeasonId,session.team_season_id))throw new Error('Permiso o temporada cambiados.');
