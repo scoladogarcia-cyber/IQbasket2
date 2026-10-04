@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { LiveOfflineStore } from "../services/games/LiveOfflineStore.js";
 import { buildTrainingIntelligence } from "../domain/player360/TrainingIntelligenceAnalytics.js";
-import { buildTeamBenchmark, buildSelfBenchmark, networkReliability } from "../domain/stats/BenchmarkEngine.js";
+import { buildTeamBenchmark, buildSelfBenchmark, estimateNetworkPercentile, networkReliability } from "../domain/stats/BenchmarkEngine.js";
 import { Player360ObservationAssembler } from "../services/player360/Player360ObservationAssembler.js";
 
 class MemoryStorage {
@@ -39,7 +39,7 @@ class MemoryStorage {
   const sessions=[
     {
       id:"s1",session_date:"2026-09-07",status:"COMPLETED",duration_minutes:60,
-      metadata:{training_focus_codes:["TECHNICAL","SHOOT_FINISH"]},
+      metadata:{training_focus_codes:["TECHNICAL","SHOOT_FINISH"],training_focus_minutes:{TECHNICAL:30,SHOOT_FINISH:20}},
       participants:[
         {player_id:"p1",attendance_status:"PRESENT",participated_minutes:60,rpe:5,internal_load:300},
         {player_id:"p2",attendance_status:"ABSENT",participated_minutes:0,rpe:null,internal_load:null}
@@ -59,6 +59,9 @@ class MemoryStorage {
   assert.equal(analytics.totals.sessionMinutes,140);
   assert.equal(analytics.totals.focusClassified,1);
   assert.equal(analytics.totals.focusCoveragePct,50);
+  assert.equal(analytics.totals.explicitFocusAllocationCoveragePct,50);
+  assert.equal(analytics.rolling.last7.sessions,1);
+  assert.equal(analytics.rolling.last14.sessions,2);
   assert.equal(analytics.totals.attendancePct,75);
   assert.equal(analytics.unclassifiedSessionIds[0],"s2");
   const p1=analytics.players.find(p=>p.playerId==="p1");
@@ -86,6 +89,13 @@ class MemoryStorage {
   assert.equal(networkReliability(19),"HIDDEN");
   assert.equal(networkReliability(20),"PROVISIONAL");
   assert.equal(networkReliability(100),"ROBUST");
+  assert.equal(estimateNetworkPercentile({
+    sample_size:120,minimum_value:0,p10:10,p25:25,p50:50,p75:75,p90:90,maximum_value:100
+  },75,true),75);
+  assert.equal(estimateNetworkPercentile({
+    sample_size:120,minimum_value:0,p10:10,p25:25,p50:50,p75:75,p90:90,maximum_value:100
+  },25,false),75);
+  assert.equal(estimateNetworkPercentile({sample_size:19,p50:50},50,true),null);
 }
 
 
@@ -118,7 +128,7 @@ class MemoryStorage {
 
 // Wiring and SQL safety contracts.
 {
-  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration,boxscoreV58,eventMigration,captureService]=await Promise.all([
+  const [registry,liveView,trainingView,player360View,migration,permissions,indexHtml,serviceWorker,entitlements,commercialMigration,boxscoreV58,eventMigration,captureService,integrityMigration,trainingPanel]=await Promise.all([
     readFile(new URL("../services/LazyViewRegistry.js",import.meta.url),"utf8"),
     readFile(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url),"utf8"),
     readFile(new URL("../views/training/TrainingCompleteEditV54View.js",import.meta.url),"utf8"),
@@ -131,7 +141,9 @@ class MemoryStorage {
     readFile(new URL("../supabase/migrations/20261004214500_v58_commercial_entitlements.sql",import.meta.url),"utf8"),
     readFile(new URL("../views/games/ScopedGameBoxScoreLiveV58View.js",import.meta.url),"utf8"),
     readFile(new URL("../supabase/migrations/20261004215500_game_event_attribution_v58.sql",import.meta.url),"utf8"),
-    readFile(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url),"utf8")
+    readFile(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url),"utf8"),
+    readFile(new URL("../supabase/migrations/20261004220500_v58_intelligence_integrity.sql",import.meta.url),"utf8"),
+    readFile(new URL("../views/training/TrainingIntelligencePanelV58.js",import.meta.url),"utf8")
   ]);
   assert.match(registry,/LiveScoreHUDViewV58/);
   assert.match(registry,/ScopedGameBoxScoreLiveV58View/);
@@ -168,6 +180,11 @@ class MemoryStorage {
   assert.match(eventMigration,/iq_v58_reassign_game_event_player/i);
   assert.match(eventMigration,/apply_event_stat_delta/i);
   assert.match(eventMigration,/GAME_EVENT_PLAYER_NOT_ELIGIBLE/i);
+  assert.match(integrityMigration,/iq_v58_set_training_focus_allocation/i);
+  assert.match(integrityMigration,/minimum_value/i);
+  assert.match(integrityMigration,/recalculate_player_derived_stats/i);
+  assert.match(trainingPanel,/data-v58-save-dose/);
+  assert.match(trainingPanel,/Carga 7 d/);
 }
 
 console.log("V58 offline + Training Intelligence + Benchmark contracts: OK");
