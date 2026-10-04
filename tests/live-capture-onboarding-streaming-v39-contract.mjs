@@ -52,6 +52,8 @@ assert.match(modes, /Marcador \/ Acta/);
 
 // V39 guarantees remain required even if a later scorer presentation wraps them.
 assert.match(registry, /attachLiveCaptureStartGate/);
+assert.match(registry, /import\("\.\.\/features\/game-live\/LiveCaptureStartController\.js"\)/, "live HUD registry must load the capture-start gate module");
+assert.match(registry, /import\("\.\/games\/GamePlayStateService\.js"\)/, "live HUD registry must load the play-state service module");
 assert.match(registry, /attachLiveWriterLease/);
 assert.match(registry, /ScopedGameBoxScoreLiveV39View/);
 
