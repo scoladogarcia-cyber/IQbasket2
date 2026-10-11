@@ -93,7 +93,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     const firstBase=finite(recovery.pending[0]?.baseRevision);
     const remote=finite(recovery.remoteRevision);
 
-    if(firstBase!==null && remote!==null && remote!==firstBase){
+    if(firstBase!==null && remote!==null && remote!==firstBase && !recovery.safeRebase){
       this.liveConflict=true;
       this.liveSyncState="conflict";
       this.liveSyncError="El servidor avanzó mientras este dispositivo tenía datos pendientes.";
@@ -101,10 +101,16 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       return;
     }
 
+    if(recovery.safeRebase && remote!==null){
+      this.liveCaptureRevision=remote;
+    }
+
     const payload=recovery.draft?.payload || recovery.pending.at(-1)?.payload;
     if(this._restoreOfflinePayload(payload)){
       this.liveSyncState="queued";
-      this.liveRecoveryMessage=`Recuperadas ${this.livePendingCount} operaciones pendientes de este dispositivo.`;
+      this.liveRecoveryMessage=recovery.safeRebase
+        ? `Recuperadas ${this.livePendingCount} operaciones del mismo registro; se reanudará la sincronización desde la revisión ${remote}.`
+        : `Recuperadas ${this.livePendingCount} operaciones pendientes de este dispositivo.`;
     }
   }
 
