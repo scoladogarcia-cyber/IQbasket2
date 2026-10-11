@@ -100,11 +100,39 @@ export class LiveCaptureSyncService {
       return { synced: !draft, queued: Boolean(draft), pending: draft ? 1 : 0, error: null };
     }
 
-    let revision = queue[0].baseRevision;
-    if (revision === null || revision === undefined) revision = await this.getRevision(id);
+    const remoteRevision = await this.getRevision(id).catch(() => null);
+    const firstBase = Number(queue[0]?.baseRevision);
+    const hasFirstBase = queue[0]?.baseRevision !== null
+      && queue[0]?.baseRevision !== undefined
+      && Number.isFinite(firstBase);
+    const hasRemoteRevision = remoteRevision !== null
+      && remoteRevision !== undefined
+      && Number.isFinite(Number(remoteRevision));
+
+    /*
+     * Every V58 outbox item is a complete snapshot, not a delta. If the server
+     * revision is still exactly the revision from which this local queue began,
+     * no queued V58 operation has been applied remotely. In that case all
+     * intermediate snapshots are superseded by the latest one and can be
+     * collapsed to a single atomic write. This is what makes recovery of a full
+     * offline game fast while preserving optimistic concurrency.
+     */
+    const canCompact = queue.length > 1
+      && hasFirstBase
+      && hasRemoteRevision
+      && Number(remoteRevision) === firstBase;
+    const workQueue = canCompact ? [queue.at(-1)] : queue;
+
+    let revision = canCompact
+      ? Number(remoteRevision)
+      : (hasFirstBase ? firstBase : (hasRemoteRevision ? Number(remoteRevision) : null));
     let lastResult = null;
 
-    for (const item of queue) {
+    for (const originalItem of workQueue) {
+      // Persist the effective revision before the request. If the response is
+      // lost, retrying the same operation id remains idempotent and correctly
+      // based on the revision reached by earlier acknowledged snapshots.
+      const item = { ...originalItem, baseRevision: revision };
       await this.offlineStore.markAttempt(item);
       try {
         lastResult = await this.captureService.saveCapture({
@@ -114,8 +142,15 @@ export class LiveCaptureSyncService {
           baseRevision: revision
         });
         const returned = Number(lastResult?.capture_revision);
-        revision = Number.isFinite(returned) ? returned : (Number.isFinite(Number(revision)) ? Number(revision) + 1 : null);
-        await this.offlineStore.remove(item.operationId);
+        revision = Number.isFinite(returned)
+          ? returned
+          : (Number.isFinite(Number(revision)) ? Number(revision) + 1 : null);
+
+        if (canCompact) {
+          await this.offlineStore.clearOutbox(id);
+        } else {
+          await this.offlineStore.remove(item.operationId);
+        }
       } catch (error) {
         await this.offlineStore.markAttempt(item, error);
         const pending = await this.offlineStore.pendingCount(id);
@@ -132,7 +167,15 @@ export class LiveCaptureSyncService {
 
     await this.offlineStore.clearDraft(id);
     try { this.storage?.removeItem(this._key(id)); } catch {}
-    return { synced: true, queued: false, pending: 0, revision, result: lastResult, error: null };
+    return {
+      synced: true,
+      queued: false,
+      pending: 0,
+      revision,
+      result: lastResult,
+      compactedSnapshots: canCompact ? queue.length : 0,
+      error: null
+    };
   }
 
   async recover(gameId) {
