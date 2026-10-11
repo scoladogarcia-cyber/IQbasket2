@@ -238,6 +238,30 @@ export class GameCaptureDelegationService {
     return data || { capture_revision: 0 };
   }
 
+  /**
+   * Confirms whether revisions applied after a local base revision all belong
+   * to the current authenticated actor. The client still verifies event lineage
+   * before using this result to rebase an offline snapshot.
+   */
+  async getRecoveryRebaseStatus(gameId, baseRevision) {
+    this._requireClient();
+    const id = requireUuid(gameId, "gameId");
+    const base = Number(baseRevision);
+    if (!Number.isFinite(base) || base < 0) {
+      throw new Error("GameCaptureDelegationService: revisión base inválida.");
+    }
+    const rpc = "iq_v61_game_capture_rebase_status";
+    const { data, error } = await this.supabase.rpc(rpc, {
+      p_game_id: id,
+      p_base_revision: base
+    });
+    if (error) {
+      if (isMissingRpc(error, rpc)) return { can_rebase: false, legacy: true };
+      throw rpcError(error, "No se pudo validar la continuidad de la recuperación offline.");
+    }
+    return data || { can_rebase: false };
+  }
+
 }
 
 export default GameCaptureDelegationService;
