@@ -11,6 +11,7 @@ on:
       - "index.html"
       - "services/games/LiveOfflineStore.js"
       - "services/games/LiveCaptureSyncService.js"
+      - "services/games/LiveCaptureRecoveryPolicy.js"
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
@@ -37,6 +38,7 @@ on:
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
       - "supabase/migrations/20261004215500_game_event_attribution_v58.sql"
       - "supabase/migrations/20261011122500_v61_live_capture_sync_security_hotfix.sql"
+      - "supabase/migrations/20261011124000_v61_partial_live_recovery.sql"
       - "tests/v58-intelligence-contract.mjs"
       - "tests/live-sync-v61-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
@@ -83,6 +85,7 @@ jobs:
           node --check public/iqbasket-sw.js
           node --check services/games/LiveOfflineStore.js
           node --check services/games/LiveCaptureSyncService.js
+          node --check services/games/LiveCaptureRecoveryPolicy.js
           node --check services/games/GameCaptureDelegationService.js
           node --check views/LiveScoreHUDViewV58.js
           node --check views/games/ScopedGameBoxScoreLiveV58View.js
