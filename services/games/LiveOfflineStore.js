@@ -221,6 +221,42 @@ export class LiveOfflineStore {
     return this._delete(OUTBOX_STORE, op);
   }
 
+  /**
+   * Clears only one game's queued snapshots after the latest full snapshot has
+   * been acknowledged by the server. The recoverable draft is intentionally
+   * separate and is cleared by the sync service only after a successful write.
+   */
+  async clearOutbox(gameId) {
+    const id = String(gameId || "");
+    if (!id) return false;
+    this._saveLocalOutbox(id, []);
+
+    const db = await this._db();
+    if (!db) return true;
+
+    const keys = await new Promise(resolve => {
+      const tx = db.transaction(OUTBOX_STORE, "readonly");
+      const req = tx.objectStore(OUTBOX_STORE).getAll();
+      req.onsuccess = () => resolve(
+        (req.result || [])
+          .filter(row => String(row.gameId) === id)
+          .map(row => row.operationId)
+          .filter(Boolean)
+      );
+      req.onerror = () => resolve([]);
+    });
+
+    if (!keys.length) return true;
+    return new Promise(resolve => {
+      const tx = db.transaction(OUTBOX_STORE, "readwrite");
+      const store = tx.objectStore(OUTBOX_STORE);
+      keys.forEach(key => store.delete(key));
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    });
+  }
+
   async pendingCount(gameId) {
     return (await this.list(gameId)).length;
   }

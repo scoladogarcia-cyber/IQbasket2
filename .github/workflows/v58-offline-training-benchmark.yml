@@ -36,7 +36,9 @@ on:
       - "services/LazyViewRegistry.js"
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
       - "supabase/migrations/20261004215500_game_event_attribution_v58.sql"
+      - "supabase/migrations/20261011122500_v61_live_capture_sync_security_hotfix.sql"
       - "tests/v58-intelligence-contract.mjs"
+      - "tests/live-sync-v61-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
     branches: [main]
@@ -55,7 +57,9 @@ on:
       - "security/permissions.js"
       - "services/LazyViewRegistry.js"
       - "supabase/migrations/20261004211500_live_offline_training_benchmark_v58.sql"
+      - "supabase/migrations/20261011122500_v61_live_capture_sync_security_hotfix.sql"
       - "tests/v58-intelligence-contract.mjs"
+      - "tests/live-sync-v61-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   workflow_dispatch:
 
@@ -98,6 +102,8 @@ jobs:
           node --check services/LazyViewRegistry.js
       - name: V58 contracts
         run: node tests/v58-intelligence-contract.mjs
+      - name: V61 live sync recovery contract
+        run: node tests/live-sync-v61-contract.mjs
       - name: Preserve live V38 contract
         run: node tests/mobile-fast-pbp-v38-contract.mjs
       - name: Preserve Training V55 contract
