@@ -69,4 +69,11 @@ assert.doesNotMatch(migration,/delete\s+from\s+public\.game_events/i);
 assert.match(migration,/v_after_total<>v_expected/);
 assert.match(migration,/revoke all on table public\.game_minutes_recovery_audit from anon, authenticated/i);
 
+const aliasHotfix = await readFile(new URL("../supabase/migrations/20261013175500_v63_2_minutes_lineup_alias_hotfix.sql",import.meta.url),"utf8");
+assert.match(aliasHotfix,/as lineup_player\(player_id\)/i);
+assert.match(aliasHotfix,/s\.player_id=lineup_player\.player_id/i);
+assert.match(aliasHotfix,/select lineup_player\.player_id/i);
+assert.match(aliasHotfix,/from exact e/i);
+assert.match(aliasHotfix,/e\.player_id::text/i);
+
 console.log("V63 game minutes recovery: isolated, validated, audited and lineup-aware OK");
