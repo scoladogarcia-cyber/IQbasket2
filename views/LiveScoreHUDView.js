@@ -494,6 +494,7 @@ export class LiveScoreHUDView {
       try {
         await this._ensureExistingGameLive();
         this.currentStep = 2;
+        this._scheduleLiveSync?.();
         await this.render();
       } catch (error) {
         alert(`No se pudo iniciar la captura: ${error.message || error}`);
@@ -1188,6 +1189,7 @@ export class LiveScoreHUDView {
           onCourt: [...this.onCourtPlayerIds]
         });
 
+        this._scheduleLiveSync?.();
         this._closeModalLayer();
         this._renderHUD();
       };
