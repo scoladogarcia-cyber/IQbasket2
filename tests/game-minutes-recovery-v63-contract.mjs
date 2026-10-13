@@ -48,8 +48,14 @@ assert.match(service,/iq_v63_save_game_minutes_recovery/);
 assert.match(panel,/Minutos directos/);
 assert.match(panel,/Quintetos por tramos/);
 assert.match(panel,/No modifica puntos, tiros, rebotes, faltas, marcador ni jugadas/);
+assert.match(panel,/_lockGeneralSave/);
+assert.match(panel,/Guarda el minutaje en el panel abierto/);
+assert.match(panel,/servidor no confirmó el total reglamentario/i);
 assert.match(boxscore,/GameMinutesRecoveryPanelV63/);
 assert.match(boxscore,/_canEdit\(game\)/);
+assert.match(boxscore,/data-field="minutes"/);
+assert.match(boxscore,/Guardar otros cambios/);
+assert.match(boxscore,/generalSaveButton/);
 
 assert.match(migration,/game_minutes_recovery_audit/);
 assert.match(migration,/iq_private\.can_mutate_game\(p_game_id\)/);
