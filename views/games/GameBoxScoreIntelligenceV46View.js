@@ -56,10 +56,13 @@ export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
     const host = tableShell?.parentElement;
     if (!host) return;
 
+    const statPlayerIds = new Set((this.gameStats || []).map(row => String(row.player_id ?? row.playerId ?? "")));
+    const recoveryPlayers = (this.players || []).filter(player => statPlayerIds.has(String(player.id)));
+
     this.minutesRecoveryPanel = new GameMinutesRecoveryPanelV63({
       supabase: this.supabase,
       game,
-      players: this.players,
+      players: recoveryPlayers,
       stats: this.gameStats,
       onSaved: async () => {
         await refreshGameBoxScore({ supabase: this.supabase, dataStore: DataStore, gameId: game.id });
