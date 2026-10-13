@@ -50,6 +50,12 @@ on:
       - "supabase/migrations/20261013163000_v63_game_minutes_recovery.sql"
       - "tests/game-minutes-recovery-v63-contract.mjs"
       - "tests/live-sync-v61-contract.mjs"
+      - "domain/games/GameMinutesRecovery.js"
+      - "services/games/GameMinutesRecoveryService.js"
+      - "views/games/GameMinutesRecoveryPanelV63.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "supabase/migrations/20261013163000_v63_game_minutes_recovery.sql"
+      - "tests/game-minutes-recovery-v63-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
     branches: [main]
