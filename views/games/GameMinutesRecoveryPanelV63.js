@@ -35,12 +35,13 @@ const parseStarterIds = game => {
 };
 
 export class GameMinutesRecoveryPanelV63 {
-  constructor({ supabase, game, players = [], stats = [], onSaved = null } = {}) {
+  constructor({ supabase, game, players = [], stats = [], onSaved = null, generalSaveButton = null } = {}) {
     this.game = game || {};
     this.players = players || [];
     this.stats = stats || [];
     this.service = new GameMinutesRecoveryService(supabase);
     this.onSaved = onSaved;
+    this.generalSaveButton = generalSaveButton;
     this.mode = "DIRECT";
     this.segments = [];
     this.host = null;
@@ -77,9 +78,35 @@ export class GameMinutesRecoveryPanelV63 {
     return this.stats.find(row => String(row.player_id ?? row.playerId) === String(playerId)) || {};
   }
 
+  _lockGeneralSave() {
+    const button = this.generalSaveButton;
+    if (!button) return;
+    if (!button.dataset.minutesRecoveryOriginalText) {
+      button.dataset.minutesRecoveryOriginalText = button.textContent || "";
+      button.dataset.minutesRecoveryWasDisabled = button.disabled ? "1" : "0";
+    }
+    button.disabled = true;
+    button.textContent = "⏱ Guarda el minutaje en el panel abierto";
+    button.title = "El minutaje usa un guardado aislado para no modificar otras estadísticas.";
+    button.style.opacity = "0.55";
+  }
+
+  _unlockGeneralSave() {
+    const button = this.generalSaveButton;
+    if (!button) return;
+    const original = button.dataset.minutesRecoveryOriginalText;
+    if (original) button.textContent = original;
+    button.disabled = button.dataset.minutesRecoveryWasDisabled === "1";
+    button.title = "Este botón guarda el resto del BoxScore. MIN se gestiona desde Recuperación de minutaje.";
+    button.style.opacity = "";
+    delete button.dataset.minutesRecoveryOriginalText;
+    delete button.dataset.minutesRecoveryWasDisabled;
+  }
+
   _open() {
     const body = this.host?.querySelector("[data-minutes-recovery-body]");
     if (!body) return;
+    this._lockGeneralSave();
     body.hidden = false;
     this._renderBody();
     body.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -88,6 +115,7 @@ export class GameMinutesRecoveryPanelV63 {
   _close() {
     const body = this.host?.querySelector("[data-minutes-recovery-body]");
     if (body) body.hidden = true;
+    this._unlockGeneralSave();
   }
 
   _modeButton(mode, label) {
@@ -169,6 +197,9 @@ export class GameMinutesRecoveryPanelV63 {
     }).join("");
 
     content.innerHTML = `
+      <div style="padding:9px 11px;margin:0 0 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;font-size:12px;font-weight:800">
+        Importante: para guardar MIN usa exclusivamente el botón verde de este panel. El botón general del BoxScore queda bloqueado mientras esta herramienta está abierta.
+      </div>
       <p style="font-size:12px;color:#475569;margin:0 0 10px">
         Introduce los minutos finales de cada jugador. El sistema sólo permitirá guardar cuando la suma sea exactamente la reglamentaria.
       </p>
@@ -207,7 +238,12 @@ export class GameMinutesRecoveryPanelV63 {
         button.disabled = true;
         button.textContent = "Guardando minutaje…";
         const note = this.host.querySelector("[data-recovery-note]")?.value || "";
-        await this.service.saveDirect({ game: this.game, entries: validation.entries, note });
+        const saved = await this.service.saveDirect({ game: this.game, entries: validation.entries, note });
+        if (Number(saved?.actual_team_minutes) !== Number(validation.expected)) {
+          throw new Error("El servidor no confirmó el total reglamentario del minutaje.");
+        }
+        window.alert(`✅ Minutaje guardado: ${validation.expected} minutos de equipo.`);
+        this._unlockGeneralSave();
         await this.onSaved?.();
       } catch (error) {
         this._showError(error);
@@ -341,12 +377,17 @@ export class GameMinutesRecoveryPanelV63 {
       button.disabled = true;
       button.textContent = "Guardando reconstrucción…";
       const note = this.host.querySelector("[data-recovery-note]")?.value || "";
-      await this.service.saveSegments({
+      const saved = await this.service.saveSegments({
         game: this.game,
         segments: this.segments,
         playerIds: this.players.map(player => String(player.id)),
         note
       });
+      if (Number(saved?.actual_team_minutes) !== Number(this._lastRecovery.expected)) {
+        throw new Error("El servidor no confirmó el total reglamentario del minutaje.");
+      }
+      window.alert(`✅ Quintetos y minutaje guardados: ${this._lastRecovery.expected} minutos de equipo.`);
+      this._unlockGeneralSave();
       await this.onSaved?.();
     } catch (error) {
       this._showError(error);
