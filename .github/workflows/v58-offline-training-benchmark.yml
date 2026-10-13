@@ -11,6 +11,7 @@ on:
       - "index.html"
       - "services/games/LiveOfflineStore.js"
       - "services/games/LiveCaptureSyncService.js"
+      - "domain/games/LiveMinutesEngine.js"
       - "services/games/LiveCaptureRecoveryPolicy.js"
       - "services/games/GameCaptureDelegationService.js"
       - "views/LiveScoreHUDViewV38.js"
@@ -39,7 +40,9 @@ on:
       - "supabase/migrations/20261004215500_game_event_attribution_v58.sql"
       - "supabase/migrations/20261011122500_v61_live_capture_sync_security_hotfix.sql"
       - "supabase/migrations/20261011124000_v61_partial_live_recovery.sql"
+      - "supabase/migrations/20261013130000_v62_live_lineup_minutes.sql"
       - "tests/v58-intelligence-contract.mjs"
+      - "tests/live-minutes-v62-contract.mjs"
       - "tests/live-sync-v61-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
@@ -85,6 +88,7 @@ jobs:
           node --check public/iqbasket-sw.js
           node --check services/games/LiveOfflineStore.js
           node --check services/games/LiveCaptureSyncService.js
+          node --check domain/games/LiveMinutesEngine.js
           node --check services/games/LiveCaptureRecoveryPolicy.js
           node --check services/games/GameCaptureDelegationService.js
           node --check views/LiveScoreHUDViewV58.js
@@ -107,6 +111,8 @@ jobs:
         run: node tests/v58-intelligence-contract.mjs
       - name: V61 live sync recovery contract
         run: node tests/live-sync-v61-contract.mjs
+      - name: V62 live minutes contract
+        run: node tests/live-minutes-v62-contract.mjs
       - name: Preserve live V38 contract
         run: node tests/mobile-fast-pbp-v38-contract.mjs
       - name: Preserve Training V55 contract

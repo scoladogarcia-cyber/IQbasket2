@@ -69,6 +69,24 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
         onCourt:[]
       };
     });
+    this.subEvents=(Array.isArray(payload.lineups) ? payload.lineups : []).map((event,index)=>{
+      const periodName=this._periodNameFromNumber(event.period, Number(event.period) > Number(this.gameSnapshot?.game?.periods_count || 4));
+      const remaining=Number.isFinite(Number(event.remaining_seconds))
+        ? Number(event.remaining_seconds)
+        : this._clockToSeconds(event.game_clock,this._getPeriodDuration(periodName));
+      return {
+        id:String(event.id || `lineup-offline-${index}`),
+        type:event.type || "SUBSTITUTION",
+        period:periodName,
+        timeRemaining:remaining,
+        playersIn:Array.isArray(event.players_in) ? event.players_in.map(String) : [],
+        playersOut:Array.isArray(event.players_out) ? event.players_out.map(String) : [],
+        onCourt:Array.isArray(event.on_court) ? event.on_court.map(String) : [],
+        event_sequence:Number(event.event_sequence || index + 1)
+      };
+    });
+    const lastLineup=this.subEvents.at(-1);
+    if(lastLineup?.onCourt?.length===5)this.onCourtPlayerIds=[...lastLineup.onCourt];
     const last=this.playByPlayEvents.at(-1);
     if(last){
       this.currentPeriod=last.period;

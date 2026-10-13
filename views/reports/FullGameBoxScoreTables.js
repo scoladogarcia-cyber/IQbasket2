@@ -21,11 +21,12 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
   const names = new Map(players.map(player => [String(player.id), player]));
   const named = row => `<th scope="row">${names.has(row.id) ? playerLabel(names.get(row.id)) : "Jugador sin ficha accesible"}</th>`;
   const mainHeaders = ["Jugador", "TIT", "MIN", "PTS", "T2 C/I", "T3 C/I", "TL C/I", "RO", "RD", "REB", "AST", "ROB", "TAP", "PER", "FC", "FR", "TAP REC", "+/−", "VAL"];
-  const mainCells = (m, r) => [m.starter ? "Sí" : "No", m.minutes, m.points, madeAttempted(m.fg2m, m.fg2a), madeAttempted(m.fg3m, m.fg3a), madeAttempted(m.ftm, m.fta), m.offReb, m.defReb, m.rebounds, m.assists, m.steals, m.blocks, m.turnovers, m.foulsCommitted, m.foulsDrawn, show(raw(r, "blocks_received", "blocksReceived")), show(raw(r, "plus_minus", "plusMinus")), m.pir];
+  const hasMinuteEvidence = stats.some(row => (raw(row, "minutes") ?? 0) > 0);
+  const mainCells = (m, r) => [m.starter ? "Sí" : "No", hasMinuteEvidence ? m.minutes : "N/D", m.points, madeAttempted(m.fg2m, m.fg2a), madeAttempted(m.fg3m, m.fg3a), madeAttempted(m.ftm, m.fta), m.offReb, m.defReb, m.rebounds, m.assists, m.steals, m.blocks, m.turnovers, m.foulsCommitted, m.foulsDrawn, show(raw(r, "blocks_received", "blocksReceived")), show(raw(r, "plus_minus", "plusMinus")), m.pir];
   const mainRows = computed.rows.map((m, i) => `<tr>${named(m)}${mainCells(m, stats[i]).map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("");
   const t = computed.totals;
   const sumOptional = key => stats.length && stats.every(row => raw(row, key) !== null) ? stats.reduce((sum, row) => sum + raw(row, key), 0) : "N/D";
-  const totalMain = ["–", t.minutes, t.points, madeAttempted(t.fg2m,t.fg2a), madeAttempted(t.fg3m,t.fg3a), madeAttempted(t.ftm,t.fta), t.offReb,t.defReb,t.rebounds,t.assists,t.steals,t.blocks,t.turnovers,t.foulsCommitted,t.foulsDrawn,sumOptional("blocks_received"),"–",t.pir];
+  const totalMain = ["–", hasMinuteEvidence ? t.minutes : "N/D", t.points, madeAttempted(t.fg2m,t.fg2a), madeAttempted(t.fg3m,t.fg3a), madeAttempted(t.ftm,t.fta), t.offReb,t.defReb,t.rebounds,t.assists,t.steals,t.blocks,t.turnovers,t.foulsCommitted,t.foulsDrawn,sumOptional("blocks_received"),"–",t.pir];
   const footerMain = `<tr><th scope="row">TOTAL EQUIPO</th>${totalMain.map(cell => `<td>${cell}</td>`).join("")}</tr>`;
 
   const efficiencyHeaders = ["Jugador", "T2%", "T3%", "TL%", "TC C/I", "TC%", "eFG%", "TS%", "AST/PER", "USG% estim.", "Game Score", "ORtg", "DRtg"];
@@ -55,7 +56,12 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
     ? `<h3 style="font-size:14px;margin-top:14px">Datos adicionales del partido (solo si se anotaron)</h3><p style="font-size:12px;color:#334155">Solo se muestran acciones con registros positivos. La base de datos guarda cero por defecto: un cero aislado no acredita una captura específica.</p>${detailTables}`
     : "";
 
+  const minutesWarning = !hasMinuteEvidence && stats.length
+    ? '<p style="font-size:11px;color:#9a3412"><strong>Minutaje N/D:</strong> este partido no conserva un timeline de quintetos/minutos válido. No se muestran ceros como si fueran minutos reales.</p>'
+    : "";
+
   return `<section class="iq-report-panel iq-full-boxscore"><h2>Acta individual completa · ${esc(game.opponent || "Partido")}</h2><p>Acta principal (cada columna completa; sin recortar la tabla para imprimir).</p>
+    ${minutesWarning}
     ${table(mainHeaders,mainRows,footerMain)}
     <h3 style="font-size:14px;margin-top:14px">Porcentajes y métricas avanzadas</h3>${table(efficiencyHeaders,efficiencyRows,`<tr><th>TOTAL EQUIPO</th>${efficiencyTotal.map(cell=>`<td>${cell}</td>`).join("")}</tr>`)}
     ${optionalSection}

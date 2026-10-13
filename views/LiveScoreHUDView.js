@@ -10,6 +10,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { Permission } from "../security/PermissionService.js";
 import { GameCaptureDelegationService } from "../services/games/GameCaptureDelegationService.js";
 import { GamePlayStateService } from "../services/games/GamePlayStateService.js";
+import { calculateLiveMinutes } from "../domain/games/LiveMinutesEngine.js";
 
 export class LiveScoreHUDView {
   constructor(authController = null, gameId = null) {
@@ -194,6 +195,28 @@ export class LiveScoreHUDView {
         onCourt: []
       };
     });
+
+    this.subEvents = (snapshot.lineups || []).map((event, index) => {
+      const periodName = this._periodNameFromNumber(event.period, Number(event.period) > regulationCount);
+      const remaining = Number.isFinite(Number(event.remaining_seconds))
+        ? Number(event.remaining_seconds)
+        : this._clockToSeconds(event.game_clock, this._getPeriodDuration(periodName));
+      return {
+        id: String(event.id || `lineup-loaded-${index}`),
+        type: event.type || "SUBSTITUTION",
+        period: periodName,
+        timeRemaining: remaining,
+        playersIn: Array.isArray(event.players_in) ? event.players_in.map(String) : [],
+        playersOut: Array.isArray(event.players_out) ? event.players_out.map(String) : [],
+        onCourt: Array.isArray(event.on_court) ? event.on_court.map(String) : [],
+        event_sequence: Number(event.event_sequence || index + 1)
+      };
+    });
+
+    const lastLineup = this.subEvents[this.subEvents.length - 1];
+    if (lastLineup?.onCourt?.length === 5) {
+      this.onCourtPlayerIds = [...lastLineup.onCourt];
+    }
 
     const lastEvent = this.playByPlayEvents[this.playByPlayEvents.length - 1];
     this.currentPeriod = lastEvent?.period || this.periodsList[0] || "Q1";
@@ -471,6 +494,7 @@ export class LiveScoreHUDView {
       try {
         await this._ensureExistingGameLive();
         this.currentStep = 2;
+        this._scheduleLiveSync?.();
         await this.render();
       } catch (error) {
         alert(`No se pudo iniciar la captura: ${error.message || error}`);
@@ -1165,6 +1189,7 @@ export class LiveScoreHUDView {
           onCourt: [...this.onCourtPlayerIds]
         });
 
+        this._scheduleLiveSync?.();
         this._closeModalLayer();
         this._renderHUD();
       };
@@ -1207,46 +1232,30 @@ export class LiveScoreHUDView {
     const totalGameMinutes = Math.round(totalGameSeconds / 60);
     const expectedSumMinutes = totalGameMinutes * 5;
 
-    const calculatedMinutesMap = new Map();
-    convoked.forEach(p => calculatedMinutesMap.set(p.id, 0));
-
-    if (this.subEvents.length > 0) {
-      this.periodsList.forEach(periodName => {
-        const periodSec = this._getPeriodDuration(periodName);
-        const pSubs = this.subEvents.filter(s => s.period === periodName);
-        
-        if (pSubs.length === 0) return;
-
-        let lastTime = periodSec;
-        let currentFive = pSubs[0].onCourt;
-
-        pSubs.forEach(sub => {
-          const duration = Math.max(0, lastTime - sub.timeRemaining);
-          currentFive.forEach(pId => {
-            calculatedMinutesMap.set(pId, (calculatedMinutesMap.get(pId) || 0) + (duration / 60));
-          });
-          lastTime = sub.timeRemaining;
-          currentFive = sub.onCourt;
-        });
-
-        currentFive.forEach(pId => {
-          calculatedMinutesMap.set(pId, (calculatedMinutesMap.get(pId) || 0) + (lastTime / 60));
-        });
-      });
-    } else {
-      const startersIds = this.roster.filter(p => p.isStarter).map(p => p.id).slice(0, 5);
-      startersIds.forEach(pId => {
-        calculatedMinutesMap.set(pId, totalGameMinutes);
-      });
-    }
+    const minuteProjection = calculateLiveMinutes({
+      playerIds: convoked.map(player => player.id),
+      lineupEvents: this.subEvents,
+      periodNames: this.periodsList,
+      getPeriodDuration: periodName => this._getPeriodDuration(periodName)
+    });
+    const calculatedMinutesMap = minuteProjection.minutesByPlayer;
+    const storedMinuteTotal = convoked.reduce((sum, player) => {
+      const value = Number(this.existingStatsByPlayerId.get(String(player.id))?.minutes);
+      return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+    }, 0);
+    const hasStoredMinuteData = storedMinuteTotal > 0;
 
     const playerStatsMap = new Map();
     const hasCaptureEvents = this.playByPlayEvents.length > 0;
     convoked.forEach(p => {
       const existing = this.existingStatsByPlayerId.get(String(p.id)) || {};
-      const calculated = Math.round(calculatedMinutesMap.get(p.id) || 0);
+      const calculated = Number(calculatedMinutesMap.get(String(p.id)) || 0);
       const storedMinutes = Number(existing.minutes);
-      const autoMin = this.isExistingGame && Number.isFinite(storedMinutes) ? storedMinutes : calculated;
+      const autoMin = hasStoredMinuteData && Number.isFinite(storedMinutes)
+        ? storedMinutes
+        : minuteProjection.hasTimeline
+          ? calculated
+          : (this.isExistingGame ? 0 : calculated);
       const useStored = this.isExistingGame && !hasCaptureEvents;
       const oreb = useStored ? Number(existing.off_reb || 0) : 0;
       const dreb = useStored ? Number(existing.def_reb || 0) : 0;
