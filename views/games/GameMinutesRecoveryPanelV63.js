@@ -202,7 +202,7 @@ export class GameMinutesRecoveryPanelV63 {
         this._showError("");
         const validation = this._directEntries(true);
         if (!validation.valid) throw new Error(`La suma debe ser exactamente ${validation.expected} minutos.`);
-        if (!window.confirm("Se actualizará únicamente el campo MIN de este partido. Las 341 jugadas y el resto del BoxScore no se modificarán. ¿Continuar?")) return;
+        if (!window.confirm("Se actualizará únicamente el campo MIN de este partido. Las jugadas y el resto del BoxScore no se modificarán. ¿Continuar?")) return;
         const button = event.currentTarget;
         button.disabled = true;
         button.textContent = "Guardando minutaje…";
