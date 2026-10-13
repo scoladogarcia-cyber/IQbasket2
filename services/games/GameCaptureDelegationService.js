@@ -83,6 +83,14 @@ export class GameCaptureDelegationService {
   async getSnapshot(gameId) {
     this._requireClient();
     const id = requireUuid(gameId, "gameId");
+
+    const v62Rpc = "iq_v62_game_capture_snapshot";
+    const v62 = await this.supabase.rpc(v62Rpc, { p_game_id: id });
+    if (!v62.error) return v62.data || null;
+    if (!isMissingRpc(v62.error, v62Rpc)) {
+      throw rpcError(v62.error, "No se pudo cargar el timeline de quintetos del partido.");
+    }
+
     const v59Rpc = "iq_v59_game_capture_snapshot";
     const v59 = await this.supabase.rpc(v59Rpc, { p_game_id: id });
     if (!v59.error) return v59.data || null;
@@ -146,6 +154,7 @@ export class GameCaptureDelegationService {
     stats = null,
     periods = null,
     events = null,
+    lineups = null,
     leaseToken = null,
     clientOperationId = null,
     baseRevision = null
@@ -168,16 +177,28 @@ export class GameCaptureDelegationService {
       leaseToken || this.liveSessionService.getStoredToken(id) || ""
     ).trim() || null;
 
-    // V58 adds idempotent offline operations and optimistic capture revision.
-    // Older deployments still fall back to V28/V21 without changing callers.
+    // V62 persists the complete lineup timeline together with the idempotent
+    // V58 capture. Older deployments fall back without changing callers.
     if (clientOperationId) {
-      const v58Rpc = "iq_v58_save_game_capture";
-      const v58Result = await this.supabase.rpc(v58Rpc, {
+      const operationArgs = {
         ...baseArgs,
         p_lease_token: token,
         p_client_operation_id: clientOperationId,
         p_base_revision: Number.isFinite(Number(baseRevision)) ? Number(baseRevision) : null
+      };
+
+      const v62Rpc = "iq_v62_save_game_capture";
+      const v62Result = await this.supabase.rpc(v62Rpc, {
+        ...operationArgs,
+        p_lineups: Array.isArray(lineups) ? lineups : null
       });
+      if (!v62Result.error) return v62Result.data || null;
+      if (!isMissingRpc(v62Result.error, v62Rpc)) {
+        throw rpcError(v62Result.error, "No se pudo sincronizar el minutaje y los quintetos del partido.");
+      }
+
+      const v58Rpc = "iq_v58_save_game_capture";
+      const v58Result = await this.supabase.rpc(v58Rpc, operationArgs);
       if (!v58Result.error) return v58Result.data || null;
       if (!isMissingRpc(v58Result.error, v58Rpc)) {
         throw rpcError(v58Result.error, "No se pudo sincronizar la captura offline del partido.");
