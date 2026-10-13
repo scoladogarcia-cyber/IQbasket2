@@ -229,12 +229,12 @@ export class GameMinutesRecoveryPanelV63 {
     update();
 
     content.querySelector("[data-save-direct]")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
       try {
         this._showError("");
         const validation = this._directEntries(true);
         if (!validation.valid) throw new Error(`La suma debe ser exactamente ${validation.expected} minutos.`);
         if (!window.confirm("Se actualizará únicamente el campo MIN de este partido. Las jugadas y el resto del BoxScore no se modificarán. ¿Continuar?")) return;
-        const button = event.currentTarget;
         button.disabled = true;
         button.textContent = "Guardando minutaje…";
         const note = this.host.querySelector("[data-recovery-note]")?.value || "";
@@ -247,8 +247,10 @@ export class GameMinutesRecoveryPanelV63 {
         await this.onSaved?.();
       } catch (error) {
         this._showError(error);
-        event.currentTarget.disabled = false;
-        event.currentTarget.textContent = "Guardar sólo minutaje";
+        if (button) {
+          button.disabled = false;
+          button.textContent = "Guardar sólo minutaje";
+        }
       }
     });
   }
@@ -369,11 +371,11 @@ export class GameMinutesRecoveryPanelV63 {
   }
 
   async _saveLineups(event) {
+    const button = event.currentTarget;
     try {
       this._previewLineups();
       if (!this._lastRecovery) return;
       if (!window.confirm("Se guardará únicamente el timeline de quintetos y MIN. No se modificarán las jugadas ni ninguna otra estadística. ¿Continuar?")) return;
-      const button = event.currentTarget;
       button.disabled = true;
       button.textContent = "Guardando reconstrucción…";
       const note = this.host.querySelector("[data-recovery-note]")?.value || "";
@@ -391,8 +393,10 @@ export class GameMinutesRecoveryPanelV63 {
       await this.onSaved?.();
     } catch (error) {
       this._showError(error);
-      event.currentTarget.disabled = false;
-      event.currentTarget.textContent = "Guardar quintetos y minutaje";
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Guardar quintetos y minutaje";
+      }
     }
   }
 }
