@@ -59,11 +59,36 @@ export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
     const statPlayerIds = new Set((this.gameStats || []).map(row => String(row.player_id ?? row.playerId ?? "")));
     const recoveryPlayers = (this.players || []).filter(player => statPlayerIds.has(String(player.id)));
 
+    // V63 owns MIN persistence. Keeping the legacy BoxScore minute input active
+    // created two save buttons with different semantics and allowed a user to
+    // type recovery values but persist the old values through the general save.
+    container.querySelectorAll('.bs-input[data-field="minutes"]').forEach(input => {
+      input.disabled = true;
+      input.readOnly = true;
+      input.title = "MIN se edita desde Recuperación de minutaje.";
+      input.setAttribute("aria-label", "Minutos: editar desde Recuperación de minutaje");
+      const cell = input.closest("td");
+      if (cell && !cell.querySelector("[data-minutes-managed-note]")) {
+        const note = document.createElement("div");
+        note.dataset.minutesManagedNote = "true";
+        note.textContent = "editar abajo";
+        note.style.cssText = "font-size:9px;color:#9a3412;font-weight:800;margin-top:2px;white-space:nowrap";
+        cell.append(note);
+      }
+    });
+
+    const generalSaveButton = container.querySelector("#btn-save-boxscore");
+    if (generalSaveButton) {
+      generalSaveButton.textContent = "💾 Guardar otros cambios";
+      generalSaveButton.title = "Guarda el resto del BoxScore. El minutaje se guarda desde Recuperación de minutaje.";
+    }
+
     this.minutesRecoveryPanel = new GameMinutesRecoveryPanelV63({
       supabase: this.supabase,
       game,
       players: recoveryPlayers,
       stats: this.gameStats,
+      generalSaveButton,
       onSaved: async () => {
         await refreshGameBoxScore({ supabase: this.supabase, dataStore: DataStore, gameId: game.id });
         await this.render(containerId, game.id);
