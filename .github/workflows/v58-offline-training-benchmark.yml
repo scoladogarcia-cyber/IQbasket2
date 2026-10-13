@@ -43,6 +43,12 @@ on:
       - "supabase/migrations/20261013130000_v62_live_lineup_minutes.sql"
       - "tests/v58-intelligence-contract.mjs"
       - "tests/live-minutes-v62-contract.mjs"
+      - "domain/games/GameMinutesRecovery.js"
+      - "services/games/GameMinutesRecoveryService.js"
+      - "views/games/GameMinutesRecoveryPanelV63.js"
+      - "views/games/GameBoxScoreIntelligenceV46View.js"
+      - "supabase/migrations/20261013163000_v63_game_minutes_recovery.sql"
+      - "tests/game-minutes-recovery-v63-contract.mjs"
       - "tests/live-sync-v61-contract.mjs"
       - ".github/workflows/v58-offline-training-benchmark.yml"
   pull_request:
@@ -89,6 +95,9 @@ jobs:
           node --check services/games/LiveOfflineStore.js
           node --check services/games/LiveCaptureSyncService.js
           node --check domain/games/LiveMinutesEngine.js
+          node --check domain/games/GameMinutesRecovery.js
+          node --check services/games/GameMinutesRecoveryService.js
+          node --check views/games/GameMinutesRecoveryPanelV63.js
           node --check services/games/LiveCaptureRecoveryPolicy.js
           node --check services/games/GameCaptureDelegationService.js
           node --check views/LiveScoreHUDViewV58.js
@@ -113,6 +122,8 @@ jobs:
         run: node tests/live-sync-v61-contract.mjs
       - name: V62 live minutes contract
         run: node tests/live-minutes-v62-contract.mjs
+      - name: V63 minutes recovery contract
+        run: node tests/game-minutes-recovery-v63-contract.mjs
       - name: Preserve live V38 contract
         run: node tests/mobile-fast-pbp-v38-contract.mjs
       - name: Preserve Training V55 contract
