@@ -34,12 +34,28 @@ function exactRemoteMatchesLocal(remoteSnapshot = {}, localPayload = {}) {
   const localPeriods = Array.isArray(localPayload?.periods) ? localPayload.periods : [];
   if (remotePeriods.length !== localPeriods.length) return false;
 
-  return localPeriods.every((localPeriod, index) => {
+  const periodsMatch = localPeriods.every((localPeriod, index) => {
     const remotePeriod = remotePeriods[index] || {};
     return Number(remotePeriod.period_number) === Number(localPeriod.period_number)
       && Number(remotePeriod.team_score) === Number(localPeriod.team_score)
       && Number(remotePeriod.opponent_score) === Number(localPeriod.opponent_score)
       && Boolean(remotePeriod.is_overtime) === Boolean(localPeriod.is_overtime);
+  });
+  if (!periodsMatch) return false;
+
+  const localLineups = Array.isArray(localPayload?.lineups) ? localPayload.lineups : [];
+  if (!localLineups.length) return true;
+  const remoteLineups = Array.isArray(remoteSnapshot?.lineups) ? remoteSnapshot.lineups : [];
+  if (remoteLineups.length !== localLineups.length) return false;
+
+  const ids = value => (Array.isArray(value) ? value : []).map(String);
+  return localLineups.every((localLineup, index) => {
+    const remoteLineup = remoteLineups[index] || {};
+    return Number(remoteLineup.period) === Number(localLineup.period)
+      && Number(remoteLineup.remaining_seconds) === Number(localLineup.remaining_seconds)
+      && JSON.stringify(ids(remoteLineup.on_court)) === JSON.stringify(ids(localLineup.on_court))
+      && JSON.stringify(ids(remoteLineup.players_in)) === JSON.stringify(ids(localLineup.players_in))
+      && JSON.stringify(ids(remoteLineup.players_out)) === JSON.stringify(ids(localLineup.players_out));
   });
 }
 
