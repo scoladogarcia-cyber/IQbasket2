@@ -278,6 +278,23 @@ export class LiveScoreHUDViewV38 extends LiveScoreHUDView {
     });
   }
 
+  _formatLineupsForSave() {
+    return (this.subEvents || []).map((event, index) => {
+      const periodName = event.period || this.currentPeriod || "Q1";
+      const remaining = Math.max(0, Number(event.timeRemaining ?? this._getPeriodDuration(periodName)) || 0);
+      return {
+        id: event.id || `lineup-${Date.now()}-${index}`,
+        type: event.type || "SUBSTITUTION",
+        period: this._periodNumberForName(periodName),
+        game_clock: this._secondsToClock(remaining),
+        remaining_seconds: remaining,
+        players_in: Array.isArray(event.playersIn) ? event.playersIn.map(String) : [],
+        players_out: Array.isArray(event.playersOut) ? event.playersOut.map(String) : [],
+        on_court: Array.isArray(event.onCourt) ? event.onCourt.map(String) : []
+      };
+    }).filter(event => event.on_court.length === 5);
+  }
+
   _periodScoresForSave() {
     return this.periodsList.map(periodName => ({
       period_type: periodName.startsWith("OT") ? "overtime" : "quarter",
@@ -299,7 +316,8 @@ export class LiveScoreHUDViewV38 extends LiveScoreHUDView {
       starterIds: this.roster.filter(player => player.isConvoked && player.isStarter).map(player => player.id),
       stats: null,
       periods: this._periodScoresForSave(),
-      events: this._formatEventsForSave()
+      events: this._formatEventsForSave(),
+      lineups: this._formatLineupsForSave()
     };
   }
 
