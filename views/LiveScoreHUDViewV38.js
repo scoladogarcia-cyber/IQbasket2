@@ -136,6 +136,7 @@ export class LiveScoreHUDViewV38 extends LiveScoreHUDView {
     });
     this.fastSelectedPlayerId = null;
     this.fastPendingActionKey = null;
+    this._scheduleLiveSync();
     this._renderHUD();
   }
 
