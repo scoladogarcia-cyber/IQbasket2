@@ -13,6 +13,7 @@ import { buildGameReportMetrics, formatMetric } from "../../domain/stats/GameRep
 import { ReportAccessPolicy, ReportType } from "../../security/ReportAccessPolicy.js";
 import { ReportExporter } from "../../services/ReportExporter.js";
 import { isConfirmedBoxScoreSaveRerender, resolveBoxScorePostSaveDestination } from "./BoxScorePostSaveNavigationV46.js";
+import { GameMinutesRecoveryPanelV63 } from "./GameMinutesRecoveryPanelV63.js";
 
 export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
   async render(containerId = "dashboard-content-area", targetGameId = null) {
@@ -38,7 +39,34 @@ export class GameBoxScoreIntelligenceV46View extends GameBoxScoreBaseView {
     const result = super._renderGameBoxScoreDetail(container, containerId);
     this._injectGameIntelligence(container);
     this._installReportActions(container);
+    this._installMinutesRecovery(container, containerId);
     return result;
+  }
+
+  /**
+   * V63 minutes recovery is intentionally separate from the normal BoxScore
+   * save path. The backend RPC can only mutate minutes and lineup history.
+   */
+  _installMinutesRecovery(container, containerId) {
+    if (!container || !this.supabase?.rpc) return;
+    const game = this.games.find(item => String(item.id) === String(this.selectedGameId));
+    if (!game || !this._canEdit(game)) return;
+
+    const tableShell = container.querySelector("tr[data-player-id]")?.closest("table")?.parentElement;
+    const host = tableShell?.parentElement;
+    if (!host) return;
+
+    this.minutesRecoveryPanel = new GameMinutesRecoveryPanelV63({
+      supabase: this.supabase,
+      game,
+      players: this.players,
+      stats: this.gameStats,
+      onSaved: async () => {
+        await refreshGameBoxScore({ supabase: this.supabase, dataStore: DataStore, gameId: game.id });
+        await this.render(containerId, game.id);
+      }
+    });
+    this.minutesRecoveryPanel.mount(host);
   }
 
   /** Valores en DOM calculados desde los campos actuales; sin escritura de estadísticas. */
