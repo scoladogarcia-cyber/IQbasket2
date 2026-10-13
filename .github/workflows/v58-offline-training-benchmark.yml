@@ -48,6 +48,7 @@ on:
       - "views/games/GameMinutesRecoveryPanelV63.js"
       - "views/games/GameBoxScoreIntelligenceV46View.js"
       - "supabase/migrations/20261013163000_v63_game_minutes_recovery.sql"
+      - "supabase/migrations/20261013175500_v63_2_minutes_lineup_alias_hotfix.sql"
       - "tests/game-minutes-recovery-v63-contract.mjs"
       - "tests/live-sync-v61-contract.mjs"
       - "domain/games/GameMinutesRecovery.js"
