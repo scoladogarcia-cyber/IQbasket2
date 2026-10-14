@@ -92,7 +92,8 @@ try {
   assert.equal(await page.locator("#p360-training-duration").inputValue(),"80");
   assert.equal(await page.locator("#p360-training-notes").inputValue(),"");
   assert.equal(await page.locator(".p360-block-row").count(),1);
-  assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),3);
+  assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),2);
+  assert.equal(await page.locator("#p360-training-title").inputValue(),"Trabajo previo");
 
   await page.locator("#p360-training-date").fill("2026-10-04");
   await page.dispatchEvent("#p360-training-date", "change");
@@ -102,11 +103,11 @@ try {
   await page.waitForTimeout(350);
   assert.equal(await page.locator('input[name="p360-training-player"]').count(),1);
   await page.locator('input[name="p360-training-player"]').check();
-  assert.match(await page.locator(".p360-selected-count").textContent(),/4 seleccionado/);
+  assert.match(await page.locator(".p360-selected-count").textContent(),/3 seleccionado/);
   await page.locator("#p360-player-search").fill("");
   await page.waitForTimeout(350);
   assert.equal(await page.locator('input[name="p360-training-player"]').count(),15);
-  assert.match(await page.locator(".p360-selected-count").textContent(),/4 seleccionado/);
+  assert.match(await page.locator(".p360-selected-count").textContent(),/3 seleccionado/);
   await page.locator("#p360-training-notes").fill("Salida de presión y finalizaciones con contacto.");
   await page.locator('input[name="p360-training-focus"][value="SHOOT_FINISH"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event("change",{bubbles:true}));});
   await page.locator('#p360-training-form button[type="submit"]').click();
@@ -118,10 +119,10 @@ try {
   assert.equal(saved.entryMode,"CLONE");
   assert.equal(saved.notes,"Salida de presión y finalizaciones con contacto.");
   assert.equal(saved.durationMinutes,80);
-  assert.equal(saved.participants.length,4);
+  assert.equal(saved.participants.length,3);
   assert.ok(saved.participants.some(row=>row.player_id==="90000000-0000-4000-8000-000000000017"));
   assert.equal(saved.blocks.length,1);
-  assert.ok(saved.title.includes("Técnica"));
+  assert.equal(saved.title,"Trabajo previo");
   console.log(`PASS Training V55 browser ${process.env.QA_BROWSER||"chromium"}: quick checks, default roster and safe clone.`);
 } finally {
   await browser.close();
