@@ -181,7 +181,7 @@ export class TrainingView {
   }
 
   /** UI gating only; backend RPC checks permission and season status again. */
-  _canEditTrainingSession(session) {
+  _canForTrainingSession(session, permission) {
     if (!session?.id || String(session.status || "").toUpperCase() === "ARCHIVED") return false;
     const isCurrent = String(session.team_season_id) === String(this.teamSeasonId);
     const season = this.trainingSeasonContexts.get(String(session.team_season_id));
@@ -193,8 +193,12 @@ export class TrainingView {
       teamSeasonId: session.team_season_id
     };
     if (!context.teamId) return false;
-    if (typeof this.auth?.canPreview === "function") return Boolean(this.auth.canPreview(Permission.EDIT_TRAINING, context));
-    return typeof this.auth?.can === "function" && Boolean(this.auth.can(Permission.EDIT_TRAINING, context));
+    if (typeof this.auth?.canPreview === "function") return Boolean(this.auth.canPreview(permission, context));
+    return typeof this.auth?.can === "function" && Boolean(this.auth.can(permission, context));
+  }
+
+  _canEditTrainingSession(session) {
+    return this._canForTrainingSession(session, Permission.EDIT_TRAINING);
   }
 
   _defaultDate() {
@@ -1214,7 +1218,7 @@ export class TrainingView {
       <div class="p360-card-actions p360-v66-bottom-actions">
         ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?'↶ Reabrir':'✓ Validar entrenamiento'}</button>`:''}
         ${this._can(Permission.EXPORT_REPORT)?`<button type="button" class="p360-secondary-btn p360-export-session-word" data-session-id="${escapeHtml(session.id)}">📄 Exportar Word</button>`:''}
-        ${canEdit&&this._can(Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">Archivar</button>`:''}
+        ${canEdit&&this._canForTrainingSession(session,Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">Archivar</button>`:''}
       </div>
     </article>`;
   }
@@ -2486,13 +2490,15 @@ export class TrainingView {
 
       const removeParticipant = event.target.closest(".p360-remove-participant");
       if (removeParticipant) {
+        const session=this.sessions.find(s=>String(s.id)===String(removeParticipant.dataset.sessionId));
+        if(!this._canEditTrainingSession(session))return;
         if (!confirm("¿Quitar a este jugador de la sesión? Úsalo solo para corregir una inclusión errónea.")) return;
 
         removeParticipant.disabled = true;
         try {
           await this.service.removeParticipant({
             trainingSessionId: removeParticipant.dataset.sessionId,
-            teamSeasonId: this.teamSeasonId,
+            teamSeasonId: session.team_season_id,
             playerId: removeParticipant.dataset.playerId
           });
           await this.render(this.containerId, this.teamId);
@@ -2591,6 +2597,8 @@ export class TrainingView {
 
       const archive = event.target.closest(".p360-archive-session");
       if (archive) {
+        const session=this.sessions.find(s=>String(s.id)===String(archive.dataset.sessionId));
+        if(!this._canForTrainingSession(session,Permission.DELETE_TRAINING))return;
         if (!confirm("¿Archivar esta sesión? Se conservarán sus datos históricos.")) return;
         archive.disabled = true;
         try {
