@@ -63,6 +63,18 @@ try {
   assert.equal(await form.locator('.v55-edit-advanced').getAttribute('open'),'');
   assert.equal(await form.locator('.v55-edit-roster').getAttribute('open'),'');
   assert.equal(await form.locator('.v54-person').count(),2);
+  // Bulk remove is a draft action. Restore/filter without mutating the database.
+  await form.locator('.v54-no-players').click();
+  assert.equal(await form.locator('.v54-person-included:checked').count(),0);
+  assert.match(await form.locator('.v54-selected-count').textContent(),/0 seleccionados/);
+  await form.locator('.v54-check-visible').click();
+  assert.equal(await form.locator('.v54-person-included:checked').count(),2);
+  await form.locator('.v54-roster-search').fill('Jugador 2');
+  await form.locator('.v54-uncheck-visible').click();
+  assert.equal(await form.locator('.v54-person-included:checked').count(),1);
+  await form.locator('.v54-roster-search').fill('');
+  await form.locator('.v54-check-visible').click();
+  assert.equal(await form.locator('.v54-person-included:checked').count(),2);
   // Existing participants remain explicit historical facts even if the date is corrected.
   await form.locator('.v54-date').fill('2026-09-08');
   assert.equal(await form.locator('.v54-eligibility-warning').isVisible(),false);
@@ -109,5 +121,46 @@ try {
   assert.equal(saved.participants[0].blocks[1].status,'NOT_ATTENDED');
   assert.equal(saved.participants[0].blocks[1].reason,'LIMITED');
   assert.equal(saved.revision.assignments.length,1);
-  console.log(`PASS Training V54 browser ${process.env.QA_BROWSER||'chromium'}: date, focus checks, intensity, blocks, roster and exceptional participation.`);
+
+  // The historical training remains editable in its own active, authorized season.
+  await page.evaluate(async()=>{
+    const view=window.__v54View;
+    view.trainingDetailId=null; // Return from the previous detail to the training list.
+    const current=view.sessions[0];
+    const originalSeason='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const history={
+      ...current,id:'20000000-0000-4000-8000-000000000002',
+      team_season_id:originalSeason,session_date:'2025-10-02',
+      title:'Entrenamiento histórico',
+      blocks:[],participants:[{...current.participants[0]}],
+      metadata:{training_focus_codes:['TECHNICAL'],training_type:'TECHNICAL'}
+    };
+    const search=view.playerDirectoryService.search.bind(view.playerDirectoryService);
+    view.playerDirectoryService.search=async args=>{
+      (window.__v54SearchSeasons ||= []).push(args.teamSeasonId);
+      return search(args);
+    };
+    view._load=async function(){
+      this.sessions=[current,history];this.externalSessions=[];this.activityTypes=[];
+      this.capabilities={ready:true,training_core:true};this.blockAssignments=[];
+      this.completeEditReady=true;this.lastError=null;
+      this.trainingSeasonContexts.set(originalSeason,{
+        id:originalSeason,team_id:this.teamId,data_status:'ACTIVE'
+      });
+    };
+    await view.render('v54-test',view.teamId);
+  });
+  await page.locator('.p360-training-list-item[data-session-id="20000000-0000-4000-8000-000000000002"]').click();
+  assert.equal(await page.locator('.p360-edit-session').count(),1);
+  await page.locator('.p360-edit-session').click();
+  const historyForm=page.locator('.v54-complete-form');
+  assert.equal(await historyForm.locator('.v54-date').getAttribute('min'),null);
+  assert.equal(await page.evaluate(()=>window.__v54SearchSeasons.includes('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')),true);
+  await historyForm.locator('.v54-title').fill('Entrenamiento histórico corregido');
+  await historyForm.locator('button[type="submit"]').click();
+  await page.waitForFunction(()=>window.__v54Calls.length===2,null,{timeout:12000});
+  const historicalSaved=await page.evaluate(()=>window.__v54Calls[1]);
+  assert.equal(historicalSaved.teamSeasonId,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  assert.equal(historicalSaved.title,'Entrenamiento histórico corregido');
+  console.log(`PASS Training V54 browser ${process.env.QA_BROWSER||'chromium'}: historical edits, bulk roster selection, blocks and attendance.`);
 } finally { await browser.close(); }

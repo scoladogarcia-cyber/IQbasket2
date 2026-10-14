@@ -49,29 +49,36 @@ export class TrainingCompleteEditV54View extends TrainingView {
     await super._load();
     this.completeEditReady=false;
     this.blockAssignments=[];
-    if(!this._can(Permission.EDIT_TRAINING) || !this.capabilities?.training_core)return;
+    if(!this.capabilities?.training_core || !(this.sessions||[]).some(session=>this._canEditTrainingSession(session)))return;
     try {
-      this.blockAssignments=await this.completeService.listBlockParticipation((this.sessions || []).filter(session => String(session.team_season_id) === String(this.teamSeasonId)));
+      this.blockAssignments=await this.completeService.listBlockParticipation((this.sessions || []).filter(session => this._canEditTrainingSession(session)));
       this.completeEditReady=true;
 
-      const participantIds=[...new Set(
-        (this.sessions||[])
-          .flatMap(session=>(session.participants||[]).map(row=>String(row.player_id||'')))
-          .filter(Boolean)
-      )];
+      // Resolve identities in the authorized original season, not just the
+      // currently selected one. Never use another season's access as a fallback.
+      const playersBySeason=new Map();
+      for(const session of this.sessions||[]){
+        if(!this._canEditTrainingSession(session))continue;
+        const seasonId=String(session.team_season_id);
+        if(!playersBySeason.has(seasonId))playersBySeason.set(seasonId,new Set());
+        for(const participant of session.participants||[]){
+          if(participant.player_id)playersBySeason.get(seasonId).add(String(participant.player_id));
+        }
+      }
       this.trainingPlayerIdentities.clear();
-      if(participantIds.length){
+      for(const [seasonId,ids] of playersBySeason){
+        if(!ids.size)continue;
         try {
           const identities=await this.playerDirectoryService.resolve({
-            teamSeasonId:this.teamSeasonId,
-            playerIds:participantIds
+            teamSeasonId:seasonId,
+            playerIds:[...ids]
           });
           (identities||[]).forEach(player=>{
             const id=String(player.player_id||player.id||'');
-            if(id)this.trainingPlayerIdentities.set(id,{...player,id, _trainingDirectoryAuthorized:true});
+            if(id)this.trainingPlayerIdentities.set(id,{...player,id,_trainingDirectoryAuthorized:true});
           });
         } catch(identityError) {
-          console.warn('[Training V57] No se pudieron resolver identidades externas:',identityError?.message||identityError);
+          console.warn('[Training V57] Identidades no disponibles para temporada:',identityError?.message||identityError);
         }
       }
     } catch(error) {
@@ -116,6 +123,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     const assigned=new Map(assignments.map(row=>[String(row.block_id),row]));
     const status=included?(participant.attendance_status||'PLANNED'):'PLANNED';
     const guest=String(participant?.participant_origin||'').toUpperCase()==='GUEST' || Boolean(player?._trainingGuest);
+    const recordedMinutes=['ABSENT','EXCUSED'].includes(String(status).toUpperCase()) ? 0 : (participant?.participated_minutes ?? this._editSessionTotalMinutes ?? '');
     return `<div class="v54-person" data-player-id="${esc(pid)}" data-existing-participant="${existing?'true':'false'}" data-directory-authorized="${directoryAuthorized?'true':'false'}">
       <label class="v54-person-heading"><input class="v54-person-included" type="checkbox" ${included?'checked':''} />
         <strong>#${esc(player.jersey ?? player.number ?? '—')} · ${esc(personName(player))}</strong>
@@ -127,7 +135,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
             ['PLANNED','Pendiente'],['PRESENT','Presente'],['PARTIAL','Parcial'],
             ['ABSENT','Ausente'],['EXCUSED','Justificada']
           ],status)}</select></label>
-          <label>Minutos reales<input class="v54-person-minutes" type="number" min="0" max="600" step="1" value="${esc(participant?.participated_minutes ?? this._editSessionTotalMinutes ?? '')}" placeholder="Duración de la sesión" /></label>
+          <label>Minutos reales<input class="v54-person-minutes" type="number" min="0" max="600" step="1" value="${esc(recordedMinutes)}" placeholder="Duración de la sesión" /></label>
           <label>RPE individual<input class="v54-person-rpe" type="number" min="0" max="10" step="0.5" value="${esc(participant?.rpe ?? '')}" placeholder="Sin registrar" /></label>
           <label>Observación breve<input class="v54-person-note" maxlength="240" value="${esc(participant?.notes || '')}" placeholder="Ej. Llegó tarde; sin datos médicos" /></label>
           ${this._can(Permission.CREATE_PLAYER_EVALUATION) && this._can(Permission.VIEW_PLAYER_PASSPORT)
@@ -183,7 +191,9 @@ export class TrainingCompleteEditV54View extends TrainingView {
   }
 
   _renderEditDirectoryShell(session,participants) {
-    const fallback=this._trainingDirectoryFallback(session.session_date,'',1);
+    const fallback=sameId(session.team_season_id,this.teamSeasonId)
+      ? this._trainingDirectoryFallback(session.session_date,'',1)
+      : {rows:[],total:0,page:1,pages:0};
     const included=new Set([...participants.keys()]);
     const pages=fallback.pages||0;
     return `<div class="v57-edit-directory">
@@ -211,7 +221,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     let directory=null;
     try {
       directory=await this.playerDirectoryService.search({
-        teamSeasonId:this.teamSeasonId,
+        teamSeasonId:session.team_season_id,
         query:this.editPlayerQuery,
         page:this.editPlayerPage,
         pageSize:15
@@ -221,7 +231,9 @@ export class TrainingCompleteEditV54View extends TrainingView {
     }
     if(seq!==this.editPlayerRequestSeq)return;
     if(!directory||(!directory.rows?.length&&!directory.total)){
-      directory=this._trainingDirectoryFallback(session.session_date,this.editPlayerQuery,this.editPlayerPage);
+      directory=sameId(session.team_season_id,this.teamSeasonId)
+        ? this._trainingDirectoryFallback(session.session_date,this.editPlayerQuery,this.editPlayerPage)
+        : {rows:[],total:0,page:1,pages:0};
     }
     if(directory.pages>0&&this.editPlayerPage>directory.pages){
       this.editPlayerPage=directory.pages;
@@ -278,9 +290,10 @@ export class TrainingCompleteEditV54View extends TrainingView {
 
   /** One complete editable form, replacing the fragmented metadata-only editor. */
   _renderTrainingEditForm(session={}) {
-    if(!this._can(Permission.EDIT_TRAINING))return '';
+    if(!this._canEditTrainingSession(session))return '';
     if(!this.completeEditReady)return `<div class="p360-error">No se ha podido verificar el detalle de participantes y bloques. Recarga la pantalla antes de editar; no se guardará parcialmente.</div>`;
-    const bounds=this._dateInputBounds();
+    // Historical sessions must not inherit the date limits of the selected season.
+    const bounds=sameId(session.team_season_id,this.teamSeasonId) ? this._dateInputBounds() : {min:'',max:''};
     this._editSessionTotalMinutes = this._sessionDuration(session);
     const directory=this._playerDirectory();
     const participants=new Map((session.participants||[]).map(p=>[String(p.player_id),p]));
@@ -321,7 +334,14 @@ export class TrainingCompleteEditV54View extends TrainingView {
         <summary>Jugadores y tiempo individual · ${participants.size} registrados</summary>
         <section class="p360-subsection" aria-label="Jugadores y tiempo individual">
           <p class="p360-card-text">Modifica asistencia y minutos de cada jugador. Busca y añade otros jugadores sin obligarlos a pertenecer al equipo activo.</p>
-          <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
+          <div class="v54-roster-tools">
+            <label class="v54-roster-search-label">Filtrar asignados<input class="v54-roster-search" type="search" placeholder="Nombre o dorsal…" autocomplete="off" /></label>
+            <span class="v54-selected-count" role="status" aria-live="polite">${participants.size} seleccionados</span>
+            ${sameId(session.team_season_id,this.teamSeasonId) ? '<button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button>' : '<span class="p360-card-text">Sesión histórica: añade jugadores desde el buscador de su temporada.</span>'}
+            <button type="button" class="p360-secondary-btn v54-check-visible">Marcar visibles</button>
+            <button type="button" class="p360-secondary-btn v54-uncheck-visible">Desmarcar visibles</button>
+            <button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button>
+          </div>
           <div class="v54-roster">${participantPlayers.sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
           <div class="v57-edit-add-player">
             <strong>Añadir otro jugador</strong>
@@ -351,7 +371,9 @@ export class TrainingCompleteEditV54View extends TrainingView {
   }
 
   _eligibility(form) {
-    const eligible=new Set(this._eligiblePlayers(form.querySelector('.v54-date')?.value).map(p=>String(p.id)));
+    const session=this.sessions.find(item=>sameId(item.id,form.dataset.sessionId));
+    const eligible=new Set((sameId(session?.team_season_id,this.teamSeasonId)
+      ? this._eligiblePlayers(form.querySelector('.v54-date')?.value) : []).map(p=>String(p.id)));
     const invalid=[];
     form.querySelectorAll('.v54-person').forEach(row=>{
       const box=row.querySelector('.v54-person-included');
@@ -367,6 +389,8 @@ export class TrainingCompleteEditV54View extends TrainingView {
     const warning=form.querySelector('.v54-eligibility-warning');
     warning.hidden=!invalid.length;
     warning.textContent=invalid.length?`No tienes alcance para incluir en esta sesión a: ${invalid.join(', ')}.`:'';
+    const count=form.querySelector('.v54-selected-count');
+    if(count){const value=form.querySelectorAll('.v54-person-included:checked').length;count.textContent=`${value} seleccionado${value===1?'':'s'}`;}
     return !invalid.length;
   }
 
@@ -453,17 +477,28 @@ export class TrainingCompleteEditV54View extends TrainingView {
         this._eligibility(form);
       }
     });
-    form.querySelector('.v54-all-players').addEventListener('click',async()=>{
+    form.querySelector('.v54-all-players')?.addEventListener('click',async()=>{
       this._eligiblePlayers(form.querySelector('.v54-date')?.value).forEach(player=>{
         this._addPlayerToEditForm(form,session,{...player,_trainingDirectoryAuthorized:true});
       });
       this._eligibility(form);
       await this._refreshEditPlayerDirectory(form,session,{query:this.editPlayerQuery,page:this.editPlayerPage});
     });
-    form.querySelector('.v54-no-players').addEventListener('click',()=>{
-      form.querySelectorAll('.v54-person').forEach(row=>{row.querySelector('.v54-person-included').checked=false;visible(row);});
+    // Batch actions only change the draft; destructive removals still require
+    // an explicit confirmation and the backend's atomic authorization check.
+    const bulk=(checked,visibleOnly=false)=>{
+      form.querySelectorAll('.v54-person').forEach(row=>{
+        if(visibleOnly&&row.hidden)return;
+        const box=row.querySelector('.v54-person-included');
+        if(box.disabled&&checked)return;
+        box.checked=checked;
+        visible(row);
+      });
       this._eligibility(form);
-    });
+    };
+    form.querySelector('.v54-no-players').addEventListener('click',()=>bulk(false));
+    form.querySelector('.v54-check-visible').addEventListener('click',()=>bulk(true,true));
+    form.querySelector('.v54-uncheck-visible').addEventListener('click',()=>bulk(false,true));
     form.addEventListener('click',event=>{
       const addPlayer=event.target.closest('.v57-add-edit-player');
       if(addPlayer){
@@ -532,6 +567,13 @@ export class TrainingCompleteEditV54View extends TrainingView {
           if(item.dataset.blockKey===block.dataset.blockKey)item.querySelector('.v54-assignment-title').textContent=event.target.value||'Bloque nuevo';
         });
       }
+      if(event.target.matches('.v54-roster-search')){
+        const query=String(event.target.value||'').trim().toLocaleLowerCase();
+        form.querySelectorAll('.v54-person').forEach(row=>{
+          const label=row.querySelector('.v54-person-heading strong')?.textContent||'';
+          row.hidden=!!query&&!label.toLocaleLowerCase().includes(query);
+        });
+      }
       if(event.target.matches('.v57-edit-player-search')){
         clearTimeout(this.editPlayerSearchTimer);
         const query=event.target.value;
@@ -555,8 +597,8 @@ export class TrainingCompleteEditV54View extends TrainingView {
         ]);
         if(input.removed.length&&!confirm(`Vas a quitar del entrenamiento a ${input.removed.map(pid=>names.get(pid)||pid).join(', ')}. Se eliminarán sus registros de asistencia y participación por bloque de ESTA sesión. ¿Confirmas expresamente la corrección?`))return;
         save.disabled=true;status.textContent='Guardando entrenamiento completo…';
-        if(!this._can(Permission.EDIT_TRAINING)||!sameId(this.teamSeasonId,session.team_season_id))throw new Error('Permiso o temporada cambiados.');
-        await this.completeService.saveComplete({session,teamSeasonId:this.teamSeasonId,
+        if(!this._canEditTrainingSession(session))throw new Error('Permiso o temporada cambiados.');
+        await this.completeService.saveComplete({session,teamSeasonId:session.team_season_id,
           revision:this.editRevisions.get(String(session.id)),...input,confirmedRemovals:input.removed.length>0});
         this.editingTrainingId=null;
         await this.render(this.containerId,this.teamId);
@@ -606,7 +648,11 @@ export class TrainingCompleteEditV54View extends TrainingView {
       .v54-exceptions p{font-size:11px;color:#475569}
       .v54-assignment{background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:9px;align-items:center}
       .v54-assignment-title{font-weight:800;font-size:12px;overflow-wrap:anywhere}
-      .v54-ineligible{border-color:#f59e0b}.v54-roster-tools{display:flex;gap:8px;flex-wrap:wrap}
+      .v54-ineligible{border-color:#f59e0b}.v54-roster-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+      .v54-roster-search-label{display:grid;gap:5px;font-size:12px;font-weight:700;min-width:170px;flex:1}
+      .v54-roster-search{width:100%;min-height:44px;padding:8px;border:1px solid #94a3b8;border-radius:8px;background:#fff;color:#0f172a}
+      .v54-selected-count{font-size:12px;font-weight:750;color:#334155;padding:10px}
+      .v54-person[hidden]{display:none!important}
       .v54-save-status{font-size:12px;font-weight:700;color:#9a3412}
       .v54-passport-evaluate{align-self:end;min-height:44px;border-color:#c4b5fd!important;color:#5b21b6!important;background:#faf5ff!important}
       .v57-edit-add-player{display:grid;gap:10px;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px}
