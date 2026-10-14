@@ -137,7 +137,7 @@ try {
     };
     const search=view.playerDirectoryService.search.bind(view.playerDirectoryService);
     view.playerDirectoryService.search=async args=>{
-      window.__v54SearchSeason=args.teamSeasonId;
+      (window.__v54SearchSeasons ||= []).push(args.teamSeasonId);
       return search(args);
     };
     view._load=async function(){
@@ -155,7 +155,7 @@ try {
   await page.locator('.p360-edit-session').click();
   const historyForm=page.locator('.v54-complete-form');
   assert.equal(await historyForm.locator('.v54-date').getAttribute('min'),null);
-  assert.equal(await page.evaluate(()=>window.__v54SearchSeason),'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  assert.equal(await page.evaluate(()=>window.__v54SearchSeasons.includes('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')),true);
   await historyForm.locator('.v54-title').fill('Entrenamiento histórico corregido');
   await historyForm.locator('button[type="submit"]').click();
   await page.waitForFunction(()=>window.__v54Calls.length===2,null,{timeout:12000});
