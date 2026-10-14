@@ -117,6 +117,8 @@ export class TrainingView {
     this.teamSeasonId = null;
     this.containerId = "dashboard-content-area";
     this.editingTrainingId = null;
+    this.trainingDetailId = null;
+    this.trainingMinutesOverrides = new Map();
     this.editingExternalId = null;
 
     // V56 training player selector state. Selection is independent from the
@@ -501,6 +503,7 @@ export class TrainingView {
             <strong>${escapeHtml(name)}</strong>
             <small>${escapeHtml(player.primary_position || "—")} · ${escapeHtml(contextLabel)}</small>
           </span>
+          ${checked ? `<span class="p360-player-minutes-field">Minutos individuales <input class="p360-player-minute-input" type="number" min="0" max="600" step="1" data-player-id="${escapeHtml(id)}" value="${escapeHtml(this.trainingMinutesOverrides.get(id) ?? (minutesBetweenTimes(this._formStartValue || '',this._formEndValue || '') ?? ''))}" aria-label="Minutos de ${escapeHtml(name)}"/></span>` : ''}
         </label>
       `;
     }).join("");
@@ -2047,6 +2050,14 @@ export class TrainingView {
       });
     });
 
+    container.addEventListener("change", event => {
+      const input = event.target.closest?.(".p360-player-minute-input");
+      if (!input) return;
+      const value = input.value.trim();
+      if (value === "") this.trainingMinutesOverrides.delete(input.dataset.playerId);
+      else this.trainingMinutesOverrides.set(input.dataset.playerId,Number(value));
+    });
+
     this._bindParticipantSelectionTools(container);
 
     const trainingForm = container.querySelector("#p360-training-form");
@@ -2081,9 +2092,14 @@ export class TrainingView {
       if (!trainingDuration) return null;
       const value = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
       trainingDuration.value = value === null ? "" : String(value);
+      this._formStartValue = trainingStart?.value || "";
+      this._formEndValue = trainingEnd?.value || "";
+      container.querySelectorAll(".p360-player-minute-input").forEach(input => { if (!this.trainingMinutesOverrides.has(input.dataset.playerId)) input.value = value ?? ""; });
       return value;
     };
     trainingStart?.addEventListener("input", syncTrainingDuration);
+    this._formStartValue = trainingStart?.value || "";
+    this._formEndValue = trainingEnd?.value || "";
     trainingEnd?.addEventListener("input", syncTrainingDuration);
     trainingTitle?.addEventListener("input", () => {
       trainingTitle.dataset.manualTitle = trainingTitle.value.trim() && trainingTitle.value.trim() !== this._quickTrainingTitle(selectedFocusCodes()) ? "1" : "";
@@ -2126,6 +2142,7 @@ export class TrainingView {
 
       const cloneDate = trainingDate?.value || this._defaultDate();
       const selected = [...new Set((session.participants || []).map(participant => String(participant.player_id)).filter(Boolean))];
+      this.trainingMinutesOverrides = new Map((session.participants || []).filter(p => p.participated_minutes != null).map(p => [String(p.player_id),Number(p.participated_minutes)]));
       await this._refreshTrainingPlayerOptions(container, cloneDate, {
         selectedIds: selected,
         query: "",
@@ -2608,11 +2625,19 @@ export class TrainingView {
       }
 
       const alreadyOccurred = String(date) <= localIsoDate();
-      const participants = selectedPlayers.map(playerId => ({
-        player_id: playerId,
-        attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
-        participated_minutes: alreadyOccurred ? durationMinutes : null
-      }));
+      let participants;
+      try { participants = selectedPlayers.map(playerId => {
+        const override = this.trainingMinutesOverrides.get(String(playerId));
+        const effective = override == null ? durationMinutes : Number(override);
+        if (!Number.isInteger(effective) || effective < 0 || effective > durationMinutes) {
+          throw new Error("Los minutos individuales deben estar entre 0 y la duración general.");
+        }
+        return {
+          player_id: playerId,
+          attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
+          participated_minutes: alreadyOccurred ? effective : null
+        };
+      }); } catch (error) { alert(error.message); return; }
       const cloneSourceIdValue = form.querySelector("#p360-training-clone-source-id")?.value || null;
       const advanced = form.querySelector("#p360-training-advanced");
       const entryMode = cloneSourceIdValue ? "CLONE" : (advanced?.open ? "ADVANCED" : "QUICK");
