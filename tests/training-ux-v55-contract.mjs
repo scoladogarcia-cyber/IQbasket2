@@ -39,11 +39,13 @@ for (const marker of [
   "p360-training-focus",
   "p360-training-notes",
   "p360-clone-training",
-  "Repetir / copiar",
+  "Duplicar",
   "Informe temporada",
   "CSV"
 ]) assert.ok(view.includes(marker), `Missing V55 UI marker: ${marker}`);
 
+assert.match(view,/p360-v66-detail/);
+assert.match(view,/Jugadores y tiempo individual/);
 assert.match(exportService,/application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document/);
 assert.match(exportService,/exportTrainingSeasonCsv/);
 assert.match(exportService,/playerExposureMinutes/);
