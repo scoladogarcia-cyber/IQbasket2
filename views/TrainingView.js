@@ -1135,7 +1135,12 @@ export class TrainingView {
           ${this._can(Permission.CREATE_TRAINING)?`<button type="button" class="p360-secondary-btn p360-repeat-session" data-session-id="${escapeHtml(session.id)}">📋 Duplicar</button>`:''}
         </div>
       </header>
-      ${editing ? this._renderTrainingEditForm(session) : `
+      ${editing ? `${this._renderTrainingEditForm(session)}
+        <section class="p360-v66-section" aria-label="Bloques registrados">
+          <h3>Contenido guardado en esta sesión</h3>
+          <div class="p360-v66-blocks">${(session.blocks||[]).map(block=>
+            `<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min</small></div>`).join('')}</div>
+        </section>` : `
       <section class="p360-v66-section" aria-label="Datos del entrenamiento">
         <div class="p360-v66-section-title"><h3>Datos generales</h3></div>
         <div class="p360-v66-overview">
