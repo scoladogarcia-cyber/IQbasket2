@@ -37,7 +37,6 @@ create trigger iq_v65_training_session_override before update of duration_minute
 on public.training_sessions for each row execute function public.iq_v65_check_training_override_parent();
 
 -- Team-season ID remains an authorization context; it is not participant membership.
-begin;
 create or replace function public.iq_v65_create_training_session(
  p_team_season_id uuid,p_session_date date,p_title text,p_objective text default null,
  p_notes text default null,p_duration_minutes integer default null,p_intensity numeric default null,
