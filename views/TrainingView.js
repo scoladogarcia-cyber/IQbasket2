@@ -1168,9 +1168,9 @@ export class TrainingView {
           </details>
         ` : ""}
 
-        ${this._renderAttendanceEditor(session, directory)}
+        ${String(session.team_season_id) === String(this.teamSeasonId) ? this._renderAttendanceEditor(session, directory) : ""}
 
-        ${this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
+        ${String(session.team_season_id) === String(this.teamSeasonId) && this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
           ? this._renderTrainingEditForm(session)
           : ""}
 
@@ -1185,12 +1185,12 @@ export class TrainingView {
               📄 Informe Word
             </button>
           ` : ""}
-          ${this._can(Permission.EDIT_TRAINING) ? `
+          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
             <button type="button" class="p360-secondary-link p360-edit-session" data-session-id="${escapeHtml(session.id)}">
               ✏️ Editar detalles
             </button>
           ` : ""}
-          ${this._can(Permission.DELETE_TRAINING) ? `
+          ${this._can(Permission.DELETE_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
             <button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">
               Archivar sesión
             </button>
