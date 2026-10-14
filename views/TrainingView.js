@@ -2069,8 +2069,9 @@ export class TrainingView {
     focusInputs().forEach(input => input.addEventListener("change", syncFocusVisuals));
 
     trainingDate?.addEventListener("change", () => {
+      // A date correction must never silently replace a copied/selected player list.
       this._refreshTrainingPlayerOptions(container, trainingDate.value, {
-        resetSelection: true,
+        selectedIds: [...this.trainingPlayerSelection],
         query: "",
         page: 1
       });
