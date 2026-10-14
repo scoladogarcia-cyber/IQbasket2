@@ -49,7 +49,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     await super._load();
     this.completeEditReady=false;
     this.blockAssignments=[];
-    if(!this._can(Permission.EDIT_TRAINING) || !this.capabilities?.training_core)return;
+    if(!this.capabilities?.training_core || !(this.sessions||[]).some(session=>this._canEditTrainingSession(session)))return;
     try {
       this.blockAssignments=await this.completeService.listBlockParticipation((this.sessions || []).filter(session => this._canEditTrainingSession(session)));
       this.completeEditReady=true;
