@@ -67,7 +67,7 @@ begin
    end if;
  end loop;
  return v_id;
-end $;
+end $$;
 revoke all on function public.iq_v65_create_training_session(uuid,date,text,text,text,integer,numeric,time,time,jsonb,jsonb,text[],uuid,text,text) from public,anon;
 grant execute on function public.iq_v65_create_training_session(uuid,date,text,text,text,integer,numeric,time,time,jsonb,jsonb,text[],uuid,text,text) to authenticated;
 
