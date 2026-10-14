@@ -98,6 +98,9 @@ try {
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),0);
   assert.match(await page.locator('.p360-selected-count').textContent(),/0 seleccionados/);
   await page.locator("#p360-select-visible-players").click();
+  assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),15);
+  // Restore the cloned original subset before testing additional guest search.
+  await page.locator("#p360-clone-training").click();
   assert.equal(await page.locator('input[name="p360-training-player"]:checked').count(),2);
 
   await page.locator("#p360-training-date").fill("2026-10-04");
