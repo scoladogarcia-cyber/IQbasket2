@@ -1221,13 +1221,20 @@ export class TrainingView {
 
         <div class="p360-session-list">
           ${this.sessions.length
-            ? this.sessions.map(session => this._renderSessionCard(session, directory)).join("")
-            : `
-              <div class="p360-empty-state">
-                <strong>Aún no hay entrenamientos registrados.</strong>
-                <span>La primera sesión que guardes aparecerá aquí y quedará vinculada a la temporada.</span>
-              </div>
-            `}
+            ? this.trainingDetailId
+              ? `<button type="button" class="p360-secondary-btn p360-training-back">← Volver al listado</button>
+                 ${this.sessions.filter(session => String(session.id) === String(this.trainingDetailId))
+                    .map(session => this._renderSessionCard(session,directory)).join("")}`
+              : `<div class="p360-training-table" role="list">
+                  ${this.sessions.map(session => `
+                    <button type="button" role="listitem" class="p360-training-list-item" data-session-id="${escapeHtml(session.id)}">
+                      <span><strong>${escapeHtml(session.title || 'Entrenamiento')}</strong>
+                        <small>${escapeHtml(session.session_date)} · ${escapeHtml(({TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo'})[session.metadata?.session_kind] || 'Sin clasificar')}</small>
+                      </span>
+                      <span>${escapeHtml(String(this._sessionDuration(session) ?? '—'))} min · ${(session.participants||[]).length} jugadores →</span>
+                    </button>`).join("")}
+                </div>`
+            : `<div class="p360-empty-state">No hay entrenamientos visibles en este contexto.</div>`}
         </div>
       </section>
     `;
@@ -1792,6 +1799,12 @@ export class TrainingView {
         .p360-readonly { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
         .p360-quick-create > summary { justify-content: flex-start; }
         .p360-quick-create > summary small { margin-left:auto;color:#64748b;font-weight:600;font-size:11px; }
+        .p360-training-table { display:grid;gap:8px; }
+        .p360-training-list-item { display:flex;justify-content:space-between;align-items:center;gap:16px;width:100%;border:1px solid #dbe4ef;border-radius:12px;background:#fff;padding:14px;text-align:left;color:#14243b;cursor:pointer; }
+        .p360-training-list-item span:first-child { display:grid;gap:4px; }
+        .p360-training-list-item small { color:#64748b;font-size:12px; }
+        .p360-training-list-item:hover { border-color:#3b82f6;background:#eff6ff; }
+        @media(max-width:600px) { .p360-training-list-item { flex-direction:column;align-items:flex-start; } }
         .p360-clone-bar {
           display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(220px,1fr) auto;
           gap:10px;align-items:center;padding:12px;border:1px solid #dbeafe;border-radius:12px;background:#eff6ff;
@@ -2202,6 +2215,19 @@ export class TrainingView {
     }
 
     this._delegatedClickHandler = async event => {
+      const openTraining = event.target.closest(".p360-training-list-item");
+      if (openTraining) {
+        this.trainingDetailId = openTraining.dataset.sessionId;
+        this.editingTrainingId = null;
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
+      if (event.target.closest(".p360-training-back")) {
+        this.trainingDetailId = null;
+        this.editingTrainingId = null;
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
       const repeatSession = event.target.closest(".p360-repeat-session");
       if (repeatSession) {
         const select = container.querySelector("#p360-clone-source");
