@@ -1116,6 +1116,19 @@ export class TrainingView {
           <span>📊 Carga ${displayNumber(load, 1)}</span>
         </div>
 
+        <div class="p360-training-type-review">
+          <label>Tipo de entrenamiento
+            <select class="p360-kind-select" data-session-id="${escapeHtml(session.id)}" ${this._can(Permission.EDIT_TRAINING) ? "" : "disabled"}>
+              ${[['TEAM','Equipo'],['TECHNIFICATION','Tecnificación'],['PERSONAL','Personal'],['COGNITIVE','Cognitivo']].map(([code,label]) =>
+                `<option value="${code}" ${(session.metadata?.session_kind || 'TEAM') === code ? 'selected' : ''}>${label}</option>`
+              ).join('')}
+            </select>
+          </label>
+          ${session.metadata?.session_kind_review === 'PENDING'
+            ? '<small>Clasificación histórica provisional; confirma el tipo cuando corresponda.</small>'
+            : ''}
+        </div>
+
         ${focuses.length ? `
           <div class="p360-focus-summary">
             ${focuses.map(code => `<span>✓ ${escapeHtml(this._trainingFocusLabel(code))}</span>`).join("")}
@@ -2014,6 +2027,26 @@ export class TrainingView {
       button.addEventListener("click", () => {
         this.activeTab = button.dataset.p360Tab === "external" ? "external" : "training";
         this._applyTab(container);
+      });
+    });
+
+    container.querySelectorAll(".p360-kind-select").forEach(select => {
+      select.addEventListener("change", async () => {
+        const session = (this.sessions || []).find(row => String(row.id) === String(select.dataset.sessionId));
+        if (!session || !this._can(Permission.EDIT_TRAINING)) return;
+        select.disabled = true;
+        try {
+          const { error } = await this.supabase.rpc("iq_v64_correct_training_kind", {
+            p_session_id: session.id, p_team_season_id: session.team_season_id, p_kind: select.value
+          });
+          if (error) throw error;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          select.value = session.metadata?.session_kind || "TEAM";
+          select.disabled = false;
+          this.lastError = error;
+          window.alert("No se pudo corregir el tipo de entrenamiento: " + (error?.message || error));
+        }
       });
     });
 
