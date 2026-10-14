@@ -1974,6 +1974,9 @@ export class TrainingView {
         if (count) {
           count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
         }
+        this._refreshTrainingPlayerOptions(container, date, {
+          query: this.trainingPlayerQuery, page: this.trainingPlayerPage
+        });
       });
     });
 
@@ -1994,6 +1997,9 @@ export class TrainingView {
       if (count) {
         count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
       }
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery, page: this.trainingPlayerPage
+      });
     });
 
     directory.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
