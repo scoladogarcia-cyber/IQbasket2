@@ -2181,7 +2181,7 @@ export class TrainingView {
 
       const cloneDate = trainingDate?.value || this._defaultDate();
       const selected = [...new Set((session.participants || []).map(participant => String(participant.player_id)).filter(Boolean))];
-      this.trainingMinutesOverrides = new Map((session.participants || []).filter(p => p.participated_minutes != null).map(p => [String(p.player_id),Number(p.participated_minutes)]));
+      this.trainingMinutesOverrides = new Map((session.participants || []).filter(p => p.duration_override_minutes != null || p.participated_minutes != null).map(p => [String(p.player_id),Number(p.duration_override_minutes ?? p.participated_minutes)]));
       await this._refreshTrainingPlayerOptions(container, cloneDate, {
         selectedIds: selected,
         query: "",
@@ -2708,7 +2708,8 @@ export class TrainingView {
         return {
           player_id: playerId,
           attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
-          participated_minutes: alreadyOccurred ? effective : null
+          participated_minutes: alreadyOccurred ? effective : null,
+          duration_override_minutes: override == null || Number(override) === durationMinutes ? null : effective
         };
       }); } catch (error) { alert(error.message); return; }
       const cloneSourceIdValue = form.querySelector("#p360-training-clone-source-id")?.value || null;
