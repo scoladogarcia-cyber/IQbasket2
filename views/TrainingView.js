@@ -108,6 +108,7 @@ export class TrainingView {
 
     this.activeTab = "training";
     this.sessions = [];
+    this.trainingSeasonContexts = new Map();
     this.externalSessions = [];
     this.activityTypes = [];
     this.capabilities = null;
@@ -161,6 +162,41 @@ export class TrainingView {
     return DataStore.getActiveSeasonContext?.(this.teamId) || null;
   }
 
+  /**
+   * Load the actual team/season context of each visible training. The visible
+   * history is player-centric; edit rights still belong to the session's own
+   * team-season, never to whichever season is selected in the UI.
+   */
+  async _loadTrainingSeasonContexts() {
+    this.trainingSeasonContexts.clear();
+    const ids = [...new Set(this.sessions.map(s => String(s.team_season_id || "")).filter(Boolean))];
+    if (!ids.length || !this.supabase?.from) return;
+    const { data, error } = await this.supabase.from("team_seasons")
+      .select("id,team_id,data_status").in("id", ids);
+    if (error) {
+      console.warn("[Training] No se pudieron verificar los permisos de temporadas históricas:", error);
+      return; // Fail closed for seasons other than the currently selected one.
+    }
+    for (const row of data || []) this.trainingSeasonContexts.set(String(row.id), row);
+  }
+
+  /** UI gating only; backend RPC checks permission and season status again. */
+  _canEditTrainingSession(session) {
+    if (!session?.id || String(session.status || "").toUpperCase() === "ARCHIVED") return false;
+    const isCurrent = String(session.team_season_id) === String(this.teamSeasonId);
+    const season = this.trainingSeasonContexts.get(String(session.team_season_id));
+    if (!season && !isCurrent) return false;
+    const state = season?.data_status || (isCurrent ? this._seasonContext()?.data_status : null);
+    if (state && String(state).toUpperCase() !== "ACTIVE") return false;
+    const context = {
+      teamId: season?.team_id || (isCurrent ? this.teamId : null),
+      teamSeasonId: session.team_season_id
+    };
+    if (!context.teamId) return false;
+    if (typeof this.auth?.canPreview === "function") return Boolean(this.auth.canPreview(Permission.EDIT_TRAINING, context));
+    return typeof this.auth?.can === "function" && Boolean(this.auth.can(Permission.EDIT_TRAINING, context));
+  }
+
   _defaultDate() {
     const context = this._seasonContext();
     const today = localIsoDate();
@@ -205,6 +241,7 @@ export class TrainingView {
   async _load() {
     this.isLoading = true;
     this.lastError = null;
+    this.trainingSeasonContexts.clear();
 
     try {
       this.capabilities = await this.service.getCapabilities({ force: true });
@@ -236,6 +273,7 @@ export class TrainingView {
       ]);
 
       this.sessions = sessions;
+      await this._loadTrainingSeasonContexts();
       this.externalSessions = externalSessions;
       this.activityTypes = activityTypes;
     } catch (error) {
@@ -545,6 +583,7 @@ export class TrainingView {
           <span class="p360-default-hint">La plantilla de la temporada actual aparece primero. Puedes buscar y añadir otros jugadores accesibles.</span>
           <button type="button" class="p360-link-btn" id="p360-select-all-players">Plantilla actual</button>
           <button type="button" class="p360-link-btn" id="p360-select-visible-players">Seleccionar visibles</button>
+          <button type="button" class="p360-link-btn" id="p360-clear-visible-players">Desmarcar visibles</button>
           <button type="button" class="p360-link-btn" id="p360-clear-all-players">
             ${escapeHtml(this.t("player360.training.clear_all", "Ninguno"))}
           </button>
@@ -1107,7 +1146,7 @@ export class TrainingView {
     const duration=this._sessionDuration(session);
     const focuses=this._trainingFocusCodes(session);
     const isCurrent=String(session.team_season_id)===String(this.teamSeasonId);
-    const canEdit=this._can(Permission.EDIT_TRAINING) && isCurrent;
+    const canEdit=this._canEditTrainingSession(session);
     const editing=canEdit && String(this.editingTrainingId)===String(session.id);
     const present=participants.filter(row=>['PRESENT','PARTIAL'].includes(String(row.attendance_status||'').toUpperCase())).length;
     const minutes=participants.reduce((total,row)=>total+
@@ -1156,7 +1195,7 @@ export class TrainingView {
           </select>
         </label>
         ${session.metadata?.session_kind_review==='PENDING'?'<p class="p360-v66-warning">Clasificación provisional recuperada del histórico. Puedes revisarla y corregirla.</p>':''}
-        ${!isCurrent?'<p class="p360-v66-warning">Sesión histórica de otra temporada: consulta disponible. La corrección debe hacerse con permisos de su contexto original.</p>':''}
+        ${!canEdit?'<p class="p360-v66-warning">Solo lectura: esta sesión está archivada, la temporada está cerrada o no tienes permisos de edición sobre su temporada de origen.</p>':''}
       </section>
       <section class="p360-v66-section" aria-label="Participantes">
         <div class="p360-v66-section-title"><h3>Jugadores y tiempo individual</h3>
@@ -1997,6 +2036,15 @@ export class TrainingView {
       });
     });
 
+    directory.querySelector("#p360-clear-visible-players")?.addEventListener("click", () => {
+      directory.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
+        if (input.value) this.trainingPlayerSelection.delete(String(input.value));
+      });
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery, page: this.trainingPlayerPage
+      });
+    });
+
     directory.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
       this.trainingPlayerSelection.clear();
       directory.querySelectorAll('input[name="p360-training-player"]').forEach(input => {
@@ -2004,6 +2052,7 @@ export class TrainingView {
       });
       const count = directory.querySelector(".p360-selected-count");
       if (count) count.textContent = "0 seleccionados";
+      this.trainingMinutesOverrides.clear();
     });
 
     const search = directory.querySelector("#p360-player-search");
@@ -2065,7 +2114,7 @@ export class TrainingView {
     container.querySelectorAll(".p360-kind-select").forEach(select => {
       select.addEventListener("change", async () => {
         const session = (this.sessions || []).find(row => String(row.id) === String(select.dataset.sessionId));
-        if (!session || !this._can(Permission.EDIT_TRAINING)) return;
+        if (!this._canEditTrainingSession(session)) return;
         select.disabled = true;
         try {
           const { error } = await this.supabase.rpc("iq_v64_correct_training_kind", {
@@ -2239,7 +2288,7 @@ export class TrainingView {
       const validateTraining = event.target.closest(".p360-validation-toggle");
       if (validateTraining) {
         const session = (this.sessions||[]).find(x=>String(x.id)===String(validateTraining.dataset.sessionId));
-        if (!session || String(session.team_season_id)!==String(this.teamSeasonId)) return;
+        if (!this._canEditTrainingSession(session)) return;
         const desired = validateTraining.dataset.validate === 'true';
         if (!confirm(desired
           ? 'Confirma asistencia y minutos individuales antes de validar. ¿Validar entrenamiento?'
@@ -2331,6 +2380,8 @@ export class TrainingView {
 
       const editSession = event.target.closest(".p360-edit-session");
       if (editSession) {
+        const target = this.sessions.find(s => String(s.id) === String(editSession.dataset.sessionId));
+        if (!this._canEditTrainingSession(target)) return;
         this.editingTrainingId = editSession.dataset.sessionId || null;
         this.editingExternalId = null;
         await this.render(this.containerId, this.teamId);
