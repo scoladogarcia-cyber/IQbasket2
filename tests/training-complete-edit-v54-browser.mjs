@@ -125,6 +125,7 @@ try {
   // The historical training remains editable in its own active, authorized season.
   await page.evaluate(async()=>{
     const view=window.__v54View;
+    view.trainingDetailId=null; // Return from the previous detail to the training list.
     const current=view.sessions[0];
     const originalSeason='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const history={
