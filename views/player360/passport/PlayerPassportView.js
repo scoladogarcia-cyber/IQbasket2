@@ -49,6 +49,7 @@ export class PlayerPassportView {
     this.filterSubdimension = "";
     this.helpOpen = false;
     this.trainingContext = null;
+    this.trainingHours = null;
     this.exportBusy = false;
     // Only explicit observations are appended. Existing values are shown as a baseline
     // but are never duplicated unless the evaluator touches the attribute.
@@ -133,7 +134,49 @@ export class PlayerPassportView {
       if (!this.teamSeasonId) throw new Error("Selecciona una temporada antes de abrir el pasaporte.");
       this.data=await this.service.getPassport({playerId:this.playerId,teamSeasonId:this.teamSeasonId});
       this._applySeasonPlayerContext();
+      await this._loadTrainingHours();
     } catch (e) { this.error=e; console.error("[PlayerPassportView]",e); }
+  }
+
+  /** Summarize validated individual training participation across authorized seasons. */
+  async _loadTrainingHours() {
+    if (!this.supabase?.from || !this.playerId) { this.trainingHours = null; return; }
+    const totals = {TEAM:0,TECHNIFICATION:0,PERSONAL:0,COGNITIVE:0};
+    let count=0,pending=0;
+    try {
+      for (let offset=0; offset<10000; offset+=500) {
+        const {data,error}=await this.supabase.from("iq_training_player_hours_v64")
+          .select("accredited_minutes,session_kind,classification_review")
+          .eq("player_id",this.playerId).range(offset,offset+499);
+        if (error) throw error;
+        (data||[]).forEach(row => {
+          const code = row.session_kind in totals ? row.session_kind : "TEAM";
+          totals[code]+=Math.max(0,Number(row.accredited_minutes)||0);
+          if (row.classification_review==="PENDING") pending++;
+          count++;
+        });
+        if (!data||data.length<500) break;
+      }
+      this.trainingHours={totals,count,pending};
+    } catch(error) {
+      // Passport assessment remains available if training-hour access is denied.
+      console.warn("[Passport] No hay acceso a horas de formación:",error?.message||error);
+      this.trainingHours=null;
+    }
+  }
+
+  _trainingHoursCard() {
+    if(!this.trainingHours) return '';
+    const labels={TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"};
+    const format=m => Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
+    const total=Object.values(this.trainingHours.totals).reduce((a,b)=>a+b,0);
+    return '<section class="pp-training-volume" aria-label="Historial de formación">'
+      +'<h2>Horas de formación</h2><strong>'+esc(format(total))+'</strong>'
+      +'<div class="pp-training-volume-grid">'+Object.entries(this.trainingHours.totals)
+        .map(([kind,minutes])=>'<div><span>'+esc(labels[kind])+'</span><b>'+esc(format(minutes))+'</b></div>').join('')
+      +'</div>'
+      +(this.trainingHours.pending?'<small>Hay '+this.trainingHours.pending+' registros con tipo de formación pendiente de revisar.</small>':'')
+      +'<p>Horas efectivamente registradas y sesiones completadas; los entrenamientos planificados no suman.</p></section>';
   }
 
   _model() {
@@ -337,7 +380,7 @@ export class PlayerPassportView {
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
       ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button>'
       : '';
-    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
+    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._trainingHoursCard()+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
     this._bind();
   }
 
