@@ -1093,120 +1093,86 @@ export class TrainingView {
     `;
   }
 
+  /**
+   * Player-centric read view for historical and current training sessions.
+   * The team-season is used for authorization, never presented as ownership.
+   * Keep the edit/attendance/validation controls shared with existing V54 flows.
+   */
   _renderSessionCard(session, directory) {
-    const present = (session.participants || []).filter(
-      participant => ["PRESENT", "PARTIAL"].includes(
-        String(participant.attendance_status || "").toUpperCase()
-      )
-    ).length;
-    const load = (session.participants || []).reduce(
-      (sum, participant) => sum + (Number(participant.internal_load) || 0),
-      0
-    );
-    const focuses = this._trainingFocusCodes(session);
-
-    return `
-      <article class="p360-session-card">
-        <div class="p360-session-top">
-          <div>
-            <div class="p360-date-badge">${escapeHtml(session.session_date)}</div>
-            <h3>${escapeHtml(session.title)}</h3>
-            ${session.objective
-              ? `<p>${escapeHtml(session.objective)}</p>`
-              : ""}
-          </div>
-          <span class="p360-status p360-status-${escapeHtml(String(session.status || "").toLowerCase())}">
-            ${escapeHtml(session.status || "PLANNED")}
-          </span>
+    const participants=session.participants || [];
+    const kind=session.metadata?.session_kind || 'TEAM';
+    const labels={TEAM:'Entrenamiento de equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Entrenamiento personal',COGNITIVE:'Entrenamiento cognitivo'};
+    const statusLabel={PLANNED:'Pendiente de validación',COMPLETED:'Validado',CANCELLED:'Cancelado',ARCHIVED:'Archivado'};
+    const state=String(session.status||'PLANNED').toUpperCase();
+    const duration=this._sessionDuration(session);
+    const focuses=this._trainingFocusCodes(session);
+    const isCurrent=String(session.team_season_id)===String(this.teamSeasonId);
+    const canEdit=this._can(Permission.EDIT_TRAINING) && isCurrent;
+    const editing=canEdit && String(this.editingTrainingId)===String(session.id);
+    const present=participants.filter(row=>['PRESENT','PARTIAL'].includes(String(row.attendance_status||'').toUpperCase())).length;
+    const minutes=participants.reduce((total,row)=>total+
+      (['PRESENT','PARTIAL'].includes(String(row.attendance_status||'').toUpperCase())
+        ? Number(row.participated_minutes||0):0),0);
+    const participantRows=participants.map(row=>{
+      const id=String(row.player_id||'');
+      const person=this.trainingPlayerIdentities?.get(id)||directory.get(id)||DataStore.getPlayerById?.(id)||{};
+      const name=playerName(person)||('Jugador '+id.slice(0,8));
+      const code=String(row.attendance_status||'PLANNED').toUpperCase();
+      const participation=code==='PRESENT'?'Presente':code==='PARTIAL'?'Parcial':code==='ABSENT'?'Ausente':code==='EXCUSED'?'Justificada':'Por confirmar';
+      const individual=row.participated_minutes ?? row.duration_override_minutes ?? duration;
+      return `<div class="p360-v66-player">
+        <span class="p360-v66-player-name"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(participation)}</small></span>
+        <strong class="p360-v66-minutes">${escapeHtml(individual == null ? '—' : String(individual))} min</strong>
+        </div>`;
+    }).join('');
+    return `<article class="p360-session-card p360-v66-detail" data-session-id="${escapeHtml(session.id)}">
+      <header class="p360-v66-header">
+        <div><span class="p360-v66-eyebrow">FICHA DEL ENTRENAMIENTO · ${escapeHtml(session.session_date||'')}</span>
+          <h2>${escapeHtml(session.title||'Entrenamiento')}</h2>
+          <span class="p360-status p360-status-${escapeHtml(state.toLowerCase())}">${escapeHtml(statusLabel[state]||state)}</span></div>
+        <div class="p360-v66-header-actions">
+          ${canEdit ? `<button type="button" class="p360-primary-btn p360-edit-session" data-session-id="${escapeHtml(session.id)}">${editing?'Editando':'✏️ Editar entrenamiento'}</button>` : ''}
+          ${this._can(Permission.CREATE_TRAINING)?`<button type="button" class="p360-secondary-btn p360-repeat-session" data-session-id="${escapeHtml(session.id)}">📋 Duplicar</button>`:''}
         </div>
-
-        <div class="p360-session-metrics">
-          <span>⏱ ${displayNumber(this._sessionDuration(session))} min</span>
-          <span>⚡ Intensidad ${displayNumber(session.intensity, 1)}</span>
-          <span>👥 ${present}/${(session.participants || []).length} presentes/parciales</span>
-          <span>📊 Carga ${displayNumber(load, 1)}</span>
+      </header>
+      ${editing ? this._renderTrainingEditForm(session) : `
+      <section class="p360-v66-section" aria-label="Datos del entrenamiento">
+        <div class="p360-v66-section-title"><h3>Datos generales</h3></div>
+        <div class="p360-v66-overview">
+          <div><small>Fecha</small><strong>${escapeHtml(session.session_date||'—')}</strong></div>
+          <div><small>Duración</small><strong>${escapeHtml(duration??'—')} min</strong></div>
+          <div><small>Horario</small><strong>${escapeHtml(String(session.start_time||'—').slice(0,5))} – ${escapeHtml(String(session.end_time||'—').slice(0,5))}</strong></div>
+          <div><small>Intensidad</small><strong>${escapeHtml(session.intensity??'Sin valorar')}</strong></div>
         </div>
-
-        <div class="p360-training-type-review">
-          <label>Tipo de entrenamiento
-            <select class="p360-kind-select" data-session-id="${escapeHtml(session.id)}" ${this._can(Permission.EDIT_TRAINING) ? "" : "disabled"}>
-              ${[['TEAM','Equipo'],['TECHNIFICATION','Tecnificación'],['PERSONAL','Personal'],['COGNITIVE','Cognitivo']].map(([code,label]) =>
-                `<option value="${code}" ${(session.metadata?.session_kind || 'TEAM') === code ? 'selected' : ''}>${label}</option>`
-              ).join('')}
-            </select>
-          </label>
-          ${session.metadata?.session_kind_review === 'PENDING'
-            ? '<small>Clasificación histórica provisional; confirma el tipo cuando corresponda.</small>'
-            : ''}
-        </div>
-
-        ${focuses.length ? `
-          <div class="p360-focus-summary">
-            ${focuses.map(code => `<span>✓ ${escapeHtml(this._trainingFocusLabel(code))}</span>`).join("")}
-          </div>
-        ` : `
-          <div class="p360-legacy-focus-note">Sesión histórica sin clasificación rápida V55.</div>
-        `}
-
-        ${session.notes ? `<p class="p360-card-text"><strong>Nota del entrenador:</strong> ${escapeHtml(session.notes)}</p>` : ""}
-
-        ${(session.blocks || []).length ? `
-          <details class="p360-block-details">
-            <summary>Ver ${(session.blocks || []).length} bloque${(session.blocks || []).length === 1 ? "" : "s"} detallado${(session.blocks || []).length === 1 ? "" : "s"}</summary>
-            <div class="p360-block-list">
-              ${session.blocks.map(block => `
-                <div class="p360-block-chip">
-                  <strong>${escapeHtml(block.title)}</strong>
-                  <span>
-                    ${escapeHtml(block.activity_code || "—")}
-                    ${block.duration_minutes ? ` · ${displayNumber(block.duration_minutes)} min` : ""}
-                    ${block.intensity !== null && block.intensity !== undefined
-                      ? ` · I${displayNumber(block.intensity, 1)}`
-                      : ""}
-                  </span>
-                </div>
-              `).join("")}
-            </div>
-          </details>
-        ` : ""}
-
-        ${String(session.team_season_id) === String(this.teamSeasonId) ? this._renderAttendanceEditor(session, directory) : ""}
-
-        ${String(session.team_season_id) === String(this.teamSeasonId) && this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
-          ? this._renderTrainingEditForm(session)
-          : ""}
-
-        <div class="p360-card-actions">
-          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId)
-            && ['PLANNED','COMPLETED'].includes(String(session.status).toUpperCase()) ? `
-            <button type="button" class="p360-secondary-btn p360-validation-toggle"
-              data-session-id="${escapeHtml(session.id)}"
-              data-validate="${String(session.status).toUpperCase() === 'COMPLETED' ? 'false' : 'true'}">
-                ${String(session.status).toUpperCase() === 'COMPLETED' ? '↶ Reabrir' : '✓ Validar entrenamiento'}
-            </button>` : ''}
-          ${this._can(Permission.CREATE_TRAINING) ? `
-            <button type="button" class="p360-secondary-link p360-repeat-session" data-session-id="${escapeHtml(session.id)}">
-              📋 Repetir / copiar
-            </button>
-          ` : ""}
-          ${this._can(Permission.EXPORT_REPORT) ? `
-            <button type="button" class="p360-secondary-link p360-export-session-word" data-session-id="${escapeHtml(session.id)}">
-              📄 Informe Word
-            </button>
-          ` : ""}
-          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
-            <button type="button" class="p360-secondary-link p360-edit-session" data-session-id="${escapeHtml(session.id)}">
-              ✏️ Editar detalles
-            </button>
-          ` : ""}
-          ${this._can(Permission.DELETE_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
-            <button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">
-              Archivar sesión
-            </button>
-          ` : ""}
-        </div>
-      </article>
-    `;
+        <label class="p360-v66-kind">Tipo de entrenamiento
+          <select class="p360-kind-select" data-session-id="${escapeHtml(session.id)}"
+            ${canEdit?'':'disabled'}>
+            ${Object.entries(labels).map(([code,label])=>`<option value="${code}" ${kind===code?'selected':''}>${label}</option>`).join('')}
+          </select>
+        </label>
+        ${session.metadata?.session_kind_review==='PENDING'?'<p class="p360-v66-warning">Clasificación provisional recuperada del histórico. Puedes revisarla y corregirla.</p>':''}
+        ${!isCurrent?'<p class="p360-v66-warning">Sesión histórica de otra temporada: consulta disponible. La corrección debe hacerse con permisos de su contexto original.</p>':''}
+      </section>
+      <section class="p360-v66-section" aria-label="Participantes">
+        <div class="p360-v66-section-title"><h3>Jugadores y tiempo individual</h3>
+          <span>${present} confirmados · ${participants.length} participantes</span></div>
+        <div class="p360-v66-roster">${participantRows||'<p>No hay asistentes registrados.</p>'}</div>
+        <p class="p360-v66-footnote">Minutos de la sesión: ${escapeHtml(duration??'—')}. Minutos de asistencia registrados entre jugadores: ${minutes}. Los tiempos previstos no se acreditan hasta validar.</p>
+        ${canEdit?this._renderAttendanceEditor(session,directory):''}
+      </section>
+      <section class="p360-v66-section" aria-label="Contenido y observaciones">
+        <div class="p360-v66-section-title"><h3>Contenido trabajado</h3></div>
+        ${session.objective?`<p><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>`:''}
+        ${focuses.length?`<div class="p360-focus-summary">${focuses.map(code=>`<span>✓ ${escapeHtml(this._trainingFocusLabel(code))}</span>`).join('')}</div>`:''}
+        ${(session.blocks||[]).length?`<div class="p360-v66-blocks">${session.blocks.map(block=>`<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min · ${escapeHtml(block.activity_code||'Actividad')}</small></div>`).join('')}</div>`:'<p>No hay bloques desglosados en este entrenamiento.</p>'}
+        ${session.notes?`<p><strong>Observaciones:</strong> ${escapeHtml(session.notes)}</p>`:''}
+      </section>`}
+      <div class="p360-card-actions p360-v66-bottom-actions">
+        ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?'↶ Reabrir':'✓ Validar entrenamiento'}</button>`:''}
+        ${this._can(Permission.EXPORT_REPORT)?`<button type="button" class="p360-secondary-btn p360-export-session-word" data-session-id="${escapeHtml(session.id)}">📄 Exportar Word</button>`:''}
+        ${canEdit&&this._can(Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">Archivar</button>`:''}
+      </div>
+    </article>`;
   }
 
   _renderTrainingPanel() {
@@ -1669,6 +1635,30 @@ export class TrainingView {
         .p360-section-head h2 { margin: 0; font-size: 18px; }
         .p360-section-head p { margin: 4px 0 0; color: #64748b; font-size: 12px; }
         .p360-session-list, .p360-external-list { display: grid; gap: 12px; }
+        .p360-v66-detail{padding:0!important;overflow:hidden;gap:0!important}
+        .p360-v66-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;background:#f5f8fc;padding:20px;flex-wrap:wrap}
+        .p360-v66-eyebrow{color:#475569;letter-spacing:.065em;font-size:11px;font-weight:700}
+        .p360-v66-header h2{font-size:23px;line-height:1.3;margin:6px 0 10px;color:#14243b}
+        .p360-v66-header-actions{display:flex;gap:8px;flex-wrap:wrap}
+        .p360-v66-section{padding:18px 20px;border-top:1px solid #e2e8f0;display:grid;gap:13px}
+        .p360-v66-section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+        .p360-v66-section-title h3{font-size:16px;margin:0;color:#14243b}
+        .p360-v66-section-title span,.p360-v66-footnote{color:#64748b;font-size:12px}
+        .p360-v66-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
+        .p360-v66-overview>div{background:#f8fafc;border-radius:10px;padding:12px;display:grid;gap:6px}
+        .p360-v66-overview small{color:#64748b}
+        .p360-v66-kind{display:grid;gap:5px;max-width:360px;font-weight:600}
+        .p360-v66-kind select{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;padding:8px;background:#fff;color:#14243b}
+        .p360-v66-roster{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
+        .p360-v66-player{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid #e2e8f0;padding:10px 12px;border-radius:10px}
+        .p360-v66-player-name{display:grid;gap:3px;min-width:0}
+        .p360-v66-player-name small{color:#64748b}
+        .p360-v66-minutes{white-space:nowrap;font-variant-numeric:tabular-nums}
+        .p360-v66-blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:9px}
+        .p360-v66-blocks>div{display:grid;gap:4px;background:#f8fafc;border-radius:10px;padding:12px}
+        .p360-v66-blocks small{color:#64748b}
+        .p360-v66-warning{color:#805700;background:#fff9e6;padding:10px;border-radius:8px;font-size:12px}
+        .p360-v66-bottom-actions{padding:16px 20px;border-top:1px solid #e2e8f0}
         .p360-session-card, .p360-external-card {
           background: white;
           border: 1px solid #e2e8f0;
