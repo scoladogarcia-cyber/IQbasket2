@@ -51,7 +51,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     this.blockAssignments=[];
     if(!this._can(Permission.EDIT_TRAINING) || !this.capabilities?.training_core)return;
     try {
-      this.blockAssignments=await this.completeService.listBlockParticipation(this.sessions);
+      this.blockAssignments=await this.completeService.listBlockParticipation((this.sessions || []).filter(session => String(session.team_season_id) === String(this.teamSeasonId)));
       this.completeEditReady=true;
 
       const participantIds=[...new Set(
@@ -127,7 +127,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
             ['PLANNED','Pendiente'],['PRESENT','Presente'],['PARTIAL','Parcial'],
             ['ABSENT','Ausente'],['EXCUSED','Justificada']
           ],status)}</select></label>
-          <label>Minutos reales<input class="v54-person-minutes" type="number" min="0" max="600" step="1" value="${esc(participant?.participated_minutes ?? '')}" placeholder="Sin registrar" /></label>
+          <label>Minutos reales<input class="v54-person-minutes" type="number" min="0" max="600" step="1" value="${esc(participant?.participated_minutes ?? this._editSessionTotalMinutes ?? '')}" placeholder="Duración de la sesión" /></label>
           <label>RPE individual<input class="v54-person-rpe" type="number" min="0" max="10" step="0.5" value="${esc(participant?.rpe ?? '')}" placeholder="Sin registrar" /></label>
           <label>Observación breve<input class="v54-person-note" maxlength="240" value="${esc(participant?.notes || '')}" placeholder="Ej. Llegó tarde; sin datos médicos" /></label>
           ${this._can(Permission.CREATE_PLAYER_EVALUATION) && this._can(Permission.VIEW_PLAYER_PASSPORT)
@@ -281,6 +281,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     if(!this._can(Permission.EDIT_TRAINING))return '';
     if(!this.completeEditReady)return `<div class="p360-error">No se ha podido verificar el detalle de participantes y bloques. Recarga la pantalla antes de editar; no se guardará parcialmente.</div>`;
     const bounds=this._dateInputBounds();
+    this._editSessionTotalMinutes = this._sessionDuration(session);
     const directory=this._playerDirectory();
     const participants=new Map((session.participants||[]).map(p=>[String(p.player_id),p]));
     const participantPlayers=[...participants.entries()].map(([pid,participant])=>{

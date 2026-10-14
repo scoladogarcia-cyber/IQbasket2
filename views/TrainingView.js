@@ -117,6 +117,8 @@ export class TrainingView {
     this.teamSeasonId = null;
     this.containerId = "dashboard-content-area";
     this.editingTrainingId = null;
+    this.trainingDetailId = null;
+    this.trainingMinutesOverrides = new Map();
     this.editingExternalId = null;
 
     // V56 training player selector state. Selection is independent from the
@@ -217,6 +219,7 @@ export class TrainingView {
         this._can(Permission.VIEW_TRAINING)
           ? this.service.listSessions({
               teamSeasonId: this.teamSeasonId,
+              allAccessible: true,
               limit: 500
             })
           : Promise.resolve([]),
@@ -501,6 +504,7 @@ export class TrainingView {
             <strong>${escapeHtml(name)}</strong>
             <small>${escapeHtml(player.primary_position || "—")} · ${escapeHtml(contextLabel)}</small>
           </span>
+          ${checked ? `<span class="p360-player-minutes-field">Minutos individuales <input class="p360-player-minute-input" type="number" min="0" max="600" step="1" data-player-id="${escapeHtml(id)}" value="${escapeHtml(this.trainingMinutesOverrides.get(id) ?? (minutesBetweenTimes(this._formStartValue || '',this._formEndValue || '') ?? ''))}" aria-label="Minutos de ${escapeHtml(name)}"/></span>` : ''}
         </label>
       `;
     }).join("");
@@ -614,6 +618,8 @@ export class TrainingView {
     const date = this._defaultDate();
     const bounds = this._dateInputBounds();
     const defaults = this._latestSessionDefaults();
+    this._formStartValue = defaults.start;
+    this._formEndValue = defaults.end;
     const recent = (this.sessions || [])
       .filter(session => String(session?.status || "").toUpperCase() !== "ARCHIVED")
       .slice(0, 8);
@@ -648,6 +654,14 @@ export class TrainingView {
           <input type="hidden" id="p360-training-clone-source-id" value="" />
 
           <label class="p360-free-note"><span>Nombre del entrenamiento</span><input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" required /></label>
+          <label class="p360-free-note"><span>Tipo de entrenamiento</span>
+            <select id="p360-training-kind" required>
+              <option value="TEAM">Entrenamiento de equipo</option>
+              <option value="TECHNIFICATION">Tecnificación</option>
+              <option value="PERSONAL">Entrenamiento personal</option>
+              <option value="COGNITIVE">Entrenamiento cognitivo</option>
+            </select>
+          </label>
           <div class="p360-quick-grid">
             <label>
               <span>Fecha</span>
@@ -1156,13 +1170,20 @@ export class TrainingView {
           </details>
         ` : ""}
 
-        ${this._renderAttendanceEditor(session, directory)}
+        ${String(session.team_season_id) === String(this.teamSeasonId) ? this._renderAttendanceEditor(session, directory) : ""}
 
-        ${this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
+        ${String(session.team_season_id) === String(this.teamSeasonId) && this.editingTrainingId && String(this.editingTrainingId) === String(session.id)
           ? this._renderTrainingEditForm(session)
           : ""}
 
         <div class="p360-card-actions">
+          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId)
+            && ['PLANNED','COMPLETED'].includes(String(session.status).toUpperCase()) ? `
+            <button type="button" class="p360-secondary-btn p360-validation-toggle"
+              data-session-id="${escapeHtml(session.id)}"
+              data-validate="${String(session.status).toUpperCase() === 'COMPLETED' ? 'false' : 'true'}">
+                ${String(session.status).toUpperCase() === 'COMPLETED' ? '↶ Reabrir' : '✓ Validar entrenamiento'}
+            </button>` : ''}
           ${this._can(Permission.CREATE_TRAINING) ? `
             <button type="button" class="p360-secondary-link p360-repeat-session" data-session-id="${escapeHtml(session.id)}">
               📋 Repetir / copiar
@@ -1173,12 +1194,12 @@ export class TrainingView {
               📄 Informe Word
             </button>
           ` : ""}
-          ${this._can(Permission.EDIT_TRAINING) ? `
+          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
             <button type="button" class="p360-secondary-link p360-edit-session" data-session-id="${escapeHtml(session.id)}">
               ✏️ Editar detalles
             </button>
           ` : ""}
-          ${this._can(Permission.DELETE_TRAINING) ? `
+          ${this._can(Permission.DELETE_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId) ? `
             <button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">
               Archivar sesión
             </button>
@@ -1195,7 +1216,7 @@ export class TrainingView {
     return `
       <section id="p360-panel-training" class="p360-tab-panel">
         <div class="p360-kpi-grid">
-          ${this._renderKpi("Sesiones", String(summary.sessions), "Temporada activa")}
+          ${this._renderKpi("Sesiones", String(summary.sessions), "Historial accesible")}
           ${this._renderKpi("Minutos planificados", displayNumber(summary.totalMinutes), "Suma de sesiones")}
           ${this._renderKpi("Intensidad media", displayNumber(summary.avgIntensity, 1), "Escala 0-10")}
           ${this._renderKpi("Carga registrada", displayNumber(summary.participantLoad, 1), "Minutos × RPE")}
@@ -1218,13 +1239,20 @@ export class TrainingView {
 
         <div class="p360-session-list">
           ${this.sessions.length
-            ? this.sessions.map(session => this._renderSessionCard(session, directory)).join("")
-            : `
-              <div class="p360-empty-state">
-                <strong>Aún no hay entrenamientos registrados.</strong>
-                <span>La primera sesión que guardes aparecerá aquí y quedará vinculada a la temporada.</span>
-              </div>
-            `}
+            ? this.trainingDetailId
+              ? `<button type="button" class="p360-secondary-btn p360-training-back">← Volver al listado</button>
+                 ${this.sessions.filter(session => String(session.id) === String(this.trainingDetailId))
+                    .map(session => this._renderSessionCard(session,directory)).join("")}`
+              : `<div class="p360-training-table" role="list">
+                  ${this.sessions.map(session => `
+                    <button type="button" role="listitem" class="p360-training-list-item" data-session-id="${escapeHtml(session.id)}">
+                      <span><strong>${escapeHtml(session.title || 'Entrenamiento')}</strong>
+                        <small>${escapeHtml(session.session_date)} · ${escapeHtml(({TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo'})[session.metadata?.session_kind] || 'Sin clasificar')}</small>
+                      </span>
+                      <span>${escapeHtml(String(this._sessionDuration(session) ?? '—'))} min · ${(session.participants||[]).length} jugadores →</span>
+                    </button>`).join("")}
+                </div>`
+            : `<div class="p360-empty-state">No hay entrenamientos visibles en este contexto.</div>`}
         </div>
       </section>
     `;
@@ -1789,6 +1817,12 @@ export class TrainingView {
         .p360-readonly { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
         .p360-quick-create > summary { justify-content: flex-start; }
         .p360-quick-create > summary small { margin-left:auto;color:#64748b;font-weight:600;font-size:11px; }
+        .p360-training-table { display:grid;gap:8px; }
+        .p360-training-list-item { display:flex;justify-content:space-between;align-items:center;gap:16px;width:100%;border:1px solid #dbe4ef;border-radius:12px;background:#fff;padding:14px;text-align:left;color:#14243b;cursor:pointer; }
+        .p360-training-list-item span:first-child { display:grid;gap:4px; }
+        .p360-training-list-item small { color:#64748b;font-size:12px; }
+        .p360-training-list-item:hover { border-color:#3b82f6;background:#eff6ff; }
+        @media(max-width:600px) { .p360-training-list-item { flex-direction:column;align-items:flex-start; } }
         .p360-clone-bar {
           display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(220px,1fr) auto;
           gap:10px;align-items:center;padding:12px;border:1px solid #dbeafe;border-radius:12px;background:#eff6ff;
@@ -1940,6 +1974,9 @@ export class TrainingView {
         if (count) {
           count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
         }
+        this._refreshTrainingPlayerOptions(container, date, {
+          query: this.trainingPlayerQuery, page: this.trainingPlayerPage
+        });
       });
     });
 
@@ -1960,6 +1997,9 @@ export class TrainingView {
       if (count) {
         count.textContent = `${this.trainingPlayerSelection.size} seleccionado${this.trainingPlayerSelection.size === 1 ? "" : "s"}`;
       }
+      this._refreshTrainingPlayerOptions(container, date, {
+        query: this.trainingPlayerQuery, page: this.trainingPlayerPage
+      });
     });
 
     directory.querySelector("#p360-clear-all-players")?.addEventListener("click", () => {
@@ -2047,6 +2087,14 @@ export class TrainingView {
       });
     });
 
+    container.addEventListener("change", event => {
+      const input = event.target.closest?.(".p360-player-minute-input");
+      if (!input) return;
+      const value = input.value.trim();
+      if (value === "") this.trainingMinutesOverrides.delete(input.dataset.playerId);
+      else this.trainingMinutesOverrides.set(input.dataset.playerId,Number(value));
+    });
+
     this._bindParticipantSelectionTools(container);
 
     const trainingForm = container.querySelector("#p360-training-form");
@@ -2081,9 +2129,14 @@ export class TrainingView {
       if (!trainingDuration) return null;
       const value = minutesBetweenTimes(trainingStart?.value, trainingEnd?.value);
       trainingDuration.value = value === null ? "" : String(value);
+      this._formStartValue = trainingStart?.value || "";
+      this._formEndValue = trainingEnd?.value || "";
+      container.querySelectorAll(".p360-player-minute-input").forEach(input => { if (!this.trainingMinutesOverrides.has(input.dataset.playerId)) input.value = value ?? ""; });
       return value;
     };
     trainingStart?.addEventListener("input", syncTrainingDuration);
+    this._formStartValue = trainingStart?.value || "";
+    this._formEndValue = trainingEnd?.value || "";
     trainingEnd?.addEventListener("input", syncTrainingDuration);
     trainingTitle?.addEventListener("input", () => {
       trainingTitle.dataset.manualTitle = trainingTitle.value.trim() && trainingTitle.value.trim() !== this._quickTrainingTitle(selectedFocusCodes()) ? "1" : "";
@@ -2114,6 +2167,8 @@ export class TrainingView {
         trainingTitle.dataset.manualTitle = "1";
       }
       if (cloneSourceId) cloneSourceId.value = session.id || "";
+      const kind = trainingForm.querySelector("#p360-training-kind");
+      if (kind) kind.value = session.metadata?.session_kind || "TEAM";
 
       const blocks = container.querySelector("#p360-blocks-container");
       if (blocks) {
@@ -2126,6 +2181,7 @@ export class TrainingView {
 
       const cloneDate = trainingDate?.value || this._defaultDate();
       const selected = [...new Set((session.participants || []).map(participant => String(participant.player_id)).filter(Boolean))];
+      this.trainingMinutesOverrides = new Map((session.participants || []).filter(p => p.duration_override_minutes != null || p.participated_minutes != null).map(p => [String(p.player_id),Number(p.duration_override_minutes ?? p.participated_minutes)]));
       await this._refreshTrainingPlayerOptions(container, cloneDate, {
         selectedIds: selected,
         query: "",
@@ -2185,6 +2241,40 @@ export class TrainingView {
     }
 
     this._delegatedClickHandler = async event => {
+      const validateTraining = event.target.closest(".p360-validation-toggle");
+      if (validateTraining) {
+        const session = (this.sessions||[]).find(x=>String(x.id)===String(validateTraining.dataset.sessionId));
+        if (!session || String(session.team_season_id)!==String(this.teamSeasonId)) return;
+        const desired = validateTraining.dataset.validate === 'true';
+        if (!confirm(desired
+          ? 'Confirma asistencia y minutos individuales antes de validar. ¿Validar entrenamiento?'
+          : '¿Reabrir la sesión para corregir los datos?')) return;
+        validateTraining.disabled = true;
+        try {
+          const {error}=await this.supabase.rpc('iq_v65_set_training_validation',{
+            p_session_id:session.id,p_team_season_id:session.team_season_id,p_validate:desired
+          });
+          if(error) throw error;
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          validateTraining.disabled=false;
+          alert('No se puede cambiar el estado: '+(error?.message||error));
+        }
+        return;
+      }
+      const openTraining = event.target.closest(".p360-training-list-item");
+      if (openTraining) {
+        this.trainingDetailId = openTraining.dataset.sessionId;
+        this.editingTrainingId = null;
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
+      if (event.target.closest(".p360-training-back")) {
+        this.trainingDetailId = null;
+        this.editingTrainingId = null;
+        await this.render(this.containerId,this.teamId);
+        return;
+      }
       const repeatSession = event.target.closest(".p360-repeat-session");
       if (repeatSession) {
         const select = container.querySelector("#p360-clone-source");
@@ -2608,11 +2698,20 @@ export class TrainingView {
       }
 
       const alreadyOccurred = String(date) <= localIsoDate();
-      const participants = selectedPlayers.map(playerId => ({
-        player_id: playerId,
-        attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
-        participated_minutes: alreadyOccurred ? durationMinutes : null
-      }));
+      let participants;
+      try { participants = selectedPlayers.map(playerId => {
+        const override = this.trainingMinutesOverrides.get(String(playerId));
+        const effective = override == null ? durationMinutes : Number(override);
+        if (!Number.isInteger(effective) || effective < 0 || effective > durationMinutes) {
+          throw new Error("Los minutos individuales deben estar entre 0 y la duración general.");
+        }
+        return {
+          player_id: playerId,
+          attendance_status: alreadyOccurred ? "PRESENT" : "PLANNED",
+          participated_minutes: alreadyOccurred ? effective : null,
+          duration_override_minutes: override == null || Number(override) === durationMinutes ? null : effective
+        };
+      }); } catch (error) { alert(error.message); return; }
       const cloneSourceIdValue = form.querySelector("#p360-training-clone-source-id")?.value || null;
       const advanced = form.querySelector("#p360-training-advanced");
       const entryMode = cloneSourceIdValue ? "CLONE" : (advanced?.open ? "ADVANCED" : "QUICK");
@@ -2633,7 +2732,8 @@ export class TrainingView {
           participants,
           focusCodes,
           cloneSourceId: cloneSourceIdValue,
-          entryMode
+          entryMode,
+          sessionKind: form.querySelector("#p360-training-kind")?.value || "TEAM"
         });
         this._resetTrainingPlayerSelection(date);
         await this.render(this.containerId, this.teamId);

@@ -55,6 +55,7 @@ try {
     window.__v54View=view;
     await view.render('v54-test',teamId);
   });
+  await page.locator('.p360-training-list-item').first().click();
   await page.locator('.p360-edit-session').click();
   const form=page.locator('.v54-complete-form');
   await form.waitFor();

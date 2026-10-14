@@ -474,7 +474,7 @@ async function runViewport(browser, name, viewport) {
 
   const core = await page.evaluate(() => ({
     title: document.querySelector(".p360-hero h1")?.textContent || "",
-    sessionCards: document.querySelectorAll(".p360-session-card").length,
+    sessionCards: document.querySelectorAll(".p360-training-list-item").length,
     hasExternalTab: Boolean(document.querySelector('[data-p360-tab="external"]')),
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     trainingMin: document.querySelector("#p360-training-date")?.getAttribute("min") || null,
@@ -586,9 +586,9 @@ async function runViewport(browser, name, viewport) {
   await page.locator("#p360-training-form").evaluate(form => form.requestSubmit());
   await page.waitForFunction(() => window.__p360.createCalls.length === 1);
   await page.waitForFunction(() => {
-    const cards = [...document.querySelectorAll(".p360-session-card")];
-    return cards.length === 2
-      && cards.some(card => card.textContent?.includes("Sesión creada por UI smoke"));
+    const items = [...document.querySelectorAll(".p360-training-list-item")];
+    return items.length === 2
+      && items.some(item => item.textContent?.includes("Sesión creada por UI smoke"));
   });
 
   const createCall = await page.evaluate(() => window.__p360.createCalls[0]);
@@ -610,6 +610,8 @@ async function runViewport(browser, name, viewport) {
     "Los presentes de una sesión histórica deben heredar la duración completa"
   );
 
+  // Open the session detail; the index intentionally has no stacked cards.
+  await page.locator(".p360-training-list-item").filter({ hasText: "Sesión existente" }).click();
   // Attendance/RPE edit of the existing session.
   const existingCard = page.locator(".p360-session-card").filter({ hasText: "Sesión existente" });
   await existingCard.locator(".p360-attendance-panel").evaluate(el => { el.open = true; });

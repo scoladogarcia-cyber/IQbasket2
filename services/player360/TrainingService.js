@@ -90,6 +90,7 @@ export class TrainingService {
     fromDate = null,
     toDate = null,
     includeArchived = false,
+    allAccessible = false,
     limit = 100
   } = {}) {
     this._assertReady();
@@ -98,11 +99,11 @@ export class TrainingService {
     let query = this.supabase
       .from("training_sessions")
       .select("*")
-      .eq("team_season_id", teamSeasonId)
       .order("session_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(Math.max(1, Math.min(Number(limit) || 100, 500)));
 
+    if (!allAccessible) query = query.eq("team_season_id", teamSeasonId);
     if (fromDate) query = query.gte("session_date", fromDate);
     if (toDate) query = query.lte("session_date", toDate);
     if (!includeArchived) query = query.neq("status", "ARCHIVED");
@@ -158,7 +159,8 @@ export class TrainingService {
     participants = [],
     focusCodes = [],
     cloneSourceId = null,
-    entryMode = "QUICK"
+    entryMode = "QUICK",
+    sessionKind = "TEAM"
   } = {}) {
     this._assertReady();
     assertRequired(teamSeasonId, "teamSeasonId");
@@ -188,7 +190,7 @@ export class TrainingService {
     }
 
     const { data, error } = await this.supabase.rpc(
-      "iq_v55_create_training_session",
+      "iq_v65_create_training_session",
       {
         p_team_season_id: teamSeasonId,
         p_session_date: sessionDate,
@@ -203,7 +205,8 @@ export class TrainingService {
         p_participants: normalizeArray(participants),
         p_focus_codes: focusCodes,
         p_clone_source_id: cloneSourceId,
-        p_entry_mode: String(entryMode || "QUICK").toUpperCase()
+        p_entry_mode: String(entryMode || "QUICK").toUpperCase(),
+        p_kind: String(sessionKind || "TEAM").toUpperCase()
       }
     );
 

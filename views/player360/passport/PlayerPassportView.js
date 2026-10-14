@@ -49,6 +49,7 @@ export class PlayerPassportView {
     this.filterSubdimension = "";
     this.helpOpen = false;
     this.trainingContext = null;
+    this.trainingHours = null;
     this.exportBusy = false;
     // Only explicit observations are appended. Existing values are shown as a baseline
     // but are never duplicated unless the evaluator touches the attribute.
@@ -133,7 +134,49 @@ export class PlayerPassportView {
       if (!this.teamSeasonId) throw new Error("Selecciona una temporada antes de abrir el pasaporte.");
       this.data=await this.service.getPassport({playerId:this.playerId,teamSeasonId:this.teamSeasonId});
       this._applySeasonPlayerContext();
+      await this._loadTrainingHours();
     } catch (e) { this.error=e; console.error("[PlayerPassportView]",e); }
+  }
+
+  /** Summarize validated individual training participation across authorized seasons. */
+  async _loadTrainingHours() {
+    if (!this.supabase?.from || !this.playerId) { this.trainingHours = null; return; }
+    const totals = {TEAM:0,TECHNIFICATION:0,PERSONAL:0,COGNITIVE:0};
+    let count=0,pending=0;
+    try {
+      for (let offset=0; offset<10000; offset+=500) {
+        const {data,error}=await this.supabase.from("iq_training_player_hours_v64")
+          .select("training_session_id,accredited_minutes,session_kind,classification_review")
+          .eq("player_id",this.playerId).order("training_session_id",{ascending:true}).range(offset,offset+499);
+        if (error) throw error;
+        (data||[]).forEach(row => {
+          const code = row.session_kind in totals ? row.session_kind : "TEAM";
+          totals[code]+=Math.max(0,Number(row.accredited_minutes)||0);
+          if (row.classification_review==="PENDING") pending++;
+          count++;
+        });
+        if (!data||data.length<500) break;
+      }
+      this.trainingHours={totals,count,pending};
+    } catch(error) {
+      // Passport assessment remains available if training-hour access is denied.
+      console.warn("[Passport] No hay acceso a horas de formación:",error?.message||error);
+      this.trainingHours=null;
+    }
+  }
+
+  _trainingHoursCard() {
+    if(!this.trainingHours) return '';
+    const labels={TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"};
+    const format=m => Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
+    const total=Object.values(this.trainingHours.totals).reduce((a,b)=>a+b,0);
+    return '<section class="pp-training-volume" aria-label="Historial de formación">'
+      +'<h2>Horas de formación</h2><strong>'+esc(format(total))+'</strong>'
+      +'<div class="pp-training-volume-grid">'+Object.entries(this.trainingHours.totals)
+        .map(([kind,minutes])=>'<div><span>'+esc(labels[kind])+'</span><b>'+esc(format(minutes))+'</b></div>').join('')
+      +'</div>'
+      +(this.trainingHours.pending?'<small>Hay '+this.trainingHours.pending+' registros con tipo de formación pendiente de revisar.</small>':'')
+      +'<p>Horas efectivamente registradas y sesiones completadas; los entrenamientos planificados no suman.</p></section>';
   }
 
   _model() {
@@ -337,7 +380,7 @@ export class PlayerPassportView {
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
       ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button>'
       : '';
-    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
+    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._trainingHoursCard()+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
     this._bind();
   }
 
@@ -392,7 +435,8 @@ export class PlayerPassportView {
   }
 
   _styles() {
-    return '<style>'+
+    return '<style>'+ 
+      '.pp-training-volume{padding:18px;margin:18px 0;border:1px solid #dbe4ee;border-radius:14px;background:#fff;color:#14243b}.pp-training-volume h2{font-size:18px;margin:0 0 8px}.pp-training-volume strong{font-size:24px}.pp-training-volume-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}.pp-training-volume-grid>div{padding:10px;border-radius:10px;background:#f1f5f9;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.pp-training-volume-grid span,.pp-training-volume small,.pp-training-volume p{color:#475569;font-size:12px}'+
       '.pp-page{max-width:1380px;margin:0 auto;padding:18px;display:grid;gap:18px;color:#0f172a;font-family:var(--font-family-base,system-ui,-apple-system,sans-serif)}.pp-page *{box-sizing:border-box}.pp-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.pp-top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.pp-top-action{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;padding:8px 12px;font-weight:800;cursor:pointer}.pp-back{min-height:44px;display:inline-flex;align-items:center;color:#475569;text-decoration:none;font-weight:800}'+
       '.pp-hero{position:relative;overflow:hidden;min-height:410px;border:1px solid #473487;border-radius:22px;padding:28px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.75fr) minmax(250px,.8fr);gap:22px;align-items:center;background:radial-gradient(circle at 52% 40%,rgba(124,58,237,.45),transparent 28%),linear-gradient(135deg,#070914,#11183a 58%,#250a42);color:#fff;box-shadow:0 24px 60px rgba(15,23,42,.22)}.pp-hero:before{content:"";position:absolute;inset:10px;border:1px solid rgba(196,181,253,.27);border-radius:16px}.pp-identity,.pp-art,.pp-badges{position:relative;z-index:1}.pp-eyebrow{display:block;color:#c4b5fd;font-size:10px;font-weight:950;letter-spacing:.14em;margin-bottom:8px}.pp-eyebrow.dark{color:#6d28d9}.pp-identity h1{margin:0;font-size:clamp(34px,5vw,64px);line-height:.92;text-transform:uppercase;letter-spacing:-.04em;color:#fff}.pp-identity>p{color:#ddd6fe}.pp-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.pp-meta span{border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.72);border-radius:999px;padding:7px 9px;font-size:11px;color:#e5e7eb!important}.pp-meta b{color:#c4b5fd!important}.pp-hero-action{margin-top:14px;min-height:46px;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:900;cursor:pointer}.pp-art{min-height:300px;align-self:end;display:flex;justify-content:center;align-items:flex-end}.pp-art img{max-width:100%;max-height:370px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.45))}.pp-silhouette{width:200px;height:260px;border-radius:100px 100px 26px 26px;display:grid;place-items:center;background:linear-gradient(160deg,#7c3aed,#1e293b);font-size:68px;font-weight:950}.pp-watermark{position:absolute;right:-5px;bottom:0;font-size:120px;line-height:.75;font-weight:950;color:rgba(255,255,255,.06);z-index:-1}.pp-badges{display:grid;gap:10px}.pp-shield,.pp-mini{border:1px solid rgba(196,181,253,.32);background:rgba(3,7,22,.64);border-radius:15px;padding:14px}.pp-shield{text-align:center}.pp-shield small,.pp-mini small{display:block;color:#c4b5fd;font-size:9px;font-weight:950;letter-spacing:.1em;margin-bottom:6px}.pp-shield strong{display:block;font-size:40px}.pp-shield strong span{font-size:15px;color:#94a3b8}.pp-shield em{font-style:normal;color:#ddd6fe}.pp-mini span{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding:6px 0;font-size:11px;color:#f1f5f9!important}.pp-mini span:first-of-type{border-top:0}.pp-mini b{color:#ddd6fe!important}.pp-shield strong,.pp-shield em{color:#fff!important}'+
       '.pp-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 5px 18px rgba(15,23,42,.04)}.pp-panel h2{margin:0 0 12px;font-size:20px}.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pp-list{display:grid;gap:7px}.pp-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px;align-items:center;border:1px solid #ede9fe;background:#faf9ff;border-radius:10px;padding:9px;font-size:12px}.pp-list small{color:#64748b}.pp-head{display:flex;justify-content:space-between;gap:12px}.pp-head p{margin:0;color:#64748b;font-size:12px}.pp-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pp-dimension{border:1px solid #e2e8f0;border-radius:13px;padding:13px;background:#fbfcff}.pp-dimension header{display:flex;justify-content:space-between}.pp-dimension h3{margin:0;font-size:14px}.pp-dimension header>div small{color:#64748b}.pp-dimension header>b{width:44px;height:44px;border:1px solid #c4b5fd;border-radius:11px;display:grid;place-items:center;color:#6d28d9}.pp-bar{height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin:9px 0}.pp-bar span{display:block;height:100%;background:linear-gradient(90deg,#7c3aed,#2563eb)}.pp-attribute{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eef2f7;font-size:11px}.pp-pips{display:flex;gap:3px}.pp-pips i{width:10px;height:10px;border:1px solid #cbd5e1;border-radius:3px}.pp-pips i.on{background:#7c3aed;border-color:#7c3aed}.pp-ne{font-size:10px;font-weight:900;color:#94a3b8}.pp-measure-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.pp-measure{border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:grid;gap:3px}.pp-measure>span{font-size:9px;text-transform:uppercase;color:#64748b;font-weight:900}.pp-measure strong{font-size:18px}.pp-measure em{font-size:9px;color:#94a3b8;font-style:normal}'+
