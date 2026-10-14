@@ -1177,6 +1177,13 @@ export class TrainingView {
           : ""}
 
         <div class="p360-card-actions">
+          ${this._can(Permission.EDIT_TRAINING) && String(session.team_season_id) === String(this.teamSeasonId)
+            && ['PLANNED','COMPLETED'].includes(String(session.status).toUpperCase()) ? `
+            <button type="button" class="p360-secondary-btn p360-validation-toggle"
+              data-session-id="${escapeHtml(session.id)}"
+              data-validate="${String(session.status).toUpperCase() === 'COMPLETED' ? 'false' : 'true'}">
+                ${String(session.status).toUpperCase() === 'COMPLETED' ? '↶ Reabrir' : '✓ Validar entrenamiento'}
+            </button>` : ''}
           ${this._can(Permission.CREATE_TRAINING) ? `
             <button type="button" class="p360-secondary-link p360-repeat-session" data-session-id="${escapeHtml(session.id)}">
               📋 Repetir / copiar
@@ -2228,6 +2235,27 @@ export class TrainingView {
     }
 
     this._delegatedClickHandler = async event => {
+      const validateTraining = event.target.closest(".p360-validation-toggle");
+      if (validateTraining) {
+        const session = (this.sessions||[]).find(x=>String(x.id)===String(validateTraining.dataset.sessionId));
+        if (!session || String(session.team_season_id)!==String(this.teamSeasonId)) return;
+        const desired = validateTraining.dataset.validate === 'true';
+        if (!confirm(desired
+          ? 'Confirma asistencia y minutos individuales antes de validar. ¿Validar entrenamiento?'
+          : '¿Reabrir la sesión para corregir los datos?')) return;
+        validateTraining.disabled = true;
+        try {
+          const {error}=await this.supabase.rpc('iq_v65_set_training_validation',{
+            p_session_id:session.id,p_team_season_id:session.team_season_id,p_validate:desired
+          });
+          if(error) throw error;
+          await this.render(this.containerId,this.teamId);
+        } catch(error) {
+          validateTraining.disabled=false;
+          alert('No se puede cambiar el estado: '+(error?.message||error));
+        }
+        return;
+      }
       const openTraining = event.target.closest(".p360-training-list-item");
       if (openTraining) {
         this.trainingDetailId = openTraining.dataset.sessionId;
