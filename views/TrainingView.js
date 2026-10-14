@@ -652,6 +652,14 @@ export class TrainingView {
           <input type="hidden" id="p360-training-clone-source-id" value="" />
 
           <label class="p360-free-note"><span>Nombre del entrenamiento</span><input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" required /></label>
+          <label class="p360-free-note"><span>Tipo de entrenamiento</span>
+            <select id="p360-training-kind" required>
+              <option value="TEAM">Entrenamiento de equipo</option>
+              <option value="TECHNIFICATION">Tecnificación</option>
+              <option value="PERSONAL">Entrenamiento personal</option>
+              <option value="COGNITIVE">Entrenamiento cognitivo</option>
+            </select>
+          </label>
           <div class="p360-quick-grid">
             <label>
               <span>Fecha</span>
@@ -2144,6 +2152,8 @@ export class TrainingView {
         trainingTitle.dataset.manualTitle = "1";
       }
       if (cloneSourceId) cloneSourceId.value = session.id || "";
+      const kind = trainingForm.querySelector("#p360-training-kind");
+      if (kind) kind.value = session.metadata?.session_kind || "TEAM";
 
       const blocks = container.querySelector("#p360-blocks-container");
       if (blocks) {
@@ -2685,7 +2695,8 @@ export class TrainingView {
           participants,
           focusCodes,
           cloneSourceId: cloneSourceIdValue,
-          entryMode
+          entryMode,
+          sessionKind: form.querySelector("#p360-training-kind")?.value || "TEAM"
         });
         this._resetTrainingPlayerSelection(date);
         await this.render(this.containerId, this.teamId);
