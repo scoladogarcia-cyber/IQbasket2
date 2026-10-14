@@ -159,7 +159,8 @@ export class TrainingService {
     participants = [],
     focusCodes = [],
     cloneSourceId = null,
-    entryMode = "QUICK"
+    entryMode = "QUICK",
+    sessionKind = "TEAM"
   } = {}) {
     this._assertReady();
     assertRequired(teamSeasonId, "teamSeasonId");
@@ -189,7 +190,7 @@ export class TrainingService {
     }
 
     const { data, error } = await this.supabase.rpc(
-      "iq_v55_create_training_session",
+      "iq_v65_create_training_session",
       {
         p_team_season_id: teamSeasonId,
         p_session_date: sessionDate,
@@ -204,7 +205,8 @@ export class TrainingService {
         p_participants: normalizeArray(participants),
         p_focus_codes: focusCodes,
         p_clone_source_id: cloneSourceId,
-        p_entry_mode: String(entryMode || "QUICK").toUpperCase()
+        p_entry_mode: String(entryMode || "QUICK").toUpperCase(),
+        p_kind: String(sessionKind || "TEAM").toUpperCase()
       }
     );
 
