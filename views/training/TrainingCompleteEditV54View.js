@@ -337,7 +337,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
           <div class="v54-roster-tools">
             <label class="v54-roster-search-label">Filtrar asignados<input class="v54-roster-search" type="search" placeholder="Nombre o dorsal…" autocomplete="off" /></label>
             <span class="v54-selected-count" role="status" aria-live="polite">${participants.size} seleccionados</span>
-            <button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button>
+            ${sameId(session.team_season_id,this.teamSeasonId) ? '<button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button>' : '<span class="p360-card-text">Sesión histórica: añade jugadores desde el buscador de su temporada.</span>'}
             <button type="button" class="p360-secondary-btn v54-check-visible">Marcar visibles</button>
             <button type="button" class="p360-secondary-btn v54-uncheck-visible">Desmarcar visibles</button>
             <button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button>
@@ -477,7 +477,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
         this._eligibility(form);
       }
     });
-    form.querySelector('.v54-all-players').addEventListener('click',async()=>{
+    form.querySelector('.v54-all-players')?.addEventListener('click',async()=>{
       this._eligiblePlayers(form.querySelector('.v54-date')?.value).forEach(player=>{
         this._addPlayerToEditForm(form,session,{...player,_trainingDirectoryAuthorized:true});
       });
