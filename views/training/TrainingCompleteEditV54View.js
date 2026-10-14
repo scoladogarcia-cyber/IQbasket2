@@ -298,55 +298,50 @@ export class TrainingCompleteEditV54View extends TrainingView {
     });
     const blocks=[...(session.blocks||[])].sort((a,b)=>Number(a.block_order)-Number(b.block_order));
     this.editRevisions.set(String(session.id),this.completeService.revision(session,this.blockAssignments));
-    return `<form class="p360-form p360-inline-editor v54-complete-form v55-simplified-edit" data-session-id="${esc(session.id)}">
-      <div class="p360-info-note"><strong>Edición rápida.</strong> Corrige fecha, focos, horario o nota en pocos toques. Los campos detallados, bloques, asistencia y Pasaporte siguen disponibles sin obligarte a recorrerlos.</div>
-
-      <section class="v55-edit-core" aria-label="Datos principales del entrenamiento">
+    return `<form class="p360-form p360-inline-editor v54-complete-form v55-simplified-edit p360-v67-unified-edit" data-session-id="${esc(session.id)}">
+      <section class="p360-v66-section v55-edit-core" aria-label="Datos generales">
+        <div class="p360-v66-section-title"><h3>Datos generales</h3></div>
         <div class="p360-form-grid">
+          <label class="p360-span-2">Nombre del entrenamiento<input class="v54-title" required maxlength="140" value="${esc(session.title)}" /></label>
           <label>Fecha<input class="v54-date" type="date" required value="${esc(session.session_date)}" ${bounds.min?`min="${esc(bounds.min)}"`:''} ${bounds.max?`max="${esc(bounds.max)}"`:''}/></label>
           <label>Inicio<input class="v54-start" type="time" required value="${esc(String(session.start_time||'').slice(0,5))}" /></label>
           <label>Fin<input class="v54-end" type="time" required value="${esc(String(session.end_time||'').slice(0,5))}" /></label>
-          <label>Duración automática<input class="v54-duration" type="number" readonly aria-readonly="true" value="${esc(this._sessionDuration(session) ?? '')}" /></label>
+          <label>Duración automática (min)<input class="v54-duration" type="number" readonly aria-readonly="true" value="${esc(this._sessionDuration(session) ?? '')}" /></label>
+          <label>Intensidad general 0–10<input class="v54-intensity" type="number" min="0" max="10" step="0.5" value="${esc(session.intensity ?? '')}" /></label>
         </div>
-
-        <div class="v55-edit-focuses">
-          <div class="v55-edit-section-copy">
-            <strong>¿Qué se trabajó?</strong>
-            <small>Marca solo los focos de esta sesión. Son los datos principales que IQBasket podrá cruzar después con evolución y rendimiento.</small>
-          </div>
-          ${this._renderTrainingFocusChecks(this._trainingFocusCodes(session),'v55-edit-focus')}
+        <div class="p360-v67-kind-note">
+          <strong>Tipo: ${esc(({TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo'})[session.metadata?.session_kind]||'Equipo')}</strong>
+          <small>El selector de tipo permanece en la ficha; guarda esta edición antes de modificar la clasificación.</small>
         </div>
-
-        <label class="p360-free-note">
-          <span>Nota libre <small>(opcional)</small></span>
-          <textarea class="v54-notes" maxlength="1000" rows="2" placeholder="Solo aquello que merezca quedar documentado.">${esc(session.notes||'')}</textarea>
-        </label>
       </section>
 
       <p class="v54-eligibility-warning p360-error" role="alert" hidden></p>
 
-      <details class="p360-advanced-details v55-edit-advanced">
-        <summary>Más detalles · nombre, intensidad, objetivo y bloques ${blocks.length?`(${blocks.length} bloques)`:''}</summary>
-        <div class="p360-form-grid">
-          <label class="p360-span-2">Nombre<input class="v54-title" required maxlength="140" value="${esc(session.title)}" /></label>
-          <label>Intensidad general 0–10<input class="v54-intensity" type="number" min="0" max="10" step="0.5" value="${esc(session.intensity ?? '')}" /></label>
-          <label class="p360-span-2">Objetivo<textarea class="v54-objective" maxlength="500" rows="2">${esc(session.objective||'')}</textarea></label>
-        </div>
-        <section class="p360-subsection"><div class="p360-subsection-head"><div><strong>Bloques de trabajo</strong><small>Opcional. Úsalos cuando quieras distribuir contenidos/minutos con precisión.</small></div><button type="button" class="p360-secondary-btn v54-add-block">＋ Añadir bloque</button></div>
-          <div class="v54-block-list">${blocks.map((block,i)=>this._blockRow(block,i+1)).join('')}</div>
-        </section>
-      </details>
-
-      <details class="p360-advanced-details v55-edit-roster">
-        <summary>Jugadores · asistencia, minutos, RPE y Pasaporte (<span class="v57-session-participant-count">${participants.size}</span> registrados)</summary>
-        <section class="p360-subsection">
-          <div><strong>Jugadores registrados en esta sesión</strong><p class="p360-card-text">Aquí solo aparecen quienes forman parte del entrenamiento. Para añadir otros usa el buscador inferior; los resultados se muestran de 15 en 15.</p></div>
+      <details class="p360-advanced-details v55-edit-roster p360-v67-edit-section" open>
+        <summary>Jugadores y tiempo individual · ${participants.size} registrados</summary>
+        <section class="p360-subsection" aria-label="Jugadores y tiempo individual">
+          <p class="p360-card-text">Modifica asistencia y minutos de cada jugador. Busca y añade otros jugadores sin obligarlos a pertenecer al equipo activo.</p>
           <div class="v54-roster-tools"><button type="button" class="p360-secondary-btn v54-all-players">＋ Añadir plantilla actual</button><button type="button" class="p360-secondary-btn v54-no-players">Desmarcar todos</button></div>
           <div class="v54-roster">${participantPlayers.sort((a,b)=>personName(a).localeCompare(personName(b))).map(player=>this._participantRow(player,participants.get(String(player.id)),blocks)).join('')}</div>
           <div class="v57-edit-add-player">
             <strong>Añadir otro jugador</strong>
             ${this._renderEditDirectoryShell(session,participants)}
           </div>
+          <span class="v57-session-participant-count" hidden>${participants.size}</span>
+        </section>
+      </details>
+
+      <details class="p360-advanced-details v55-edit-advanced p360-v67-edit-section" open>
+        <summary>Contenido trabajado y observaciones</summary>
+        <section class="p360-subsection" aria-label="Contenido trabajado">
+          <label class="p360-span-2">Objetivo<textarea class="v54-objective" maxlength="500" rows="2">${esc(session.objective||'')}</textarea></label>
+          <div class="v55-edit-focuses">
+            <div class="v55-edit-section-copy"><strong>Focos de trabajo</strong><small>Selecciona los contenidos registrados en esta sesión.</small></div>
+            ${this._renderTrainingFocusChecks(this._trainingFocusCodes(session),'v55-edit-focus')}
+          </div>
+          <div class="p360-subsection-head"><div><strong>Bloques de trabajo</strong><small>Distribución de actividades y minutos de la sesión.</small></div><button type="button" class="p360-secondary-btn v54-add-block">＋ Añadir bloque</button></div>
+          <div class="v54-block-list">${blocks.map((block,i)=>this._blockRow(block,i+1)).join('')}</div>
+          <label class="p360-free-note"><span>Observaciones</span><textarea class="v54-notes" maxlength="1000" rows="2">${esc(session.notes||'')}</textarea></label>
         </section>
       </details>
 
