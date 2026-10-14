@@ -146,8 +146,8 @@ export class PlayerPassportView {
     try {
       for (let offset=0; offset<10000; offset+=500) {
         const {data,error}=await this.supabase.from("iq_training_player_hours_v64")
-          .select("accredited_minutes,session_kind,classification_review")
-          .eq("player_id",this.playerId).range(offset,offset+499);
+          .select("training_session_id,accredited_minutes,session_kind,classification_review")
+          .eq("player_id",this.playerId).order("training_session_id",{ascending:true}).range(offset,offset+499);
         if (error) throw error;
         (data||[]).forEach(row => {
           const code = row.session_kind in totals ? row.session_kind : "TEAM";
