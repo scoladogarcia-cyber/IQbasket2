@@ -51,7 +51,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     this.blockAssignments=[];
     if(!this._can(Permission.EDIT_TRAINING) || !this.capabilities?.training_core)return;
     try {
-      this.blockAssignments=await this.completeService.listBlockParticipation(this.sessions);
+      this.blockAssignments=await this.completeService.listBlockParticipation((this.sessions || []).filter(session => String(session.team_season_id) === String(this.teamSeasonId)));
       this.completeEditReady=true;
 
       const participantIds=[...new Set(
