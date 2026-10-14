@@ -14,7 +14,7 @@ assert.ok(
 assert.match(completeView,/v57-edit-player-search/);
 assert.match(completeView,/v57-add-edit-player/);
 assert.match(completeView,/máximo 15/);
-assert.match(completeView,/Jugadores registrados en esta sesión/);
+assert.match(completeView,/Jugadores y tiempo individual/);
 assert.match(completeView,/añadirlos al entrenamiento no los incorpora a la plantilla/);
 assert.match(completeView,/data-directory-authorized/);
 

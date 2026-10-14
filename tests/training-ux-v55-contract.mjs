@@ -27,11 +27,11 @@ assert.match(sql,/TRAINING_CLONE_SOURCE_SCOPE_MISMATCH/);
 assert.match(service,/iq_v65_create_training_session/);
 assert.match(read("../supabase/migrations/20261014123000_training_v65_create_kind.sql"),/iq_v65_create_training_session/);
 assert.match(complete,/iq_v55_update_training_complete/);
-assert.match(completeView,/Edición rápida/);
+assert.match(completeView,/p360-v67-unified-edit/);
 assert.match(completeView,/v55-simplified-edit/);
-assert.match(completeView,/Más detalles · nombre, intensidad, objetivo y bloques/);
-assert.match(completeView,/Jugadores · asistencia, minutos, RPE y Pasaporte/);
-assert.match(completeView,/Jugadores registrados en esta sesión/);
+assert.match(completeView,/Contenido trabajado y observaciones/);
+assert.match(completeView,/Jugadores y tiempo individual/);
+assert.match(completeView,/Añadir otro jugador/);
 assert.match(completeView,/añadirlos al entrenamiento no los incorpora a la plantilla/);
 
 for (const marker of [
