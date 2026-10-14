@@ -575,6 +575,16 @@ export class TrainingCompleteEditV54View extends TrainingView {
   _renderStyles() {
     return super._renderStyles().replace('</style>',`
       .v54-complete-form{border:2px solid #1d4ed8;border-radius:14px;margin:12px 0;padding:16px;min-width:0;background:#fff}
+      .p360-v67-unified-edit.v54-complete-form{display:grid;gap:0;padding:0;margin:0;border:0;border-radius:0;background:transparent}
+      .p360-v67-unified-edit .p360-v66-section{border:0;border-bottom:1px solid #e2e8f0;border-radius:0;background:transparent;padding:18px 20px}
+      .p360-v67-unified-edit .p360-v66-section h3{margin:0;font-size:16px}
+      .p360-v67-edit-section{margin:0;padding:12px 20px;border:0;border-bottom:1px solid #e2e8f0;border-radius:0}
+      .p360-v67-edit-section>summary{font-weight:750;font-size:16px;color:#14243b;cursor:pointer;padding:8px 0}
+      .p360-v67-edit-section[open]>summary{margin-bottom:8px}
+      .p360-v67-unified-edit .p360-form-actions,.p360-v67-unified-edit .v54-save-status{margin:12px 20px}
+      .p360-v67-kind-note{display:grid;gap:4px;color:#334155}
+      .p360-v67-kind-note small{font-size:12px;color:#64748b}
+
       .v55-simplified-edit{display:grid;gap:14px}
       .v55-edit-core{display:grid;gap:12px;border:1px solid #dbeafe;background:#f8fbff;border-radius:12px;padding:12px}
       .v55-edit-focuses{display:grid;gap:9px}
