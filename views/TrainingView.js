@@ -618,6 +618,8 @@ export class TrainingView {
     const date = this._defaultDate();
     const bounds = this._dateInputBounds();
     const defaults = this._latestSessionDefaults();
+    this._formStartValue = defaults.start;
+    this._formEndValue = defaults.end;
     const recent = (this.sessions || [])
       .filter(session => String(session?.status || "").toUpperCase() !== "ARCHIVED")
       .slice(0, 8);
