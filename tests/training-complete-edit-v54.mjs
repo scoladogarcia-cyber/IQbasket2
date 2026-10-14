@@ -16,7 +16,8 @@ for(const item of ['v54-date','v55-edit-focus','v54-intensity','v54-block','v54-
 assert.match(ui,/confirm\(`/);
 assert.match(ui,/this\._eligiblePlayers\(/);
 assert.match(ui,/this\.editRevisions/);
-assert.match(ui,/this\._canEditTrainingSession\(session\)/);\nassert.match(ui,/teamSeasonId:session\.team_season_id/);
+assert.match(ui,/this\._canEditTrainingSession\(session\)/);
+assert.match(ui,/teamSeasonId:session\.team_season_id/);
 assert.match(ui,/Sin detalle no equivale/);
 assert.equal(TRAINING_FOCUS_OPTIONS.some(item=>item.code==='TACTICAL_TEAM'),true);
 assert.equal(BLOCK_PARTICIPATION_OPTIONS.some(([type])=>type==='NOT_ATTENDED'),true);
