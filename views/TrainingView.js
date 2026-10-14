@@ -219,6 +219,7 @@ export class TrainingView {
         this._can(Permission.VIEW_TRAINING)
           ? this.service.listSessions({
               teamSeasonId: this.teamSeasonId,
+              allAccessible: true,
               limit: 500
             })
           : Promise.resolve([]),
