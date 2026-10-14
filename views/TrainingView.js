@@ -1216,7 +1216,7 @@ export class TrainingView {
     return `
       <section id="p360-panel-training" class="p360-tab-panel">
         <div class="p360-kpi-grid">
-          ${this._renderKpi("Sesiones", String(summary.sessions), "Temporada activa")}
+          ${this._renderKpi("Sesiones", String(summary.sessions), "Historial accesible")}
           ${this._renderKpi("Minutos planificados", displayNumber(summary.totalMinutes), "Suma de sesiones")}
           ${this._renderKpi("Intensidad media", displayNumber(summary.avgIntensity, 1), "Escala 0-10")}
           ${this._renderKpi("Carga registrada", displayNumber(summary.participantLoad, 1), "Minutos × RPE")}
