@@ -623,7 +623,7 @@ export class TrainingView {
         <summary>
           <span>⚡</span>
           ${escapeHtml(this.t("player360.training.create", "Entreno rápido"))}
-          <small>Fecha + focos + guardar. El resto es opcional.</small>
+          <small>Nombre, duración y asistentes; los detalles adicionales son opcionales.</small>
         </summary>
 
         <form id="p360-training-form" class="p360-form">
@@ -647,6 +647,7 @@ export class TrainingView {
 
           <input type="hidden" id="p360-training-clone-source-id" value="" />
 
+          <label class="p360-free-note"><span>Nombre del entrenamiento</span><input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" required /></label>
           <div class="p360-quick-grid">
             <label>
               <span>Fecha</span>
@@ -708,10 +709,6 @@ export class TrainingView {
           <details class="p360-advanced-details" id="p360-training-advanced">
             <summary>Más detalles · opcional</summary>
             <div class="p360-form-grid">
-              <label class="p360-span-2">
-                <span>Nombre de la sesión</span>
-                <input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" />
-              </label>
               <label>
                 <span>Intensidad general 0–10</span>
                 <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
@@ -1114,6 +1111,19 @@ export class TrainingView {
           <span>⚡ Intensidad ${displayNumber(session.intensity, 1)}</span>
           <span>👥 ${present}/${(session.participants || []).length} presentes/parciales</span>
           <span>📊 Carga ${displayNumber(load, 1)}</span>
+        </div>
+
+        <div class="p360-training-type-review">
+          <label>Tipo de entrenamiento
+            <select class="p360-kind-select" data-session-id="${escapeHtml(session.id)}" ${this._can(Permission.EDIT_TRAINING) ? "" : "disabled"}>
+              ${[['TEAM','Equipo'],['TECHNIFICATION','Tecnificación'],['PERSONAL','Personal'],['COGNITIVE','Cognitivo']].map(([code,label]) =>
+                `<option value="${code}" ${(session.metadata?.session_kind || 'TEAM') === code ? 'selected' : ''}>${label}</option>`
+              ).join('')}
+            </select>
+          </label>
+          ${session.metadata?.session_kind_review === 'PENDING'
+            ? '<small>Clasificación histórica provisional; confirma el tipo cuando corresponda.</small>'
+            : ''}
         </div>
 
         ${focuses.length ? `
@@ -2017,6 +2027,26 @@ export class TrainingView {
       });
     });
 
+    container.querySelectorAll(".p360-kind-select").forEach(select => {
+      select.addEventListener("change", async () => {
+        const session = (this.sessions || []).find(row => String(row.id) === String(select.dataset.sessionId));
+        if (!session || !this._can(Permission.EDIT_TRAINING)) return;
+        select.disabled = true;
+        try {
+          const { error } = await this.supabase.rpc("iq_v64_correct_training_kind", {
+            p_session_id: session.id, p_team_season_id: session.team_season_id, p_kind: select.value
+          });
+          if (error) throw error;
+          await this.render(this.containerId, this.teamId);
+        } catch (error) {
+          select.value = session.metadata?.session_kind || "TEAM";
+          select.disabled = false;
+          this.lastError = error;
+          window.alert("No se pudo corregir el tipo de entrenamiento: " + (error?.message || error));
+        }
+      });
+    });
+
     this._bindParticipantSelectionTools(container);
 
     const trainingForm = container.querySelector("#p360-training-form");
@@ -2039,8 +2069,9 @@ export class TrainingView {
     focusInputs().forEach(input => input.addEventListener("change", syncFocusVisuals));
 
     trainingDate?.addEventListener("change", () => {
+      // A date correction must never silently replace a copied/selected player list.
       this._refreshTrainingPlayerOptions(container, trainingDate.value, {
-        resetSelection: true,
+        selectedIds: [...this.trainingPlayerSelection],
         query: "",
         page: 1
       });
@@ -2079,7 +2110,8 @@ export class TrainingView {
 
       if (trainingTitle) {
         trainingTitle.dataset.manualTitle = "";
-        trainingTitle.value = this._quickTrainingTitle(focuses);
+        trainingTitle.value = session.title || this._quickTrainingTitle(focuses);
+        trainingTitle.dataset.manualTitle = "1";
       }
       if (cloneSourceId) cloneSourceId.value = session.id || "";
 
@@ -2093,7 +2125,7 @@ export class TrainingView {
       if ((session.blocks || []).length && advanced) advanced.open = true;
 
       const cloneDate = trainingDate?.value || this._defaultDate();
-      const selected = this._eligiblePlayers(cloneDate).map(player => String(player.id));
+      const selected = [...new Set((session.participants || []).map(participant => String(participant.player_id)).filter(Boolean))];
       await this._refreshTrainingPlayerOptions(container, cloneDate, {
         selectedIds: selected,
         query: "",
