@@ -112,6 +112,9 @@ jobs:
       - name: Training UX V55
         run: node tests/training-ux-v55-contract.mjs
 
+      - name: Training player-centric V65
+        run: node tests/training-v65-contract.mjs
+
       - name: Training player directory V56
         run: node tests/training-player-directory-v56-contract.mjs
 
