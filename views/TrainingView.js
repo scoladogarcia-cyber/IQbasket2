@@ -623,7 +623,7 @@ export class TrainingView {
         <summary>
           <span>⚡</span>
           ${escapeHtml(this.t("player360.training.create", "Entreno rápido"))}
-          <small>Fecha + focos + guardar. El resto es opcional.</small>
+          <small>Nombre, duración y asistentes; los detalles adicionales son opcionales.</small>
         </summary>
 
         <form id="p360-training-form" class="p360-form">
@@ -647,6 +647,7 @@ export class TrainingView {
 
           <input type="hidden" id="p360-training-clone-source-id" value="" />
 
+          <label class="p360-free-note"><span>Nombre del entrenamiento</span><input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" required /></label>
           <div class="p360-quick-grid">
             <label>
               <span>Fecha</span>
@@ -708,10 +709,6 @@ export class TrainingView {
           <details class="p360-advanced-details" id="p360-training-advanced">
             <summary>Más detalles · opcional</summary>
             <div class="p360-form-grid">
-              <label class="p360-span-2">
-                <span>Nombre de la sesión</span>
-                <input type="text" id="p360-training-title" maxlength="140" value="Entrenamiento" />
-              </label>
               <label>
                 <span>Intensidad general 0–10</span>
                 <input type="number" id="p360-training-intensity" min="0" max="10" step="0.5" inputmode="decimal" />
@@ -2112,7 +2109,8 @@ export class TrainingView {
 
       if (trainingTitle) {
         trainingTitle.dataset.manualTitle = "";
-        trainingTitle.value = this._quickTrainingTitle(focuses);
+        trainingTitle.value = session.title || this._quickTrainingTitle(focuses);
+        trainingTitle.dataset.manualTitle = "1";
       }
       if (cloneSourceId) cloneSourceId.value = session.id || "";
 
@@ -2126,7 +2124,7 @@ export class TrainingView {
       if ((session.blocks || []).length && advanced) advanced.open = true;
 
       const cloneDate = trainingDate?.value || this._defaultDate();
-      const selected = this._eligiblePlayers(cloneDate).map(player => String(player.id));
+      const selected = [...new Set((session.participants || []).map(participant => String(participant.player_id)).filter(Boolean))];
       await this._refreshTrainingPlayerOptions(container, cloneDate, {
         selectedIds: selected,
         query: "",
