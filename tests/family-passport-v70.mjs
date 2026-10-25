@@ -35,7 +35,7 @@ assert.match(html,/SU HISTORIA, NO SU EQUIPO/);
 assert.match(html,/12 h 30 min/);
 assert.match(html,/3 h 00 min/);
 assert.match(html,/No significa que el jugador no haya entrenado/);
-assert.match(html,/valoraci[oó]n cient[ií]fica/i);
+assert.match(html,/validaci[oó]n cient[ií]fica/i);
 assert.doesNotMatch(html,/Global score|OVR|ranking/i);
 const noAccess=presentFamilyPassportBrief({player_id:'p1',training_access:false,evaluation_access:false},{});
 assert.equal(noAccess.training.available,false);
