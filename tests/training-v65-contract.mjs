@@ -30,7 +30,7 @@ assert.match(validation,/iq_v4_can_manage_training/);
 assert.match(validation,/TRAINING_PARTICIPANTS_NEED_CONFIRMATION/);
 assert.match(validation,/TRAINING_CANNOT_VALIDATE_FUTURE/);
 assert.match(edit,/_editSessionTotalMinutes/);
-assert.match(passport,/iq_training_player_hours_v64/);
+assert.match(passport,/iq_passport_training_minutes_v68/);
 assert.match(passport,/_trainingHoursCard/);
 assert.match(passport,/\.order\("training_session_id"/);
 console.log("PASS Training V65: list/detail, RLS historical scope, types, individual minutes, validation, passport hours.");
