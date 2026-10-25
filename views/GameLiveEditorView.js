@@ -347,11 +347,21 @@ export class GameLiveEditorView {
       const resultText = isWin ? this.t("win", "VICTORIA") : this.t("loss", "DERROTA");
 
       const periods = DataStore.getGamePeriodScores(game.id) || [];
-      const quarters = periods.filter(period => !period.is_overtime && !period.isOvertime);
-      const overtimes = periods.filter(period => period.is_overtime || period.isOvertime);
-      const quarterScore = index => quarters[index]
-        ? `${quarters[index].team_score ?? quarters[index].teamScore ?? 0}-${quarters[index].opponent_score ?? quarters[index].opponentScore ?? 0}`
-        : "0-0";
+      const periodNumber = period => Number(period.period_number ?? period.periodNumber);
+      const quarters = periods
+        .filter(period => !period.is_overtime && !period.isOvertime)
+        .sort((a, b) => periodNumber(a) - periodNumber(b));
+      const overtimes = periods
+        .filter(period => period.is_overtime || period.isOvertime)
+        .sort((a, b) => periodNumber(a) - periodNumber(b));
+      // Nunca convertir un cuarto ausente en 0-0: "—" significa no registrado.
+      // La clave es period_number, no la posición en el array (puede faltar Q1).
+      const quarterScore = index => {
+        const period = quarters.find(row => periodNumber(row) === index + 1);
+        if (!period || period.team_score == null && period.teamScore == null ||
+            period.opponent_score == null && period.opponentScore == null) return "—";
+        return `${period.team_score ?? period.teamScore}-${period.opponent_score ?? period.opponentScore}`;
+      };
 
       const otMarkup = overtimes.length > 0
         ? overtimes.map((period, index) =>

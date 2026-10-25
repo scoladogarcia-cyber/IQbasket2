@@ -1480,8 +1480,12 @@ class DataStoreService {
       opponent_score: Number(p.opponent_score ?? p.opponentScore ?? 0),
       is_overtime: Boolean(p.is_overtime ?? p.isOvertime ?? false)
     }));
-    this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gId));
-    this.gamePeriodScores.push(...formattedPeriods);
+    // La edición de BoxScore puede omitir periodScores. Igual que la escritura
+    // remota, una lista vacía NO equivale a eliminar los cuartos ya guardados.
+    if (formattedPeriods.length > 0) {
+      this.gamePeriodScores = this.gamePeriodScores.filter((p) => String(p.game_id || p.gameId) !== String(gId));
+      this.gamePeriodScores.push(...formattedPeriods);
+    }
 
     const formattedEvents = liveEvents.map((ev, idx) => {
       const pId = ev.player_id || ev.playerId || null;
