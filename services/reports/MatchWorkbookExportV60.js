@@ -14,8 +14,8 @@ import {
 
 const id=value=>String(value??"");
 const num=value=>{const n=Number(value);return Number.isFinite(n)?n:0;};
-const optional=value=>{const n=Number(value);return Number.isFinite(n)?n:null;};
-const percent=(made,attempted)=>num(attempted)>0?Number(((100*num(made))/num(attempted)).toFixed(1)):0;
+const optional=value=>{if(value===null||value===undefined||value==="")return null;const n=Number(value);return Number.isFinite(n)?n:null;};
+const percent=(made,attempted)=>num(attempted)>0?Number(((100*num(made))/num(attempted)).toFixed(1)):null;
 
 function playerDisplay(player={}) {
   return [player.first_name,player.last_name].filter(Boolean).join(" ")||player.name||"Jugador";
@@ -90,11 +90,9 @@ export function buildActaRows(reports=[]) {
     const totals=teamTotals(report.stats||[]);
     const team=report.teamStats||{};
     const regulation=num(game.periods_count)||4;
-    const efg=optional(team.efg) ?? (
-      (totals.fg2_attempted+totals.fg3_attempted)>0
-        ? Number((100*(totals.fg2_made+1.5*totals.fg3_made)/(totals.fg2_attempted+totals.fg3_attempted)).toFixed(1))
-        : 0
-    );
+    const efg=(totals.fg2_attempted+totals.fg3_attempted)>0
+      ? (optional(team.efg) ?? Number((100*(totals.fg2_made+1.5*totals.fg3_made)/(totals.fg2_attempted+totals.fg3_attempted)).toFixed(1)))
+      : null;
     return [
       id(game.id),game.date||"",game.opponent||"Rival",game.play_state||game.status||"",
       num(game.team_score),num(game.opponent_score),periodText(report.periods||[],regulation),
@@ -138,8 +136,10 @@ export function buildBoxScoreRows(reports=[]) {
         statsValue(stat,"blocks_made","blocks"),statsValue(stat,"blocks_received"),
         statsValue(stat,"turnovers"),statsValue(stat,"fouls_committed"),
         statsValue(stat,"fouls_drawn","fouls_received"),statsValue(stat,"plus_minus"),
-        statsValue(stat,"evaluation"),optional(stat.game_score),optional(stat.efg_pct),
-        optional(stat.true_shooting_pct),optional(stat.offensive_rating),optional(stat.defensive_rating),
+        statsValue(stat,"evaluation"),optional(stat.game_score),
+        (fg2a+fg3a)>0?optional(stat.efg_pct):null,
+        (fg2a+fg3a+fta)>0?optional(stat.true_shooting_pct):null,
+        optional(stat.offensive_rating),optional(stat.defensive_rating),
         optional(stat.usage_pct),statsValue(stat,"fg_rim_made"),statsValue(stat,"fg_rim_attempted"),
         statsValue(stat,"fg_mid_made"),statsValue(stat,"fg_mid_attempted"),
         statsValue(stat,"fg_corner3_made"),statsValue(stat,"fg_corner3_attempted"),
