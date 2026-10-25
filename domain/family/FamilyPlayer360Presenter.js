@@ -108,14 +108,15 @@ export function presentFamilyPlayer360(snapshot = {}) {
     ? `Hay ${games.length} partidos recientes disponibles para contextualizar la evolución.`
     : "Todavía no hay suficientes partidos registrados para resumir la evolución.";
 
-  const evolution = windows
+  const evolution = windows && trends.length
     ? [...rising, ...falling, ...stable].slice(0, 4).map(trendSentence)
-    : ["Necesitamos al menos 6 partidos comparables para mostrar una tendencia responsable."];
+    : ["Faltan partidos o datos estadísticos comparables para mostrar una tendencia fiable."];
 
   const meaning = [];
   if (rising.length) meaning.push(`La señal más positiva ahora está en ${rising[0].label}.`);
   if (falling.length) meaning.push(`Conviene observar ${falling[0].label} en los próximos partidos sin asumir una causa.`);
-  if (!meaning.length && windows) meaning.push("El rendimiento reciente es relativamente estable en los indicadores observados.");
+  if (!meaning.length && trends.length) meaning.push("El rendimiento reciente es relativamente estable en los indicadores observados.");
+  if (!meaning.length && !trends.length) meaning.push("No hay todavía indicadores comparables suficientes.");
   if (latestEvaluation?.summary) meaning.push(safeText(latestEvaluation.summary, 220));
 
   const next = [];
@@ -126,7 +127,7 @@ export function presentFamilyPlayer360(snapshot = {}) {
   if (!next.length) next.push("Mantener el foco en un objetivo observable y revisarlo tras los próximos partidos/entrenamientos.");
 
   return {
-    enoughEvidence: Boolean(windows),
+    enoughEvidence: Boolean(windows && trends.length),
     whatHappened,
     evolution,
     meaning,
