@@ -181,7 +181,7 @@ export class LiveCaptureSyncService {
       if (remoteSnapshot && exactRemoteMatchesLocal(remoteSnapshot, localPayload)) {
         // An action can be staged while the RPC snapshot is in flight.
         // Remove ONLY the acknowledged operations, never a newer snapshot.
-        for (const operation of queue) await this.offlineStore.remove(operation.operationId);
+        for (const operation of queue) await this.offlineStore.remove(operation.operationId, id);
         const remaining = await this.offlineStore.pendingCount(id);
         if (!remaining) {
           await this.offlineStore.clearDraft(id);
@@ -259,10 +259,10 @@ export class LiveCaptureSyncService {
           // The last complete snapshot supersedes only the queue observed
           // before this request. Preserve any newly staged game action.
           for (const acknowledged of queue) {
-            await this.offlineStore.remove(acknowledged.operationId);
+            await this.offlineStore.remove(acknowledged.operationId, id);
           }
         } else {
-          await this.offlineStore.remove(item.operationId);
+          await this.offlineStore.remove(item.operationId, id);
         }
       } catch (error) {
         await this.offlineStore.markAttempt(item, error);
