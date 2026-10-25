@@ -111,6 +111,8 @@ const hud=readFileSync(new URL("../views/LiveScoreHUDViewV58.js",import.meta.url
 assert.match(hud,/writer\.ownsLease/);
 assert.match(hud,/waitingForLease:true/);
 assert.match(hud,/offlineStore\.pendingCount/);
+const gameList=readFileSync(new URL("../views/GameLiveEditorView.js",import.meta.url),"utf8");
+assert.match(gameList,/await DataStore\.init\(this\.teamId, true\)/);
 const lease=readFileSync(new URL("../features/game-live/LiveWriterLeaseV43Controller.js",import.meta.url),"utf8");
 assert.match(lease,/controller\.onLeaseReady/);
 
