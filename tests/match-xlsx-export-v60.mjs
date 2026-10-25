@@ -123,4 +123,18 @@ assert.match(readSource,/event_sequence/);
 assert.match(readSource,/game_clock/);
 assert.match(readSource,/teamStats: aggregate \|\| null/);
 
+// An undefined rate is N/D (blank workbook cell), not a 0% success rate.
+const noShots={...stats[1],fg2_made:0,fg2_attempted:0,fg3_made:0,fg3_attempted:0,
+  ft_made:0,ft_attempted:0,efg_pct:0,true_shooting_pct:0,usage_pct:null,game_score:null};
+const zeroReport={...report,stats:[noShots],teamStats:{efg:0}};
+const rates=buildBoxScoreRows([zeroReport]),rateHead=rates[0],rateRow=rates[1];
+for(const col of ["T2_%","T3_%","TL_%","eFG_%","TS_%","USG_%","GameScore"])
+  assert.equal(rateRow[rateHead.indexOf(col)],null,col+" has no valid observed denominator/value");
+const zeroActa=buildActaRows([zeroReport]);
+assert.equal(zeroActa[1][zeroActa[0].indexOf("eFG_%")],null);
+const missed={...noShots,fg2_attempted:5,efg_pct:0,true_shooting_pct:0};
+const observed=buildBoxScoreRows([{...report,stats:[missed]}])[1];
+assert.equal(observed[rateHead.indexOf("T2_%")],0); // Genuine 0 made of 5.
+assert.equal(observed[rateHead.indexOf("eFG_%")],0);
+
 console.log("V60 real XLSX Acta + BoxScore + all plays contract OK");
