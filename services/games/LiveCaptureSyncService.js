@@ -64,6 +64,8 @@ export class LiveCaptureSyncService {
     this.captureService = captureService || null;
     this.storage = safeStorage(storage);
     this.offlineStore = offlineStore || new LiveOfflineStore({ localStorage: this.storage });
+    // One server write per game at a time: no overlapping snapshot revisions.
+    this.inFlightFlushes = new Map();
   }
 
   _key(gameId) {
@@ -130,6 +132,18 @@ export class LiveCaptureSyncService {
    */
   async flush(gameId) {
     const id = normalizeGameId(gameId);
+    if (this.inFlightFlushes.has(id)) return this.inFlightFlushes.get(id);
+    const operation = this._flushOnce(id);
+    this.inFlightFlushes.set(id, operation);
+    try {
+      return await operation;
+    } finally {
+      if (this.inFlightFlushes.get(id) === operation) this.inFlightFlushes.delete(id);
+    }
+  }
+
+  async _flushOnce(gameId) {
+    const id = normalizeGameId(gameId);
     if (!id || !this.captureService?.saveCapture) {
       return { synced: false, queued: false, pending: 0, error: new Error("Live sync backend no disponible.") };
     }
@@ -165,13 +179,18 @@ export class LiveCaptureSyncService {
       // A previous retry may already have persisted the exact final snapshot.
       // In that case the local queue is stale bookkeeping, not unsaved data.
       if (remoteSnapshot && exactRemoteMatchesLocal(remoteSnapshot, localPayload)) {
-        await this.offlineStore.clearOutbox(id);
-        await this.offlineStore.clearDraft(id);
-        try { this.storage?.removeItem(this._key(id)); } catch {}
+        // An action can be staged while the RPC snapshot is in flight.
+        // Remove ONLY the acknowledged operations, never a newer snapshot.
+        for (const operation of queue) await this.offlineStore.remove(operation.operationId);
+        const remaining = await this.offlineStore.pendingCount(id);
+        if (!remaining) {
+          await this.offlineStore.clearDraft(id);
+          try { this.storage?.removeItem(this._key(id)); } catch {}
+        }
         return {
-          synced: true,
-          queued: false,
-          pending: 0,
+          synced: remaining === 0,
+          queued: remaining > 0,
+          pending: remaining,
           revision: Number(remoteRevision),
           result: remoteSnapshot,
           reconciled: true,
@@ -237,7 +256,11 @@ export class LiveCaptureSyncService {
           : (Number.isFinite(Number(revision)) ? Number(revision) + 1 : null);
 
         if (canCollapse) {
-          await this.offlineStore.clearOutbox(id);
+          // The last complete snapshot supersedes only the queue observed
+          // before this request. Preserve any newly staged game action.
+          for (const acknowledged of queue) {
+            await this.offlineStore.remove(acknowledged.operationId);
+          }
         } else {
           await this.offlineStore.remove(item.operationId);
         }
@@ -255,12 +278,15 @@ export class LiveCaptureSyncService {
       }
     }
 
-    await this.offlineStore.clearDraft(id);
-    try { this.storage?.removeItem(this._key(id)); } catch {}
+    const remaining = await this.offlineStore.pendingCount(id);
+    if (remaining === 0) {
+      await this.offlineStore.clearDraft(id);
+      try { this.storage?.removeItem(this._key(id)); } catch {}
+    }
     return {
-      synced: true,
-      queued: false,
-      pending: 0,
+      synced: remaining === 0,
+      queued: remaining > 0,
+      pending: remaining,
       revision,
       result: lastResult,
       compactedSnapshots: canCollapse && queue.length > 1 ? queue.length : 0,
