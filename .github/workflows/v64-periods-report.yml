@@ -1,0 +1,38 @@
+name: V64 Period Scores + DNP Report
+
+on:
+  pull_request:
+    paths:
+      - "views/GameLiveEditorView.js"
+      - "views/reports/FullGameBoxScoreTables.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "tests/game-periods-dnp-report-v64.mjs"
+      - ".github/workflows/v64-periods-report.yml"
+  push:
+    branches:
+      - main
+      - "fix/period-scores-and-dnp-report-*"
+    paths:
+      - "views/GameLiveEditorView.js"
+      - "views/reports/FullGameBoxScoreTables.js"
+      - "services/games/GameCaptureDelegationService.js"
+      - "tests/game-periods-dnp-report-v64.mjs"
+      - ".github/workflows/v64-periods-report.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Regression quarters and DNP
+        run: node tests/game-periods-dnp-report-v64.mjs
+      - name: Regression minute semantics
+        run: node tests/live-minutes-v62-contract.mjs
+      - name: Regression complete-season reports
+        run: node tests/complete-season-report-v50.mjs
