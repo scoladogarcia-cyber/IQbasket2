@@ -396,6 +396,7 @@ export class PlayerPassportView {
       '<p><strong>5. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
       '<p><strong>6. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
       '<p><strong>7. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
+      '<p><strong>8. Un cero no es N/D.</strong> Cero refleja una acción efectivamente registrada; N/D indica que faltan datos o el cálculo no tiene denominador.</p>'+
       '<button type="button" id="pp-help-start" class="pp-primary-action">Empezar una valoración</button></div></div>';
   }
 
@@ -501,16 +502,29 @@ export class PlayerPassportView {
       cards+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 →</a>';
   }
 
+  _passportFaq(){
+    return '<details class="pp-panel pp-faq" aria-label="Preguntas frecuentes del pasaporte">'+
+      '<summary style="cursor:pointer;min-height:44px;font-weight:900">Guía rápida: interpretar el pasaporte y sus estadísticas</summary>'+
+      '<dl>'+
+      '<dt><strong>¿Qué representa la nota 1–5?</strong></dt><dd>Una descripción ordinal del comportamiento observado en una rúbrica y dificultad concretas. No es una nota absoluta de talento.</dd>'+
+      '<dt><strong>¿Qué significan D1–D5?</strong></dt><dd>La dificultad de la tarea evaluada. No aumenta automáticamente con la edad, categoría o puntuación.</dd>'+
+      '<dt><strong>¿Qué significa NE?</strong></dt><dd>Atributo no evaluado: no equivale a un 0 ni a un nivel 1.</dd>'+
+      '<dt><strong>¿Qué significa N/D?</strong></dt><dd>Dato no disponible o no calculable, por ejemplo minutos no registrados o porcentaje sin intentos.</dd>'+
+      '<dt><strong>¿Los puntos anotados demuestran que ha mejorado el tiro?</strong></dt><dd>No por sí solos: la evolución de habilidad exige observaciones comparables, contexto y rúbricas del entrenador.</dd>'+
+      '<dt><strong>¿Quién ve el histórico anterior?</strong></dt><dd>Solo perfiles con relación verificada, permiso deportivo y autorización explícita para cada información compartida.</dd>'+
+      '</dl></details>';
+  }
+
   _sectionContent(model){
     switch(this.activeSection){
       case 'skills':return this._insights(model)+this._dimensions(model);
       case 'evolution':return this._careerPanel()+this._measurements();
       case 'training':return this._trainingHoursCard()+this._trainingHistoryPanel();
-      case 'games':return this._gamesPanel();
+      case 'games':return this._gamesPanel()+this._passportFaq();
       case 'evidence':return this._evidencePanel(model);
       case 'habits':return this._habitsPanel();
       case 'evaluation':return this._editor();
-      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model);
+      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model)+this._passportFaq();
     }
   }
 
