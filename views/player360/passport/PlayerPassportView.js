@@ -7,6 +7,7 @@
 import { DataStore } from "../../../services/DataStore.js";
 import { PlayerPassportService } from "../../../services/player360/PlayerPassportService.js";
 import { PlayerPassportPortfolioService } from "../../../services/player360/PlayerPassportPortfolioService.js";
+import { PASSPORT_DIFFICULTY_LEVELS_V68, passportCategoryContext } from "../../../config/playerPassportCategoriesV68.config.js";
 import { summarizeTrainingPortfolio, summarizeGamePortfolio, mergeAuthorizedCareer, evidenceQuality, summarizeAssessmentTime, formatBasketballMinutes, TRAINING_TYPE_LABELS } from "../../../domain/player360/PlayerPassportPortfolio.js";
 
 import { Permission } from "../../../security/PermissionService.js";
@@ -342,11 +343,7 @@ export class PlayerPassportView {
     for(var i=1;i<=5;i++) buttons+='<button type="button" data-score="'+i+'" '+(state.score===i?'class="selected"':'')+'>'+i+'</button>';
     const tiers=[
       ["","Selecciona la dificultad observada"],
-      ["D1","D1 · Iniciación controlada"],
-      ["D2","D2 · Fundamentos con variabilidad"],
-      ["D3","D3 · Oposición real"],
-      ["D4","D4 · Presión y decisiones complejas"],
-      ["D5","D5 · Rendimiento exigente acreditado"]
+      ...PASSPORT_DIFFICULTY_LEVELS_V68.map(level=>[level.code,level.code+" · "+level.label])
     ];
     const tierOptions=tiers.map(([value,label])=>
       '<option value="'+value+'" '+(state.difficultyTier===value?'selected':'')+'>'+esc(label)+'</option>').join('');
@@ -372,11 +369,13 @@ export class PlayerPassportView {
     var cards=this._filteredAttributes().map(function(a){return self._attributeEditor(a,latest);}).join("") || '<div class="pp-empty">No hay atributos válidos para estos filtros.</div>';
     var defaultDate=this.editorMeta.date||this.trainingContext?.sessionDate||today();
     var defaultTitle=this.editorMeta.title||(this.trainingContext?.sessionTitle ? "Entrenamiento · "+this.trainingContext.sessionTitle : "Evaluación Pasaporte · "+today());
+    const categoryContext=passportCategoryContext(this.data?.team?.category);
+    const categoryNote='<p class="pp-quality-note"><strong>Categoría competitiva:</strong> '+esc(categoryContext.raw||"Por verificar")+'. El nivel D1–D5 se elige por la exigencia realmente observada, no por la edad ni por subir de categoría.</p>';
     var sourceNote=this.trainingContext
       ? '<div class="pp-source-note">🏋️ Esta valoración quedará vinculada como evidencia al entrenamiento <strong>'+esc(this.trainingContext.sessionTitle||"seleccionado")+'</strong>.</div>'
       : '';
     return '<section class="pp-panel pp-editor-shell"><button id="pp-toggle" class="pp-toggle"><span><b>Evaluación contextual</b><small>NE significa no evaluado. Guarda solo lo que realmente hayas observado.</small></span><b>−</b></button>'+
-      '<form id="pp-form" class="pp-editor">'+sourceNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
+      '<form id="pp-form" class="pp-editor">'+sourceNote+categoryNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
       '<label>Dimensión<select id="pp-dimension"><option value="">Todas</option>'+dimOptions+'</select></label><label>Subdimensión<select id="pp-subdimension"><option value="">Todas</option>'+subOptions+'</select></label></div>'+
       '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label>'+
       '<label class="pp-title">Tiempo real dedicado a esta evaluación (minutos, opcional)<input id="pp-assessment-minutes" type="number" min="1" max="600" step="1" value="'+esc(this.editorMeta.minutes||"")+'" placeholder="Sin registrar"></label>'+
