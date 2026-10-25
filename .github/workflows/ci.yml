@@ -58,6 +58,9 @@ jobs:
       - name: Player Passport V68 portfolio and evidence contract
         run: node tests/player-passport-portfolio-v68.mjs
 
+      - name: Family Passport V70 audit and access contract
+        run: node tests/family-passport-v70.mjs
+
       - name: Player Passport route and RBAC
         run: node tests/player-passport-route-rbac.mjs
 
