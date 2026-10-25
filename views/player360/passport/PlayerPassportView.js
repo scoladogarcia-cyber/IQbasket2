@@ -61,7 +61,7 @@ export class PlayerPassportView {
     // Only explicit observations are appended. Existing values are shown as a baseline
     // but are never duplicated unless the evaluator touches the attribute.
     this.editorDraft = new Map();
-    this.editorMeta = { date:null, title:null, summary:"" };
+    this.editorMeta = { date:null, title:null, summary:"",minutes:"" };
   }
 
   _context() {
@@ -297,7 +297,8 @@ export class PlayerPassportView {
       touched:Boolean(draft?.touched),
       evidenceCount:draft ? draft.evidenceCount : 0,
       confidence:draft ? draft.confidence : (previous?.confidence || "MEDIUM"),
-      notes:draft ? draft.notes : ""
+      notes:draft ? draft.notes : "",
+      difficultyTier:draft ? draft.difficultyTier : ""
     };
   }
 
@@ -311,6 +312,7 @@ export class PlayerPassportView {
       evidenceCount:0,
       confidence:previous?.confidence || "MEDIUM",
       notes:"",
+      difficultyTier:"",
       touched:false
     };
     this.editorDraft.set(code,{...current,...patch,touched:true});
@@ -338,12 +340,22 @@ export class PlayerPassportView {
       : '<div class="pp-current-value pp-current-empty"><span>Valor actual</span><b>NE</b><small>Sin valoración previa</small></div>';
     var buttons='<button type="button" data-score="" '+(state.score==null?'class="selected"':'')+' '+(previous?'disabled title="NE no borra una valoración histórica; selecciona 1–5 para corregirla."':'')+'>NE</button>';
     for(var i=1;i<=5;i++) buttons+='<button type="button" data-score="'+i+'" '+(state.score===i?'class="selected"':'')+'>'+i+'</button>';
+    const tiers=[
+      ["","Selecciona la dificultad observada"],
+      ["D1","D1 · Iniciación controlada"],
+      ["D2","D2 · Fundamentos con variabilidad"],
+      ["D3","D3 · Oposición real"],
+      ["D4","D4 · Presión y decisiones complejas"],
+      ["D5","D5 · Rendimiento exigente acreditado"]
+    ];
+    const tierOptions=tiers.map(([value,label])=>
+      '<option value="'+value+'" '+(state.difficultyTier===value?'selected':'')+'>'+esc(label)+'</option>').join('');
     var confidence=["LOW","MEDIUM","HIGH"].map(function(value){
       var label=value==="LOW"?"Baja":value==="HIGH"?"Alta":"Media";
       return '<option value="'+value+'" '+(state.confidence===value?"selected":"")+'>'+label+'</option>';
     }).join("");
     return '<article class="pp-eval-card '+(state.touched?'pp-eval-changed':'')+'" data-code="'+esc(a.code)+'" data-current-score="'+esc(previous?.score??"")+'"><header><div><small>'+esc(a.code)+'</small><h3>'+esc(a.name)+'</h3><em class="pp-change-marker">'+(state.touched?'Cambio pendiente':'Sin cambios')+'</em></div><button type="button" class="pp-help" aria-label="Ver criterios de valoración">Criterios</button></header><p>'+esc(a.definition)+'</p>'+
-      currentText+'<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Evidencias nuevas<input class="pp-count" type="number" min="0" inputmode="numeric" value="'+esc(state.evidenceCount)+'"></label><label>Confianza de esta observación<select class="pp-confidence">'+confidence+'</select></label></div>'+
+      currentText+'<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Nivel de exigencia observado<select class="pp-difficulty" required>'+tierOptions+'</select></label><label>Observaciones verificadas (mínimo '+Number(a.min_evidence||1)+')<input class="pp-count" type="number" min="0" inputmode="numeric" value="'+esc(state.evidenceCount)+'"></label><label>Confianza de esta observación<select class="pp-confidence">'+confidence+'</select></label></div>'+
       '<label>Nota de esta observación<textarea class="pp-notes" rows="2">'+esc(state.notes)+'</textarea></label><div class="pp-rubric" hidden><strong>Qué observar</strong><p>'+esc(a.observation_guide||"")+'</p>'+anchors+'</div></article>';
   }
 
@@ -366,7 +378,9 @@ export class PlayerPassportView {
     return '<section class="pp-panel pp-editor-shell"><button id="pp-toggle" class="pp-toggle"><span><b>Evaluación contextual</b><small>NE significa no evaluado. Guarda solo lo que realmente hayas observado.</small></span><b>−</b></button>'+
       '<form id="pp-form" class="pp-editor">'+sourceNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
       '<label>Dimensión<select id="pp-dimension"><option value="">Todas</option>'+dimOptions+'</select></label><label>Subdimensión<select id="pp-subdimension"><option value="">Todas</option>'+subOptions+'</select></label></div>'+
-      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label><div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
+      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label>'+
+      '<label class="pp-title">Tiempo real dedicado a esta evaluación (minutos, opcional)<input id="pp-assessment-minutes" type="number" min="1" max="600" step="1" value="'+esc(this.editorMeta.minutes||"")+'" placeholder="Sin registrar"></label>'+
+      '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
       '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
   }
 
@@ -375,7 +389,8 @@ export class PlayerPassportView {
     return '<div class="pp-modal" id="pp-help-modal"><div class="pp-modal-card"><div class="pp-modal-head"><h2>Cómo valorar el Pasaporte</h2><button type="button" id="pp-close-help">✕</button></div>'+
       '<p><strong>1. Valora solo lo observado.</strong> Si no tienes evidencia suficiente, deja NE. NE nunca equivale a un 1.</p>'+
       '<p><strong>2. Elige el contexto correcto.</strong> T = tarea controlada; JR = juego reducido; P5 = partido/5x5; VIDEO = revisión de vídeo.</p>'+
-      '<p><strong>3. Usa los criterios específicos.</strong> Cada atributo tiene definición, guía de observación y cinco anclajes. Pulsa “Criterios” antes de puntuar si hay duda.</p>'+
+      '<p><strong>3. Dificultad y categoría son diferentes.</strong> Selecciona D1–D5 según la prueba realmente observada: no se dan puntos por cumplir años ni por pasar de mini a júnior.</p>'+
+      '<p><strong>4. Aporta el número mínimo de observaciones.</strong> Cada atributo indica su umbral y Supabase lo comprueba de nuevo. Sin evidencia suficiente, no se guarda una nota nueva.</p>'+
       '<p><strong>4. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
       '<p><strong>5. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
       '<p><strong>6. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
@@ -520,6 +535,10 @@ export class PlayerPassportView {
     var date=document.getElementById("pp-date"); if(date)date.addEventListener("input",function(e){self.editorMeta.date=e.target.value;});
     var title=document.getElementById("pp-title"); if(title)title.addEventListener("input",function(e){self.editorMeta.title=e.target.value;});
     var summary=document.getElementById("pp-summary"); if(summary)summary.addEventListener("input",function(e){self.editorMeta.summary=e.target.value;});
+    var assessmentMinutes=document.getElementById("pp-assessment-minutes"); if(assessmentMinutes)assessmentMinutes.addEventListener("input",function(e){self.editorMeta.minutes=e.target.value;});
+    document.querySelectorAll(".pp-difficulty").forEach(select=>select.addEventListener("change",function(){
+      self._setDraftFromRow(select.closest(".pp-eval-card"),{difficultyTier:select.value});
+    }));
     var context=document.getElementById("pp-context"); if(context)context.addEventListener("change",function(e){
       if(self._draftCount() && !confirm("Cambiar el contexto descartará los cambios de atributos todavía no guardados. ¿Continuar?")){e.target.value=self.filterContext;return;}
       self.editorDraft.clear();self.filterContext=e.target.value;self._render();
@@ -541,20 +560,55 @@ export class PlayerPassportView {
 
   async _save(event) {
     event.preventDefault();
-    var status=document.getElementById("pp-status");
-    var scores=[...this.editorDraft.entries()].map(function(entry){
-      var code=entry[0],draft=entry[1];
-      if(!draft?.touched || !Number.isInteger(draft.score) || draft.score<1 || draft.score>5)return null;
-      return {metric_code:code,score:draft.score,evidence_count:Math.max(0,Number(draft.evidenceCount)||0),confidence:draft.confidence||"MEDIUM",notes:String(draft.notes||"").trim()||null,rubric_version:"1.0"};
-    }).filter(Boolean);
-    if(!scores.length){if(status)status.textContent="No has modificado ni añadido ninguna valoración. Los valores actuales no se duplican.";return;}
+    const status=document.getElementById("pp-status");
+    const lookup=new Map((this.data?.catalog?.attributes||[]).map(a=>[String(a.code).toUpperCase(),a]));
+    const scores=[];
+    for(const [code,draft] of this.editorDraft.entries()){
+      if(!draft?.touched||!Number.isInteger(draft.score)||draft.score<1||draft.score>5)continue;
+      const attr=lookup.get(code);
+      if(!attr) {if(status)status.textContent='Atributo desconocido: '+code;return;}
+      const minimum=Math.max(1,Number(attr.min_evidence)||1);
+      const count=Number(draft.evidenceCount)||0;
+      if(!draft.difficultyTier||!/^D[1-5]$/.test(draft.difficultyTier)){
+        if(status)status.textContent='Selecciona D1–D5 para '+attr.name+'.';return;
+      }
+      if(!Number.isInteger(count)||count<minimum){
+        if(status)status.textContent=attr.name+': se necesitan al menos '+minimum+' observaciones verificadas.';return;
+      }
+      if(this.filterContext!=="VIDEO"&&Array.isArray(attr.valid_contexts)&&!attr.valid_contexts.includes(this.filterContext)){
+        if(status)status.textContent='El contexto seleccionado no permite valorar '+attr.name+'.';return;
+      }
+      scores.push({
+        metric_code:code,score:draft.score,evidence_count:count,
+        difficulty_tier:draft.difficultyTier,confidence:draft.confidence||"MEDIUM",
+        rubric_version:attr.rubric_version||"1.0",notes:String(draft.notes||"").trim()||null
+      });
+    }
+    if(!scores.length){if(status)status.textContent="Selecciona y documenta algún atributo nuevo; los valores anteriores no se duplican.";return;}
+    const durationField=document.getElementById("pp-assessment-minutes");
+    const timeText=durationField?.value?.trim()||"";
+    const assessmentDurationMinutes=timeText===""?null:Number(timeText);
+    if(timeText!==""&&(!Number.isInteger(assessmentDurationMinutes)||assessmentDurationMinutes<1||assessmentDurationMinutes>600)){
+      if(status)status.textContent="La duración de la evaluación debe estar entre 1 y 600 minutos.";return;
+    }
     try{
-      if(status)status.textContent="Guardando…";
-      await this.service.saveEvaluation({playerId:this.playerId,teamSeasonId:this.teamSeasonId,evaluationDate:document.getElementById("pp-date").value,title:document.getElementById("pp-title").value.trim(),context:this.filterContext,scores:scores,summary:document.getElementById("pp-summary").value.trim()||null,trainingSessionId:this.trainingContext?.trainingSessionId||null});
+      if(status)status.textContent="Guardando valoración con evidencias…";
+      await this.service.saveGuidedEvaluation({
+        playerId:this.playerId,teamSeasonId:this.teamSeasonId,
+        evaluationDate:document.getElementById("pp-date").value,
+        title:document.getElementById("pp-title").value.trim(),
+        context:this.filterContext,scores,
+        summary:document.getElementById("pp-summary").value.trim()||null,
+        trainingSessionId:this.trainingContext?.trainingSessionId||null,
+        assessmentDurationMinutes,protocolVersion:"IQB-RUBRIC-1.0"
+      });
       if(this.trainingContext){sessionStorage.removeItem("iq_passport_training_context");this.trainingContext=null;}
-      this.editorDraft.clear();this.editorMeta={date:null,title:null,summary:""};
-      this.editorOpen=false; await this._load(); this._render();
-    }catch(e){console.error("[PlayerPassportView] save",e);if(status)status.textContent=e.message||"No se pudo guardar.";}
+      this.editorDraft.clear();this.editorMeta={date:null,title:null,summary:"",minutes:""};
+      this.editorOpen=false;await this._load();this._render();
+    }catch(error){
+      console.error("[PlayerPassportView] guided save",error);
+      if(status)status.textContent=error.message||"No se pudo guardar la valoración.";
+    }
   }
 
   _styles() {
