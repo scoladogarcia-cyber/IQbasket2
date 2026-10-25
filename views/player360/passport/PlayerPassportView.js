@@ -128,6 +128,7 @@ export class PlayerPassportView {
         this.trainingContext=pending;
         this.editorOpen=true;
         this.filterContext=pending.context||"T";
+        this.activeSection="evaluation";
       }
     } catch {}
     await this._load();
@@ -202,7 +203,8 @@ export class PlayerPassportView {
       summary:summary,
       latest:latest,
       roles:deriveFunctionalRoles(latest,{minimumCoverage:PLAYER_PASSPORT_CONFIG.roleCoverageThreshold}),
-      asymmetries:rightLeftAsymmetries(summary.attributes)
+      asymmetries:rightLeftAsymmetries(summary.attributes),
+      quality:evidenceQuality(attrs,latest)
     };
   }
 
@@ -241,10 +243,10 @@ export class PlayerPassportView {
     return '<section class="pp-hero">'+
       '<div class="pp-identity"><span class="pp-eyebrow">IQBASKET · PLAYER PASSPORT</span><h1>'+esc(name)+'</h1><p>Perfil longitudinal basado en evidencia, contexto y evolución.</p>'+action+
       '<div class="pp-meta"><span><b>#</b> '+esc(pNumber(p))+'</span><span><b>POS</b> '+esc(pPosition(p))+'</span><span><b>EDAD</b> '+esc(age==null?"—":age)+'</span><span><b>NAC.</b> '+esc(p.birth_date||"—")+'</span></div>'+
-      '<div class="pp-meta"><span><b>EQUIPO</b> '+esc(t.team_name||"—")+'</span><span><b>TEMP.</b> '+esc(t.season_name||t.season_code||"—")+'</span></div></div>'+
+      '<div class="pp-meta"><span><b>CATEGORÍA</b> '+esc(t.category||"Sin categoría verificada")+'</span><span><b>EQUIPO</b> '+esc(t.team_name||"—")+'</span><span><b>TEMP.</b> '+esc(t.season_name||t.season_code||"—")+'</span></div></div>'+
       '<div class="pp-art">'+art+'<div class="pp-watermark">'+esc(pNumber(p))+'</div></div>'+
-      '<div class="pp-badges"><article class="pp-shield"><small>COBERTURA</small><strong>'+model.summary.ratedCount+'<span>/'+model.summary.totalCount+'</span></strong><em>'+pct(model.summary.coverage)+'</em></article>'+
-      '<article class="pp-mini"><small>ROLES CON EVIDENCIA</small>'+roleHtml+'</article><article class="pp-mini"><small>FORTALEZAS</small>'+strengthHtml+'</article></div></section>';
+      '<div class="pp-badges"><article class="pp-shield"><small>ATRIBUTOS VALORADOS</small><strong>'+model.summary.ratedCount+'<span>/'+model.summary.totalCount+'</span></strong><em>Con evidencia suficiente: '+model.quality.verified+'/'+model.quality.total+'</em></article>'+
+      '<article class="pp-mini"><small>ROLES DERIVADOS · PROVISIONALES</small>'+roleHtml+'</article><article class="pp-mini"><small>FORTALEZAS</small>'+strengthHtml+'</article></div></section>';
   }
 
   _dimensions(model) {
@@ -380,6 +382,109 @@ export class PlayerPassportView {
       '<button type="button" id="pp-help-start" class="pp-primary-action">Empezar una valoración</button></div></div>';
   }
 
+  _sectionNav(){
+    const tabs=[
+      ['overview','Resumen'],['skills','Competencias'],['evolution','Evolución'],
+      ['training','Entrenamientos'],['games','Partidos'],['evidence','Evidencias'],
+      ['habits','Hábitos'],['evaluation','Valorar']
+    ];
+    return '<nav class="pp-section-nav" aria-label="Secciones del pasaporte">'+
+      tabs.map(([key,label])=>'<button type="button" data-pp-section="'+key+'" class="pp-section-tab'+(this.activeSection===key?' is-active':'')+'" aria-current="'+(this.activeSection===key?'page':'false')+'">'+label+'</button>').join('')+
+      '</nav>';
+  }
+
+  _qualityPanel(model){
+    const q=model.quality;
+    return '<section class="pp-panel pp-quality-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">FIABILIDAD DEL PERFIL</span><h2>Qué sabemos con evidencia</h2></div></div>'+
+      '<div class="pp-quality-grid">'+
+       '<div><strong>'+q.rated+'/'+q.total+'</strong><small>Atributos con nota</small></div>'+
+       '<div><strong>'+q.verified+'/'+q.total+'</strong><small>Con observaciones suficientes</small></div>'+
+       '<div><strong>'+q.withoutEvidence+'</strong><small>Valorados sin evidencias contabilizadas</small></div>'+
+      '</div><p>Las valoraciones antiguas permanecen visibles como provisionales: una nota sin observaciones documentadas no equivale a una valoración verificada. No se ha alterado el histórico.</p></section>';
+  }
+
+  _trainingHistoryPanel(){
+    if(this.portfolioData?.training?.error)return '<section class="pp-panel"><h2>Historial no disponible</h2><p>No se puede verificar el detalle en este momento.</p></section>';
+    const items=[...(this.portfolioData?.training?.rows||[])].sort((a,b)=>String(b.session_date||'').localeCompare(String(a.session_date||''))).slice(0,25);
+    const list=items.map(x=>'<div class="pp-portfolio-event"><span><strong>'+esc(x.session_date||'Sin fecha')+
+      '</strong><small>'+esc(TRAINING_TYPE_LABELS[x.session_kind]||'Tipo por revisar')+
+      ' · '+esc(x.session_status==='COMPLETED'?'Validado':'Sin validar')+'</small></span>'+
+      '<span>'+esc(formatBasketballMinutes(x.recorded_minutes))+' registrados · '+
+      esc(formatBasketballMinutes(x.accredited_minutes))+' acreditados</span></div>').join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HISTORIAL INDIVIDUAL</span><h2>Sesiones registradas</h2></div></div>'+
+       '<div class="pp-portfolio-events">'+(list||'<p>No se han encontrado sesiones accesibles.</p>')+'</div>'+
+       '<p><a href="#/training">Revisar y validar entrenamientos</a></p></section>';
+  }
+
+  _gamesPanel(){
+    const data=this.portfolioData?.games;
+    if(!data||data.error)return '<section class="pp-panel"><h2>Competición</h2><p>Datos no disponibles. No se interpretan como cero partidos.</p></section>';
+    const g=summarizeGamePortfolio(data.rows);
+    const stat=(name,value)=>'<div><strong>'+esc(value)+'</strong><small>'+esc(name)+'</small></div>';
+    const recent=[...data.rows].sort((a,b)=>String(b.game_date||'').localeCompare(String(a.game_date||''))).slice(0,16)
+      .map(x=>'<div class="pp-portfolio-event"><strong>'+esc(x.game_date||'Sin fecha')+
+        '</strong><span>'+esc(x.minutes==null?'Minutos N/D':String(x.minutes)+' min')+
+        ' · '+esc(x.points??'N/D')+' puntos · '+esc(x.assists??'N/D')+' asist.</span></div>').join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">COMPETICIÓN</span><h2>Partidos y estadísticas reales</h2></div></div>'+
+      '<div class="pp-quality-grid">'+stat('Partidos finalizados con registro',g.games)+stat('Minutos anotados',g.minutes)+
+      stat('Puntos',g.points)+stat('Asistencias',g.assists)+stat('Rebotes',g.rebounds)+stat('Recuperaciones',g.steals)+'</div>'+
+      (g.unknownMinutes?'<p class="pp-quality-note">'+g.unknownMinutes+' partidos tienen minutos N/D; no se han inventado.</p>':'')+
+      '<div class="pp-portfolio-events">'+recent+'</div><p>Estas estadísticas son observaciones de competición, no certifican por sí solas un atributo técnico ni predicen talento.</p></section>';
+  }
+
+  _careerPanel(){
+    const career=this.portfolioData?.career?.career||[];
+    const content=career.map(c=>{
+      const team=c.team||{};
+      return '<div class="pp-portfolio-event"><span><strong>'+esc(team.season_name||team.season_code||'Temporada')+
+        '</strong><small>'+esc(team.team_name||'Equipo histórico autorizado')+'</small></span>'+
+        '<span>'+((c.evaluations||[]).length)+' valoraciones accesibles</span></div>';
+    }).join('');
+    const evaluations=this.data?.evaluations||[];
+    const timeline=evaluations.slice(0,24).map(e=>{
+      const tiers=[...new Set((e.scores||[]).map(x=>x.metadata?.difficulty_tier).filter(Boolean))];
+      return '<div class="pp-portfolio-event"><span><strong>'+esc(e.evaluation_date||'Sin fecha')+' · '+esc(e.title||'Valoración')+'</strong>'+
+        '<small>'+esc(e.metadata?.assessment_category||'Categoría histórica no registrada')+'</small></span>'+
+        '<span>'+((e.scores||[]).length)+' atributos'+(tiers.length?' · '+esc(tiers.join(', ')):' · dificultad histórica N/D')+'</span></div>';
+    }).join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">PROGRESIÓN LONGITUDINAL</span><h2>Trayectoria del jugador</h2></div></div>'+
+      '<div class="pp-portfolio-events">'+(content||'<p>Solo hay contexto autorizado de la temporada actual.</p>')+'</div>'+
+      '<h3>Evaluaciones por fecha</h3><div class="pp-portfolio-events">'+(timeline||'<p>Todavía no hay evaluaciones.</p>')+'</div>'+
+      '<p>El acceso al historial de otros clubes requiere permiso independiente; no se comparte automáticamente información privada anterior.</p></section>';
+  }
+
+  _evidencePanel(model){
+    const time=this.portfolioData?.assessmentTime;
+    const assessment=time&&!time.error?summarizeAssessmentTime(time.rows):null;
+    return this._qualityPanel(model)+
+      '<section class="pp-panel"><h2>Tiempo dedicado a evaluaciones</h2>'+
+      (assessment?'<strong>'+esc(formatBasketballMinutes(assessment.minutes))+'</strong>'+
+        '<p>'+assessment.recordedEvaluations+' valoraciones con duración documentada; '+
+        assessment.unknownEvaluations+' sin duración conocida.</p>':
+        '<p>Duración no verificable. No se estima a partir del número de atributos.</p>')+
+      '<p>Las nuevas evaluaciones exigen el número mínimo de observaciones de cada rúbrica, contexto y nivel de dificultad D1–D5; la validación científica de los umbrales sigue pendiente de calibración.</p></section>';
+  }
+
+  _habitsPanel(){
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HÁBITOS Y BIENESTAR</span><h2>Datos de contexto y recomendaciones futuras</h2></div></div>'+
+      '<p>Los registros de bienestar de Player 360 son datos sensibles, especialmente para menores. No se incorporan automáticamente al pasaporte ni a un motor de IA sin permiso específico, finalidad y garantías de privacidad.</p>'+
+      '<p>El modelo mantiene identificadores de jugador, fechas y procedencia para incorporar en el futuro indicadores autorizados de descanso, carga, recuperación o nutrición sin mezclar datos privados entre clubes.</p>'+
+      '<a href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 y sus módulos autorizados</a></section>';
+  }
+
+  _sectionContent(model){
+    switch(this.activeSection){
+      case 'skills':return this._insights(model)+this._dimensions(model);
+      case 'evolution':return this._careerPanel()+this._measurements();
+      case 'training':return this._trainingHoursCard()+this._trainingHistoryPanel();
+      case 'games':return this._gamesPanel();
+      case 'evidence':return this._evidencePanel(model);
+      case 'habits':return this._habitsPanel();
+      case 'evaluation':return this._editor();
+      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model);
+    }
+  }
+
   _render() {
     var el=document.getElementById(this.containerId); if(!el)return;
     if(this.error){
@@ -391,17 +496,24 @@ export class PlayerPassportView {
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
       ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button>'
       : '';
-    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._trainingHoursCard()+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
+    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._sectionNav()+this._sectionContent(model)+'</section>'+this._helpPanel()+this._styles();
     this._bind();
   }
 
   _bind() {
     var self=this;
+    document.querySelectorAll("[data-pp-section]").forEach(btn=>btn.addEventListener("click",()=>{
+      const target=btn.dataset.ppSection;
+      if(this.activeSection===target)return;
+      if(this.editorOpen&&this._draftCount()&&!confirm("Hay puntuaciones sin guardar. ¿Cambiar de sección?"))return;
+      this.activeSection=target;
+      this._render();
+    }));
     var toggle=document.getElementById("pp-toggle"); if(toggle)toggle.addEventListener("click",function(){self.editorOpen=!self.editorOpen;self._render();});
-    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorDraft.clear();self.editorMeta={date:null,title:null,summary:""};self.editorOpen=true;self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
+    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorDraft.clear();self.editorMeta={date:null,title:null,summary:""};self.editorOpen=true;self.activeSection="evaluation";self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
     var openHelp=document.getElementById("pp-open-help"); if(openHelp)openHelp.addEventListener("click",function(){self.helpOpen=true;self._render();});
     var closeHelp=document.getElementById("pp-close-help"); if(closeHelp)closeHelp.addEventListener("click",function(){self.helpOpen=false;self._render();});
-    var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self._render();});
+    var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self.activeSection="evaluation";self._render();});
     var model=self._model();
     var word=document.getElementById("pp-export-word"); if(word)word.addEventListener("click",function(){exportPassportWord({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,asymmetries:model.asymmetries,measurements:self.data.measurements});});
     var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
@@ -447,6 +559,8 @@ export class PlayerPassportView {
 
   _styles() {
     return '<style>'+ 
+      '.pp-section-nav{display:flex;gap:8px;flex-wrap:wrap;padding:8px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:12px;position:relative;z-index:2}.pp-section-tab{min-height:44px;padding:9px 14px;border:1px solid transparent;border-radius:9px;background:transparent;color:#334155;font-weight:800;cursor:pointer}.pp-section-tab.is-active,.pp-section-tab:hover{color:#fff;background:#5b21b6}.pp-quality-grid,.pp-training-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:14px 0}.pp-quality-grid>div,.pp-training-totals>div{padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;display:grid;gap:7px}.pp-quality-grid strong,.pp-training-totals strong{font-size:23px;color:#14243b}.pp-quality-grid small,.pp-training-totals small{font-size:12px;color:#475569}.pp-portfolio-events{display:grid;gap:8px;margin:15px 0}.pp-portfolio-event{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px;border:1px solid #e2e8f0;border-radius:10px;flex-wrap:wrap}.pp-portfolio-event span:first-child{display:grid;gap:4px}.pp-portfolio-event small{color:#64748b}.pp-quality-note{color:#7c2d12;background:#fff7ed;padding:10px;border-radius:8px}.pp-training-volume-grid>div{display:grid;gap:5px}.pp-training-volume-grid>div small{color:#475569}@media(max-width:600px){.pp-section-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.pp-section-tab{text-align:center}.pp-portfolio-event{align-items:flex-start}}'+
+
       '.pp-training-volume{padding:18px;margin:18px 0;border:1px solid #dbe4ee;border-radius:14px;background:#fff;color:#14243b}.pp-training-volume h2{font-size:18px;margin:0 0 8px}.pp-training-volume strong{font-size:24px}.pp-training-volume-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}.pp-training-volume-grid>div{padding:10px;border-radius:10px;background:#f1f5f9;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.pp-training-volume-grid span,.pp-training-volume small,.pp-training-volume p{color:#475569;font-size:12px}'+
       '.pp-page{max-width:1380px;margin:0 auto;padding:18px;display:grid;gap:18px;color:#0f172a;font-family:var(--font-family-base,system-ui,-apple-system,sans-serif)}.pp-page *{box-sizing:border-box}.pp-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.pp-top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.pp-top-action{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;padding:8px 12px;font-weight:800;cursor:pointer}.pp-back{min-height:44px;display:inline-flex;align-items:center;color:#475569;text-decoration:none;font-weight:800}'+
       '.pp-hero{position:relative;overflow:hidden;min-height:410px;border:1px solid #473487;border-radius:22px;padding:28px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.75fr) minmax(250px,.8fr);gap:22px;align-items:center;background:radial-gradient(circle at 52% 40%,rgba(124,58,237,.45),transparent 28%),linear-gradient(135deg,#070914,#11183a 58%,#250a42);color:#fff;box-shadow:0 24px 60px rgba(15,23,42,.22)}.pp-hero:before{content:"";position:absolute;inset:10px;border:1px solid rgba(196,181,253,.27);border-radius:16px}.pp-identity,.pp-art,.pp-badges{position:relative;z-index:1}.pp-eyebrow{display:block;color:#c4b5fd;font-size:10px;font-weight:950;letter-spacing:.14em;margin-bottom:8px}.pp-eyebrow.dark{color:#6d28d9}.pp-identity h1{margin:0;font-size:clamp(34px,5vw,64px);line-height:.92;text-transform:uppercase;letter-spacing:-.04em;color:#fff}.pp-identity>p{color:#ddd6fe}.pp-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.pp-meta span{border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.72);border-radius:999px;padding:7px 9px;font-size:11px;color:#e5e7eb!important}.pp-meta b{color:#c4b5fd!important}.pp-hero-action{margin-top:14px;min-height:46px;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:900;cursor:pointer}.pp-art{min-height:300px;align-self:end;display:flex;justify-content:center;align-items:flex-end}.pp-art img{max-width:100%;max-height:370px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.45))}.pp-silhouette{width:200px;height:260px;border-radius:100px 100px 26px 26px;display:grid;place-items:center;background:linear-gradient(160deg,#7c3aed,#1e293b);font-size:68px;font-weight:950}.pp-watermark{position:absolute;right:-5px;bottom:0;font-size:120px;line-height:.75;font-weight:950;color:rgba(255,255,255,.06);z-index:-1}.pp-badges{display:grid;gap:10px}.pp-shield,.pp-mini{border:1px solid rgba(196,181,253,.32);background:rgba(3,7,22,.64);border-radius:15px;padding:14px}.pp-shield{text-align:center}.pp-shield small,.pp-mini small{display:block;color:#c4b5fd;font-size:9px;font-weight:950;letter-spacing:.1em;margin-bottom:6px}.pp-shield strong{display:block;font-size:40px}.pp-shield strong span{font-size:15px;color:#94a3b8}.pp-shield em{font-style:normal;color:#ddd6fe}.pp-mini span{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding:6px 0;font-size:11px;color:#f1f5f9!important}.pp-mini span:first-of-type{border-top:0}.pp-mini b{color:#ddd6fe!important}.pp-shield strong,.pp-shield em{color:#fff!important}'+
