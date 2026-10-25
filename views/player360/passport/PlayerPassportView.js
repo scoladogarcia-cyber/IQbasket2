@@ -163,7 +163,9 @@ export class PlayerPassportView {
         this.data.team={...(this.data.team||{}),category:career.category,
           competition:career.competition||null};
       }
-      const merged=mergeAuthorizedCareer(this.data,career.career||[]);
+      const merged=mergeAuthorizedCareer(this.data,[
+        ...(career.career||[]),{evaluations:portfolio.sharedEvaluations||[],measurements:[]}
+      ]);
       this.data.evaluations=merged.evaluations;
       this.data.measurements=merged.measurements;
       this.trainingHours=portfolio.training.error?null:summarizeTrainingPortfolio(portfolio.training.rows,{asOfDate:today()});
