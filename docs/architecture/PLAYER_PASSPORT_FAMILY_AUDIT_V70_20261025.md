@@ -76,3 +76,35 @@ Se conserva el pasaporte técnico V68 y su editor de 69 atributos. Se integra un
 ## Criterio de aceptación humano
 
 Una familia debería poder responder en diez segundos a cuatro preguntas: «¿Qué categoría juega?», «¿Cuánto ha entrenado realmente?», «¿Cuánto está pendiente de confirmar?» y «¿Hasta qué punto están documentadas sus valoraciones?». El sistema debe explicar con claridad cuando no tiene la respuesta.
+
+## Corrección de auditoría V70.1 (25-10-2026)
+
+La auditoría postdespliegue detectó que la RPC familiar V70 original contenía
+`s.rubric_version`, columna **inexistente** en `player_evaluation_scores`.
+PostgreSQL admite crear una función PL/pgSQL con una consulta todavía no
+ejecutada, por lo que una comprobación de `to_regprocedure` no detecta este
+fallo. En una cuenta con `PLAYER_PASSPORT` activo, la lectura podía fallar.
+
+La migración **aditiva** `20261025180000_family_passport_brief_v701_runtime_fix.sql`
+reemplaza solo la definición de la RPC, sin modificar datos existentes:
+
+- Obtiene evidencia de `evidence_count` y protocolo/dificultad de
+  `player_evaluation_scores.metadata`, que son los campos reales.
+- Solo contabiliza atributos del catálogo de 69 reglas vigentes y puntuaciones
+  realmente informadas, compartidas con el jugador y no privadas.
+- Filtra entrenamientos futuros y ausencias de los contadores de sesiones
+  realizadas, y permite la visualización si existe `GAME_HISTORY` o
+  `BASIC_TIMELINE`, siempre después de comprobar vínculo y permiso.
+- Conserva la exigencia de cuenta activa, `family_can_view_player`,
+  `PLAYER_PROFILE` y los entitlements independientes.
+- No cambia el significado de las notas históricas; ninguna obtiene por esta
+  corrección dificultad, evidencia o acreditación adicional.
+
+Comprobación previa: consulta real de metadatos y unión con el catálogo
+ejecutada en Supabase, sin errores de esquema. La calibración de rúbricas
+sigue siendo una cuestión metodológica distinta de la corrección de la RPC.
+
+La prueba de contrato ahora verifica que no se reintroduzcan columnas
+inexistentes, que se respeten los permisos y que los minutos futuros
+no se consideren realizados. La validación autenticada con una cuenta
+familiar real es una prueba adicional recomendada para el lanzamiento comercial.
