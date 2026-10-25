@@ -7,6 +7,12 @@ on:
       - "services/reports/**"
       - "views/ReportsViewV53.js"
       - "tests/family-p0-p1-v70.mjs"
+      - "tests/product-p1-v71.mjs"
+      - "services/i18n/**"
+      - "domain/stats/StatQualityV71.js"
+      - "views/ReportsViewV50.js"
+      - "views/player360/passport/PlayerPassportView.js"
+      - "views/LanguageSettingsView.js"
       - "tests/live-lease-sync-race-v69.mjs"
       - ".github/workflows/family-p0-p1-v70.yml"
   pull_request:
@@ -25,6 +31,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node tests/family-p0-p1-v70.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/player-passport-portfolio-v68.mjs
+      - run: node tests/selected-reports-v53.mjs
       - run: node tests/live-lease-sync-race-v69.mjs
       - run: node tests/live-minutes-v62-contract.mjs
       - run: node tests/game-periods-dnp-report-v64.mjs
