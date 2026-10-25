@@ -1,0 +1,40 @@
+name: V69 Live Lease and Sync Race QA
+
+on:
+  pull_request:
+    paths:
+      - "features/game-live/LiveWriterLeaseV43Controller.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "views/LiveScoreHUDViewV58.js"
+      - "tests/live-lease-sync-race-v69.mjs"
+      - "tests/live-sync-v61-contract.mjs"
+      - ".github/workflows/live-lease-sync-race-v69.yml"
+  push:
+    branches:
+      - main
+      - "fix/live-lease-singleflight-retry-*"
+    paths:
+      - "features/game-live/LiveWriterLeaseV43Controller.js"
+      - "services/games/LiveCaptureSyncService.js"
+      - "views/LiveScoreHUDViewV58.js"
+      - "tests/live-lease-sync-race-v69.mjs"
+      - "tests/live-sync-v61-contract.mjs"
+      - ".github/workflows/live-lease-sync-race-v69.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node tests/live-lease-sync-race-v69.mjs
+      - run: node tests/live-sync-v61-contract.mjs
+      - run: node tests/release-freshness-lease-recovery-v43-contract.mjs
+      - run: node tests/game-live-writer-lease-v1-contract.mjs
+      - run: node tests/live-minutes-v62-contract.mjs
+      - run: node tests/game-periods-dnp-report-v64.mjs
