@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "views/GameLiveEditorView.js"
+      - "services/DataStore.js"
       - "views/reports/FullGameBoxScoreTables.js"
       - "services/games/GameCaptureDelegationService.js"
       - "tests/game-periods-dnp-report-v64.mjs"
@@ -14,6 +15,7 @@ on:
       - "fix/period-scores-and-dnp-report-*"
     paths:
       - "views/GameLiveEditorView.js"
+      - "services/DataStore.js"
       - "views/reports/FullGameBoxScoreTables.js"
       - "services/games/GameCaptureDelegationService.js"
       - "tests/game-periods-dnp-report-v64.mjs"
