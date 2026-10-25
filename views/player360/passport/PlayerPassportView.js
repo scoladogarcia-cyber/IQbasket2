@@ -6,6 +6,10 @@
  */
 import { DataStore } from "../../../services/DataStore.js";
 import { PlayerPassportService } from "../../../services/player360/PlayerPassportService.js";
+import { PlayerPassportPortfolioService } from "../../../services/player360/PlayerPassportPortfolioService.js";
+import { PASSPORT_DIFFICULTY_LEVELS_V68, passportCategoryContext } from "../../../config/playerPassportCategoriesV68.config.js";
+import { summarizeTrainingPortfolio, summarizeGamePortfolio, mergeAuthorizedCareer, evidenceQuality, summarizeAssessmentTime, formatBasketballMinutes, TRAINING_TYPE_LABELS } from "../../../domain/player360/PlayerPassportPortfolio.js";
+
 import { Permission } from "../../../security/PermissionService.js";
 import { ageOnDate } from "../../../domain/player360/PlayerAge.js";
 import { latestScoresByAttribute, summarizePassport, rightLeftAsymmetries } from "../../../domain/player360/PlayerPassportScoring.js";
@@ -37,6 +41,10 @@ export class PlayerPassportView {
     this.supabase = supabaseClient && (supabaseClient.supabase || supabaseClient.default) || supabaseClient;
     this.auth = authController;
     this.service = new PlayerPassportService(this.supabase);
+    this.portfolioService = new PlayerPassportPortfolioService(this.supabase);
+    this.portfolioData=null;
+    this.portfolioError=null;
+    this.activeSection="overview";
     this.containerId = "dashboard-content-area";
     this.teamId = null;
     this.teamSeasonId = null;
@@ -54,7 +62,7 @@ export class PlayerPassportView {
     // Only explicit observations are appended. Existing values are shown as a baseline
     // but are never duplicated unless the evaluator touches the attribute.
     this.editorDraft = new Map();
-    this.editorMeta = { date:null, title:null, summary:"" };
+    this.editorMeta = { date:null, title:null, summary:"",minutes:"" };
   }
 
   _context() {
@@ -121,6 +129,7 @@ export class PlayerPassportView {
         this.trainingContext=pending;
         this.editorOpen=true;
         this.filterContext=pending.context||"T";
+        this.activeSection="evaluation";
       }
     } catch {}
     await this._load();
@@ -134,49 +143,55 @@ export class PlayerPassportView {
       if (!this.teamSeasonId) throw new Error("Selecciona una temporada antes de abrir el pasaporte.");
       this.data=await this.service.getPassport({playerId:this.playerId,teamSeasonId:this.teamSeasonId});
       this._applySeasonPlayerContext();
-      await this._loadTrainingHours();
+      await this._loadPortfolio();
     } catch (e) { this.error=e; console.error("[PlayerPassportView]",e); }
   }
 
-  /** Summarize validated individual training participation across authorized seasons. */
-  async _loadTrainingHours() {
-    if (!this.supabase?.from || !this.playerId) { this.trainingHours = null; return; }
-    const totals = {TEAM:0,TECHNIFICATION:0,PERSONAL:0,COGNITIVE:0};
-    let count=0,pending=0;
+  /**
+   * The core passport remains available if an optional evidence source fails;
+   * show an explicit data error instead of silently reporting zero.
+   */
+  async _loadPortfolio(){
+    this.portfolioData=null;this.portfolioError=null;this.trainingHours=null;
     try {
-      for (let offset=0; offset<10000; offset+=500) {
-        const {data,error}=await this.supabase.from("iq_training_player_hours_v64")
-          .select("training_session_id,accredited_minutes,session_kind,classification_review")
-          .eq("player_id",this.playerId).order("training_session_id",{ascending:true}).range(offset,offset+499);
-        if (error) throw error;
-        (data||[]).forEach(row => {
-          const code = row.session_kind in totals ? row.session_kind : "TEAM";
-          totals[code]+=Math.max(0,Number(row.accredited_minutes)||0);
-          if (row.classification_review==="PENDING") pending++;
-          count++;
-        });
-        if (!data||data.length<500) break;
+      const portfolio=await this.portfolioService.load({
+        playerId:this.playerId,teamSeasonId:this.teamSeasonId
+      });
+      this.portfolioData=portfolio;
+      const career=portfolio.career||{};
+      if(career.category){
+        this.data.team={...(this.data.team||{}),category:career.category,
+          competition:career.competition||null};
       }
-      this.trainingHours={totals,count,pending};
-    } catch(error) {
-      // Passport assessment remains available if training-hour access is denied.
-      console.warn("[Passport] No hay acceso a horas de formación:",error?.message||error);
-      this.trainingHours=null;
+      const merged=mergeAuthorizedCareer(this.data,[
+        ...(career.career||[]),{evaluations:portfolio.sharedEvaluations||[],measurements:[]}
+      ]);
+      this.data.evaluations=merged.evaluations;
+      this.data.measurements=merged.measurements;
+      this.trainingHours=portfolio.training.error?null:summarizeTrainingPortfolio(portfolio.training.rows,{asOfDate:today()});
+    }catch(error){
+      this.portfolioError=String(error?.message||error);
+      console.warn("[PlayerPassport] Portfolio source unavailable",this.portfolioError);
     }
   }
 
-  _trainingHoursCard() {
-    if(!this.trainingHours) return '';
-    const labels={TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"};
-    const format=m => Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
-    const total=Object.values(this.trainingHours.totals).reduce((a,b)=>a+b,0);
-    return '<section class="pp-training-volume" aria-label="Historial de formación">'
-      +'<h2>Horas de formación</h2><strong>'+esc(format(total))+'</strong>'
-      +'<div class="pp-training-volume-grid">'+Object.entries(this.trainingHours.totals)
-        .map(([kind,minutes])=>'<div><span>'+esc(labels[kind])+'</span><b>'+esc(format(minutes))+'</b></div>').join('')
-      +'</div>'
-      +(this.trainingHours.pending?'<small>Hay '+this.trainingHours.pending+' registros con tipo de formación pendiente de revisar.</small>':'')
-      +'<p>Horas efectivamente registradas y sesiones completadas; los entrenamientos planificados no suman.</p></section>';
+  _trainingHoursCard(){
+    if(!this.trainingHours){
+      return '<section class="pp-training-volume"><h2>Horas de formación</h2><p>No se ha podido verificar el historial de entrenamientos. No mostramos cero como si fueran horas confirmadas.</p>'+
+       (this.portfolioData?.training?.error?'<small>'+esc(this.portfolioData.training.error)+'</small>':'')+'</section>';
+    }
+    const h=this.trainingHours;
+    const kinds=Object.entries(h.kinds).map(([kind,data])=>
+      '<div><span>'+esc(TRAINING_TYPE_LABELS[kind])+'</span><b>'+esc(formatBasketballMinutes(data.registered))+'</b><small>Validadas: '+esc(formatBasketballMinutes(data.accredited))+'</small></div>').join('');
+    return '<section class="pp-training-volume" aria-label="Historial de entrenamientos">'+
+      '<h2>Horas de formación</h2><div class="pp-training-totals">'+
+      '<div><small>Asistencia registrada</small><strong>'+esc(formatBasketballMinutes(h.totalRegistered))+'</strong></div>'+
+      '<div><small>Horas acreditadas</small><strong>'+esc(formatBasketballMinutes(h.totalAccredited))+'</strong></div>'+
+      '<div><small>Pendientes de validación</small><strong>'+esc(formatBasketballMinutes(h.pendingMinutes))+'</strong></div></div>'+
+      '<div class="pp-training-volume-grid">'+kinds+'</div>'+
+      (h.reviewPending?'<p class="pp-quality-note">'+h.reviewPending+' registros pendientes de revisar su tipo de entrenamiento.</p>':'')+
+      (h.unknownMinutes?'<p class="pp-quality-note">'+h.unknownMinutes+' asistencias sin minutos verificables.</p>':'')+
+      '<p>Las sesiones pendientes no se acreditan hasta confirmar asistencia y minutos; no se completan automáticamente.</p></section>';
   }
 
   _model() {
@@ -191,7 +206,8 @@ export class PlayerPassportView {
       summary:summary,
       latest:latest,
       roles:deriveFunctionalRoles(latest,{minimumCoverage:PLAYER_PASSPORT_CONFIG.roleCoverageThreshold}),
-      asymmetries:rightLeftAsymmetries(summary.attributes)
+      asymmetries:rightLeftAsymmetries(summary.attributes),
+      quality:evidenceQuality(attrs,latest)
     };
   }
 
@@ -230,10 +246,10 @@ export class PlayerPassportView {
     return '<section class="pp-hero">'+
       '<div class="pp-identity"><span class="pp-eyebrow">IQBASKET · PLAYER PASSPORT</span><h1>'+esc(name)+'</h1><p>Perfil longitudinal basado en evidencia, contexto y evolución.</p>'+action+
       '<div class="pp-meta"><span><b>#</b> '+esc(pNumber(p))+'</span><span><b>POS</b> '+esc(pPosition(p))+'</span><span><b>EDAD</b> '+esc(age==null?"—":age)+'</span><span><b>NAC.</b> '+esc(p.birth_date||"—")+'</span></div>'+
-      '<div class="pp-meta"><span><b>EQUIPO</b> '+esc(t.team_name||"—")+'</span><span><b>TEMP.</b> '+esc(t.season_name||t.season_code||"—")+'</span></div></div>'+
+      '<div class="pp-meta"><span><b>CATEGORÍA</b> '+esc(t.category||"Sin categoría verificada")+'</span><span><b>EQUIPO</b> '+esc(t.team_name||"—")+'</span><span><b>TEMP.</b> '+esc(t.season_name||t.season_code||"—")+'</span></div></div>'+
       '<div class="pp-art">'+art+'<div class="pp-watermark">'+esc(pNumber(p))+'</div></div>'+
-      '<div class="pp-badges"><article class="pp-shield"><small>COBERTURA</small><strong>'+model.summary.ratedCount+'<span>/'+model.summary.totalCount+'</span></strong><em>'+pct(model.summary.coverage)+'</em></article>'+
-      '<article class="pp-mini"><small>ROLES CON EVIDENCIA</small>'+roleHtml+'</article><article class="pp-mini"><small>FORTALEZAS</small>'+strengthHtml+'</article></div></section>';
+      '<div class="pp-badges"><article class="pp-shield"><small>ATRIBUTOS VALORADOS</small><strong>'+model.summary.ratedCount+'<span>/'+model.summary.totalCount+'</span></strong><em>Con evidencia suficiente: '+model.quality.verified+'/'+model.quality.total+'</em></article>'+
+      '<article class="pp-mini"><small>ROLES DERIVADOS · PROVISIONALES</small>'+roleHtml+'</article><article class="pp-mini"><small>FORTALEZAS</small>'+strengthHtml+'</article></div></section>';
   }
 
   _dimensions(model) {
@@ -284,7 +300,8 @@ export class PlayerPassportView {
       touched:Boolean(draft?.touched),
       evidenceCount:draft ? draft.evidenceCount : 0,
       confidence:draft ? draft.confidence : (previous?.confidence || "MEDIUM"),
-      notes:draft ? draft.notes : ""
+      notes:draft ? draft.notes : "",
+      difficultyTier:draft ? draft.difficultyTier : ""
     };
   }
 
@@ -298,6 +315,7 @@ export class PlayerPassportView {
       evidenceCount:0,
       confidence:previous?.confidence || "MEDIUM",
       notes:"",
+      difficultyTier:"",
       touched:false
     };
     this.editorDraft.set(code,{...current,...patch,touched:true});
@@ -325,12 +343,18 @@ export class PlayerPassportView {
       : '<div class="pp-current-value pp-current-empty"><span>Valor actual</span><b>NE</b><small>Sin valoración previa</small></div>';
     var buttons='<button type="button" data-score="" '+(state.score==null?'class="selected"':'')+' '+(previous?'disabled title="NE no borra una valoración histórica; selecciona 1–5 para corregirla."':'')+'>NE</button>';
     for(var i=1;i<=5;i++) buttons+='<button type="button" data-score="'+i+'" '+(state.score===i?'class="selected"':'')+'>'+i+'</button>';
+    const tiers=[
+      ["","Selecciona la dificultad observada"],
+      ...PASSPORT_DIFFICULTY_LEVELS_V68.map(level=>[level.code,level.code+" · "+level.label])
+    ];
+    const tierOptions=tiers.map(([value,label])=>
+      '<option value="'+value+'" '+(state.difficultyTier===value?'selected':'')+'>'+esc(label)+'</option>').join('');
     var confidence=["LOW","MEDIUM","HIGH"].map(function(value){
       var label=value==="LOW"?"Baja":value==="HIGH"?"Alta":"Media";
       return '<option value="'+value+'" '+(state.confidence===value?"selected":"")+'>'+label+'</option>';
     }).join("");
     return '<article class="pp-eval-card '+(state.touched?'pp-eval-changed':'')+'" data-code="'+esc(a.code)+'" data-current-score="'+esc(previous?.score??"")+'"><header><div><small>'+esc(a.code)+'</small><h3>'+esc(a.name)+'</h3><em class="pp-change-marker">'+(state.touched?'Cambio pendiente':'Sin cambios')+'</em></div><button type="button" class="pp-help" aria-label="Ver criterios de valoración">Criterios</button></header><p>'+esc(a.definition)+'</p>'+
-      currentText+'<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Evidencias nuevas<input class="pp-count" type="number" min="0" inputmode="numeric" value="'+esc(state.evidenceCount)+'"></label><label>Confianza de esta observación<select class="pp-confidence">'+confidence+'</select></label></div>'+
+      currentText+'<div class="pp-score">'+buttons+'</div><div class="pp-evidence"><label>Nivel de exigencia observado<select class="pp-difficulty">'+tierOptions+'</select></label><label>Observaciones verificadas (mínimo '+Number(a.min_evidence||1)+')<input class="pp-count" type="number" min="0" inputmode="numeric" value="'+esc(state.evidenceCount)+'"></label><label>Confianza de esta observación<select class="pp-confidence">'+confidence+'</select></label></div>'+
       '<label>Nota de esta observación<textarea class="pp-notes" rows="2">'+esc(state.notes)+'</textarea></label><div class="pp-rubric" hidden><strong>Qué observar</strong><p>'+esc(a.observation_guide||"")+'</p>'+anchors+'</div></article>';
   }
 
@@ -347,13 +371,18 @@ export class PlayerPassportView {
     var cards=this._filteredAttributes().map(function(a){return self._attributeEditor(a,latest);}).join("") || '<div class="pp-empty">No hay atributos válidos para estos filtros.</div>';
     var defaultDate=this.editorMeta.date||this.trainingContext?.sessionDate||today();
     var defaultTitle=this.editorMeta.title||(this.trainingContext?.sessionTitle ? "Entrenamiento · "+this.trainingContext.sessionTitle : "Evaluación Pasaporte · "+today());
+    const categoryContext=passportCategoryContext(this.data?.team?.category);
+    const categoryNote='<p class="pp-quality-note"><strong>Categoría competitiva:</strong> '+esc(categoryContext.raw||"Por verificar")+'. El nivel D1–D5 se elige por la exigencia realmente observada, no por la edad ni por subir de categoría.</p>';
     var sourceNote=this.trainingContext
       ? '<div class="pp-source-note">🏋️ Esta valoración quedará vinculada como evidencia al entrenamiento <strong>'+esc(this.trainingContext.sessionTitle||"seleccionado")+'</strong>.</div>'
       : '';
     return '<section class="pp-panel pp-editor-shell"><button id="pp-toggle" class="pp-toggle"><span><b>Evaluación contextual</b><small>NE significa no evaluado. Guarda solo lo que realmente hayas observado.</small></span><b>−</b></button>'+
-      '<form id="pp-form" class="pp-editor">'+sourceNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
+      '<form id="pp-form" class="pp-editor">'+sourceNote+categoryNote+'<div class="pp-filters"><label>Fecha<input id="pp-date" type="date" required value="'+defaultDate+'"></label><label>Contexto<select id="pp-context"><option value="T" '+(this.filterContext==="T"?"selected":"")+'>Tarea controlada</option><option value="JR" '+(this.filterContext==="JR"?"selected":"")+'>Juego reducido</option><option value="P5" '+(this.filterContext==="P5"?"selected":"")+'>Partido / 5x5</option><option value="VIDEO" '+(this.filterContext==="VIDEO"?"selected":"")+'>Vídeo</option></select></label>'+
       '<label>Dimensión<select id="pp-dimension"><option value="">Todas</option>'+dimOptions+'</select></label><label>Subdimensión<select id="pp-subdimension"><option value="">Todas</option>'+subOptions+'</select></label></div>'+
-      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label><div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
+      '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label>'+
+      '<label class="pp-title">Tiempo real dedicado a esta evaluación (minutos, opcional)<input id="pp-assessment-minutes" type="number" min="1" max="600" step="1" value="'+esc(this.editorMeta.minutes||"")+'" placeholder="Sin registrar"></label>'+
+      '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+
+      '<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
       '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
   }
 
@@ -362,11 +391,127 @@ export class PlayerPassportView {
     return '<div class="pp-modal" id="pp-help-modal"><div class="pp-modal-card"><div class="pp-modal-head"><h2>Cómo valorar el Pasaporte</h2><button type="button" id="pp-close-help">✕</button></div>'+
       '<p><strong>1. Valora solo lo observado.</strong> Si no tienes evidencia suficiente, deja NE. NE nunca equivale a un 1.</p>'+
       '<p><strong>2. Elige el contexto correcto.</strong> T = tarea controlada; JR = juego reducido; P5 = partido/5x5; VIDEO = revisión de vídeo.</p>'+
-      '<p><strong>3. Usa los criterios específicos.</strong> Cada atributo tiene definición, guía de observación y cinco anclajes. Pulsa “Criterios” antes de puntuar si hay duda.</p>'+
-      '<p><strong>4. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
-      '<p><strong>5. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
-      '<p><strong>6. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
+      '<p><strong>3. Dificultad y categoría son diferentes.</strong> Selecciona D1–D5 según la prueba realmente observada: no se dan puntos por cumplir años ni por pasar de mini a júnior.</p>'+
+      '<p><strong>4. Aporta el número mínimo de observaciones.</strong> Cada atributo indica su umbral y Supabase lo comprueba de nuevo. Sin evidencia suficiente, no se guarda una nota nueva.</p>'+
+      '<p><strong>5. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
+      '<p><strong>6. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
+      '<p><strong>7. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
       '<button type="button" id="pp-help-start" class="pp-primary-action">Empezar una valoración</button></div></div>';
+  }
+
+  _sectionNav(){
+    const tabs=[
+      ['overview','Resumen'],['skills','Competencias'],['evolution','Evolución'],
+      ['training','Entrenamientos'],['games','Partidos'],['evidence','Evidencias'],
+      ['habits','Hábitos'],['evaluation','Valorar']
+    ];
+    return '<nav class="pp-section-nav" aria-label="Secciones del pasaporte">'+
+      tabs.map(([key,label])=>'<button type="button" data-pp-section="'+key+'" class="pp-section-tab'+(this.activeSection===key?' is-active':'')+'" aria-current="'+(this.activeSection===key?'page':'false')+'">'+label+'</button>').join('')+
+      '</nav>';
+  }
+
+  _qualityPanel(model){
+    const q=model.quality;
+    return '<section class="pp-panel pp-quality-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">FIABILIDAD DEL PERFIL</span><h2>Qué sabemos con evidencia</h2></div></div>'+
+      '<div class="pp-quality-grid">'+
+       '<div><strong>'+q.rated+'/'+q.total+'</strong><small>Atributos con nota</small></div>'+
+       '<div><strong>'+q.verified+'/'+q.total+'</strong><small>Con observaciones suficientes</small></div>'+
+       '<div><strong>'+q.withoutEvidence+'</strong><small>Valorados sin evidencias contabilizadas</small></div>'+
+      '</div><p>Las valoraciones antiguas permanecen visibles como provisionales: una nota sin observaciones documentadas no equivale a una valoración verificada. No se ha alterado el histórico.</p></section>';
+  }
+
+  _trainingHistoryPanel(){
+    if(this.portfolioData?.training?.error)return '<section class="pp-panel"><h2>Historial no disponible</h2><p>No se puede verificar el detalle en este momento.</p></section>';
+    const items=[...(this.portfolioData?.training?.rows||[])].sort((a,b)=>String(b.session_date||'').localeCompare(String(a.session_date||''))).slice(0,25);
+    const list=items.map(x=>'<div class="pp-portfolio-event"><span><strong>'+esc(x.session_date||'Sin fecha')+
+      '</strong><small>'+esc(TRAINING_TYPE_LABELS[x.session_kind]||'Tipo por revisar')+
+      ' · '+esc(x.session_status==='COMPLETED'?'Validado':'Sin validar')+'</small></span>'+
+      '<span>'+esc(formatBasketballMinutes(x.recorded_minutes))+' registrados · '+
+      esc(formatBasketballMinutes(x.accredited_minutes))+' acreditados</span></div>').join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HISTORIAL INDIVIDUAL</span><h2>Sesiones registradas</h2></div></div>'+
+       '<div class="pp-portfolio-events">'+(list||'<p>No se han encontrado sesiones accesibles.</p>')+'</div>'+
+       '<p><a href="#/training">Revisar y validar entrenamientos</a></p></section>';
+  }
+
+  _gamesPanel(){
+    const data=this.portfolioData?.games;
+    if(!data||data.error)return '<section class="pp-panel"><h2>Competición</h2><p>Datos no disponibles. No se interpretan como cero partidos.</p></section>';
+    const g=summarizeGamePortfolio(data.rows);
+    const stat=(name,value)=>'<div><strong>'+esc(value)+'</strong><small>'+esc(name)+'</small></div>';
+    const recent=[...data.rows].sort((a,b)=>String(b.game_date||'').localeCompare(String(a.game_date||''))).slice(0,16)
+      .map(x=>'<div class="pp-portfolio-event"><strong>'+esc(x.game_date||'Sin fecha')+
+        '</strong><span>'+esc(x.minutes==null?'Minutos N/D':String(x.minutes)+' min')+
+        ' · '+esc(x.points??'N/D')+' puntos · '+esc(x.assists??'N/D')+' asist.</span></div>').join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">COMPETICIÓN</span><h2>Partidos y estadísticas reales</h2></div></div>'+
+      '<div class="pp-quality-grid">'+stat('Partidos finalizados con registro',g.games)+stat('Minutos anotados',g.minutes)+
+      stat('Puntos',g.points)+stat('Asistencias',g.assists)+stat('Rebotes',g.rebounds)+stat('Recuperaciones',g.steals)+'</div>'+
+      (g.unknownMinutes?'<p class="pp-quality-note">'+g.unknownMinutes+' partidos tienen minutos N/D; no se han inventado.</p>':'')+
+      '<div class="pp-portfolio-events">'+recent+'</div><p>Estas estadísticas son observaciones de competición, no certifican por sí solas un atributo técnico ni predicen talento.</p></section>';
+  }
+
+  _careerPanel(){
+    const career=this.portfolioData?.career?.career||[];
+    const content=career.map(c=>{
+      const team=c.team||{};
+      return '<div class="pp-portfolio-event"><span><strong>'+esc(team.season_name||team.season_code||'Temporada')+
+        '</strong><small>'+esc(team.team_name||'Equipo histórico autorizado')+'</small></span>'+
+        '<span>'+((c.evaluations||[]).length)+' valoraciones accesibles</span></div>';
+    }).join('');
+    const evaluations=this.data?.evaluations||[];
+    const timeline=evaluations.slice(0,24).map(e=>{
+      const tiers=[...new Set((e.scores||[]).map(x=>x.metadata?.difficulty_tier).filter(Boolean))];
+      return '<div class="pp-portfolio-event"><span><strong>'+esc(e.evaluation_date||'Sin fecha')+' · '+esc(e.title||'Valoración')+'</strong>'+
+        '<small>'+esc(e.metadata?.assessment_category||'Categoría histórica no registrada')+'</small></span>'+
+        '<span>'+((e.scores||[]).length)+' atributos'+(tiers.length?' · '+esc(tiers.join(', ')):' · dificultad histórica N/D')+'</span></div>';
+    }).join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">PROGRESIÓN LONGITUDINAL</span><h2>Trayectoria del jugador</h2></div></div>'+
+      '<div class="pp-portfolio-events">'+(content||'<p>Solo hay contexto autorizado de la temporada actual.</p>')+'</div>'+
+      '<h3>Evaluaciones por fecha</h3><div class="pp-portfolio-events">'+(timeline||'<p>Todavía no hay evaluaciones.</p>')+'</div>'+
+      '<p>El acceso al historial de otros clubes requiere permiso independiente; no se comparte automáticamente información privada anterior.</p></section>';
+  }
+
+  _evidencePanel(model){
+    const time=this.portfolioData?.assessmentTime;
+    const assessment=time&&!time.error?summarizeAssessmentTime(time.rows):null;
+    return this._qualityPanel(model)+
+      '<section class="pp-panel"><h2>Tiempo dedicado a evaluaciones</h2>'+
+      (assessment?'<strong>'+esc(formatBasketballMinutes(assessment.minutes))+'</strong>'+
+        '<p>'+assessment.recordedEvaluations+' valoraciones con duración documentada; '+
+        assessment.unknownEvaluations+' sin duración conocida.</p>':
+        '<p>Duración no verificable. No se estima a partir del número de atributos.</p>')+
+      '<p>Las nuevas evaluaciones exigen el número mínimo de observaciones de cada rúbrica, contexto y nivel de dificultad D1–D5; la validación científica de los umbrales sigue pendiente de calibración.</p></section>';
+  }
+
+  _habitsPanel(){
+    const wellness=this.portfolioData?.wellness||{};
+    const cards=['recovery','nutrition'].map(module=>{
+      const result=wellness[module];
+      const title=module==='recovery'?'Descanso y recuperación':'Hábitos de nutrición';
+      if(!result||result.error)return '<article class="pp-panel"><h3>'+title+'</h3><p>Datos no disponibles; no se interpreta como ausencia de hábitos.</p></article>';
+      if(!result.allowed)return '<article class="pp-panel"><h3>'+title+'</h3><p>Acceso restringido. Requiere autorización específica para este jugador y finalidad.</p></article>';
+      const entries=(result.rows||[]).slice(0,8).map(entry=>
+        '<div class="pp-portfolio-event"><strong>'+esc(entry.entry_date||'Sin fecha')+'</strong>'+
+        '<span>'+((entry.observations||[]).length)+' observaciones autorizadas</span></div>').join('');
+      return '<article class="pp-panel"><h3>'+title+'</h3><p>Datos visibles únicamente con el permiso sensible correspondiente.</p>'+
+        '<div class="pp-portfolio-events">'+(entries||'<p>Sin registros autorizados en este contexto.</p>')+'</div></article>';
+    }).join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HÁBITOS Y BIENESTAR</span>'+
+      '<h2>Contexto del jugador</h2></div></div>'+
+      '<p>Los permisos de recuperación y nutrición son independientes del pasaporte; no se hacen predicciones automáticas ni se comparten datos sensibles entre clubes.</p></section>'+
+      cards+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 →</a>';
+  }
+
+  _sectionContent(model){
+    switch(this.activeSection){
+      case 'skills':return this._insights(model)+this._dimensions(model);
+      case 'evolution':return this._careerPanel()+this._measurements();
+      case 'training':return this._trainingHoursCard()+this._trainingHistoryPanel();
+      case 'games':return this._gamesPanel();
+      case 'evidence':return this._evidencePanel(model);
+      case 'habits':return this._habitsPanel();
+      case 'evaluation':return this._editor();
+      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model);
+    }
   }
 
   _render() {
@@ -380,23 +525,34 @@ export class PlayerPassportView {
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
       ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button>'
       : '';
-    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._trainingHoursCard()+this._insights(model)+this._dimensions(model)+this._measurements()+this._editor()+'</section>'+this._helpPanel()+this._styles();
+    el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._sectionNav()+this._sectionContent(model)+'</section>'+this._helpPanel()+this._styles();
     this._bind();
   }
 
   _bind() {
     var self=this;
+    document.querySelectorAll("[data-pp-section]").forEach(btn=>btn.addEventListener("click",()=>{
+      const target=btn.dataset.ppSection;
+      if(this.activeSection===target)return;
+      if(this.editorOpen&&this._draftCount()&&!confirm("Hay puntuaciones sin guardar. ¿Cambiar de sección?"))return;
+      this.activeSection=target;
+      this._render();
+    }));
     var toggle=document.getElementById("pp-toggle"); if(toggle)toggle.addEventListener("click",function(){self.editorOpen=!self.editorOpen;self._render();});
-    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorDraft.clear();self.editorMeta={date:null,title:null,summary:""};self.editorOpen=true;self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
+    var start=document.getElementById("pp-start-evaluation"); if(start)start.addEventListener("click",function(){self.editorDraft.clear();self.editorMeta={date:null,title:null,summary:""};self.editorOpen=true;self.activeSection="evaluation";self._render();setTimeout(function(){document.querySelector(".pp-editor-shell")?.scrollIntoView({behavior:"smooth",block:"start"});},0);});
     var openHelp=document.getElementById("pp-open-help"); if(openHelp)openHelp.addEventListener("click",function(){self.helpOpen=true;self._render();});
     var closeHelp=document.getElementById("pp-close-help"); if(closeHelp)closeHelp.addEventListener("click",function(){self.helpOpen=false;self._render();});
-    var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self._render();});
+    var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self.activeSection="evaluation";self._render();});
     var model=self._model();
-    var word=document.getElementById("pp-export-word"); if(word)word.addEventListener("click",function(){exportPassportWord({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,asymmetries:model.asymmetries,measurements:self.data.measurements});});
-    var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
+    var word=document.getElementById("pp-export-word"); if(word)word.addEventListener("click",function(){exportPassportWord({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,asymmetries:model.asymmetries,measurements:self.data.measurements,training:self.trainingHours,competition:self.portfolioData?.games?.error?null:summarizeGamePortfolio(self.portfolioData?.games?.rows||[]),quality:model.quality,assessmentTime:self.portfolioData?.assessmentTime?.error?null:summarizeAssessmentTime(self.portfolioData?.assessmentTime?.rows||[])});});
+    var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,quality:model.quality});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
     var date=document.getElementById("pp-date"); if(date)date.addEventListener("input",function(e){self.editorMeta.date=e.target.value;});
     var title=document.getElementById("pp-title"); if(title)title.addEventListener("input",function(e){self.editorMeta.title=e.target.value;});
     var summary=document.getElementById("pp-summary"); if(summary)summary.addEventListener("input",function(e){self.editorMeta.summary=e.target.value;});
+    var assessmentMinutes=document.getElementById("pp-assessment-minutes"); if(assessmentMinutes)assessmentMinutes.addEventListener("input",function(e){self.editorMeta.minutes=e.target.value;});
+    document.querySelectorAll(".pp-difficulty").forEach(select=>select.addEventListener("change",function(){
+      self._setDraftFromRow(select.closest(".pp-eval-card"),{difficultyTier:select.value});
+    }));
     var context=document.getElementById("pp-context"); if(context)context.addEventListener("change",function(e){
       if(self._draftCount() && !confirm("Cambiar el contexto descartará los cambios de atributos todavía no guardados. ¿Continuar?")){e.target.value=self.filterContext;return;}
       self.editorDraft.clear();self.filterContext=e.target.value;self._render();
@@ -418,24 +574,61 @@ export class PlayerPassportView {
 
   async _save(event) {
     event.preventDefault();
-    var status=document.getElementById("pp-status");
-    var scores=[...this.editorDraft.entries()].map(function(entry){
-      var code=entry[0],draft=entry[1];
-      if(!draft?.touched || !Number.isInteger(draft.score) || draft.score<1 || draft.score>5)return null;
-      return {metric_code:code,score:draft.score,evidence_count:Math.max(0,Number(draft.evidenceCount)||0),confidence:draft.confidence||"MEDIUM",notes:String(draft.notes||"").trim()||null,rubric_version:"1.0"};
-    }).filter(Boolean);
-    if(!scores.length){if(status)status.textContent="No has modificado ni añadido ninguna valoración. Los valores actuales no se duplican.";return;}
+    const status=document.getElementById("pp-status");
+    const lookup=new Map((this.data?.catalog?.attributes||[]).map(a=>[String(a.code).toUpperCase(),a]));
+    const scores=[];
+    for(const [code,draft] of this.editorDraft.entries()){
+      if(!draft?.touched||!Number.isInteger(draft.score)||draft.score<1||draft.score>5)continue;
+      const attr=lookup.get(code);
+      if(!attr) {if(status)status.textContent='Atributo desconocido: '+code;return;}
+      const minimum=Math.max(1,Number(attr.min_evidence)||1);
+      const count=Number(draft.evidenceCount)||0;
+      if(!draft.difficultyTier||!/^D[1-5]$/.test(draft.difficultyTier)){
+        if(status)status.textContent='Selecciona D1–D5 para '+attr.name+'.';return;
+      }
+      if(!Number.isInteger(count)||count<minimum){
+        if(status)status.textContent=attr.name+': se necesitan al menos '+minimum+' observaciones verificadas.';return;
+      }
+      if(this.filterContext!=="VIDEO"&&Array.isArray(attr.valid_contexts)&&!attr.valid_contexts.includes(this.filterContext)){
+        if(status)status.textContent='El contexto seleccionado no permite valorar '+attr.name+'.';return;
+      }
+      scores.push({
+        metric_code:code,score:draft.score,evidence_count:count,
+        difficulty_tier:draft.difficultyTier,confidence:draft.confidence||"MEDIUM",
+        rubric_version:attr.rubric_version||"1.0",notes:String(draft.notes||"").trim()||null
+      });
+    }
+    if(!scores.length){if(status)status.textContent="Selecciona y documenta algún atributo nuevo; los valores anteriores no se duplican.";return;}
+    const durationField=document.getElementById("pp-assessment-minutes");
+    const timeText=durationField?.value?.trim()||"";
+    const assessmentDurationMinutes=timeText===""?null:Number(timeText);
+    if(timeText!==""&&(!Number.isInteger(assessmentDurationMinutes)||assessmentDurationMinutes<1||assessmentDurationMinutes>600)){
+      if(status)status.textContent="La duración de la evaluación debe estar entre 1 y 600 minutos.";return;
+    }
     try{
-      if(status)status.textContent="Guardando…";
-      await this.service.saveEvaluation({playerId:this.playerId,teamSeasonId:this.teamSeasonId,evaluationDate:document.getElementById("pp-date").value,title:document.getElementById("pp-title").value.trim(),context:this.filterContext,scores:scores,summary:document.getElementById("pp-summary").value.trim()||null,trainingSessionId:this.trainingContext?.trainingSessionId||null});
+      if(status)status.textContent="Guardando valoración con evidencias…";
+      await this.service.saveGuidedEvaluation({
+        playerId:this.playerId,teamSeasonId:this.teamSeasonId,
+        evaluationDate:document.getElementById("pp-date").value,
+        title:document.getElementById("pp-title").value.trim(),
+        context:this.filterContext,scores,
+        summary:document.getElementById("pp-summary").value.trim()||null,
+        trainingSessionId:this.trainingContext?.trainingSessionId||null,
+        assessmentDurationMinutes,protocolVersion:"IQB-RUBRIC-1.0"
+      });
       if(this.trainingContext){sessionStorage.removeItem("iq_passport_training_context");this.trainingContext=null;}
-      this.editorDraft.clear();this.editorMeta={date:null,title:null,summary:""};
-      this.editorOpen=false; await this._load(); this._render();
-    }catch(e){console.error("[PlayerPassportView] save",e);if(status)status.textContent=e.message||"No se pudo guardar.";}
+      this.editorDraft.clear();this.editorMeta={date:null,title:null,summary:"",minutes:""};
+      this.editorOpen=false;await this._load();this._render();
+    }catch(error){
+      console.error("[PlayerPassportView] guided save",error);
+      if(status)status.textContent=error.message||"No se pudo guardar la valoración.";
+    }
   }
 
   _styles() {
     return '<style>'+ 
+      '.pp-section-nav{display:flex;gap:8px;flex-wrap:wrap;padding:8px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:12px;position:relative;z-index:2}.pp-section-tab{min-height:44px;padding:9px 14px;border:1px solid transparent;border-radius:9px;background:transparent;color:#334155;font-weight:800;cursor:pointer}.pp-section-tab.is-active,.pp-section-tab:hover{color:#fff;background:#5b21b6}.pp-quality-grid,.pp-training-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:14px 0}.pp-quality-grid>div,.pp-training-totals>div{padding:14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;display:grid;gap:7px}.pp-quality-grid strong,.pp-training-totals strong{font-size:23px;color:#14243b}.pp-quality-grid small,.pp-training-totals small{font-size:12px;color:#475569}.pp-portfolio-events{display:grid;gap:8px;margin:15px 0}.pp-portfolio-event{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px;border:1px solid #e2e8f0;border-radius:10px;flex-wrap:wrap}.pp-portfolio-event span:first-child{display:grid;gap:4px}.pp-portfolio-event small{color:#64748b}.pp-quality-note{color:#7c2d12;background:#fff7ed;padding:10px;border-radius:8px}.pp-training-volume-grid>div{display:grid;gap:5px}.pp-training-volume-grid>div small{color:#475569}@media(max-width:600px){.pp-section-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.pp-section-tab{text-align:center}.pp-portfolio-event{align-items:flex-start}}'+
+
       '.pp-training-volume{padding:18px;margin:18px 0;border:1px solid #dbe4ee;border-radius:14px;background:#fff;color:#14243b}.pp-training-volume h2{font-size:18px;margin:0 0 8px}.pp-training-volume strong{font-size:24px}.pp-training-volume-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}.pp-training-volume-grid>div{padding:10px;border-radius:10px;background:#f1f5f9;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.pp-training-volume-grid span,.pp-training-volume small,.pp-training-volume p{color:#475569;font-size:12px}'+
       '.pp-page{max-width:1380px;margin:0 auto;padding:18px;display:grid;gap:18px;color:#0f172a;font-family:var(--font-family-base,system-ui,-apple-system,sans-serif)}.pp-page *{box-sizing:border-box}.pp-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.pp-top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.pp-top-action{min-height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;padding:8px 12px;font-weight:800;cursor:pointer}.pp-back{min-height:44px;display:inline-flex;align-items:center;color:#475569;text-decoration:none;font-weight:800}'+
       '.pp-hero{position:relative;overflow:hidden;min-height:410px;border:1px solid #473487;border-radius:22px;padding:28px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.75fr) minmax(250px,.8fr);gap:22px;align-items:center;background:radial-gradient(circle at 52% 40%,rgba(124,58,237,.45),transparent 28%),linear-gradient(135deg,#070914,#11183a 58%,#250a42);color:#fff;box-shadow:0 24px 60px rgba(15,23,42,.22)}.pp-hero:before{content:"";position:absolute;inset:10px;border:1px solid rgba(196,181,253,.27);border-radius:16px}.pp-identity,.pp-art,.pp-badges{position:relative;z-index:1}.pp-eyebrow{display:block;color:#c4b5fd;font-size:10px;font-weight:950;letter-spacing:.14em;margin-bottom:8px}.pp-eyebrow.dark{color:#6d28d9}.pp-identity h1{margin:0;font-size:clamp(34px,5vw,64px);line-height:.92;text-transform:uppercase;letter-spacing:-.04em;color:#fff}.pp-identity>p{color:#ddd6fe}.pp-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.pp-meta span{border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.72);border-radius:999px;padding:7px 9px;font-size:11px;color:#e5e7eb!important}.pp-meta b{color:#c4b5fd!important}.pp-hero-action{margin-top:14px;min-height:46px;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:900;cursor:pointer}.pp-art{min-height:300px;align-self:end;display:flex;justify-content:center;align-items:flex-end}.pp-art img{max-width:100%;max-height:370px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.45))}.pp-silhouette{width:200px;height:260px;border-radius:100px 100px 26px 26px;display:grid;place-items:center;background:linear-gradient(160deg,#7c3aed,#1e293b);font-size:68px;font-weight:950}.pp-watermark{position:absolute;right:-5px;bottom:0;font-size:120px;line-height:.75;font-weight:950;color:rgba(255,255,255,.06);z-index:-1}.pp-badges{display:grid;gap:10px}.pp-shield,.pp-mini{border:1px solid rgba(196,181,253,.32);background:rgba(3,7,22,.64);border-radius:15px;padding:14px}.pp-shield{text-align:center}.pp-shield small,.pp-mini small{display:block;color:#c4b5fd;font-size:9px;font-weight:950;letter-spacing:.1em;margin-bottom:6px}.pp-shield strong{display:block;font-size:40px}.pp-shield strong span{font-size:15px;color:#94a3b8}.pp-shield em{font-style:normal;color:#ddd6fe}.pp-mini span{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding:6px 0;font-size:11px;color:#f1f5f9!important}.pp-mini span:first-of-type{border-top:0}.pp-mini b{color:#ddd6fe!important}.pp-shield strong,.pp-shield em{color:#fff!important}'+

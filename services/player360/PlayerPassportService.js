@@ -68,6 +68,38 @@ export class PlayerPassportService {
     };
   }
 
+  /**
+   * Save a guided rubric assessment atomically with difficulty and evidence.
+   * No client-side rule can substitute the Supabase RPC checks.
+   */
+  async saveGuidedEvaluation({
+    playerId,teamSeasonId,evaluationDate,title,context,scores,summary=null,
+    trainingSessionId=null,assessmentDurationMinutes=null,protocolVersion="IQB-RUBRIC-1.0"
+  }={}){
+    this._assertClient();
+    assertRequired(playerId,"playerId");assertRequired(teamSeasonId,"teamSeasonId");
+    assertRequired(evaluationDate,"evaluationDate");assertRequired(title,"title");
+    const payload=(Array.isArray(scores)?scores:[]).map(item=>({
+      metric_code:String(item.metric_code||"").toUpperCase(),
+      score:Number(item.score),evidence_count:Number(item.evidence_count)||0,
+      difficulty_tier:String(item.difficulty_tier||"").toUpperCase(),
+      confidence:String(item.confidence||"MEDIUM").toUpperCase(),
+      rubric_version:String(item.rubric_version||"1.0"),
+      notes:item.notes||null
+    }));
+    if(!payload.length)throw new Error("PASSPORT_NO_EVALUATED_ATTRIBUTES");
+    const {data,error}=await this.supabase.rpc("iq_v68_save_guided_passport_evaluation",{
+      p_team_season_id:teamSeasonId,p_player_id:playerId,
+      p_evaluation_date:evaluationDate,p_title:title,
+      p_context:String(context||"").toUpperCase(),p_scores:payload,
+      p_summary:summary,p_training_session_id:trainingSessionId,
+      p_assessment_duration_minutes:assessmentDurationMinutes,
+      p_protocol_version:protocolVersion
+    });
+    if(error)throw error;
+    return data;
+  }
+
   async saveEvaluation({
     playerId,
     teamSeasonId,

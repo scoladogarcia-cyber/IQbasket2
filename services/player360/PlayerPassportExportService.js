@@ -29,10 +29,6 @@ function loadImage(src) {
 function xml(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[c]));
 }
-function overallPassportScore(summary={}) {
-  const values=(summary.attributes||[]).map(a=>Number(a?.latest?.score)).filter(v=>Number.isFinite(v)&&v>=1&&v<=5);
-  return values.length ? values.reduce((a,b)=>a+b,0)/values.length : null;
-}
 function dimensionPassportScores(summary={}) {
   const map=new Map();
   for(const attribute of summary.attributes||[]) {
@@ -127,28 +123,55 @@ function baseCardCanvas() {
   ctx.strokeStyle="rgba(196,181,253,.68)";ctx.lineWidth=3;ctx.strokeRect(28,28,1024,1294);
   return {canvas,ctx};
 }
-export function exportPassportWord({player={},team={},summary={},roles=[],asymmetries=[],measurements=[]}={}) {
+export function exportPassportWord({player={},team={},summary={},roles=[],asymmetries=[],measurements=[],training=null,competition=null,quality=null,assessmentTime=null}={}) {
   const name=playerName(player);
   const strengths=(summary.strengths||[]).slice(0,10);
   const limiters=(summary.limiters||[]).slice(0,10);
   const availableRoles=(roles||[]).filter(r=>r.status==="AVAILABLE").slice(0,8);
-  const overall=overallPassportScore(summary);
   const dimensions=dimensionPassportScores(summary);
   const body=[];
   body.push(wParagraph("IQBasket · Pasaporte Digital del Jugador",{bold:true,size:34,color:"4C1D95",after:80}));
   body.push(wParagraph(name,{bold:true,size:30,color:"111827",after:60}));
-  body.push(wParagraph("#"+(player.jersey ?? player.number ?? "—")+" · "+(player.primary_position||player.position||"—")+" · "+(team.team_name||"Equipo")+" · "+(team.season_name||team.season_code||"Temporada"),{size:20,color:"64748B"}));
+  body.push(wParagraph("#"+(player.jersey ?? player.number ?? "—")+" · "+(player.primary_position||player.position||"—")+" · "+(team.team_name||"Equipo")+" · "+(team.category||"Categoría por verificar")+" · "+(team.season_name||team.season_code||"Temporada"),{size:20,color:"64748B"}));
   body.push(wParagraph("Nacimiento: "+(player.birth_date||"—"),{size:18,color:"64748B"}));
   body.push(wParagraph("Resumen",{bold:true,size:28,color:"4C1D95"}));
   body.push(wTable(["Indicador","Valor"],[
     ["Cobertura",(summary.ratedCount||0)+"/"+(summary.totalCount||0)+" ("+Math.round((summary.coverage||0)*100)+"%)"],
-    ["Valor global",overall==null?"NE":overall.toFixed(1)+"/5"],
-    ["Criterio del valor global","Media simple de los atributos actualmente evaluados"]
+    ["Valoraciones con evidencia suficiente",quality?quality.verified+"/"+quality.total:"Sin verificar"],
+    ["Calidad de las valoraciones","La cobertura de notas NO certifica evidencias ni equivale a un valor global"]
   ]));
-  body.push(wParagraph("Valores por dimensión",{bold:true,size:28,color:"4C1D95"}));
+  body.push(wParagraph("Valores descriptivos por dimensión (provisionales)",{bold:true,size:28,color:"4C1D95"}));
   body.push(wTable(["Dimensión","Valor","Cobertura"],dimensions.map(d=>[
     d.name,d.score==null?"NE":d.score.toFixed(1)+"/5",d.rated+"/"+d.total
   ])));
+  if(training){
+    const fmt=v=>Math.floor(Math.max(0,Number(v)||0)/60)+" h "+String(Math.round(Math.max(0,Number(v)||0))%60).padStart(2,"0")+" min";
+    body.push(wParagraph("Formación registrada y acreditada",{bold:true,size:28,color:"4C1D95"}));
+    body.push(wTable(["Indicador","Tiempo"],[
+      ["Asistencia registrada",fmt(training.totalRegistered)],
+      ["Horas acreditadas",fmt(training.totalAccredited)],
+      ["Sin validar",fmt(training.pendingMinutes)]
+    ]));
+    if(training.kinds)body.push(wTable(["Tipo","Registrada","Acreditada"],
+      Object.entries(training.kinds).map(([kind,value])=>[kind,fmt(value.registered),fmt(value.accredited)])));
+  }
+  if(competition){
+    body.push(wParagraph("Competición acreditada",{bold:true,size:28,color:"4C1D95"}));
+    body.push(wTable(["Indicador","Valor"],[
+      ["Partidos finalizados",String(competition.games||0)],
+      ["Minutos registrados",String(competition.minutes||0)],
+      ["Minutos sin registrar (partidos)",String(competition.unknownMinutes||0)],
+      ["Puntos",String(competition.points||0)],
+      ["Asistencias",String(competition.assists||0)]
+    ]));
+  }
+  if(assessmentTime){
+    body.push(wParagraph("Tiempo de evaluación",{bold:true,size:28,color:"4C1D95"}));
+    body.push(wTable(["Indicador","Valor"],[
+      ["Minutos efectivamente documentados",String(assessmentTime.minutes||0)],
+      ["Valoraciones sin duración",String(assessmentTime.unknownEvaluations||0)]
+    ]));
+  }
   body.push(wParagraph("Roles funcionales",{bold:true,size:28,color:"4C1D95"}));
   body.push(wTable(["Rol","Valor"],availableRoles.length?availableRoles.map(r=>[r.label,Number(r.score).toFixed(1)+"/5"]):[["Datos insuficientes","—"]]));
   body.push(wParagraph("Fortalezas",{bold:true,size:28,color:"4C1D95"}));
@@ -160,8 +183,8 @@ export function exportPassportWord({player={},team={},summary={},roles=[],asymme
   for(const attribute of summary.attributes||[]){const key=attribute.dimension||"Otros";if(!byDimension.has(key))byDimension.set(key,[]);byDimension.get(key).push(attribute);}
   for(const [dimension,items] of byDimension.entries()){
     body.push(wParagraph(dimension,{bold:true,size:23,color:"6D28D9"}));
-    body.push(wTable(["Atributo","Valor","Contexto","Evidencias","Confianza"],items.map(a=>[
-      a.name,String(a.latest?.score??"NE"),a.latest?.context||"—",String(a.latest?.evidence_count??0),a.latest?.confidence||"—"
+    body.push(wTable(["Atributo","Valor","Dificultad","Contexto","Observaciones","Confianza"],items.map(a=>[
+      a.name,String(a.latest?.score??"NE"),a.latest?.metadata?.difficulty_tier||"Sin documentar",a.latest?.context||"—",String(a.latest?.evidence_count??0),a.latest?.confidence||"—"
     ])));
   }
   body.push(wParagraph("Asimetrías D/I",{bold:true,size:28,color:"4C1D95"}));
@@ -172,7 +195,7 @@ export function exportPassportWord({player={},team={},summary={},roles=[],asymme
   body.push(wTable(["Prueba","Valor","Fecha"],(measurements||[]).length?(measurements||[]).map(m=>[
     m.test_code||"—",String(m.value??"")+" "+String(m.unit||""),String(m.measured_at||"").slice(0,10)
   ]):[["Sin mediciones registradas","—","—"]]));
-  body.push(wParagraph("Escala observacional 1–5. NE = no evaluado. El valor global mostrado es una media descriptiva de los atributos evaluados, no una ponderación automática.",{size:17,color:"64748B"}));
+  body.push(wParagraph("Escala observacional contextual 1–5. NE = no evaluado. Dificultad D1–D5 independiente de la categoría. No existe OVR global validado. Las notas históricas sin observaciones suficientes son provisionales.",{size:17,color:"64748B"}));
 
   const documentXml="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>"+body.join("")+"<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"900\" w:right=\"900\" w:bottom=\"900\" w:left=\"900\" w:header=\"450\" w:footer=\"450\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>";
   const contentTypes="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>";
@@ -186,11 +209,11 @@ export function exportPassportWord({player={},team={},summary={},roles=[],asymme
   ]);
   download(new Blob([zip],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}),"IQBasket_Pasaporte_"+filename(name)+".docx");
 }
-async function renderIdentityCard({player={},team={},summary={},roles=[]}={}) {
-  const {canvas,ctx}=baseCardCanvas(), name=playerName(player).toUpperCase(), overall=overallPassportScore(summary);
+async function renderIdentityCard({player={},team={},summary={},roles=[],quality=null}={}) {
+  const {canvas,ctx}=baseCardCanvas(), name=playerName(player).toUpperCase();
   ctx.fillStyle="#c4b5fd";ctx.font="800 24px Arial";ctx.fillText("IQBASKET · PLAYER PASSPORT",64,92);
   ctx.fillStyle="#fff";drawTextFit(ctx,name,64,160,950,62,38,"900");
-  ctx.fillStyle="#ddd6fe";ctx.font="700 24px Arial";ctx.fillText("#"+(player.jersey??player.number??"—")+" · "+(player.primary_position||player.position||"Jugador")+" · "+(team.team_name||"Equipo"),64,205);
+  ctx.fillStyle="#ddd6fe";ctx.font="700 24px Arial";ctx.fillText("#"+(player.jersey??player.number??"—")+" · "+(player.primary_position||player.position||"Jugador")+" · "+(team.category||"Categoría N/D"),64,205);
 
   const photo=player.photo_url||player.avatar_url||player.image_url||"";
   ctx.save();roundedRect(ctx,90,255,900,665,34);ctx.clip();
@@ -200,9 +223,9 @@ async function renderIdentityCard({player={},team={},summary={},roles=[]}={}) {
   ctx.restore();ctx.strokeStyle="rgba(196,181,253,.72)";ctx.lineWidth=3;roundedRect(ctx,90,255,900,665,34);ctx.stroke();
 
   ctx.fillStyle="rgba(2,6,23,.84)";roundedRect(ctx,90,955,900,280,28);ctx.fill();
-  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("VALOR GLOBAL",130,1010);
-  ctx.fillStyle="#fff";ctx.font="900 92px Arial";ctx.fillText(overall==null?"NE":overall.toFixed(1)+"/5",130,1115);
-  ctx.fillStyle="#cbd5e1";ctx.font="600 20px Arial";ctx.fillText("Media descriptiva de "+(summary.ratedCount||0)+" atributos evaluados · cobertura "+Math.round((summary.coverage||0)*100)+"%",130,1160);
+  ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("ATRIBUTOS CON EVIDENCIA REGISTRADA",130,1010);
+  ctx.fillStyle="#fff";ctx.font="900 92px Arial";ctx.fillText(quality?String(quality.verified)+"/"+String(quality.total):"N/D",130,1115);
+  ctx.fillStyle="#cbd5e1";ctx.font="600 20px Arial";ctx.fillText("Atributos puntuados: "+(summary.ratedCount||0)+"/"+(summary.totalCount||0)+" · no equivale a un OVR global",130,1160);
   const firstRole=(roles||[]).find(r=>r.status==="AVAILABLE");
   if(firstRole){ctx.fillStyle="#ddd6fe";ctx.font="700 22px Arial";ctx.fillText("Rol destacado · "+firstRole.label+" "+Number(firstRole.score).toFixed(1)+"/5",130,1205);}
   ctx.fillStyle="#94a3b8";ctx.font="600 17px Arial";ctx.fillText("Escala 1–5 · NE = no evaluado",64,1290);
@@ -212,10 +235,10 @@ async function renderValuesCard({player={},team={},summary={}}={}) {
   const {canvas,ctx}=baseCardCanvas(), name=playerName(player).toUpperCase(), dimensions=dimensionPassportScores(summary);
   ctx.fillStyle="#c4b5fd";ctx.font="800 24px Arial";ctx.fillText("IQBASKET · PLAYER PASSPORT",64,92);
   ctx.fillStyle="#fff";drawTextFit(ctx,name,64,160,950,58,36,"900");
-  ctx.fillStyle="#ddd6fe";ctx.font="700 24px Arial";ctx.fillText("VALORES DEL PASAPORTE · "+(team.season_name||team.season_code||"Temporada"),64,205);
+  ctx.fillStyle="#ddd6fe";ctx.font="700 24px Arial";ctx.fillText("ATRIBUTOS · "+(team.category||"Categoría N/D")+" · "+(team.season_name||team.season_code||"Temporada"),64,205);
 
   ctx.fillStyle="rgba(2,6,23,.82)";roundedRect(ctx,64,245,952,700,28);ctx.fill();
-  ctx.fillStyle="#c4b5fd";ctx.font="800 24px Arial";ctx.fillText("VALORES POR DIMENSIÓN",98,300);
+  ctx.fillStyle="#c4b5fd";ctx.font="800 24px Arial";ctx.fillText("MEDIAS DESCRIPTIVAS (NO OVR)",98,300);
   let y=360;
   for(const d of dimensions){
     ctx.fillStyle="#f8fafc";ctx.font="800 25px Arial";ctx.fillText(d.name,98,y);
@@ -230,7 +253,7 @@ async function renderValuesCard({player={},team={},summary={}}={}) {
   ctx.fillStyle="#fff";ctx.font="700 21px Arial";strengths.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1045+i*36));
   ctx.fillStyle="#c4b5fd";ctx.font="800 22px Arial";ctx.fillText("PRIORIDADES DE DESARROLLO",98,1165);
   ctx.fillStyle="#fff";ctx.font="700 21px Arial";limiters.forEach((x,i)=>ctx.fillText("• "+x.name+"  "+x.latest.score+"/5",98,1205+i*34));
-  ctx.fillStyle="#94a3b8";ctx.font="600 17px Arial";ctx.fillText("Perfil longitudinal · escala 1–5 · valores calculados con la valoración más reciente de cada atributo",64,1305);
+  ctx.fillStyle="#94a3b8";ctx.font="600 17px Arial";ctx.fillText("Escala contextual 1–5 · dificultad y evidencia documentadas por separado",64,1305);
   return canvas;
 }
 export async function exportPassportCardPng(payload={}) {
