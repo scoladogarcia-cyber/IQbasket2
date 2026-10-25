@@ -29,7 +29,7 @@ export class FamilyWorkspaceV30View extends FamilyWorkspaceView {
         playerId: this.playerId,
         teamSeasonId: selected.team_season_id || null
       });
-      const target = container.querySelector(".family-player-scope") || container.querySelector(".family-hero");
+      const target = container.querySelector(".family-team-anchor") || container.querySelector(".family-player-scope") || container.querySelector(".family-hero");
       if (target && this.teamSnapshot) target.insertAdjacentHTML("afterend", this._teamSection(this.teamSnapshot));
     } catch (error) {
       console.warn("[FamilyWorkspaceV30] Team snapshot no disponible:", error?.message || error);
