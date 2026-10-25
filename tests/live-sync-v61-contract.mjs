@@ -92,7 +92,7 @@ assert.equal(
   assert.equal(calls.length, 1);
   assert.equal(calls[0].clientOperationId, "op-3");
   assert.equal(calls[0].baseRevision, 0);
-  assert.equal(store.clearOutboxCalls, 1);
+  assert.equal(store.clearOutboxCalls, 0, "La cola se compacta sin borrar escrituras nuevas");
   assert.equal(await store.pendingCount(gameId), 0);
 }
 
@@ -155,7 +155,7 @@ assert.equal(
   assert.equal(calls.length, 1);
   assert.equal(calls[0].clientOperationId, "op-3");
   assert.equal(calls[0].baseRevision, 2);
-  assert.equal(store.clearOutboxCalls, 1);
+  assert.equal(store.clearOutboxCalls, 0, "La cola se compacta sin borrar escrituras nuevas");
 }
 
 // If the server already contains the exact final snapshot, recover() clears

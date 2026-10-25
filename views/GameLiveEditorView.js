@@ -293,6 +293,16 @@ export class GameLiveEditorView {
     if (!container) return;
 
     this.teamId = teamId || DataStore.getActiveTeamId();
+    // El scorer V62 escribe por RPC; la caché del listado puede conservar
+    // el 0-0 inicial aun cuando Supabase ya tiene el resultado completo.
+    // Refrescar una sola vez al entrar en Partidos (no al cambiar filtros).
+    if (!gameId && !this.isEditing && typeof navigator !== "undefined" && navigator.onLine !== false) {
+      try {
+        await DataStore.init(this.teamId, true);
+      } catch (error) {
+        console.warn("[Partidos] No se pudo actualizar el marcador; usando datos locales.", error);
+      }
+    }
     this.players = DataStore.getPlayersEligibleOnDate?.(
       this.teamId,
       new Date().toISOString().slice(0, 10)

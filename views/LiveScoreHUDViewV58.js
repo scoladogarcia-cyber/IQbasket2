@@ -160,6 +160,19 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       return {synced:false,queued:true,pending:this.livePendingCount,conflict:true,error:new Error(this.liveSyncError)};
     }
 
+    // A newly opened or recovered tab may not own the server lease yet.
+    // Leave events durably queued; never send a write that the backend must reject.
+    const writer=this.liveWriterLeaseController;
+    if(writer && writer.supported !== false &&
+        (!writer.ownsLease || !writer.service?.getStoredToken?.(this.gameId))){
+      const pending=await this._liveSync().offlineStore.pendingCount(this.gameId);
+      this.livePendingCount=pending;
+      this.liveSyncState="queued";
+      this.liveSyncError="Esperando turno de escritura; las jugadas están guardadas localmente.";
+      this._updateSyncStatusDom();
+      return {synced:false,queued:true,pending,waitingForLease:true,error:null};
+    }
+
     this.liveSyncState="syncing";
     this._updateSyncStatusDom();
     const result=await this._liveSync().flush(this.gameId);
@@ -178,12 +191,20 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       this.liveSyncError=String(result?.error?.message || result?.error || "");
     }
     this._updateSyncStatusDom();
+    // A newer snapshot may have been staged while the previous write was in
+    // flight. Retry only that pending local queue, never a stale full snapshot.
+    if(result?.pending > 0 && !result?.conflict && !result?.error && writer?.ownsLease){
+      globalThis.setTimeout?.(() => this._flushLiveSync().catch(() => {}), 300);
+    }
     return result;
   }
 
   _syncStatusText() {
     if(this.liveSyncState==="conflict") return `Conflicto · ${this.livePendingCount} pendientes protegidos`;
-    if(this.liveSyncState==="queued") return `Sin cobertura · ${this.livePendingCount || "cambios"} pendientes`;
+    if(this.liveSyncState==="queued"){
+      if(this.liveSyncError?.includes("turno de escritura")) return `Guardado local · esperando turno de escritura`;
+      return `Sin sincronizar · ${this.livePendingCount || "cambios"} pendientes`;
+    }
     if(this.liveSyncState==="pending") return `Guardando · ${Math.max(1,this.livePendingCount)} pendiente`;
     return super._syncStatusText();
   }
