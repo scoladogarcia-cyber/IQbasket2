@@ -15,12 +15,17 @@ import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/fami
 import { PlayerDataSubmissionService } from "../../services/player360/PlayerDataSubmissionService.js";
 import { PlayerSubmissionPanel } from "../player360/PlayerSubmissionPanel.js";
 import { Permission } from "../../security/PermissionService.js";
+import { displayObserved } from "../../domain/stats/StatQualityV71.js";
+import { buildFamilyHomeV70, renderFamilyHomeV70 } from "./FamilyHomeV70.js";
+import { bindFamilyMotivationV74 } from "./FamilyMotivationReflectionV74.js";
+import { I18n } from "../../services/I18nService.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+// Share the canonical recorded-value formatter: unknown is N/D, observed zero is 0.
+const number = value => displayObserved(value,{digits:1});
 
 export class FamilyWorkspaceView {
   constructor(supabaseClient = null, authController = null) {
@@ -30,7 +35,7 @@ export class FamilyWorkspaceView {
     this.submissionService = new PlayerDataSubmissionService(supabaseClient);
     this.contributionPanel = new PlayerSubmissionPanel({ service: this.submissionService });
     this.playerId = null;
-    this.state = { players: [], product: null, passport: null, passportBrief: null, passportBriefError: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, support: null, growth: null, submissionContext: null, contributionsAvailable: false, error: null };
+    this.state = { players: [], product: null, passport: null, player360: null, developmentContext: null, developmentCycle: null, weeklyPlan: null, support: null, growth: null, submissionContext: null, contributionsAvailable: false, error: null };
   }
 
   async render(containerId = "dashboard-content-area", routeParams = {}) {
@@ -51,8 +56,6 @@ export class FamilyWorkspaceView {
       if (!this.playerId) {
         this.state.product = null;
         this.state.passport = null;
-        this.state.passportBrief = null;
-        this.state.passportBriefError = null;
         this.state.player360 = null;
         this.state.developmentContext = null;
         this.state.developmentCycle = null;
@@ -73,16 +76,6 @@ export class FamilyWorkspaceView {
       ]);
       this.state.product = product || {};
       this.state.passport = passport || {};
-      // The basic family workspace remains usable if the optional V70 read fails.
-      // Missing data is always shown as unavailable, never as a fabricated zero.
-      this.state.passportBrief = null;
-      this.state.passportBriefError = null;
-      try {
-        this.state.passportBrief = await this.service.getPassportBrief(this.playerId);
-      } catch (briefError) {
-        this.state.passportBriefError = "El resumen del pasaporte no está disponible ahora.";
-        console.warn("[FamilyWorkspaceView] Family passport brief unavailable", briefError?.code || briefError?.message);
-      }
       this.state.player360 = player360 || {};
       this.state.developmentContext = developmentContext || {};
       this.state.developmentCycle = developmentCycle || {};
@@ -143,6 +136,7 @@ export class FamilyWorkspaceView {
       story, developmentContext: this.state.developmentContext, developmentCycle, weeklyPlan
     });
 
+    const locale=I18n.getLocale?.()||"es";
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
         <div><p class="family-eyebrow">IQBasket Family</p>
@@ -153,7 +147,12 @@ export class FamilyWorkspaceView {
           <small>${product.subject_covered ? "Jugador cubierto" : "Cobertura pendiente"}</small></div>
       </header>
       ${this._playerSwitcher()}
-      ${this._passportFamilyBrief()}
+      ${renderFamilyHomeV70(buildFamilyHomeV70({ passport, growth, story, plan:weeklyPlan, cycleProjection:developmentCycle, playerId:this.playerId, selectedPlayer:this.state.players.find(p=>String(p.player_id)===String(this.playerId)), contributionsAvailable:this.state.contributionsAvailable,locale }))}
+      <div data-family-passport-brief role="status" aria-live="polite" aria-label="Resumen del pasaporte">
+        <p>Consultando su historial...</p>
+      </div>
+      <details class="family-deep-dive" data-family-deep-dive><summary>Explorar estadísticas, entrenamientos, retos y análisis avanzados</summary>
+      <div class="family-team-anchor" aria-hidden="true"></div>
       ${this._supportGuide(support)}
       ${this._familyContributions()}
       <div class="family-value-strip" aria-label="Recorrido de valor">
@@ -167,70 +166,10 @@ export class FamilyWorkspaceView {
       ${this._career(passport.career || [])}
       ${this._conversionCard(growth)}
       ${this._aiProductPreview(product)}
+      </details>
       ${this._claimPanel()}
     </section>`;
   }
-  /**
-   * Read-only, plain-language passport overview for verified family accounts.
-   * Only display groups explicitly returned by the independently gated V70 RPC.
-   * A missing/denied group is NEVER represented with zero values.
-   */
-  _passportFamilyBrief() {
-    const data=this.state.passportBrief;
-    if (!data) return `<section class="family-card family-passport-brief" aria-label="Pasaporte familiar">
-      <div class="family-card-head"><div><p class="family-eyebrow">Pasaporte del jugador</p>
-        <h2>Su historia deportiva, en un vistazo</h2></div></div>
-      <p role="status">${escapeHtml(this.state.passportBriefError || "No hay un resumen disponible para este jugador.")}</p>
-    </section>`;
-    const fmtMinutes=value=>{
-      const minutes=Number(value);
-      if(!Number.isFinite(minutes)||minutes<0)return "Sin registrar";
-      const n=Math.round(minutes);
-      return `${Math.floor(n/60)} h ${String(n%60).padStart(2,"0")} min`;
-    };
-    const category=String(data.category||"Categoría por confirmar");
-    const scope=[data.team_name,data.season_name].filter(Boolean).join(" · ");
-    const training=data.training_access && data.training ? data.training : null;
-    const evaluation=data.evaluation_access && data.evaluation_quality ? data.evaluation_quality : null;
-    const trainingHtml=training ? `
-      <div class="family-passport-numbers" aria-label="Horas de entrenamiento">
-        <div><small>Tiempo registrado</small><strong>${escapeHtml(fmtMinutes(training.recorded_minutes))}</strong>
-          <span>Asistencia anotada en entrenamientos</span></div>
-        <div><small>Tiempo confirmado</small><strong>${escapeHtml(fmtMinutes(training.accredited_minutes))}</strong>
-          <span>Entrenamientos validados</span></div>
-        <div><small>Pendiente de confirmar</small><strong>${escapeHtml(fmtMinutes(training.pending_minutes))}</strong>
-          <span>Debe revisarlo el entrenador</span></div>
-      </div>
-      ${Number(training.pending_sessions)>0?`<p class="family-passport-note">Hay ${escapeHtml(training.pending_sessions)} sesiones pendientes de validación. No se han perdido esas horas.</p>`:""}
-      ${Number(training.without_minutes)>0?`<p class="family-passport-note">Hay ${escapeHtml(training.without_minutes)} asistencias sin minutos documentados.</p>`:""}
-      ${Number(training.classification_to_review)>0?`<p class="family-passport-note">Algunos entrenamientos tienen su tipo pendiente de revisión.</p>`:""}`
-      : `<p class="family-passport-muted">Los minutos de entrenamiento estarán disponibles cuando este jugador tenga habilitado su historial deportivo.</p>`;
-    const qualityHtml=evaluation ?
-      `<p><strong>${escapeHtml(evaluation.with_documented_observations)} de ${escapeHtml(evaluation.attributes_rated)}</strong> habilidades valoradas tienen observaciones y dificultad registradas.
-      ${Number(evaluation.pending_documentation)>0?`Otras ${escapeHtml(evaluation.pending_documentation)} valoraciones aún necesitan documentación.`:""}
-      No es una nota global ni una certificación científica.</p>`
-      : `<p class="family-passport-muted">Las valoraciones técnicas detalladas solo se muestran si están compartidas con el jugador y su plan permite consultarlas.</p>`;
-    return `<section class="family-card family-passport-brief" aria-label="Pasaporte familiar" data-family-passport-brief>
-      <div class="family-card-head"><div>
-        <p class="family-eyebrow">El pasaporte es suyo, no de un equipo</p>
-        <h2>Su recorrido deportivo</h2>
-        <p>Datos sencillos para acompañar su evolución, sin convertirla en un ranking.</p>
-      </div></div>
-      <div class="family-passport-context">
-        <span><strong>Categoría</strong> ${escapeHtml(category)}</span>
-        ${scope?`<span><strong>Equipo y temporada</strong> ${escapeHtml(scope)}</span>`:""}
-      </div>
-      ${trainingHtml}
-      <details class="family-passport-method">
-        <summary>¿Qué significa cada dato?</summary>
-        <p><strong>Registrado:</strong> tiempo de asistencia anotado. <strong>Confirmado:</strong> horas de sesiones validadas.
-        <strong>Pendiente:</strong> tiempo anotado que aún necesita revisión.</p>
-        <p>El pasaporte acompaña al jugador al cambiar de club. Las evaluaciones privadas nunca se comparten automáticamente.</p>
-      </details>
-      <div class="family-passport-quality"><h3>¿Cómo de fiables son las valoraciones?</h3>${qualityHtml}</div>
-    </section>`;
-  }
-
   _playerSwitcher() {
     const cards = this.state.players.map(row => {
       const label = `${row.first_name || ""} ${row.last_name || ""}`.trim() || "Jugador";
@@ -470,6 +409,7 @@ export class FamilyWorkspaceView {
   }
 
   _bind(container) {
+    bindFamilyMotivationV74(container,I18n.getLocale?.()||"es");
     container.querySelector("[data-family-retry]")?.addEventListener("click", () => this.render(container));
     container.querySelectorAll("[data-family-player-link]").forEach(link => {
       link.addEventListener("click", () => {
@@ -537,24 +477,6 @@ export class FamilyWorkspaceView {
       .family-player-scope{display:grid;gap:12px;margin:14px 0;padding:18px;border:1px solid #dbeafe;border-radius:18px;background:#f8fbff}.family-player-scope h2{margin:3px 0 5px}.family-player-scope p{margin:0;color:#64748b;font-size:13px}.family-player-chips{display:flex;gap:9px;overflow-x:auto;padding:2px 0}.family-player-chip{display:grid;gap:3px;min-width:180px;padding:11px 13px;border:1px solid #cbd5e1;border-radius:13px;background:#fff;color:#0f172a;text-decoration:none}.family-player-chip span{font-size:11px;color:#64748b}.family-player-chip.active{border-color:#2563eb;box-shadow:0 0 0 2px #dbeafe}.family-link-card input{min-height:44px;border:1px solid #cbd5e1;border-radius:10px;padding:8px 12px;background:#fff}
       .family-support{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border-color:#bfdbfe}.family-support-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.family-support-grid article{padding:15px;border:1px solid #dbeafe;border-radius:14px;background:#fff}.family-support-grid span{font-size:11px;font-weight:900;text-transform:uppercase;color:#2563eb}.family-support-grid ul,.family-support-grid ol{margin:8px 0 0;padding-left:20px}.family-support-grid li{margin:7px 0;color:#334155;font-size:14px}.family-support-question p{font-size:17px;font-weight:800;color:#0f172a}.family-contributions{background:#f8fafc}.family-contributions>.family-card-head p{margin:4px 0;color:#64748b;font-size:13px}.family-wellness-link{display:inline-flex;align-items:center;min-height:44px;margin:4px 0 10px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:11px;background:#eff6ff;color:#1d4ed8;font-weight:850;text-decoration:none}.family-contributions .psub-panel{margin-top:4px}.family-evidence-summary{margin:20px 0}.family-evidence-summary h2{margin:3px 0}.family-evidence-summary p{margin:4px 0;color:#64748b;font-size:13px}.family-career-card summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center}.family-career-card summary::-webkit-details-marker{display:none}.family-career-content{margin-top:10px}
       .family-value-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.family-value-strip span{padding:10px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;font-size:12px;font-weight:800;text-align:center}
-      .family-passport-brief{border-color:#bfdbfe;background:linear-gradient(155deg,#ffffff,#f8fbff)}
-      .family-passport-brief .family-card-head p{color:#475569;margin:5px 0}
-      .family-passport-context{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
-      .family-passport-context>span{display:grid;gap:3px;padding:11px 13px;border:1px solid #dbeafe;border-radius:12px;background:#fff;font-size:13px;color:#334155}
-      .family-passport-context strong{font-size:11px;color:#64748b}
-      .family-passport-numbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-      .family-passport-numbers>div{display:grid;gap:6px;padding:14px;border-radius:13px;background:#f1f5f9}
-      .family-passport-numbers small{font-weight:800;color:#475569}
-      .family-passport-numbers strong{font-size:clamp(18px,2.6vw,27px);font-variant-numeric:tabular-nums}
-      .family-passport-numbers span,.family-passport-method p{font-size:12px;color:#64748b}
-      .family-passport-note{font-size:13px;color:#92400e;margin:8px 0}
-      .family-passport-muted{font-size:13px;color:#475569}
-      .family-passport-method{margin:14px 0;padding:11px 13px;border-radius:12px;background:#eff6ff}
-      .family-passport-method summary{font-weight:800;cursor:pointer}
-      .family-passport-quality{padding-top:13px;margin-top:12px;border-top:1px solid #dbeafe}
-      .family-passport-quality h3{font-size:15px}
-      .family-passport-quality p{font-size:13px;color:#334155}
-      @media(max-width:650px){.family-passport-numbers{grid-template-columns:1fr}.family-passport-numbers>div{padding:12px}.family-passport-context{display:grid}}
       .family-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.family-kpi{padding:16px;border-radius:16px;background:#0f172a;color:#fff;display:grid}.family-kpi strong{font-size:24px}.family-kpi span{font-size:12px;color:#cbd5e1}
       .family-card{padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;margin:14px 0}.family-card h2{margin:3px 0 10px}.family-card-head{display:flex;justify-content:space-between;align-items:flex-start}
       .family-career-row{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid #f1f5f9}.family-career-row span{display:block;color:#64748b;font-size:13px}.family-career-numbers{display:grid;grid-template-columns:auto auto;gap:1px 8px;text-align:right}.family-career-numbers small{color:#64748b}
