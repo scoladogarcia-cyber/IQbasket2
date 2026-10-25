@@ -5,6 +5,7 @@ on:
     paths:
       - "features/game-live/LiveWriterLeaseV43Controller.js"
       - "services/games/LiveCaptureSyncService.js"
+      - "services/games/LiveOfflineStore.js"
       - "views/LiveScoreHUDViewV58.js"
       - "tests/live-lease-sync-race-v69.mjs"
       - "tests/live-sync-v61-contract.mjs"
@@ -16,6 +17,7 @@ on:
     paths:
       - "features/game-live/LiveWriterLeaseV43Controller.js"
       - "services/games/LiveCaptureSyncService.js"
+      - "services/games/LiveOfflineStore.js"
       - "views/LiveScoreHUDViewV58.js"
       - "tests/live-lease-sync-race-v69.mjs"
       - "tests/live-sync-v61-contract.mjs"
