@@ -2,14 +2,17 @@
 -- Read-only. Never alters scores, sessions or access to other players.
 -- Independently gates relationship AND commercial feature entitlement.
 begin;
-create or replace function public.iq_v70_family_passport_brief(p_player_id uuid)
-returns jsonb
-language plpgsql stable security definer set search_path = ''
-as $function$
+CREATE OR REPLACE FUNCTION public.iq_v70_family_passport_brief(p_player_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
 declare
  v_profile jsonb;
  v_history jsonb;
  v_advanced jsonb;
+ v_timeline jsonb;
  v_has_history boolean;
  v_has_advanced boolean;
  v_category text;
@@ -35,8 +38,10 @@ begin
    raise exception 'FAMILY_PROFILE_NOT_INCLUDED' using errcode='42501';
  end if;
  v_history:=public.iq_saas_entitlement_check('PLAYER',p_player_id,null,'GAME_HISTORY',1);
+ v_timeline:=public.iq_saas_entitlement_check('PLAYER',p_player_id,null,'BASIC_TIMELINE',1);
  v_advanced:=public.iq_saas_entitlement_check('PLAYER',p_player_id,null,'PLAYER_PASSPORT',1);
- v_has_history:=public.iq_v3_is_global_superadmin() or coalesce((v_history->>'allowed')::boolean,false);
+ v_has_history:=public.iq_v3_is_global_superadmin() or coalesce((v_history->>'allowed')::boolean,false)
+   or coalesce((v_timeline->>'allowed')::boolean,false);
  v_has_advanced:=public.iq_v3_is_global_superadmin() or coalesce((v_advanced->>'allowed')::boolean,false);
 
  select t.category,t.name,sc.name
@@ -53,7 +58,8 @@ begin
  limit 1;
 
  if v_has_history then
-   select count(*)::integer,
+   select count(*) filter(where ts.session_date<=current_date
+       and tp.attendance_status in ('PRESENT','PARTIAL'))::integer,
      coalesce(sum(case when tp.attendance_status in ('PRESENT','PARTIAL')
        and ts.session_date <= current_date and tp.participated_minutes is not null
        then greatest(0,least(tp.participated_minutes,coalesce(ts.duration_minutes,0)))
@@ -67,7 +73,9 @@ begin
         and ts.session_date<=current_date
         and tp.attendance_status in ('PRESENT','PARTIAL')
         and coalesce(tp.participated_minutes,0)>0)::integer,
-     count(*) filter(where coalesce(ts.metadata->>'session_kind_review','NOT_REVIEWED')
+     count(*) filter(where ts.session_date<=current_date
+        and tp.attendance_status in ('PRESENT','PARTIAL')
+        and coalesce(ts.metadata->>'session_kind_review','NOT_REVIEWED')
         in ('PENDING','NOT_REVIEWED'))::integer,
      count(*) filter(where tp.attendance_status in ('PRESENT','PARTIAL')
        and ts.session_date<=current_date and tp.participated_minutes is null)::integer
@@ -81,24 +89,25 @@ begin
    with ranked as (
      select distinct on (upper(s.metric_code))
        s.metric_code,s.evidence_count,s.metadata,
-       s.rubric_version,e.evaluation_date,e.created_at
+       e.evaluation_date,e.created_at
      from public.player_evaluation_scores s
      join public.player_evaluations e on e.id=s.evaluation_id
      where e.player_id=p_player_id
-       and e.status<>'ARCHIVED'
+       and upper(coalesce(e.status,''))<>'ARCHIVED'
+       and s.score is not null
        and e.share_with_player is true
        and coalesce(e.is_private,false)=false
        and iq_private.iq_v4_score_is_player_passport(s.metric_code)
      order by upper(s.metric_code),e.evaluation_date desc,e.created_at desc,s.id desc
    )
    select count(*)::integer,
-       count(*) filter(where r.metric_code is not null
-         and coalesce(ranked.evidence_count,0)>=r.minimum_observations
+       count(*) filter(where coalesce(ranked.evidence_count,0)>=r.minimum_observations
          and upper(coalesce(ranked.metadata->>'difficulty_tier','')) in ('D1','D2','D3','D4','D5')
-         and ranked.rubric_version=r.rubric_version)::integer
+         and ranked.metadata->>'protocol_version'='IQB-RUBRIC-1.0'
+         and ranked.metadata->>'minimum_evidence_met'='true')::integer
    into v_rated,v_documented
    from ranked
-   left join iq_private.iq_passport_attribute_rules_v68 r
+   join iq_private.iq_passport_attribute_rules_v68 r
      on r.metric_code=upper(ranked.metric_code);
    v_unverified:=greatest(0,v_rated-v_documented);
  end if;
@@ -121,7 +130,9 @@ begin
    'source','IQB_FAMILY_RBAC_ENTITLEMENTS_V70'
  );
 end
-$function$;
+$function$
+;
+
 revoke all on function public.iq_v70_family_passport_brief(uuid) from public,anon;
 grant execute on function public.iq_v70_family_passport_brief(uuid) to authenticated;
 comment on function public.iq_v70_family_passport_brief(uuid)
