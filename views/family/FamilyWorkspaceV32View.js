@@ -71,7 +71,8 @@ export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
       weeklyPlan,
       developmentCycle
     );
-    return `<div data-family-passport-brief role="status" aria-live="polite" aria-label="Resumen del pasaporte"><p>Consultando su historial...</p></div>${dashboard}${this._basicTrendCharts()}`;
+    // A single visible family-owned passport slot is supplied by the family shell.
+    return `${dashboard}${this._basicTrendCharts()}`;
   }
 
   _basicTrendCharts() {
