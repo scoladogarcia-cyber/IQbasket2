@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {parseBoxScoreCsv,serializeBoxScoreCsv} from "../services/reports/BoxScoreExchangeV53.js";
+import {parseBoxScoreCsv} from "../services/reports/BoxScoreExchangeV53.js";
 import {exportPassportAssessmentCsvV73,previewPassportAssessmentCsvV73,PASSPORT_CSV_HEADERS_V73} from "../services/player360/PassportAssessmentCsvV73.js";
 
 const attributes=Array.from({length:69},(_,i)=>({
@@ -14,7 +14,8 @@ assert.deepEqual(matrix[0],PASSPORT_CSV_HEADERS_V73);
 assert.equal(matrix[1][2],""); // Template never copies a previous 1-5 as new evidence.
 assert.equal(matrix[1][7],"3"); // Baseline can be seen without editing.
 matrix[1][2]="4";matrix[1][3]="D2";matrix[1][4]="5";matrix[1][5]="HIGH";
-const csv=serializeBoxScoreCsv(matrix);
+const encodeMatrix=rows=>rows.map(row=>row.map(value=>'"' + String(value??"").replace(/"/g,'""') + '"').join(",")).join("\r\n")+"\r\n";
+const csv=encodeMatrix(matrix);
 const review=previewPassportAssessmentCsvV73(csv,{catalog,context:"P5"});
 assert.equal(review.updated,1);
 assert.equal(review.unchanged,68);
@@ -23,11 +24,11 @@ assert.deepEqual(review.drafts.get("IQ1"),{
 });
 assert.throws(()=>previewPassportAssessmentCsvV73(exportPassportAssessmentCsvV73(catalog,latest),{catalog}),/No has introducido/);
 matrix[1][2]="0";
-assert.throws(()=>previewPassportAssessmentCsvV73(serializeBoxScoreCsv(matrix),{catalog}),/fuera de 1–5/);
+assert.throws(()=>previewPassportAssessmentCsvV73(encodeMatrix(matrix),{catalog}),/fuera de 1–5/);
 matrix[1][2]="4";matrix[1][4]="1";
-assert.throws(()=>previewPassportAssessmentCsvV73(serializeBoxScoreCsv(matrix),{catalog}),/observaciones/);
+assert.throws(()=>previewPassportAssessmentCsvV73(encodeMatrix(matrix),{catalog}),/observaciones/);
 matrix[1][4]="5";matrix[1][0]="FORGED";
-assert.throws(()=>previewPassportAssessmentCsvV73(serializeBoxScoreCsv(matrix),{catalog}),/ajeno/);
+assert.throws(()=>previewPassportAssessmentCsvV73(encodeMatrix(matrix),{catalog}),/ajeno/);
 const view=fs.readFileSync(new URL("../views/player360/passport/PlayerPassportView.js",import.meta.url),"utf8");
 assert.match(view,/exportPassportAssessmentCsvV73/);
 assert.match(view,/previewPassportAssessmentCsvV73/);
