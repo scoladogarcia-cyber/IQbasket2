@@ -152,15 +152,8 @@ async function installFixture(page) {
       data_status: window.__box.frozen ? "FROZEN" : "ACTIVE"
     });
 
-    DataStore.saveGameAndStats = async (gameData, statsList) => {
-      window.__box.calls.push({
-        gameData: structuredClone(gameData),
-        statsList: structuredClone(statsList)
-      });
-      statsByGame[gameData.id] = statsList.map(row => ({ ...row }));
-      const index = games.findIndex(game => game.id === gameData.id);
-      if (index >= 0) games[index] = { ...games[index], ...structuredClone(gameData) };
-      return true;
+    DataStore.saveGameAndStats = async () => {
+      throw new Error("BoxScore must not perform a full game rewrite");
     };
 
     const makeAuth = role => {
@@ -189,6 +182,22 @@ async function installFixture(page) {
     window.__renderBox = async ({ role = "ENTRENADOR", gameId = "game-open", frozen = false } = {}) => {
       window.__box.frozen = Boolean(frozen);
       const view = new GameBoxScoreView(null, makeAuth(role));
+      view.captureService = {
+        saveCapture: async ({ gameId: savedGameId, starterIds, stats }) => {
+          window.__box.calls.push({
+            gameId: savedGameId,
+            starterIds: structuredClone(starterIds || []),
+            statsList: structuredClone(stats || [])
+          });
+          statsByGame[savedGameId] = (stats || []).map(row => ({ ...row }));
+          const game = games.find(item => item.id === savedGameId) || null;
+          return {
+            game: game ? structuredClone(game) : null,
+            players: structuredClone(players),
+            stats: structuredClone(statsByGame[savedGameId] || [])
+          };
+        }
+      };
       window.__box.view = view;
       await view.render("boxscore-test-root", gameId);
     };
@@ -240,6 +249,8 @@ async function runViewport(browser, viewportName, viewport) {
 
   const saveCall = await page.evaluate(() => window.__box.calls[0]);
   const victor = saveCall.statsList.find(row => row.player_id === "10000000-0000-4000-8000-000000000001");
+  assertCondition(saveCall.gameId === "game-open", viewportName, "BoxScore guarda sobre un gameId incorrecto");
+  assertCondition(!("team_score" in saveCall) && !("periods" in saveCall), viewportName, "BoxScore no debe reescribir resultado ni parciales");
   assertCondition(Boolean(victor), viewportName, "No se guarda la fila de Víctor");
   assertCondition(victor.fg2_made === 3, viewportName, "BoxScore guarda T2C incorrecto");
   assertCondition(victor.minutes === 32, viewportName, "BoxScore guarda minutos incorrectos");
