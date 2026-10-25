@@ -3,6 +3,7 @@
  * The browser NEVER expands authorization: PostgreSQL RBAC, RLS, premium
  * entitlement and per-season restrictions remain authoritative.
  */
+import { WellnessService } from "./WellnessService.js";
 const PAGE_SIZE=250;
 function required(v,name){ if(!v)throw new Error('PASSPORT_'+name+'_REQUIRED');return v; }
 function array(v){return Array.isArray(v)?v:[];}
@@ -20,7 +21,7 @@ async function queryAll(client,table,fields,playerId,{orderKey,limit=10000}={}){
   throw new Error('PASSPORT_PAGINATION_LIMIT_REACHED: '+table);
 }
 export class PlayerPassportPortfolioService {
-  constructor(client){this.client=client?.supabase||client?.default||client;}
+  constructor(client){this.client=client?.supabase||client?.default||client;this.wellnessService=new WellnessService(this.client);}
   async load({playerId,teamSeasonId}){
     required(playerId,'PLAYER');required(teamSeasonId,'SEASON');
     if(!this.client?.rpc||!this.client?.from)throw new Error('PASSPORT_BACKEND_NOT_READY');
@@ -43,8 +44,29 @@ export class PlayerPassportPortfolioService {
     const unpack=(result,label)=>result.status==='fulfilled'
       ?{rows:result.value,error:null}
       :{rows:[],error:label+': '+String(result.reason?.message||result.reason)};
+    const wellness={};
+    // Existing sensitive-data RPC is the only source. No direct table reads.
+    for(const module of ['recovery','nutrition']){
+      try{
+        const cap=await this.wellnessService.resolveAccessContext({
+          teamSeasonId,playerId,module
+        });
+        if(!cap.can_read||!cap.purpose){
+          wellness[module]={allowed:false,rows:[],purpose:null,error:null};
+          continue;
+        }
+        const list=await this.wellnessService.listEntries({
+          teamSeasonId,playerId,module,purpose:cap.purpose,limit:30
+        });
+        wellness[module]={allowed:true,rows:list,purpose:cap.purpose,error:null};
+      }catch(error){
+        wellness[module]={allowed:false,rows:[],purpose:null,
+          error:'WELLNESS_ACCESS: '+String(error?.message||error)};
+      }
+    }
     return {career:career||{},training:unpack(training,'TRAINING'),
-      games:unpack(games,'GAMES'),assessmentTime:unpack(assessments,'ASSESSMENTS')};
+      games:unpack(games,'GAMES'),assessmentTime:unpack(assessments,'ASSESSMENTS'),
+      wellness};
   }
 }
 export default PlayerPassportPortfolioService;
