@@ -481,10 +481,22 @@ export class PlayerPassportView {
   }
 
   _habitsPanel(){
-    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HÁBITOS Y BIENESTAR</span><h2>Datos de contexto y recomendaciones futuras</h2></div></div>'+
-      '<p>Los registros de bienestar de Player 360 son datos sensibles, especialmente para menores. No se incorporan automáticamente al pasaporte ni a un motor de IA sin permiso específico, finalidad y garantías de privacidad.</p>'+
-      '<p>El modelo mantiene identificadores de jugador, fechas y procedencia para incorporar en el futuro indicadores autorizados de descanso, carga, recuperación o nutrición sin mezclar datos privados entre clubes.</p>'+
-      '<a href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 y sus módulos autorizados</a></section>';
+    const wellness=this.portfolioData?.wellness||{};
+    const cards=['recovery','nutrition'].map(module=>{
+      const result=wellness[module];
+      const title=module==='recovery'?'Descanso y recuperación':'Hábitos de nutrición';
+      if(!result||result.error)return '<article class="pp-panel"><h3>'+title+'</h3><p>Datos no disponibles; no se interpreta como ausencia de hábitos.</p></article>';
+      if(!result.allowed)return '<article class="pp-panel"><h3>'+title+'</h3><p>Acceso restringido. Requiere autorización específica para este jugador y finalidad.</p></article>';
+      const entries=(result.rows||[]).slice(0,8).map(entry=>
+        '<div class="pp-portfolio-event"><strong>'+esc(entry.entry_date||'Sin fecha')+'</strong>'+
+        '<span>'+((entry.observations||[]).length)+' observaciones autorizadas</span></div>').join('');
+      return '<article class="pp-panel"><h3>'+title+'</h3><p>Datos visibles únicamente con el permiso sensible correspondiente.</p>'+
+        '<div class="pp-portfolio-events">'+(entries||'<p>Sin registros autorizados en este contexto.</p>')+'</div></article>';
+    }).join('');
+    return '<section class="pp-panel"><div class="pp-head"><div><span class="pp-eyebrow dark">HÁBITOS Y BIENESTAR</span>'+
+      '<h2>Contexto del jugador</h2></div></div>'+
+      '<p>Los permisos de recuperación y nutrición son independientes del pasaporte; no se hacen predicciones automáticas ni se comparten datos sensibles entre clubes.</p></section>'+
+      cards+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 →</a>';
   }
 
   _sectionContent(model){
