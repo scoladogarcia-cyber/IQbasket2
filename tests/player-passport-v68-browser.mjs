@@ -24,7 +24,7 @@ try{
       measurements:[]
     });
     v.portfolioService.load=async()=>({
-      career:{category:'Cadete Masculino',career:[]},
+      sharedEvaluations:[],career:{category:'Cadete Masculino',career:[]},
       training:{error:null,rows:[
         {training_session_id:'t1',session_date:'2026-10-01',session_kind:'TEAM',session_status:'PLANNED',attendance_status:'PRESENT',participated_minutes:60,recorded_minutes:60,accredited_minutes:0,classification_review:'PENDING'},
         {training_session_id:'t2',session_date:'2026-09-01',session_kind:'TECHNIFICATION',session_status:'COMPLETED',attendance_status:'PRESENT',participated_minutes:30,recorded_minutes:30,accredited_minutes:30,classification_review:'REVIEWED'}
