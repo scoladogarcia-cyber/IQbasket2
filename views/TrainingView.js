@@ -16,6 +16,7 @@ import { I18n } from "../services/I18nService.js";
 import { Permission } from "../security/PermissionService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
 import {exportTrainingEvidenceCsvV75,previewTrainingEvidenceCsvV75} from "../services/exchange/TrainingEvidenceExchangeV75.js";
+import {buildTrainingImportPreflightV76} from "../services/exchange/TrainingImportPreflightV76.js";
 import {
   EXTERNAL_PROVIDER_LABELS,
   EXTERNAL_PROVIDER_TYPE,
@@ -2167,8 +2168,20 @@ export class TrainingView {
         const preview=previewTrainingEvidenceCsvV75(await file.text(),{
           sessions:selected,teamSeasonId:this.teamSeasonId
         });
+        // Preflight is audit metadata, never a permission or a write operation.
+        let revisionMessage="Verificación de versiones pendiente.";
+        try{
+          const plan=buildTrainingImportPreflightV76({
+            preview,sessions:selected,teamSeasonId:this.teamSeasonId,
+            seasonStatus:this._seasonContext()?.data_status||"ACTIVE"
+          });
+          revisionMessage="Preflight de versiones preparado para "+plan.changed+" cambio(s), sin aplicar.";
+        }catch(preflightError){
+          revisionMessage="Preflight no disponible: "+String(preflightError.message||preflightError)+
+            " Revisa los registros en el editor antes de modificar nada.";
+        }
         if(status)status.textContent=preview.changed+" participante(s) con cambios. "+
-          preview.warnings.slice(0,3).join(" ")+" "+preview.message;
+          preview.warnings.slice(0,3).join(" ")+" "+revisionMessage+" "+preview.message;
       }catch(error){
         if(status)status.textContent="Revisión cancelada: "+String(error.message||error);
       }finally{trainingEvidenceFile.value="";}
