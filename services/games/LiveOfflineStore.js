@@ -192,12 +192,14 @@ export class LiveOfflineStore {
     return row;
   }
 
-  async remove(operationId) {
+  async remove(operationId, knownGameId = null) {
     const op = String(operationId || "");
     if (!op) return false;
     const db = await this._db();
-    let gameId = null;
-    if (db) {
+    // The sync service already knows the game. This also supports fallback
+    // storage implementations without localStorage.key()/length.
+    let gameId = knownGameId ? String(knownGameId) : null;
+    if (db && !gameId) {
       const indexed = await this._get(OUTBOX_STORE, op);
       gameId = indexed?.gameId || null;
     }
