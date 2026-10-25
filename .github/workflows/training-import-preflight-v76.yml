@@ -1,0 +1,29 @@
+name: Training Import V76 Preflight
+on:
+  push:
+    branches: ["feature/v76-safe-training-import-preflight", "main"]
+    paths:
+      - "services/exchange/**"
+      - "views/TrainingView.js"
+      - "tests/training-import-preflight-v76.mjs"
+      - ".github/workflows/training-import-preflight-v76.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/training-import-preflight-v76.mjs
+      - run: node tests/six-modules-v75.mjs
+      - run: node tests/product-six-modules-v74.mjs
+      - run: node tests/training-v65-contract.mjs
+      - run: npm run build
