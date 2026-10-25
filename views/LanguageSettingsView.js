@@ -321,7 +321,7 @@ export class LanguageSettingsView {
         if(!canSave())throw new Error("Sin permiso de gestión de idiomas.");
         if(file.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
         const known=new Set([...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(TranslationStore.getDictionary(this.selectedLocale))]);
-        const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known});
+        const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known,referenceDictionary:TranslationStore.defaultDictionary?.es||{}});
         // Keep edits on the visible page, then let the newly imported pack take precedence.
         host.querySelectorAll(".i18n-input").forEach(input=>{const key=input.getAttribute("data-key");if(key)this.importDraft[key]=input.value;});
         this.importDraft={...this.importDraft,...entries};
