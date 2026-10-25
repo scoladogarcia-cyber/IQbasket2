@@ -27,7 +27,7 @@ try{
   v.service.getPassportBrief=async()=>({
    player_id:ID,category:'Cadete Masculino',team_name:'Equipo A',season_name:'2026/27',
    training_access:true,training:{recorded_minutes:750,accredited_minutes:0,pending_minutes:750,sessions:10,pending_sessions:10,classification_to_review:3,without_minutes:0},
-   evaluation_access:true,evaluation_quality:{attributes_rated:69,with_documented_observations:0,pending_documentation:69}
+   evaluation_access:true,evaluation_quality:{attributes_rated:69,with_documented_observations:0,pending_documentation:69,legacy_attributes:5,legacy_score_records:60}
   });
   v.service.getPlayer360Snapshot=async()=>({allowed:false,reason_code:'ENTITLEMENT_NOT_INCLUDED'});
   v.service.getDevelopmentContext=async()=>({allowed:false,reason_code:'ENTITLEMENT_NOT_INCLUDED'});
@@ -47,7 +47,7 @@ try{
  assert.ok(result.workspace,'Existing family dashboard must remain visible');
  assert.equal(await page.locator('[data-family-passport-brief]').count(),1);
  assert.equal(await page.locator('[data-family-passport-brief]').isVisible(),true,'Family passport must appear without opening advanced analysis');
- for(const s of ['Cadete Masculino','12 h 30 min','0 h 00 min','Pendiente de validar','Valoraciones']){
+ for(const s of ['Cadete Masculino','12 h 30 min','0 h 00 min','Pendiente de validar','Valoraciones','5 habilidades de un sistema de valoración antiguo','60 registros']){
    assert.ok(result.brief.includes(s),'Expected: '+s+' in '+result.brief.slice(0,1000));
  }
  assert.ok(result.width<=result.viewport+2,'Mobile overflow: '+JSON.stringify(result));

@@ -36,6 +36,8 @@ export function presentFamilyPassportBrief(payload={},familyPassport={}){
       available:Boolean(q),rated:q?.attributes_rated??null,
       documented:q?.with_documented_observations??null,
       needsEvidence:q?.pending_documentation??null,
+      legacyAttributes:q?.legacy_attributes??0,
+      legacyScoreRecords:q?.legacy_score_records??0,
       notScientificallyValidated:true
     }
   };

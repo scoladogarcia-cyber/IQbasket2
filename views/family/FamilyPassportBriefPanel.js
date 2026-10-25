@@ -23,7 +23,8 @@ export function renderFamilyPassportBrief(payload={},passport={}){
    :'<p class="family-passport-short">Las estadísticas de partidos no están disponibles en este plan o contexto.</p>';
  const quality=q.available
    ?`<p class="family-passport-short">Valoraciones: <strong>${esc(q.documented)} de ${esc(q.rated)}</strong> atributos puntuados tienen las observaciones mínimas anotadas.${q.needsEvidence?
-       ` Hay ${esc(q.needsEvidence)} que necesitan documentación adicional.`:''} Esto no equivale a una validación científica.</p>`
+       ` Hay ${esc(q.needsEvidence)} que necesitan documentación adicional.`:''} Esto no equivale a una validación científica.</p>`+
+      (Number(q.legacyAttributes)>0?`<p class="family-passport-short"><strong>Historial anterior:</strong> ${esc(q.legacyAttributes)} habilidades de un sistema de valoración antiguo (${esc(q.legacyScoreRecords)} registros). Se conservan, pero no se comparan directamente con las 69 rúbricas actuales ni se convierten automáticamente en nuevas puntuaciones.</p>`:'')
    :'<p class="family-passport-short">Las valoraciones técnicas detalladas se consultan cuando el pasaporte avanzado está incluido en la licencia.</p>';
  return `<section class="family-passport-brief" aria-labelledby="family-passport-title">
    <style>
