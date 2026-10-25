@@ -45,6 +45,9 @@ try{
  });
  assert.equal(result.selected,'11111111-1111-4111-8111-111111111111');
  assert.ok(result.workspace,'Existing family dashboard must remain visible');
+ const visible = await page.locator('[data-family-passport-brief]').isVisible();
+ assert.equal(visible,true,'The player passport must be visible outside the collapsed advanced panel');
+ assert.equal(await page.locator('[data-family-passport-brief]').count(),1,'Never duplicate the family passport overview');
  for(const s of ['Cadete Masculino','12 h 30 min','0 h 00 min','Pendiente de validar','Valoraciones']){
    assert.ok(result.brief.includes(s),'Expected: '+s+' in '+result.brief.slice(0,1000));
  }
