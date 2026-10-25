@@ -83,6 +83,12 @@ export function adaptFederationCsv(matrix,{game,eligiblePlayers=[],stats=[]}={})
     seen.add(pid);
     const sourceName=safeName(cells[header.player]);
     if(!sourceName)throw new Error("Fila "+n+": nombre de jugador obligatorio.");
+    // Dorsal can be recycled or changed: when the roster includes a verified name,
+    // require name agreement as a second identity factor. Never guess or silently map.
+    const rosterName=[player.first_name,player.last_name].filter(Boolean).join(" ").trim()||String(player.name||"").trim();
+    const tokens=value=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().split(/[^a-z0-9]+/g).filter(Boolean).sort().join(" ");
+    if(rosterName&&tokens(sourceName)!==tokens(rosterName))
+      throw new Error("Fila "+n+": el dorsal coincide pero el nombre no. Verifica identidad y plantilla antes de importar.");
     const raw={game_id:String(game.id),team_season_id:String(game.team_season_id??game.teamSeasonId),
       player_id:pid,jugador:sourceName,starter:statsById.get(pid).starter?"1":"0"};
     for(const field of BOX_FIELDS){

@@ -17,6 +17,7 @@ import { deriveFunctionalRoles } from "../../../domain/player360/PlayerPassportR
 import { PLAYER_PASSPORT_CONFIG } from "../../../config/player-passport.config.js";
 import { exportPassportWord, exportPassportCardPng } from "../../../services/player360/PlayerPassportExportService.js";
 import { exportPassportAssessmentCsvV73, previewPassportAssessmentCsvV73 } from "../../../services/player360/PassportAssessmentCsvV73.js";
+import { exportPassportCoverageV74 } from "../../../domain/player360/PassportCoverageV74.js";
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -543,7 +544,7 @@ export class PlayerPassportView {
     }
     var model=this._model();
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
-      ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button>'
+      ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button><button type="button" id="pp-export-coverage" class="pp-top-action">📋 Cobertura CSV</button>'
       : '';
     el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._sectionNav()+this._sectionContent(model)+'</section>'+this._helpPanel()+this._styles();
     this._bind();
@@ -565,6 +566,14 @@ export class PlayerPassportView {
     var helpStart=document.getElementById("pp-help-start"); if(helpStart)helpStart.addEventListener("click",function(){self.helpOpen=false;self.editorOpen=true;self.activeSection="evaluation";self._render();});
     var model=self._model();
     var word=document.getElementById("pp-export-word"); if(word)word.addEventListener("click",function(){exportPassportWord({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,asymmetries:model.asymmetries,measurements:self.data.measurements,training:self.trainingHours,competition:self.portfolioData?.games?.error?null:summarizeGamePortfolio(self.portfolioData?.games?.rows||[]),quality:model.quality,assessmentTime:self.portfolioData?.assessmentTime?.error?null:summarizeAssessmentTime(self.portfolioData?.assessmentTime?.rows||[])});});
+    var coverage=document.getElementById("pp-export-coverage"); if(coverage)coverage.addEventListener("click",function(){
+      if(!self._can(Permission.EXPORT_PLAYER_PASSPORT))return;
+      try{
+        const data=exportPassportCoverageV74({catalog:self.data?.catalog,latest:self._model().latest});
+        const url=URL.createObjectURL(new Blob([data],{type:"text/csv;charset=utf-8"}));
+        const a=document.createElement("a");a.href=url;a.download="IQBasket_Cobertura_Pasaporte_"+String(self.playerId).replace(/[^a-z0-9_-]/gi,"")+".csv";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+      }catch(error){coverage.title=String(error.message||error);}
+    });
     var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,quality:model.quality});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
     var date=document.getElementById("pp-date"); if(date)date.addEventListener("input",function(e){self.editorMeta.date=e.target.value;});
     var title=document.getElementById("pp-title"); if(title)title.addEventListener("input",function(e){self.editorMeta.title=e.target.value;});

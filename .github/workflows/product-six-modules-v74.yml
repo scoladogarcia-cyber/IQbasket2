@@ -1,0 +1,39 @@
+name: Six Product Modules V74
+on:
+  push:
+    branches: ["feature/passport-reports-exchange-languages-family-motivation-v74", "main"]
+    paths:
+      - "domain/motivation/**"
+      - "domain/player360/PassportCoverageV74.js"
+      - "services/reports/ReportProfileV74.js"
+      - "services/exchange/**"
+      - "services/i18n/**"
+      - "services/reports/FederationCsvAdapterV70.js"
+      - "views/family/**"
+      - "views/player360/passport/PlayerPassportView.js"
+      - "views/ReportsViewV53.js"
+      - "views/LanguageSettingsView.js"
+      - "tests/product-six-modules-v74.mjs"
+      - ".github/workflows/product-six-modules-v74.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/product-six-modules-v74.mjs
+      - run: node tests/family-p0-p1-v70.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/product-p1-v72.mjs
+      - run: node tests/passport-csv-v73.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: npm run build

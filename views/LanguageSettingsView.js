@@ -13,6 +13,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
 import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale } from "../services/i18n/LanguagePackExchangeV71.js";
+import { localeCoverageV74, missingLanguageTemplateV74 } from "../services/i18n/LanguageCoverageV74.js";
 
 export class LanguageSettingsView {
   /**
@@ -105,7 +106,10 @@ export class LanguageSettingsView {
       "edit_player_data", "cancel", "active", "inactive"
     ];
 
-    const totalItems = keysToTranslate.length;
+    // Preserve legacy administrative keys while discovering newly versioned catalog keys.
+    // This prevents new translations disappearing from the paginated admin interface.
+    const allKeys=Array.from(new Set([...keysToTranslate,...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(dict)])).filter(key=>/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)).sort();
+    const totalItems = allKeys.length;
     const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
 
     if (this.currentPage > totalPages) this.currentPage = totalPages;
@@ -113,7 +117,7 @@ export class LanguageSettingsView {
 
     const startIndex = (this.currentPage - 1) * this.pageSize;
     const endIndex = startIndex + this.pageSize;
-    const paginatedKeys = keysToTranslate.slice(startIndex, endIndex);
+    const paginatedKeys = allKeys.slice(startIndex, endIndex);
 
     let rowsHtml = "";
     paginatedKeys.forEach((key) => {
@@ -170,6 +174,7 @@ export class LanguageSettingsView {
 
           <div class="lang-pack-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
             <button type="button" data-lang-pack-export style="min-height:44px;padding:9px;border-radius:9px">Descargar idioma CSV</button>
+            <button type="button" data-lang-pack-missing style="min-height:44px;padding:9px;border-radius:9px">CSV de claves pendientes</button>
             <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">Importar CSV y previsualizar</button>
             <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="Seleccionar archivo CSV de traducciones">
             <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios no se guardan hasta pulsar Guardar. Idiomas soportados: es, ca, en, fr.</span>
@@ -268,7 +273,8 @@ export class LanguageSettingsView {
   bindEvents(root, { canSave = () => false } = {}) {
     const host=root?.querySelector?.(".language-settings-view");
     if (!host) return;
-    const refresh=()=>{
+    const refresh=({carryEdits=true}={})=>{
+      if(carryEdits)host.querySelectorAll(".i18n-input").forEach(input=>{const key=input.getAttribute("data-key");if(key)this.importDraft[key]=input.value;});
       const shell=host.parentElement;
       if(!shell)return;
       shell.innerHTML=this.render(this.selectedLocale);
@@ -276,7 +282,7 @@ export class LanguageSettingsView {
     };
     host.querySelector("#langCodeInput")?.addEventListener("change", event=>{
       this.selectedLocale=supportedLocale(event.target.value);
-      this.currentPage=1;this.importDraft=Object.create(null);refresh();
+      this.currentPage=1;this.importDraft=Object.create(null);refresh({carryEdits:false});
     });
     for(const [code,offset] of [["prev",-1],["next",1]]){
       const id=code==="prev"?"#btn-prev-lang-page":"#btn-next-lang-page";
@@ -291,6 +297,17 @@ export class LanguageSettingsView {
       const a=document.createElement("a");a.href=url;a.download="IQBasket_idioma_"+this.selectedLocale+".csv";
       document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
     });
+    host.querySelector("[data-lang-pack-missing]")?.addEventListener("click",()=>{
+      const source=TranslationStore.defaultDictionary.es||{};
+      const target={...(TranslationStore.defaultDictionary[this.selectedLocale]||{}),...this.importDraft};
+      const report=localeCoverageV74({source,target,locale:this.selectedLocale});
+      const status=host.querySelector("[data-lang-pack-status]");
+      if(!report.missing.length){if(status)status.textContent="Catálogo principal completo para "+report.locale+" ("+report.coveragePct+" %). Revisa aparte los textos legacy fijos.";return;}
+      const content=missingLanguageTemplateV74({source,target,locale:this.selectedLocale});
+      const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
+      const a=document.createElement("a");a.href=url;a.download="IQBasket_pendientes_"+report.locale+".csv";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+      if(status)status.textContent=report.missing.length+" claves pendientes de "+report.total+" ("+report.coveragePct+" %). La traducción de componentes legacy se revisa por separado.";
+    });
     const fileInput=host.querySelector("[data-lang-pack-file]");
     host.querySelector("[data-lang-pack-import]")?.addEventListener("click",()=>{
       if(!canSave())return;
@@ -303,10 +320,12 @@ export class LanguageSettingsView {
       try{
         if(!canSave())throw new Error("Sin permiso de gestión de idiomas.");
         if(file.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
-        const known=new Set(Object.keys(TranslationStore.getDictionary(this.selectedLocale)));
+        const known=new Set([...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(TranslationStore.getDictionary(this.selectedLocale))]);
         const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known});
+        // Keep edits on the visible page, then let the newly imported pack take precedence.
+        host.querySelectorAll(".i18n-input").forEach(input=>{const key=input.getAttribute("data-key");if(key)this.importDraft[key]=input.value;});
         this.importDraft={...this.importDraft,...entries};
-        this.currentPage=1;refresh();
+        this.currentPage=1;refresh({carryEdits:false});
         const next=root.querySelector("[data-lang-pack-status]");
         if(next)next.textContent=Object.keys(entries).length+" traducciones cargadas para revisión. Pulsa Guardar para confirmarlas.";
       }catch(error){if(status)status.textContent=String(error.message||error);}

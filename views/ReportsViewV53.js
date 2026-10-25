@@ -20,6 +20,8 @@ import { guideCoachV72, renderGuidedCoachV72 } from "../domain/insights/GuidedSu
 import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.js";
 import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
 import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
+import { REPORT_PROFILE_V74, resolveReportProfileV74 } from "../services/reports/ReportProfileV74.js";
+import { exportRosterCsvV74, previewRosterCsvV74 } from "../services/exchange/RosterExchangeV74.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
 const id = value => String(value ?? "");
@@ -126,23 +128,31 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
     const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
-    const printWindow=(kind==="pdf"||kind==="summary-pdf")?window.open("","_blank","width=1024,height=768"):null;
-    if((kind==="pdf"||kind==="summary-pdf")&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
+    const printWindow=(kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf")?window.open("","_blank","width=1024,height=768"):null;
+    if((kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf")&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
     this._exchangeBusy=true;status.textContent=`Consultando ${games.length} acta(s) autorizadas…`;
     if(printWindow)printWindow.document.body.textContent="Preparando informe completo…";
     try {
       const reports=await this._readSelected(games,true);
-      if(kind==="pdf"||kind==="summary-pdf") {
+      if(kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf") {
         const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
         const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
         const quality=reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
-        const html=kind==="pdf"
+        const profile=kind==="profile-pdf"?resolveReportProfileV74(this._reportProfileV74||"DEVELOPMENT"):null;
+        const safeTitle=(teamName+" · "+seasonName).replace(/[&<>"\x27]/g,"");
+        const profileHtml=profile?
+          '<section class="iq-report-panel"><h1>IQBasket · '+profile.title+" · "+safeTitle+"</h1>"+
+          (profile.complete?buildCompleteSeasonReport({reports,teamName,seasonName}):"")+
+          (profile.overview?renderSelectedGamesOverview(reports.map(r=>({game:r.game,stats:r.stats})),{title:"Partidos seleccionados"}):"")+
+          (profile.interpretation?renderGuidedCoachV72(guideCoachV72(reports)):"")+
+          (profile.quality?quality:"")+(profile.glossary?renderGameStatisticsGlossary():"")+"</section>" : null;
+        const html=profile?profileHtml:kind==="pdf"
           ? buildCompleteSeasonReport({reports,teamName,seasonName})+quality
           : '<section class="iq-report-panel"><h1>Resumen visual · '+teamName.replace(/[&<>"']/g,"")+' · '+seasonName.replace(/[&<>"']/g,"")+'</h1>'+
             renderSelectedGamesOverview(reports.map(r=>({game:r.game,stats:r.stats})),{title:"Resumen visual · selección de partidos"})+
             renderGuidedCoachV72(guideCoachV72(reports))+quality+renderGameStatisticsGlossary()+'</section>';
         const authorization=this.reportAccessPolicy.authorizeExport(ReportType.SEASON_DOSSIER,context);
-        if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
+        if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":kind==="profile-pdf"?"IQBasket_"+profile.key:"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
       } else if(kind==="csv") {
         const rows=buildBoxScoreExchangeRows(reports);
         this._download(serializeBoxScoreCsv(rows),"text/csv;charset=utf-8","IQBasket_BoxScore_Seleccion.csv");
@@ -156,8 +166,40 @@ export class ReportsViewV53 extends ReportsViewV50 {
       } else {
         throw new Error("Formato de exportación no compatible.");
       }
-      status.textContent=`Preparados ${games.length} partido(s). ${(kind==="pdf"||kind==="summary-pdf")?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
+      status.textContent=`Preparados ${games.length} partido(s). ${(kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf")?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
     }catch(error){status.textContent=`Exportación cancelada: ${error.message}`;if(printWindow&&!printWindow.closed)printWindow.document.body.textContent=status.textContent;}
+    finally{this._exchangeBusy=false;}
+  }
+
+  /** Reuse the same fresh, per-game authorized report for the roster read boundary. */
+  async _rosterExchangeV74(status,holder,file=null) {
+    if(this._exchangeBusy)return;
+    const selected=this._selectionGames();
+    if(selected.length!==1){status.textContent="Selecciona un solo partido para esta plantilla.";return;}
+    this._exchangeBusy=true;
+    try{
+      const report=(await this._readSelected(selected,true))[0];
+      const roster=report.players||[];
+      if(!roster.length)throw new Error("Plantilla autorizada no disponible.");
+      if(file){
+        if(file.size>1_000_000)throw new Error("Archivo demasiado grande.");
+        const preview=previewRosterCsvV74(await file.text(),{authorizedPlayers:roster});
+        holder.replaceChildren();
+        holder.append(note("Vista previa · "+preview.changed+" jugador(es) con diferencias. "+preview.reason));
+        const table=document.createElement("table");table.style.cssText="width:100%;border-collapse:collapse;font-size:12px";
+        const head=document.createElement("tr");
+        ["ID","Nombre","Apellidos","Dorsal","Posición"].forEach(s=>{const th=document.createElement("th");th.textContent=s;head.append(th);});table.append(head);
+        for(const row of preview.rows.filter(r=>r.changed)){
+          const tr=document.createElement("tr");
+          [row.player_id,row.first_name,row.last_name,row.jersey,row.primary_position].forEach(s=>{const td=document.createElement("td");td.textContent=String(s??"");tr.append(td);});table.append(tr);
+        }
+        holder.append(table);
+        status.textContent="Archivo validado y previsualizado. No se han modificado jugadores.";
+      }else{
+        this._download(exportRosterCsvV74(roster),"text/csv;charset=utf-8","IQBasket_Plantilla_Jugadores.csv");
+        status.textContent="CSV de jugadores autorizados exportado.";
+      }
+    }catch(error){status.textContent="Intercambio de jugadores cancelado: "+error.message;}
     finally{this._exchangeBusy=false;}
   }
 
@@ -341,12 +383,22 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
     const templateCsv=button("Plantilla editable CSV · 1 partido","#0369a1");
+    const profile=document.createElement("select");profile.setAttribute("aria-label","Perfil de informe PDF");profile.style.cssText="min-height:44px;border-radius:9px;padding:8px;border:1px solid #94a3b8";
+    Object.values(REPORT_PROFILE_V74).forEach(p=>{const item=document.createElement("option");item.value=p.key;item.textContent=p.title;profile.append(item);});profile.value=this._reportProfileV74||"DEVELOPMENT";
+    const profilePdf=button("PDF configurable","#0f766e");
+    const rosterCsv=button("Jugadores CSV","#64748b");
+    const rosterPreview=button("Revisar jugadores CSV","#64748b");
+    const rosterFile=document.createElement("input");rosterFile.type="file";rosterFile.accept=".csv,text/csv";rosterFile.hidden=true;
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,file);panel.append(toolbar);
+    toolbar.append(profile,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
     for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
     templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
+    profilePdf.addEventListener("click",()=>{this._reportProfileV74=profile.value;void this._exportSelection("profile-pdf",status);});
+    rosterCsv.addEventListener("click",()=>{void this._rosterExchangeV74(status,holder);});
+    rosterPreview.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona un solo partido.";return;}rosterFile.click();});
+    rosterFile.addEventListener("change",()=>{const upload=rosterFile.files?.[0];if(upload)void this._rosterExchangeV74(status,holder,upload);rosterFile.value="";});
     importButton.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}if(!this._canImport(this._selectionGames()[0])){status.textContent="Sin permiso de edición o partido/temporada cerrado.";return;}file.click();});
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);
