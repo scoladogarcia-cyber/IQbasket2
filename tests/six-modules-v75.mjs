@@ -5,6 +5,7 @@ import {exportTrainingEvidenceCsvV75,previewTrainingEvidenceCsvV75,TRAINING_CSV_
 import {buildPassportComparableTrendV75,exportPassportComparableTrendCsvV75} from "../domain/player360/PassportComparableTrendV75.js";
 import {parseLanguagePackCsv,languagePlaceholdersV75} from "../services/i18n/LanguagePackExchangeV71.js";
 import {resolveReportProfileV74} from "../services/reports/ReportProfileV74.js";
+import {motivationConversationV75} from "../domain/motivation/MotivationReflectionV74.js";
 const repo=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const quote=matrix=>matrix.map(row=>row.map(x=>'"'+String(x??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
 
@@ -64,7 +65,15 @@ assert.equal(parseLanguagePackCsv(quote(header),{existingKeys:new Set(["greeting
 assert.throws(()=>parseLanguagePackCsv(quote([header[0],["greeting","Hello {player}"]]),{referenceDictionary:dict}),/marcadores/);
 assert.throws(()=>parseLanguagePackCsv(quote([header[0],["greeting","Hello {player} {newValue} {team}"]]),{referenceDictionary:dict}),/marcadores/);
 
-// 4: Existing report profiles now permit independent section selection.
+// 4: Motivation is not a score: local questions adapt without storage or diagnosis.
+const low=motivationConversationV75({ENJOYMENT:"NOT_NOW",LEARNING:"YES",VOICE:"YES"},"es");
+assert.match(low.starter,/disfrutar/);
+const all=motivationConversationV75({ENJOYMENT:"YES",LEARNING:"YES",VOICE:"YES"},"ca");
+assert.match(all.starter,/moment/);
+assert.equal(motivationConversationV75({ENJOYMENT:"",LEARNING:"",VOICE:""},"en").starter,null);
+assert.throws(()=>motivationConversationV75({VOICE:"9"},"en"),/desconocida/);
+
+// 5: Existing report profiles now permit independent section selection.
 assert.equal(resolveReportProfileV74("DEVELOPMENT",{quality:false,glossary:false}).quality,false);
 assert.throws(()=>resolveReportProfileV74("COMPLETE",{overview:true}),/duplicarlo/);
 const reports=repo("views/ReportsViewV53.js"),training=repo("views/TrainingView.js"),language=repo("views/LanguageSettingsView.js"),passport=repo("views/player360/passport/PlayerPassportView.js");
