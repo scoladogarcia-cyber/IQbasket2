@@ -55,6 +55,9 @@ jobs:
       - name: Player Passport domain smoke
         run: node tests/player-passport-domain-smoke.mjs
 
+      - name: Player Passport V68 portfolio and evidence contract
+        run: node tests/player-passport-portfolio-v68.mjs
+
       - name: Player Passport route and RBAC
         run: node tests/player-passport-route-rbac.mjs
 
