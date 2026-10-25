@@ -96,19 +96,21 @@ export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
   }
 
   _barChart(games, key, title, minutes = false) {
-    const max = Math.max(1, ...games.map(game => n(game[key])));
+    const known = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+    const max = Math.max(1, ...games.filter(game=>known(game[key])).map(game => Number(game[key])));
     const bars = games.map((game, index) => {
-      const value = n(game[key]);
-      const height = value <= 0 ? 3 : Math.max(7, Math.round((value / max) * 100));
+      const available=known(game[key]);
+      const value = available ? Number(game[key]) : null;
+      const height = !available || value <= 0 ? 3 : Math.max(7, Math.round((value / max) * 100));
       const date = String(game.date || "").slice(5).replace("-", "/") || `P${index + 1}`;
       const opponent = game.opponent || "Rival";
-      const accessible = `${title}: ${value}. ${opponent}. ${game.date || ""}`;
+      const accessible = `${title}: ${available ? value : "N/D"}. ${opponent}. ${game.date || ""}`;
       return `<div class="family-trend-bar" aria-label="${esc(accessible)}" title="${esc(accessible)}">
-        <strong>${esc(value)}</strong><i class="family-trend-fill" style="height:${height}%"></i><span>${esc(date)}</span>
+        <strong>${available ? esc(value) : "N/D"}</strong><i class="family-trend-fill" style="height:${height}%"></i><span>${esc(date)}</span>
       </div>`;
     }).join("");
     return `<article class="family-trend-card${minutes ? " minutes" : ""}">
-      <h3>${esc(title)}</h3><p>${games.length} partidos comparables</p>
+      <h3>${esc(title)}</h3><p>${games.filter(game=>game[key] !== null && game[key] !== undefined && game[key] !== "").length} partidos con registros de ${title.toLowerCase()}</p>
       <div class="family-trend-scroll"><div class="family-trend-bars" style="--count:${games.length}">${bars}</div></div>
     </article>`;
   }

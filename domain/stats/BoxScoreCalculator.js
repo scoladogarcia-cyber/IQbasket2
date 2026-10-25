@@ -250,8 +250,8 @@ export class BoxScoreCalculator {
     const pfd = Number(row.fouls_drawn ?? row.foulsDrawn ?? row.fouls_received ?? row.fd ?? 0);
     const pm = Number(row.plus_minus ?? row.plusMinus ?? 0);
 
-    const points = (row.points !== undefined && row.points !== null && Number(row.points) > 0)
-      ? Number(row.points)
+    const points = (row.points !== undefined && row.points !== null && row.points !== "")
+      ? Number(row.points) // A recorded 0 must stay 0; discrepancies are surfaced by StatQuality.
       : this.calculatePoints(fg2m, fg3m, ftm);
 
     const fga = this.calculateFGA(fg2a, fg3a);
@@ -268,10 +268,10 @@ export class BoxScoreCalculator {
     const efficiency = this.calculateEFF(statsPayload);
     const gameScore = this.calculateGameScore(statsPayload);
 
-    const eFG = fga > 0 ? Number((((fgm + 0.5 * fg3m) / fga) * 100).toFixed(1)) : 0;
+    const eFG = fga > 0 ? Number((((fgm + 0.5 * fg3m) / fga) * 100).toFixed(1)) : null;
     const tsDenom = 2 * (fga + 0.44 * fta);
-    const tsPct = tsDenom > 0 ? Number(((points / tsDenom) * 100).toFixed(1)) : 0;
-    const astTo = tov > 0 ? Number((ast / tov).toFixed(1)) : ast;
+    const tsPct = tsDenom > 0 ? Number(((points / tsDenom) * 100).toFixed(1)) : null;
+    const astTo = tov > 0 ? Number((ast / tov).toFixed(1)) : null;
 
     return {
       playerId: row.playerId ?? row.player_id ?? null,
@@ -313,11 +313,12 @@ export class BoxScoreCalculator {
       evaluation: pir,
       val: pir,
       efficiency,
-      gameScore: isNaN(gameScore) ? 0 : gameScore,
-      eFG: isNaN(eFG) ? 0 : eFG,
-      tsPct: isNaN(tsPct) ? 0 : tsPct,
-      astTo: isNaN(astTo) ? 0 : astTo,
-      usageRate: 18.5
+      gameScore: Number.isFinite(gameScore) ? gameScore : null,
+      eFG,
+      tsPct,
+      astTo,
+      // USG requires team possessions/minutes and cannot be fabricated here.
+      usageRate: null
     };
   }
 

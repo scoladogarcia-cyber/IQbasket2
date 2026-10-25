@@ -12,6 +12,7 @@
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
+import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale } from "../services/i18n/LanguagePackExchangeV71.js";
 
 export class LanguageSettingsView {
   /**
@@ -26,6 +27,8 @@ export class LanguageSettingsView {
     // Estado de paginación de seguridad
     this.currentPage = 1;
     this.pageSize = 20;
+    this.selectedLocale = I18n.getLocale?.() || "es";
+    this.importDraft = Object.create(null);
   }
 
   t(key, fallback = "") {
@@ -66,7 +69,7 @@ export class LanguageSettingsView {
     return c;
   }
 
-  render(currentLangCode = (I18n.getLocale ? I18n.getLocale() : "es"), currentDictionary = []) {
+  render(currentLangCode = this.selectedLocale, currentDictionary = []) {
     const langCode = this._normalizeLang(currentLangCode);
     const dict = TranslationStore ? TranslationStore.getDictionary(langCode) : {};
 
@@ -115,7 +118,8 @@ export class LanguageSettingsView {
     let rowsHtml = "";
     paginatedKeys.forEach((key) => {
       const dbEntry = Array.isArray(currentDictionary) ? currentDictionary.find((d) => d.key === key) : null;
-      const val = dbEntry ? (dbEntry.translation || dbEntry.value) : (dict[key] || "");
+      const val = this.importDraft[key] ?? (dbEntry ? (dbEntry.translation || dbEntry.value) : (dict[key] || ""));
+      const safeVal=String(val).replace(/[&<>"']/g,ch=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
 
       rowsHtml += `
         <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -126,7 +130,7 @@ export class LanguageSettingsView {
             <input 
               type="text" 
               data-key="${key}" 
-              value="${val}" 
+              value="${safeVal}" 
               placeholder="${this.t(key, key)}" 
               class="i18n-input" 
               style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; box-sizing: border-box;"
@@ -141,7 +145,7 @@ export class LanguageSettingsView {
         <div style="margin-bottom: 24px;">
           <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">🌐 ${this.t("languages_mgmt_title", "Administración de Idiomas")}</h2>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
-            ${this.t("languages_mgmt_desc", "Personaliza y guarda las traducciones directamente en la base de datos de Supabase.")}
+            ${this.t("languages_mgmt_desc", "Catálogo versionado por idioma; exporta/edita un CSV sin necesidad de mantener miles de celdas en la base de datos. Las personalizaciones autorizadas se guardan como excepciones.")}
           </p>
         </div>
 
@@ -164,6 +168,12 @@ export class LanguageSettingsView {
             </div>
           </div>
 
+          <div class="lang-pack-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button type="button" data-lang-pack-export style="min-height:44px;padding:9px;border-radius:9px">Descargar idioma CSV</button>
+            <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">Importar CSV y previsualizar</button>
+            <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="Seleccionar archivo CSV de traducciones">
+            <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios no se guardan hasta pulsar Guardar. Idiomas soportados: es, ca, en, fr.</span>
+          </div>
           <div style="overflow-x: auto;">
             <table class="translations-table" style="width: 100%; border-collapse: collapse; text-align: left;">
               <thead>
@@ -204,7 +214,7 @@ export class LanguageSettingsView {
     const inputs = document.querySelectorAll(".i18n-input");
 
     const payload = [];
-    const newDict = {};
+    const newDict = {...this.importDraft};
 
     inputs.forEach((input) => {
       const key = input.getAttribute("data-key");
@@ -212,14 +222,13 @@ export class LanguageSettingsView {
 
       if (key && value) {
         newDict[key] = value;
-        payload.push({
-          key: key,
-          language_code: targetLang,
-          translation: value
-        });
+
       }
     });
 
+    for (const [key,translation] of Object.entries(newDict)) {
+      if (translation.trim()) payload.push({key,language_code:targetLang,translation:translation.trim()});
+    }
     if (payload.length === 0) {
       alert("⚠️ No hay campos de traducción para guardar.");
       return;
@@ -228,25 +237,11 @@ export class LanguageSettingsView {
     this.showSyncOverlay(`💾 Guardando traducciones [${targetLang.toUpperCase()}] en Supabase...`);
 
     try {
-      if (supabase) {
-        const { error } = await supabase
-          .from("translations")
-          .upsert(payload, { onConflict: "key,language_code" });
-
-        if (error) {
-          console.warn("Upsert directo falló, intentando por claves individuales:", error.message);
-          for (const item of payload) {
-            await supabase
-              .from("translations")
-              .delete()
-              .eq("key", item.key)
-              .eq("language_code", item.language_code);
-            await supabase
-              .from("translations")
-              .insert([item]);
-          }
-        }
-      }
+      if (!supabase) throw new Error("Servicio de traducciones no disponible.");
+      // Backend grants/RLS must authorize every language mutation.
+      // Fail closed; never delete rows to bypass a rejected UPSERT.
+      const { error } = await supabase.from("translations").upsert(payload, { onConflict: "key,language_code" });
+      if (error) throw error;
 
       if (TranslationStore) {
         TranslationStore.saveDictionary(targetLang, newDict);
@@ -257,6 +252,7 @@ export class LanguageSettingsView {
         I18n.notify();
       }
 
+      this.importDraft=Object.create(null);
       this.hideSyncOverlay();
       alert(`✅ ¡Traducciones guardadas con éxito para [${targetLang.toUpperCase()}]!`);
     } catch (err) {
@@ -265,6 +261,63 @@ export class LanguageSettingsView {
       alert(`❌ Error al conectar con Supabase: ${err.message}`);
     }
   }
+  /**
+   * Local pack workflow: export, preview and apply. Caller must pass the current
+   * MANAGE_TRANSLATIONS authorization; Supabase remains the final write boundary.
+   */
+  bindEvents(root, { canSave = () => false } = {}) {
+    const host=root?.querySelector?.(".language-settings-view");
+    if (!host) return;
+    const refresh=()=>{
+      const shell=host.parentElement;
+      if(!shell)return;
+      shell.innerHTML=this.render(this.selectedLocale);
+      this.bindEvents(root,{canSave});
+    };
+    host.querySelector("#langCodeInput")?.addEventListener("change", event=>{
+      this.selectedLocale=supportedLocale(event.target.value);
+      this.currentPage=1;this.importDraft=Object.create(null);refresh();
+    });
+    for(const [code,offset] of [["prev",-1],["next",1]]){
+      const id=code==="prev"?"#btn-prev-lang-page":"#btn-next-lang-page";
+      const id2=code==="prev"?"#btn-prev-lang-page-bottom":"#btn-next-lang-page-bottom";
+      for(const el of host.querySelectorAll(id+","+id2))
+        el.addEventListener("click",()=>{this.currentPage+=offset;refresh();});
+    }
+    host.querySelector("[data-lang-pack-export]")?.addEventListener("click",()=>{
+      const dict={...TranslationStore.getDictionary(this.selectedLocale),...this.importDraft};
+      const content=serializeLanguagePackCsv(dict,this.selectedLocale);
+      const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
+      const a=document.createElement("a");a.href=url;a.download="IQBasket_idioma_"+this.selectedLocale+".csv";
+      document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    });
+    const fileInput=host.querySelector("[data-lang-pack-file]");
+    host.querySelector("[data-lang-pack-import]")?.addEventListener("click",()=>{
+      if(!canSave())return;
+      fileInput?.click();
+    });
+    fileInput?.addEventListener("change",async()=>{
+      const file=fileInput.files?.[0];
+      if(!file)return;
+      const status=host.querySelector("[data-lang-pack-status]");
+      try{
+        if(!canSave())throw new Error("Sin permiso de gestión de idiomas.");
+        if(file.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
+        const known=new Set(Object.keys(TranslationStore.getDictionary(this.selectedLocale)));
+        const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known});
+        this.importDraft={...this.importDraft,...entries};
+        this.currentPage=1;refresh();
+        const next=root.querySelector("[data-lang-pack-status]");
+        if(next)next.textContent=Object.keys(entries).length+" traducciones cargadas para revisión. Pulsa Guardar para confirmarlas.";
+      }catch(error){if(status)status.textContent=String(error.message||error);}
+      fileInput.value="";
+    });
+    host.querySelector("#btnSaveLanguage")?.addEventListener("click",()=>{
+      if(!canSave()){const status=host.querySelector("[data-lang-pack-status]");if(status)status.textContent="Sin permiso de modificar idiomas.";return;}
+      void this.handleSave(this.selectedLocale);
+    });
+  }
+
 }
 
 export default LanguageSettingsView;

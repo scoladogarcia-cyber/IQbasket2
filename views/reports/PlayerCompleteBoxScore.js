@@ -45,12 +45,13 @@ export function renderPlayerCompleteBoxScore({ player, games = [], stats = [] } 
   const total = Object.fromEntries(["minutes", "fg2m", "fg2a", "fg3m", "fg3a", "ftm", "fta", "offReb", "defReb", "assists", "steals", "blocks", "turnovers", "foulsCommitted", "foulsDrawn", "pir"].map(key => [key, sum(key)]));
   const fgMade = total.fg2m + total.fg3m;
   const fgAttempted = total.fg2a + total.fg3a;
-  const gamesCount = played.filter(row => row.m.minutes > 0).length;
-  const minutes = total.minutes;
+  const gamesCount = played.filter(row => numberOrNull(row.source.minutes) > 0).length;
+  const hasUnknownMinutes = played.some(row=>numberOrNull(row.source.minutes)===null);
+  const minutes = hasUnknownMinutes ? "N/D" : total.minutes;
   const label = row => `${row.game.date || "Sin fecha"} · ${row.game.opponent || "Rival"}`;
   const shooting = played.map(row => {
     const m = row.m;
-    return rowHtml(label(row), [m.minutes, row.points, attempts(m.fg2m,m.fg2a),percentage(m.fg2m,m.fg2a),attempts(m.fg3m,m.fg3a),percentage(m.fg3m,m.fg3a),attempts(m.fg2m+m.fg3m,m.fga),percentage(m.fg2m+m.fg3m,m.fga),attempts(m.ftm,m.fta),percentage(m.ftm,m.fta)]);
+    return rowHtml(label(row), [numberOrNull(row.source.minutes) ?? "N/D", row.points, attempts(m.fg2m,m.fg2a),percentage(m.fg2m,m.fg2a),attempts(m.fg3m,m.fg3a),percentage(m.fg3m,m.fg3a),attempts(m.fg2m+m.fg3m,m.fga),percentage(m.fg2m+m.fg3m,m.fga),attempts(m.ftm,m.fta),percentage(m.ftm,m.fta)]);
   }).join("") + rowHtml("TOTAL", [minutes,totalPoints,attempts(total.fg2m,total.fg2a),percentage(total.fg2m,total.fg2a),attempts(total.fg3m,total.fg3a),percentage(total.fg3m,total.fg3a),attempts(fgMade,fgAttempted),percentage(fgMade,fgAttempted),attempts(total.ftm,total.fta),percentage(total.ftm,total.fta)], true);
   const rebounding = played.map(row => {
     const m = row.m;

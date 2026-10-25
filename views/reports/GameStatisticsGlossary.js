@@ -31,6 +31,6 @@ const esc = x => String(x ?? "").replace(/[&<>"']/g, k => ({"&":"&amp;","<":"&lt
 export function renderGameStatisticsGlossary() {
   return `<section class="iq-report-panel iq-report-glossary" aria-label="Hoja final de ayuda estadística"><h2>Guía de lectura · glosario de estadísticas</h2>
   <p>Consulta rápida para entrenadores, analistas, familias y usuarios autorizados. C = convertidos, I = intentados; % expresa la proporción en porcentaje.</p>
-  <div class="iq-glossary-grid">${ENTRIES.map(([term,meaning])=>`<div class="iq-glossary-entry"><strong>${esc(term)}</strong><span>${esc(meaning)}</span></div>`).join("")}</div>
-  <p><small>IQBasket · Glosario del informe de partido. Las comparaciones son descriptivas: contexto, estilo de captura y cobertura afectan su interpretación.</small></p></section>`;
+  <div class="iq-glossary-grid">${ENTRIES.map(([term,meaning])=>`<details class="iq-glossary-entry"><summary style="cursor:pointer;min-height:32px"><strong>${esc(term)}</strong></summary><span>${esc(meaning)}</span></details>`).join("")}</div>
+  <p><strong>Preguntas frecuentes:</strong> ¿Un 0 es igual que N/D? No. ¿Qué significa 0/0 tiros? Que el porcentaje es N/D, no 0 %. ¿Se comparan porcentajes sin intentos suficientes? No deben compararse sin contextualizar la muestra.</p><p><small>IQBasket · Glosario del informe de partido. Las comparaciones son descriptivas: contexto, estilo de captura y cobertura afectan su interpretación.</small></p></section>`;
 }

@@ -1,0 +1,56 @@
+name: Family P0-P1 V70 and Live V69 Gate
+on:
+  push:
+    branches: ["feature/family-p0-p1-integration-20261025", "main"]
+    paths:
+      - "views/family/**"
+      - "services/reports/**"
+      - "views/ReportsViewV53.js"
+      - "tests/family-p0-p1-v70.mjs"
+      - "tests/product-p1-v71.mjs"
+      - "tests/family-zero-evidence-v72.mjs"
+      - "domain/family/FamilyPlayer360Presenter.js"
+      - "views/family/FamilyWorkspaceV32View.js"
+      - "views/reports/PlayerCompleteBoxScore.js"
+      - "tests/product-p1-v72.mjs"
+      - "domain/stats/**"
+      - "domain/insights/**"
+      - "views/player360/passport/**"
+      - "services/player360/PassportAssessmentCsvV73.js"
+      - "tests/passport-csv-v73.mjs"
+      - "tests/product-p1-v71.mjs"
+      - "services/i18n/**"
+      - "domain/stats/StatQualityV71.js"
+      - "views/ReportsViewV50.js"
+      - "views/player360/passport/PlayerPassportView.js"
+      - "views/LanguageSettingsView.js"
+      - "tests/live-lease-sync-race-v69.mjs"
+      - ".github/workflows/family-p0-p1-v70.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/family-p0-p1-v70.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/family-zero-evidence-v72.mjs
+      - run: node tests/product-p1-v72.mjs
+      - run: node tests/passport-csv-v73.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/player-passport-portfolio-v68.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: node tests/live-lease-sync-race-v69.mjs
+      - run: node tests/live-minutes-v62-contract.mjs
+      - run: node tests/game-periods-dnp-report-v64.mjs
+      - run: node tests/family-runtime-data-v32-contract.mjs
+      - run: npm run build

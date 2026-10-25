@@ -34,6 +34,7 @@ export class ReportsViewV50 extends ReportsView {
     this._playerPdfRunning = false;
     this._playerReadToken = 0;
     this._playerReportReady = false;
+    this._playerReportFormat = "complete";
   }
 
   /** La vista puede filtrar sede, siempre dentro de la temporada activa. */
@@ -169,7 +170,7 @@ export class ReportsViewV50 extends ReportsView {
       }
       replaceScopedPlayerStatsInMemory(DataStore, { ...selection, stats });
       const report = selection.players.map((player, i) => `<section style="${i ? "break-before:page;page-break-before:always;" : ""}break-inside:auto">
-        ${this._renderSinglePlayerCard(player, selection.games)}
+        ${this._playerReportFormat === "short" ? renderPlayerCompleteBoxScore({player,games:selection.games,stats:DataStore.getPlayerGameStats?.(player.id)||[]}) : this._renderSinglePlayerCard(player, selection.games)}
       </section>`).join("");
       const team = DataStore.getTeamById?.(context.teamId);
       const season = DataStore.getActiveSeasonDisplayName?.(context.teamId) || "Temporada";
@@ -285,10 +286,23 @@ export class ReportsViewV50 extends ReportsView {
       const legacy = toolbar?.querySelector("#btn-open-dossier-modal");
       if (legacy) legacy.style.display = "none";
       if (toolbar) {
+        const formatLabel=document.createElement("label");
+        formatLabel.textContent="Extensión del informe individual: ";
+        formatLabel.style.cssText="display:flex;gap:8px;align-items:center;font-size:12px;flex-wrap:wrap";
+        const format=document.createElement("select");
+        format.id="iq-player-report-format";
+        format.setAttribute("aria-label","Extensión del informe de jugadores");
+        format.style.cssText="min-height:44px;border:1px solid #cbd5e1;border-radius:9px;padding:8px";
+        for(const [value,text] of [["complete","Completo · gráficos, mapa y estadísticas"],["short","Breve · actas y estadísticas esenciales"]]){
+          const option=document.createElement("option");option.value=value;option.textContent=text;format.append(option);
+        }
+        format.value=this._playerReportFormat;
+        format.addEventListener("change",()=>{this._playerReportFormat=format.value;});
+        formatLabel.append(format);toolbar.append(formatLabel);
         const button = document.createElement("button");
         button.type = "button";
         button.id = "btn-export-complete-players";
-        button.textContent = "📥 Exportar informe individual completo (PDF)";
+        button.textContent = "📥 Exportar jugadores seleccionados (PDF)";
         button.style.cssText = "padding:10px 14px;border-radius:8px;border:1px solid #15803d;background:#15803d;color:#fff;font-size:12px;font-weight:800;min-height:44px;max-width:100%;white-space:normal;cursor:pointer";
         button.disabled = true;
         button.title = "Acta individual por partido, T2/T3/TC/TL, rebotes, acciones, porcentajes, radar y mapa de tiro. Imprimir → Guardar como PDF.";

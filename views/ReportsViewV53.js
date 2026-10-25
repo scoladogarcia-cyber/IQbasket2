@@ -15,6 +15,11 @@ import { refreshGameBoxScore } from "../services/games/GameBoxScoreFreshReadServ
 import { buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
 import { renderSelectedGamesOverview } from "./reports/SelectedGamesOverviewV53.js";
 import { buildBoxScoreExchangeRows,serializeBoxScoreCsv,parseBoxScoreCsv,parseBoxScoreExcel,validateBoxScoreImport,commitBoxScoreImport } from "../services/reports/BoxScoreExchangeV53.js";
+import { renderStatsQualityInfo } from "../domain/stats/StatQualityV71.js";
+import { guideCoachV72, renderGuidedCoachV72 } from "../domain/insights/GuidedSummaryV72.js";
+import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.js";
+import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
+import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
 const id = value => String(value ?? "");
@@ -121,16 +126,23 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
     const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
-    const printWindow=kind==="pdf"?window.open("","_blank","width=1024,height=768"):null;
-    if(kind==="pdf"&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
+    const printWindow=(kind==="pdf"||kind==="summary-pdf")?window.open("","_blank","width=1024,height=768"):null;
+    if((kind==="pdf"||kind==="summary-pdf")&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
     this._exchangeBusy=true;status.textContent=`Consultando ${games.length} acta(s) autorizadas…`;
     if(printWindow)printWindow.document.body.textContent="Preparando informe completo…";
     try {
       const reports=await this._readSelected(games,true);
-      if(kind==="pdf") {
-        const html=buildCompleteSeasonReport({reports,teamName:DataStore.getTeamById?.(context.teamId)?.name||"Equipo",seasonName:DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada"});
+      if(kind==="pdf"||kind==="summary-pdf") {
+        const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
+        const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
+        const quality=reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
+        const html=kind==="pdf"
+          ? buildCompleteSeasonReport({reports,teamName,seasonName})+quality
+          : '<section class="iq-report-panel"><h1>Resumen visual · '+teamName.replace(/[&<>"']/g,"")+' · '+seasonName.replace(/[&<>"']/g,"")+'</h1>'+
+            renderSelectedGamesOverview(reports.map(r=>({game:r.game,stats:r.stats})),{title:"Resumen visual · selección de partidos"})+
+            renderGuidedCoachV72(guideCoachV72(reports))+quality+renderGameStatisticsGlossary()+'</section>';
         const authorization=this.reportAccessPolicy.authorizeExport(ReportType.SEASON_DOSSIER,context);
-        if(!authorization.allowed||!ReportExporter.printReport("IQBasket_Seleccion_Partidos",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
+        if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
       } else if(kind==="csv") {
         const rows=buildBoxScoreExchangeRows(reports);
         this._download(serializeBoxScoreCsv(rows),"text/csv;charset=utf-8","IQBasket_BoxScore_Seleccion.csv");
@@ -144,7 +156,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
       } else {
         throw new Error("Formato de exportación no compatible.");
       }
-      status.textContent=`Preparados ${games.length} partido(s). ${kind==="pdf"?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
+      status.textContent=`Preparados ${games.length} partido(s). ${(kind==="pdf"||kind==="summary-pdf")?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
     }catch(error){status.textContent=`Exportación cancelada: ${error.message}`;if(printWindow&&!printWindow.closed)printWindow.document.body.textContent=status.textContent;}
     finally{this._exchangeBusy=false;}
   }
@@ -195,6 +207,30 @@ export class ReportsViewV53 extends ReportsViewV50 {
       && Boolean(this.auth?.can?.(Permission.EDIT_GAME,context));
   }
 
+  /**
+   * Download one-game template from the same RLS-authorized report used by the
+   * normal export. Empty statistics stay blank; user edits never write to DB.
+   */
+  async _exportFederationTemplate(status) {
+    if(this._exchangeBusy)return;
+    const selected=this._selectionGames();
+    if(selected.length!==1){status.textContent="Selecciona exactamente un partido para generar su plantilla.";return;}
+    this._exchangeBusy=true;
+    try{
+      status.textContent="Preparando plantilla desde el acta autorizada…";
+      const report=(await this._readSelected(selected,true))[0];
+      const eligible=DataStore.getPlayersEligibleOnDate?.(report.game.team_id,report.game.date)||[];
+      const template=createFederationWorksheetV72({game:report.game,eligiblePlayers:eligible,stats:report.stats});
+      if(!this.reportAccessPolicy.canExport(ReportType.GAME_STATS,{...this._reportContext(),gameId:report.game.id}))
+        throw new Error("Permiso de exportación cambiado.");
+      this._download(template.content,"text/csv;charset=utf-8",template.filename);
+      status.textContent="Plantilla descargada: "+template.rows+" jugadores. "+
+        (template.missingCells?template.missingCells+" campos sin registrar aparecen vacíos (N/D); complétalos antes de importarla.":"Todos los campos de la plantilla tienen valores registrados.")+
+        " Puedes editarla en Excel o LibreOffice y guardarla como CSV UTF-8.";
+    }catch(error){status.textContent="No se ha generado la plantilla: "+error.message;}
+    finally{this._exchangeBusy=false;}
+  }
+
   async _importSelection(file,holder,status) {
     holder.replaceChildren();const games=this._selectionGames();
     if(games.length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}
@@ -204,15 +240,41 @@ export class ReportsViewV53 extends ReportsViewV50 {
     try{
       status.textContent="Leyendo y comprobando archivo…";
       const text=await file.text();
-      const matrix=/\.csv$/i.test(file.name)?parseBoxScoreCsv(text):/\.xls$/i.test(file.name)?parseBoxScoreExcel(text):null;
+      let matrix=/\.csv$/i.test(file.name)?parseBoxScoreCsv(text):/\.xls$/i.test(file.name)?parseBoxScoreExcel(text):null;
       if(!matrix)throw new Error("Formato no compatible: importa CSV o el Excel XML .xls exportado por IQBasket.");
       const [report,events]=await Promise.all([
         this._readSelected([game],true).then(items=>items[0]),
         supabase.from("game_events").select("id").eq("game_id",game.id).limit(1)
       ]);
       if(events.error||!Array.isArray(events.data))throw new Error("No se puede comprobar el play-by-play.");
-      if(events.data.length)throw new Error("Este partido contiene jugadas: su BoxScore se corrige en el editor de jugadas, no por importación.");
       const eligible=DataStore.getPlayersEligibleOnDate?.(game.team_id,game.date)||[];
+      const federated=isFederationCsv(matrix);
+      if(federated)matrix=adaptFederationCsv(matrix,{game:report.game,stats:report.stats,eligiblePlayers:eligible});
+      // Never overwrite a live play-by-play from a third-party boxscore.
+      // Federated data can still be compared, without mutation.
+      if(events.data.length){
+        if(!federated)throw new Error("Este partido contiene jugadas: su BoxScore se corrige en el editor de jugadas, no por importación.");
+        const current=new Map(report.stats.map(r=>[id(r.player_id??r.playerId),r]));
+        const head=matrix[0], col=n=>head.indexOf(n);
+        const diffs=matrix.slice(1).map(row=>{
+          const pid=row[col("player_id")], old=current.get(pid)||{};
+          const pts=Number(row[col("points")]), min=Number(row[col("minutes")]);
+          const oldPts=old.points==null?"N/D":old.points,oldMin=old.minutes==null?"N/D":old.minutes;
+          return {player:row[col("jugador")],oldPts,pts,oldMin,min,
+            changed:String(oldPts)!==String(pts)||String(oldMin)!==String(min)};
+        });
+        holder.append(note("Comparación oficial · modo solo lectura. Hay jugadas de anotación en vivo: no se modifica el acta ni se pierde el play-by-play."));
+        const table=document.createElement("table");table.style.cssText="width:100%;font-size:12px";
+        const th=document.createElement("tr");
+        ["Jugador","PTS IQBasket","PTS acta","MIN IQBasket","MIN acta"].forEach(label=>{const cell=document.createElement("th");cell.textContent=label;th.append(cell);});table.append(th);
+        diffs.filter(d=>d.changed).forEach(d=>{const tr=document.createElement("tr");
+          [d.player,d.oldPts,d.pts,d.oldMin,d.min].forEach(val=>{const td=document.createElement("td");td.textContent=String(val);tr.append(td);});table.append(tr);
+        });
+        if(diffs.some(d=>d.changed))holder.append(table);
+        else holder.append(note("Los puntos y minutos importados coinciden con los datos actuales."));
+        status.textContent="Comparación completada. Para corregir un partido con jugadas, utiliza el editor de anotación; ningún dato se ha sobrescrito.";
+        return;
+      }
       const preview=validateBoxScoreImport(matrix,{game:report.game,stats:report.stats,eligiblePlayers:eligible});
       holder.append(note(`Vista previa · ${preview.rows.length} jugadores · ${preview.differences} filas con cambios · ${preview.points} puntos. Solo se modificarían estadísticas individuales del partido, nunca jugadas, parciales ni marcador.`));
       const table=document.createElement("table");table.style.cssText="width:100%;font-size:12px;border-collapse:collapse";
@@ -243,7 +305,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     try{
       const reports=await this._readSelected(games,false);
       if(token!==this._overviewToken || this.reportMode!=="game"||this.selectedGameId!=="all")return;
-      target.innerHTML=renderSelectedGamesOverview(reports.map(report=>({game:report.game,stats:report.stats})),{title:"Resumen visual · partidos seleccionados"});
+      target.innerHTML=renderSelectedGamesOverview(reports.map(report=>({game:report.game,stats:report.stats})),{title:"Resumen visual · partidos seleccionados"})+renderGuidedCoachV72(guideCoachV72(reports))+reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
     }catch(error){if(token===this._overviewToken)target.textContent=`No se pudo elaborar el resumen: ${error.message}`;}
   }
 
@@ -259,7 +321,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     this._refreshCompleteSelectionButton(container);
     const panel=document.createElement("section");panel.style.cssText="background:white;border:1px solid #cbd5e1;border-radius:12px;padding:14px;margin:12px 0;display:grid;gap:9px";
     const title=document.createElement("h3");title.textContent="Selección de partidos y datos reutilizables";panel.append(title);
-    const status=note("Excel .xlsx exporta Acta, BoxScore y todas las jugadas reales. CSV se mantiene para intercambio de BoxScore; la importación .xls es solo compatibilidad legacy.");status.setAttribute("role","status");panel.append(status);
+    const status=note("Excel .xlsx exporta Acta, BoxScore y todas las jugadas reales. CSV permite también comparar o importar un acta federativa con columnas completas y dorsales verificados; no sustituye jugadas en vivo. El .xls es solo legacy.");status.setAttribute("role","status");panel.append(status);
     const games=this._visibleGames();
     if(this.selectedGameId==="all") {
       const select=document.createElement("div");select.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px";
@@ -273,15 +335,18 @@ export class ReportsViewV53 extends ReportsViewV50 {
       panel.append(select,actions);
     }
     const toolbar=document.createElement("div");toolbar.style.cssText="display:flex;flex-wrap:wrap;gap:8px";
-    const pdf=button("PDF · partidos seleccionados","#0f766e");
+    const pdf=button("PDF completo · mapas + gráficas + actas","#0f766e");
+    const summaryPdf=button("PDF visual breve · resumen","#2563eb");
     const xlsx=button("Excel completo · Acta + BoxScore + Jugadas","#1d4ed8");
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
-    const importButton=button("Importar BoxScore CSV / .xls legacy","#b45309");
+    const templateCsv=button("Plantilla editable CSV · 1 partido","#0369a1");
+    const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(pdf,xlsx,eventsXlsx,csv,importButton,file);panel.append(toolbar);
+    toolbar.append(summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,file);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
-    for(const [btn,kind] of [[pdf,"pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
+    for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
+    templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
     importButton.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}if(!this._canImport(this._selectionGames()[0])){status.textContent="Sin permiso de edición o partido/temporada cerrado.";return;}file.click();});
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);

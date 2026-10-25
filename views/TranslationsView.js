@@ -2975,7 +2975,7 @@ export class TranslationsView {
 
     // PESTAÑA IDIOMAS: GUARDAR EN SUPABASE
     if (this.activeTab === "translations") {
-      this.languageSettingsView.bindEvents(container);
+      this.languageSettingsView.bindEvents(container, { canSave: () => this._can("MANAGE_TRANSLATIONS") });
 
       container.querySelectorAll("button, .btn-primary, .btn-save-translations").forEach(btn => {
         if (btn.textContent.includes("Guardar Traducciones")) {

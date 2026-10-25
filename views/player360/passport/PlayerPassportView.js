@@ -16,6 +16,7 @@ import { latestScoresByAttribute, summarizePassport, rightLeftAsymmetries } from
 import { deriveFunctionalRoles } from "../../../domain/player360/PlayerPassportRoles.js";
 import { PLAYER_PASSPORT_CONFIG } from "../../../config/player-passport.config.js";
 import { exportPassportWord, exportPassportCardPng } from "../../../services/player360/PlayerPassportExportService.js";
+import { exportPassportAssessmentCsvV73, previewPassportAssessmentCsvV73 } from "../../../services/player360/PassportAssessmentCsvV73.js";
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -383,7 +384,12 @@ export class PlayerPassportView {
       '<label class="pp-title">Tiempo real dedicado a esta evaluación (minutos, opcional)<input id="pp-assessment-minutes" type="number" min="1" max="600" step="1" value="'+esc(this.editorMeta.minutes||"")+'" placeholder="Sin registrar"></label>'+
       '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+
       '<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
-      '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
+      '<div class="pp-csv-toolbar"><strong>Valoraciones fuera de IQBasket</strong>'+
+      '<p>Descarga los 69 atributos, completa solo los observados y vuelve a importar el CSV. Primero se revisan aquí; no se guardan sin confirmación.</p>'+
+      '<button type="button" id="pp-csv-download" class="pp-top-action">Descargar plantilla CSV</button> '+
+      '<button type="button" id="pp-csv-choose" class="pp-top-action">Importar CSV y revisar</button>'+
+      '<input type="file" id="pp-csv-file" accept=".csv,text/csv" hidden aria-label="Archivo de evaluación CSV">'+
+      '</div><div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
   }
 
   _helpPanel() {
@@ -396,6 +402,7 @@ export class PlayerPassportView {
       '<p><strong>5. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
       '<p><strong>6. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
       '<p><strong>7. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
+      '<p><strong>8. Un cero no es N/D.</strong> Cero refleja una acción efectivamente registrada; N/D indica que faltan datos o el cálculo no tiene denominador.</p>'+
       '<button type="button" id="pp-help-start" class="pp-primary-action">Empezar una valoración</button></div></div>';
   }
 
@@ -501,16 +508,29 @@ export class PlayerPassportView {
       cards+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Abrir Player 360 →</a>';
   }
 
+  _passportFaq(){
+    return '<details class="pp-faq" style="padding:16px;border:1px solid #cbd5e1;border-radius:14px;background:#fff;margin:12px 0" aria-label="Preguntas frecuentes del pasaporte">'+
+      '<summary style="cursor:pointer;min-height:44px;font-weight:900">Guía rápida: interpretar el pasaporte y sus estadísticas</summary>'+
+      '<dl>'+
+      '<dt><strong>¿Qué representa la nota 1–5?</strong></dt><dd>Una descripción ordinal del comportamiento observado en una rúbrica y dificultad concretas. No es una nota absoluta de talento.</dd>'+
+      '<dt><strong>¿Qué significan D1–D5?</strong></dt><dd>La dificultad de la tarea evaluada. No aumenta automáticamente con la edad, categoría o puntuación.</dd>'+
+      '<dt><strong>¿Qué significa NE?</strong></dt><dd>Atributo no evaluado: no equivale a un 0 ni a un nivel 1.</dd>'+
+      '<dt><strong>¿Qué significa N/D?</strong></dt><dd>Dato no disponible o no calculable, por ejemplo minutos no registrados o porcentaje sin intentos.</dd>'+
+      '<dt><strong>¿Los puntos anotados demuestran que ha mejorado el tiro?</strong></dt><dd>No por sí solos: la evolución de habilidad exige observaciones comparables, contexto y rúbricas del entrenador.</dd>'+
+      '<dt><strong>¿Quién ve el histórico anterior?</strong></dt><dd>Solo perfiles con relación verificada, permiso deportivo y autorización explícita para cada información compartida.</dd>'+
+      '</dl></details>';
+  }
+
   _sectionContent(model){
     switch(this.activeSection){
       case 'skills':return this._insights(model)+this._dimensions(model);
       case 'evolution':return this._careerPanel()+this._measurements();
       case 'training':return this._trainingHoursCard()+this._trainingHistoryPanel();
-      case 'games':return this._gamesPanel();
+      case 'games':return this._gamesPanel()+this._passportFaq();
       case 'evidence':return this._evidencePanel(model);
       case 'habits':return this._habitsPanel();
       case 'evaluation':return this._editor();
-      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model);
+      default:return this._trainingHoursCard()+this._qualityPanel(model)+this._insights(model)+this._passportFaq();
     }
   }
 
@@ -553,6 +573,41 @@ export class PlayerPassportView {
     document.querySelectorAll(".pp-difficulty").forEach(select=>select.addEventListener("change",function(){
       self._setDraftFromRow(select.closest(".pp-eval-card"),{difficultyTier:select.value});
     }));
+    var csvDownload=document.getElementById("pp-csv-download");
+    if(csvDownload)csvDownload.addEventListener("click",function(){
+      if(!self._can(Permission.CREATE_PLAYER_EVALUATION))return;
+      try{
+        const text=exportPassportAssessmentCsvV73(self.data?.catalog,self._model().latest);
+        const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
+        const url=URL.createObjectURL(blob),a=document.createElement("a");
+        a.href=url;a.download="IQBasket_Pasaporte_Evaluacion_"+String(self.playerId||"jugador").replace(/[^a-z0-9_-]/gi,"")+".csv";
+        document.body.append(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),10000);
+      }catch(error){
+        const status=document.getElementById("pp-status");
+        if(status)status.textContent=String(error.message||error);
+      }
+    });
+    var csvChoose=document.getElementById("pp-csv-choose"),csvFile=document.getElementById("pp-csv-file");
+    if(csvChoose)csvChoose.addEventListener("click",function(){if(self._can(Permission.CREATE_PLAYER_EVALUATION))csvFile?.click();});
+    if(csvFile)csvFile.addEventListener("change",async function(){
+      const selected=csvFile.files?.[0];if(!selected)return;
+      const status=document.getElementById("pp-status");
+      try{
+        if(!self._can(Permission.CREATE_PLAYER_EVALUATION))throw new Error("Sin permiso para valorar al jugador.");
+        if(selected.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
+        const preview=previewPassportAssessmentCsvV73(await selected.text(),{
+          catalog:self.data?.catalog,context:self.filterContext
+        });
+        if(self._draftCount()&&!confirm("La importación sustituirá los cambios locales no guardados. ¿Continuar?"))return;
+        self.editorDraft=new Map(preview.drafts);
+        self.filterDimension="";self.filterSubdimension="";
+        self._render();
+        const freshStatus=document.getElementById("pp-status");
+        if(freshStatus)freshStatus.textContent=preview.updated+" atributos importados para revisión. Comprueba las observaciones y pulsa Guardar cambios observados.";
+      }catch(error){if(status)status.textContent=String(error.message||error);}
+      finally{csvFile.value="";}
+    });
     var context=document.getElementById("pp-context"); if(context)context.addEventListener("change",function(e){
       if(self._draftCount() && !confirm("Cambiar el contexto descartará los cambios de atributos todavía no guardados. ¿Continuar?")){e.target.value=self.filterContext;return;}
       self.editorDraft.clear();self.filterContext=e.target.value;self._render();
@@ -634,6 +689,7 @@ export class PlayerPassportView {
       '.pp-hero{position:relative;overflow:hidden;min-height:410px;border:1px solid #473487;border-radius:22px;padding:28px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(230px,.75fr) minmax(250px,.8fr);gap:22px;align-items:center;background:radial-gradient(circle at 52% 40%,rgba(124,58,237,.45),transparent 28%),linear-gradient(135deg,#070914,#11183a 58%,#250a42);color:#fff;box-shadow:0 24px 60px rgba(15,23,42,.22)}.pp-hero:before{content:"";position:absolute;inset:10px;border:1px solid rgba(196,181,253,.27);border-radius:16px}.pp-identity,.pp-art,.pp-badges{position:relative;z-index:1}.pp-eyebrow{display:block;color:#c4b5fd;font-size:10px;font-weight:950;letter-spacing:.14em;margin-bottom:8px}.pp-eyebrow.dark{color:#6d28d9}.pp-identity h1{margin:0;font-size:clamp(34px,5vw,64px);line-height:.92;text-transform:uppercase;letter-spacing:-.04em;color:#fff}.pp-identity>p{color:#ddd6fe}.pp-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.pp-meta span{border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.72);border-radius:999px;padding:7px 9px;font-size:11px;color:#e5e7eb!important}.pp-meta b{color:#c4b5fd!important}.pp-hero-action{margin-top:14px;min-height:46px;border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:900;cursor:pointer}.pp-art{min-height:300px;align-self:end;display:flex;justify-content:center;align-items:flex-end}.pp-art img{max-width:100%;max-height:370px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.45))}.pp-silhouette{width:200px;height:260px;border-radius:100px 100px 26px 26px;display:grid;place-items:center;background:linear-gradient(160deg,#7c3aed,#1e293b);font-size:68px;font-weight:950}.pp-watermark{position:absolute;right:-5px;bottom:0;font-size:120px;line-height:.75;font-weight:950;color:rgba(255,255,255,.06);z-index:-1}.pp-badges{display:grid;gap:10px}.pp-shield,.pp-mini{border:1px solid rgba(196,181,253,.32);background:rgba(3,7,22,.64);border-radius:15px;padding:14px}.pp-shield{text-align:center}.pp-shield small,.pp-mini small{display:block;color:#c4b5fd;font-size:9px;font-weight:950;letter-spacing:.1em;margin-bottom:6px}.pp-shield strong{display:block;font-size:40px}.pp-shield strong span{font-size:15px;color:#94a3b8}.pp-shield em{font-style:normal;color:#ddd6fe}.pp-mini span{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.12);padding:6px 0;font-size:11px;color:#f1f5f9!important}.pp-mini span:first-of-type{border-top:0}.pp-mini b{color:#ddd6fe!important}.pp-shield strong,.pp-shield em{color:#fff!important}'+
       '.pp-panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;box-shadow:0 5px 18px rgba(15,23,42,.04)}.pp-panel h2{margin:0 0 12px;font-size:20px}.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pp-list{display:grid;gap:7px}.pp-list>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px;align-items:center;border:1px solid #ede9fe;background:#faf9ff;border-radius:10px;padding:9px;font-size:12px}.pp-list small{color:#64748b}.pp-head{display:flex;justify-content:space-between;gap:12px}.pp-head p{margin:0;color:#64748b;font-size:12px}.pp-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pp-dimension{border:1px solid #e2e8f0;border-radius:13px;padding:13px;background:#fbfcff}.pp-dimension header{display:flex;justify-content:space-between}.pp-dimension h3{margin:0;font-size:14px}.pp-dimension header>div small{color:#64748b}.pp-dimension header>b{width:44px;height:44px;border:1px solid #c4b5fd;border-radius:11px;display:grid;place-items:center;color:#6d28d9}.pp-bar{height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin:9px 0}.pp-bar span{display:block;height:100%;background:linear-gradient(90deg,#7c3aed,#2563eb)}.pp-attribute{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eef2f7;font-size:11px}.pp-pips{display:flex;gap:3px}.pp-pips i{width:10px;height:10px;border:1px solid #cbd5e1;border-radius:3px}.pp-pips i.on{background:#7c3aed;border-color:#7c3aed}.pp-ne{font-size:10px;font-weight:900;color:#94a3b8}.pp-measure-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.pp-measure{border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:grid;gap:3px}.pp-measure>span{font-size:9px;text-transform:uppercase;color:#64748b;font-weight:900}.pp-measure strong{font-size:18px}.pp-measure em{font-size:9px;color:#94a3b8;font-style:normal}'+
       '.pp-editor-shell{padding:0;overflow:hidden}.pp-source-note{border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:9px;padding:10px;font-size:12px}.pp-toggle{width:100%;min-height:64px;border:0;background:#111827;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;text-align:left;cursor:pointer}.pp-toggle span{display:grid;gap:3px}.pp-toggle small{color:#cbd5e1}.pp-editor{padding:18px;display:grid;gap:13px}.pp-editor label{display:grid;gap:5px;font-size:11px;font-weight:850}.pp-editor input,.pp-editor select,.pp-editor textarea{width:100%;min-height:44px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font:inherit;background:#fff}.pp-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.pp-title{max-width:720px}.pp-note{border:1px solid #ddd6fe;background:#faf5ff;color:#5b21b6;border-radius:9px;padding:10px;font-size:11px}.pp-eval-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.pp-eval-card{border:1px solid #e2e8f0;border-radius:11px;padding:11px;display:grid;gap:9px}.pp-eval-card.pp-eval-changed{border-color:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.10)}.pp-eval-card header{display:flex;justify-content:space-between}.pp-eval-card header small{color:#7c3aed;font-weight:900}.pp-change-marker{display:block;margin-top:3px;font-size:9px;font-style:normal;color:#94a3b8;font-weight:800}.pp-eval-changed .pp-change-marker{color:#6d28d9}.pp-current-value{display:grid;grid-template-columns:auto auto 1fr;gap:7px;align-items:center;border:1px solid #ddd6fe;background:#faf5ff;border-radius:8px;padding:8px}.pp-current-value span{font-size:9px;text-transform:uppercase;font-weight:900;color:#6d28d9}.pp-current-value b{font-size:14px;color:#4c1d95}.pp-current-value small{font-size:9px;color:#64748b;text-align:right}.pp-current-empty{background:#f8fafc;border-color:#e2e8f0}.pp-current-empty span,.pp-current-empty b{color:#64748b}.pp-eval-card h3{margin:2px 0 0;font-size:13px}.pp-eval-card>p{margin:0;color:#64748b;font-size:10px;line-height:1.45}.pp-help{min-width:82px;height:44px;padding:0 10px;border:1px solid #c4b5fd;border-radius:9px;background:#f5f3ff;color:#6d28d9;font-weight:950}.pp-score{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}.pp-score button{min-height:44px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-weight:900}.pp-score button.selected{background:#6d28d9;border-color:#6d28d9;color:#fff}.pp-score button:disabled{opacity:.45;cursor:not-allowed}.pp-evidence{display:grid;grid-template-columns:1fr 1fr;gap:7px}.pp-rubric{border-top:1px solid #e2e8f0;padding-top:8px}.pp-rubric>p{font-size:10px;color:#475569}.pp-rubric>div{display:grid;gap:2px;padding:6px 0;border-top:1px solid #f1f5f9}.pp-rubric b{font-size:10px;color:#6d28d9}.pp-rubric span{font-size:9px;color:#475569}.pp-save{display:flex;justify-content:flex-end;align-items:center;gap:10px}.pp-save span{font-size:11px;color:#b45309}.pp-save button{min-height:44px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:9px 15px;font-weight:900}'+
+      '.pp-csv-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:12px}.pp-csv-toolbar strong,.pp-csv-toolbar p{flex-basis:100%;margin:0}.pp-csv-toolbar p{font-size:12px;color:#334155}.pp-csv-toolbar button{min-height:44px}'+
       '.pp-primary-action{min-height:44px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:10px 14px;font-weight:900;cursor:pointer}.pp-modal{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.72);display:grid;place-items:center;padding:16px}.pp-modal-card{width:min(680px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;color:#0f172a}.pp-modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.pp-modal-head h2{margin:0}.pp-modal-head button{width:44px;height:44px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;font-size:18px}.pp-modal-card p{font-size:13px;line-height:1.55;color:#475569}.pp-picker{background:linear-gradient(135deg,#0f172a,#312e81);color:#fff!important;border-radius:18px;padding:24px}.pp-picker h1{margin:0;font-size:32px;color:#fff!important;text-shadow:0 1px 2px rgba(0,0,0,.25)}.pp-picker p{color:#ede9fe!important}.pp-pick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.pp-pick{min-height:76px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:11px;background:#fff;color:#0f172a;text-decoration:none}.pp-avatar{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#ede9fe;color:#6d28d9;font-weight:950}.pp-pick>span:nth-child(2){display:grid;gap:3px}.pp-pick small{color:#64748b}.pp-empty,.pp-error{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:11px;padding:16px;color:#475569}.pp-error{border-style:solid;border-color:#fecaca;background:#fff7f7;color:#991b1b}.pp-loading{min-height:340px;display:flex;gap:12px;align-items:center;justify-content:center;color:#475569}.pp-spinner{width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#7c3aed;border-radius:50%;animation:ppspin .8s linear infinite}@keyframes ppspin{to{transform:rotate(360deg)}}'+
       '@media(max-width:1050px){.pp-hero{grid-template-columns:1fr .7fr}.pp-badges{grid-column:1/-1;grid-template-columns:repeat(3,1fr)}.pp-measure-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.pp-page{padding:12px;gap:12px}.pp-hero{min-height:0;padding:17px;grid-template-columns:1fr;border-radius:16px}.pp-art{min-height:210px}.pp-art img{max-height:260px}.pp-silhouette{width:160px;height:210px;font-size:52px}.pp-badges{grid-column:auto;grid-template-columns:1fr}.pp-two,.pp-dim-grid,.pp-eval-grid{grid-template-columns:1fr}.pp-measure-grid{grid-template-columns:repeat(2,1fr)}.pp-filters{grid-template-columns:1fr 1fr}.pp-pick-grid{grid-template-columns:1fr}.pp-head{display:grid}.pp-list>div{grid-template-columns:1fr auto}.pp-list small{grid-column:1/-1}.pp-save{display:grid}.pp-save button{width:100%}}@media(max-width:430px){.pp-filters,.pp-evidence,.pp-measure-grid{grid-template-columns:1fr}.pp-score{grid-template-columns:repeat(3,1fr)}.pp-meta{display:grid;grid-template-columns:1fr 1fr}.pp-identity h1{font-size:34px}}'+
     '</style>';
