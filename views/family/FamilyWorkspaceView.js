@@ -15,6 +15,7 @@ import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/fami
 import { PlayerDataSubmissionService } from "../../services/player360/PlayerDataSubmissionService.js";
 import { PlayerSubmissionPanel } from "../player360/PlayerSubmissionPanel.js";
 import { Permission } from "../../security/PermissionService.js";
+import { displayObserved } from "../../domain/stats/StatQualityV71.js";
 import { buildFamilyHomeV70, renderFamilyHomeV70 } from "./FamilyHomeV70.js";
 import { bindFamilyMotivationV74 } from "./FamilyMotivationReflectionV74.js";
 import { I18n } from "../../services/I18nService.js";
@@ -23,7 +24,8 @@ const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+// Share the canonical recorded-value formatter: unknown is N/D, observed zero is 0.
+const number = value => displayObserved(value,{digits:1});
 
 export class FamilyWorkspaceView {
   constructor(supabaseClient = null, authController = null) {

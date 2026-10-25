@@ -58,7 +58,14 @@ function metricTrend(metric, recent, previous) {
 function threePointTrend(recent, previous) {
   const made = rows => rows.reduce((sum, row) => sum + finite(row?.fg3_made), 0);
   const attempted = rows => rows.reduce((sum, row) => sum + finite(row?.fg3_attempted), 0);
-  if ([...recent,...previous].some(row=>row?.fg3_made === null || row?.fg3_made === undefined || row?.fg3_attempted === null || row?.fg3_attempted === undefined)) return null;
+  // No false 0% when shot records are blank, invalid or internally inconsistent.
+  const recordedShots=row=>{
+    const rawMade=row?.fg3_made,rawAttempts=row?.fg3_attempted;
+    if(rawMade===null||rawMade===undefined||rawMade===""||rawAttempts===null||rawAttempts===undefined||rawAttempts==="")return false;
+    const m=Number(rawMade),a=Number(rawAttempts);
+    return Number.isInteger(m)&&Number.isInteger(a)&&m>=0&&a>=0&&m<=a;
+  };
+  if (![...recent,...previous].every(recordedShots)) return null;
   const recentAttempts = attempted(recent);
   const previousAttempts = attempted(previous);
   if (recentAttempts < 5 || previousAttempts < 5) return null;
