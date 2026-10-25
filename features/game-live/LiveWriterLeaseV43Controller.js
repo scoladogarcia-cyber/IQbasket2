@@ -26,11 +26,33 @@ export class LiveWriterLeaseV43Controller extends LiveWriterLeaseController {
     super(supabaseClient);
     this.service = new GameLiveSessionV43Service(supabaseClient);
     this.lastOwnedState = null;
+    this.leaseSyncPromise = null;
+    this.recoveryPromise = null;
+    this.onLeaseReady = null;
+  }
+
+  /** A rerender may run while the lease check is awaiting a backend RPC.
+   * Reuse that check so concurrent HUD renders cannot race acquisition.
+   */
+  async syncAfterRender(container, gameId) {
+    if (this.leaseSyncPromise && String(this.gameId || "") === String(gameId || "")) {
+      return this.leaseSyncPromise;
+    }
+    const operation = super.syncAfterRender(container, gameId);
+    this.leaseSyncPromise = operation;
+    try {
+      return await operation;
+    } finally {
+      if (this.leaseSyncPromise === operation) this.leaseSyncPromise = null;
+    }
   }
 
   _activateOwnedLease(state = {}) {
     this.lastOwnedState = { ...state };
     super._activateOwnedLease(state);
+    // A queued offline snapshot was never sent without an owned token.
+    // Notify the scorer once ownership is confirmed, not on every rerender.
+    this.onLeaseReady?.();
   }
 
   /** Restore the lease panel after the HUD replaces its own innerHTML. */
@@ -76,16 +98,22 @@ export class LiveWriterLeaseV43Controller extends LiveWriterLeaseController {
 
   async _recoverOwn() {
     if (!this.gameId) return;
-    this._setWriterControlsEnabled(false);
-    this._renderLoading();
-    try {
-      const recovered = await this.service.recoverOwn({ gameId: this.gameId });
-      this._activateOwnedLease(recovered);
-    } catch (error) {
-      this.ownsLease = false;
+    if (this.recoveryPromise) return this.recoveryPromise;
+    const operation = (async () => {
       this._setWriterControlsEnabled(false);
-      this._renderError(error);
-    }
+      this._renderLoading();
+      try {
+        const recovered = await this.service.recoverOwn({ gameId: this.gameId });
+        this._activateOwnedLease(recovered);
+      } catch (error) {
+        this.ownsLease = false;
+        this._setWriterControlsEnabled(false);
+        this._renderError(error);
+      }
+    })();
+    this.recoveryPromise = operation;
+    try { return await operation; }
+    finally { if (this.recoveryPromise === operation) this.recoveryPromise = null; }
   }
 
   async releaseForNavigation(reason = "Navigation away from live capture") {
@@ -121,6 +149,16 @@ export function attachLiveWriterLeaseV43(view, supabaseClient = null, gameId = n
   view.__liveWriterLeaseAttached = true;
 
   const controller = new LiveWriterLeaseV43Controller(supabaseClient);
+  controller.onLeaseReady = () => {
+    // Resume the durable V58 outbox only after this tab owns the writer token.
+    // Do not create a new snapshot; replay the existing queued operations.
+    queueMicrotask(() => {
+      if (!controller.ownsLease || String(view.gameId || "") !== String(controller.gameId || "")) return;
+      if (typeof view._flushLiveSync === "function" && view.livePendingCount > 0) {
+        void view._flushLiveSync().catch(() => {});
+      }
+    });
+  };
   const originalRender = view.render.bind(view);
   const originalHudRender = typeof view._renderHUD === "function"
     ? view._renderHUD.bind(view)
