@@ -8,6 +8,10 @@ on:
       - "views/ReportsViewV53.js"
       - "tests/family-p0-p1-v70.mjs"
       - "tests/product-p1-v71.mjs"
+      - "tests/product-p1-v72.mjs"
+      - "domain/stats/**"
+      - "domain/insights/**"
+      - "tests/product-p1-v71.mjs"
       - "services/i18n/**"
       - "domain/stats/StatQualityV71.js"
       - "views/ReportsViewV50.js"
@@ -31,6 +35,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node tests/family-p0-p1-v70.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/product-p1-v72.mjs
       - run: node tests/product-p1-v71.mjs
       - run: node tests/player-passport-portfolio-v68.mjs
       - run: node tests/selected-reports-v53.mjs
