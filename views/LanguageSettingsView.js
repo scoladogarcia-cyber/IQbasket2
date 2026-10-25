@@ -119,7 +119,7 @@ export class LanguageSettingsView {
     paginatedKeys.forEach((key) => {
       const dbEntry = Array.isArray(currentDictionary) ? currentDictionary.find((d) => d.key === key) : null;
       const val = this.importDraft[key] ?? (dbEntry ? (dbEntry.translation || dbEntry.value) : (dict[key] || ""));
-      const safeVal=String(val).replace(/[&<>"\x27]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",\x27:"&quot;","\x27":"&#39;"}[ch]||"&#39;"));
+      const safeVal=String(val).replace(/[&<>"']/g,ch=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
 
       rowsHtml += `
         <tr style="border-bottom: 1px solid #f1f5f9;">
