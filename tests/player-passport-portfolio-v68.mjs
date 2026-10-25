@@ -41,6 +41,7 @@ const rowsByTable={
 const client={
  rpc:async(name,args)=>{
    if(name==='iq_v68_player_passport_career')return {data:{category:'Cadete Masculino',career:[{evaluations:[],measurements:[]}]},error:null};
+   if(name==='iq_v68_passport_shared_career')return {data:[],error:null};
    if(name==='iq_v4e2_wellness_capabilities')return {data:{can_read:false,can_create:false,can_update:false},error:null};
    throw Error('Unexpected RPC '+name);
  },
@@ -60,7 +61,11 @@ const sql=readFileSync(new URL('../supabase/migrations/20261025120000_player_pas
 const guided=readFileSync(new URL('../supabase/migrations/20261025124500_player_passport_guided_scoring_v68.sql',import.meta.url),'utf8');
 const view=readFileSync(new URL('../views/player360/passport/PlayerPassportView.js',import.meta.url),'utf8');
 assert.match(sql,/security_invoker=true/);assert.match(sql,/iq_v4_can_access_player_passport/);
-assert.match(sql,/iqbasket_recovery_20261025/);assert.match(guided,/PASSPORT_EVIDENCE_INSUFFICIENT/);
+assert.match(sql,/iqbasket_recovery_20261025/);
+const shared=readFileSync(new URL('../supabase/migrations/20261025133000_player_passport_shared_history_v68.sql',import.meta.url),'utf8');
+assert.match(shared,/family_can_view_player/);
+assert.match(shared,/share_with_player is true/);
+assert.match(shared,/is_private,false/);assert.match(guided,/PASSPORT_EVIDENCE_INSUFFICIENT/);
 assert.match(guided,/PASSPORT_DIFFICULTY_REQUIRED/);
 assert.match(guided,/PLAYER_PASSPORT_EDIT_DENIED/);
 for(const segment of ['overview','skills','evolution','training','games','evidence','habits','evaluation'])assert.ok(view.includes(segment));
