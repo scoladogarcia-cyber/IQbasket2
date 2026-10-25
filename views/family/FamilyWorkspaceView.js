@@ -15,6 +15,7 @@ import { FAMILY_AI_PRODUCTS_EXTENDED, FAMILY_AI_POLICY } from "../../config/fami
 import { PlayerDataSubmissionService } from "../../services/player360/PlayerDataSubmissionService.js";
 import { PlayerSubmissionPanel } from "../player360/PlayerSubmissionPanel.js";
 import { Permission } from "../../security/PermissionService.js";
+import { buildFamilyHomeV70, renderFamilyHomeV70 } from "./FamilyHomeV70.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -141,6 +142,9 @@ export class FamilyWorkspaceView {
           <small>${product.subject_covered ? "Jugador cubierto" : "Cobertura pendiente"}</small></div>
       </header>
       ${this._playerSwitcher()}
+      ${renderFamilyHomeV70(buildFamilyHomeV70({ passport, growth, story, plan:weeklyPlan, cycleProjection:developmentCycle, playerId:this.playerId, selectedPlayer:this.state.players.find(p=>String(p.player_id)===String(this.playerId)), contributionsAvailable:this.state.contributionsAvailable }))}
+      <details class="family-deep-dive" data-family-deep-dive><summary>Explorar estadísticas, entrenamientos, retos y análisis avanzados</summary>
+      <div class="family-team-anchor" aria-hidden="true"></div>
       ${this._supportGuide(support)}
       ${this._familyContributions()}
       <div class="family-value-strip" aria-label="Recorrido de valor">
@@ -154,6 +158,7 @@ export class FamilyWorkspaceView {
       ${this._career(passport.career || [])}
       ${this._conversionCard(growth)}
       ${this._aiProductPreview(product)}
+      </details>
       ${this._claimPanel()}
     </section>`;
   }
