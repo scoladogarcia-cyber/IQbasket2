@@ -41,6 +41,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     this._exchangeBusy=false;
     this._playerEvents=[];
     this._playerEventsScope=new Set();
+    this._reportProfileOptionsV75=null;
   }
 
   /** Los eventos no forman parte de la carga inicial del DataStore: lectura RLS fresca. */
@@ -138,7 +139,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
         const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
         const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
         const quality=reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
-        const profile=kind==="profile-pdf"?resolveReportProfileV74(this._reportProfileV74||"DEVELOPMENT"):null;
+        const profile=kind==="profile-pdf"?resolveReportProfileV74(this._reportProfileV74||"DEVELOPMENT",this._reportProfileOptionsV75||{}):null;
         const safeTitle=(teamName+" · "+seasonName).replace(/[&<>"\x27]/g,"");
         const profileHtml=profile?
           '<section class="iq-report-panel"><h1>IQBasket · '+profile.title+" · "+safeTitle+"</h1>"+
@@ -385,17 +386,41 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const templateCsv=button("Plantilla editable CSV · 1 partido","#0369a1");
     const profile=document.createElement("select");profile.setAttribute("aria-label","Perfil de informe PDF");profile.style.cssText="min-height:44px;border-radius:9px;padding:8px;border:1px solid #94a3b8";
     Object.values(REPORT_PROFILE_V74).forEach(p=>{const item=document.createElement("option");item.value=p.key;item.textContent=p.title;profile.append(item);});profile.value=this._reportProfileV74||"DEVELOPMENT";
+    const sectionOptions=document.createElement("fieldset");
+    sectionOptions.setAttribute("aria-label","Secciones del informe");
+    sectionOptions.style.cssText="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid #cbd5e1;border-radius:10px;align-items:center";
+    const profileLegend=document.createElement("legend");profileLegend.textContent="Incluir en el PDF";profileLegend.style.cssText="font-size:12px;font-weight:800;color:#334155";sectionOptions.append(profileLegend);
+    const sectionInputs=new Map();
+    for(const [key,label] of [["overview","Resumen y gráficos"],["interpretation","Conclusiones"],["quality","Calidad de datos"],["glossary","Glosario"]]){
+      const wrapper=document.createElement("label");wrapper.style.cssText="display:inline-flex;gap:6px;align-items:center;font-size:12px;cursor:pointer";
+      const input=document.createElement("input");input.type="checkbox";input.dataset.section=key;input.style.minWidth="18px";input.style.minHeight="18px";
+      wrapper.append(input,document.createTextNode(label));sectionOptions.append(wrapper);sectionInputs.set(key,input);
+    }
+    const syncProfile=(reset=false)=>{
+      const plan=REPORT_PROFILE_V74[profile.value]||REPORT_PROFILE_V74.DEVELOPMENT;
+      const old=(!reset&&this._reportProfileV74===plan.key)?this._reportProfileOptionsV75:null;
+      for(const [key,input] of sectionInputs){
+        input.disabled=Boolean(plan.complete&&key==="overview");
+        input.checked=input.disabled?false:(old?.[key]??plan[key]);
+      }
+    };
+    syncProfile();
+    profile.addEventListener("change",()=>{this._reportProfileV74=profile.value;this._reportProfileOptionsV75=null;syncProfile(true);});
+    for(const input of sectionInputs.values())input.addEventListener("change",()=>{
+      this._reportProfileV74=profile.value;
+      this._reportProfileOptionsV75=Object.fromEntries([...sectionInputs].map(([key,box])=>[key,Boolean(box.checked)]));
+    });
     const profilePdf=button("PDF configurable","#0f766e");
     const rosterCsv=button("Jugadores CSV","#64748b");
     const rosterPreview=button("Revisar jugadores CSV","#64748b");
     const rosterFile=document.createElement("input");rosterFile.type="file";rosterFile.accept=".csv,text/csv";rosterFile.hidden=true;
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(profile,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
+    toolbar.append(profile,sectionOptions,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
     for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
     templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
-    profilePdf.addEventListener("click",()=>{this._reportProfileV74=profile.value;void this._exportSelection("profile-pdf",status);});
+    profilePdf.addEventListener("click",()=>{this._reportProfileV74=profile.value;this._reportProfileOptionsV75=Object.fromEntries([...sectionInputs].map(([key,box])=>[key,Boolean(box.checked)]));void this._exportSelection("profile-pdf",status);});
     rosterCsv.addEventListener("click",()=>{void this._rosterExchangeV74(status,holder);});
     rosterPreview.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona un solo partido.";return;}rosterFile.click();});
     rosterFile.addEventListener("change",()=>{const upload=rosterFile.files?.[0];if(upload)void this._rosterExchangeV74(status,holder,upload);rosterFile.value="";});
