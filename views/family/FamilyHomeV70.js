@@ -3,6 +3,8 @@
  * @description Pure presentation; no protected reads, ratings, diagnoses or speculative zeroes.
  * Reuses the existing Family RPC boundary, goals, cycles and longitudinal passport.
  */
+import { guideFamilyV72, renderGuidedFamilyV72 } from "../../domain/insights/GuidedSummaryV72.js";
+
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const rows = v => Array.isArray(v) ? v : [];
 const known = v => v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v));
@@ -44,6 +46,7 @@ export function buildFamilyHomeV70({passport={},growth={},story=null,plan={},cyc
       games:fmt(row?.games),
       points:fmt(row?.points)
     })),
+    hasVerifiedObjective:Boolean(objective?.title||plan?.objectiveTitle),
     hasSharedEvaluation:Boolean(story?.latestEvaluation),
     shareableSummary:story?.latestEvaluation?.summary||null,
     contributionsAvailable:Boolean(contributionsAvailable)
@@ -99,7 +102,7 @@ export function renderFamilyHomeV70(model) {
     '<article class="fh70-card"><p class="fh70-kicker">¿Qué trabajar ahora?</p>'+
     '<div class="fh70-focus"><h3>'+esc(m.objective)+'</h3><p>'+esc(m.next)+'</p></div>'+
     (m.actionCount ? '<p class="fh70-muted">'+esc(m.complete)+' de '+esc(m.actionCount)+' acciones registradas como completadas por el staff.</p>' : '')+
-    '</article></div>'+
+    '</article></div>'+renderGuidedFamilyV72(guideFamilyV72({home:m,hasVerifiedObjective:m.hasVerifiedObjective}))+
     '<article class="fh70-card"><p class="fh70-kicker">Mi desarrollo</p><h3>Una historia, muchas temporadas</h3>'+
     (career?'<ol class="fh70-timeline">'+career+'</ol>':'<p>Las temporadas se mostrarán aquí cuando haya registros autorizados.</p>')+
     '<div class="fh70-actions">'+
