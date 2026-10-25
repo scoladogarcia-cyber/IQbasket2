@@ -166,10 +166,10 @@ export class GameBoxScoreView {
       const totFgm = totFg2m + totFg3m;
       const totFga = totFg2a + totFg3a;
 
-      const efgVal = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "0.0";
-      const pct2p  = totFg2a > 0 ? ((totFg2m / totFg2a) * 100).toFixed(1) : "0.0";
-      const pct3p  = totFg3a > 0 ? ((totFg3m / totFg3a) * 100).toFixed(1) : "0.0";
-      const pctFt  = totFta > 0 ? ((totFtm / totFta) * 100).toFixed(1) : "0.0";
+      const efgVal = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "N/D";
+      const pct2p  = totFg2a > 0 ? ((totFg2m / totFg2a) * 100).toFixed(1) : "N/D";
+      const pct3p  = totFg3a > 0 ? ((totFg3m / totFg3a) * 100).toFixed(1) : "N/D";
+      const pctFt  = totFta > 0 ? ((totFtm / totFta) * 100).toFixed(1) : "N/D";
 
       const venueLower = String(g.venue || "").toLowerCase();
       const isHome = venueLower === "home" || venueLower === "local" || g.is_home === true || g.isHome === true;
@@ -336,10 +336,10 @@ export class GameBoxScoreView {
       totFr += valFr;
       totVal += computed.pir || 0;
 
-      const efgText = `${computed.eFG.toFixed(1)}%`;
+      const efgText = computed.eFG === null || computed.eFG === undefined ? "N/D" : `${Number(computed.eFG).toFixed(1)}%`;
       const valText = computed.pir ?? 0;
-      const astToText = valPer > 0 ? (valAst / valPer).toFixed(1) : valAst.toFixed(1);
-      const usgText = computed.usageRate ? `${computed.usageRate.toFixed(1)}%` : "18.5%";
+      const astToText = valPer > 0 ? (valAst / valPer).toFixed(1) : "N/D";
+      const usgText = computed.usageRate !== null && computed.usageRate !== undefined && Number.isFinite(Number(computed.usageRate)) ? `${Number(computed.usageRate).toFixed(1)}%` : "N/D";
 
       return `
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 13px;" data-player-id="${p.id}">
@@ -372,8 +372,8 @@ export class GameBoxScoreView {
 
     const totalFga = totFg2a + totFg3a;
     const totalFgm = totFg2m + totFg3m;
-    const teamEfg = totalFga > 0 ? (((totalFgm + 0.5 * totFg3m) / totalFga) * 100).toFixed(1) : "0.0";
-    const teamAstTo = totPer > 0 ? (totAst / totPer).toFixed(1) : totAst.toFixed(1);
+    const teamEfg = totalFga > 0 ? (((totalFgm + 0.5 * totFg3m) / totalFga) * 100).toFixed(1) : "N/D";
+    const teamAstTo = totPer > 0 ? (totAst / totPer).toFixed(1) : "N/D";
 
     const backHref = this.isGameScopedOnly ? "#/dashboard" : "#/boxscore";
     const optionsMarkup = this.games.map(g => `
@@ -555,9 +555,9 @@ export class GameBoxScoreView {
           const cellAstTo = tr.querySelector(".cell-astto");
 
           if (cellPts) cellPts.textContent = comp.points || 0;
-          if (cellEfg) cellEfg.textContent = `${comp.eFG.toFixed(1)}%`;
+          if (cellEfg) cellEfg.textContent = comp.eFG === null || comp.eFG === undefined ? "N/D" : `${Number(comp.eFG).toFixed(1)}%`;
           if (cellVal) cellVal.textContent = comp.pir ?? 0;
-          if (cellAstTo) cellAstTo.textContent = tov > 0 ? (ast / tov).toFixed(1) : ast.toFixed(1);
+          if (cellAstTo) cellAstTo.textContent = tov > 0 ? (ast / tov).toFixed(1) : "N/D";
         });
       });
     });
