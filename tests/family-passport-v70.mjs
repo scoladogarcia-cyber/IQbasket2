@@ -58,6 +58,15 @@ assert.match(sql,/iq_saas_entitlement_check\('PLAYER',p_player_id,null,'PLAYER_P
 assert.match(sql,/grant execute on function public.iq_v70_family_passport_brief\(uuid\) to authenticated/);
 assert.match(sql,/revoke all on function public.iq_v70_family_passport_brief\(uuid\) from public,anon/);
 assert.match(sql,/coalesce\(e.is_private,false\)=false/);
+const corrected=readFileSync(new URL('../supabase/migrations/20261025180000_family_passport_brief_v701_runtime_fix.sql',import.meta.url),'utf8');
+assert.doesNotMatch(corrected,/\bs\.rubric_version\b|\branked\.rubric_version\b/);
+assert.match(corrected,/ranked\.metadata->>'protocol_version'='IQB-RUBRIC-1\.0'/);
+assert.match(corrected,/ranked\.metadata->>'minimum_evidence_met'='true'/);
+assert.match(corrected,/join iq_private\.iq_passport_attribute_rules_v68 r/);
+assert.match(corrected,/s\.score is not null/);
+assert.match(corrected,/ts\.session_date<=current_date/);
+assert.match(corrected,/iq_saas_entitlement_check\('PLAYER',p_player_id,null,'BASIC_TIMELINE',1\)/);
+assert.doesNotMatch(corrected,/\b(?:delete from|drop table|truncate table|update public\.player_evaluation_scores)\b/i);
 const view=readFileSync(new URL('../views/family/FamilyWorkspaceV32View.js',import.meta.url),'utf8');
 assert.match(view,/data-family-passport-brief/);
 assert.match(view,/requestId!==this._passportBriefRequestId/);
