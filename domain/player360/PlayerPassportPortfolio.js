@@ -2,9 +2,9 @@
  * @fileoverview Pure, repeatable read models for the lifetime passport.
  * No inferred hours, estimated categories, synthesized skills or causal AI.
  */
-const TYPES=['TEAM','TECHNIFICATION','PERSONAL','COGNITIVE'];
+const TYPES=['TEAM','TECHNIFICATION','PERSONAL','COGNITIVE','UNCLASSIFIED'];
 export const TRAINING_TYPE_LABELS=Object.freeze({
-  TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo'
+  TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo',UNCLASSIFIED:'Sin clasificar'
 });
 const nonNegative=v=>Number.isFinite(Number(v))?Math.max(0,Number(v)):0;
 const rows=v=>Array.isArray(v)?v:[];
@@ -12,12 +12,12 @@ export const formatBasketballMinutes=value=>{
   const minutes=Math.round(nonNegative(value));
   return Math.floor(minutes/60)+' h '+String(minutes%60).padStart(2,'0')+' min';
 };
-export function summarizeTrainingPortfolio(items=[]){
+export function summarizeTrainingPortfolio(items=[],{asOfDate=''}={}){
   const kinds=Object.fromEntries(TYPES.map(code=>[code,{registered:0,accredited:0,pending:0,sessions:0}]));
   let totalRegistered=0,totalAccredited=0,pendingSessions=0,futureConflicts=0,unknownMinutes=0,reviewPending=0;
   const sessionIds=new Set();
   for(const record of rows(items)){
-    const kind=Object.prototype.hasOwnProperty.call(kinds,record.session_kind)?record.session_kind:'TEAM';
+    const kind=Object.prototype.hasOwnProperty.call(kinds,record.session_kind)?record.session_kind:'UNCLASSIFIED';
     const bucket=kinds[kind];
     const id=String(record.training_session_id||'');
     const value=nonNegative(record.recorded_minutes);
@@ -29,7 +29,7 @@ export function summarizeTrainingPortfolio(items=[]){
     if(record.attendance_status==='PRESENT'||record.attendance_status==='PARTIAL'){
       if(record.participated_minutes==null)unknownMinutes++;
       if(record.session_status!=='COMPLETED'&&value>0){pendingSessions++;bucket.pending+=value;}
-      if(record.session_status!=='COMPLETED'&&record.participated_minutes!=null&&value===0&&record.session_date)new Date(record.session_date)>new Date()?futureConflicts++:null;
+      if(asOfDate&&record.session_status!=='COMPLETED'&&record.participated_minutes!=null&&value===0&&String(record.session_date||'')>asOfDate)futureConflicts++;
     }
     if(id)sessionIds.add(id);
   }
