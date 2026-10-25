@@ -30,6 +30,12 @@ export class PlayerPassportPortfolioService {
       p_player_id:playerId,p_team_season_id:teamSeasonId
     });
     if(error)throw new Error('PASSPORT_CAREER_DENIED: '+(error.message||error));
+    // Old-club records are visible only if explicitly shared with a verified
+    // player/guardian relation. Current staff never inherit that access.
+    const {data:sharedEvaluations,error:sharedError}=await this.client.rpc(
+      'iq_v68_passport_shared_career',{p_player_id:playerId,p_team_season_id:teamSeasonId}
+    );
+    if(sharedError)throw new Error('PASSPORT_SHARED_HISTORY: '+(sharedError.message||sharedError));
     const [training,games,assessments]=await Promise.allSettled([
       queryAll(this.client,'iq_passport_training_minutes_v68',
         'training_session_id,authorization_context_id,session_date,session_status,session_kind,classification_review,attendance_status,participated_minutes,duration_override_minutes,duration_minutes,recorded_minutes,accredited_minutes',
@@ -64,7 +70,7 @@ export class PlayerPassportPortfolioService {
           error:'WELLNESS_ACCESS: '+String(error?.message||error)};
       }
     }
-    return {career:career||{},training:unpack(training,'TRAINING'),
+    return {career:career||{},sharedEvaluations:array(sharedEvaluations),training:unpack(training,'TRAINING'),
       games:unpack(games,'GAMES'),assessmentTime:unpack(assessments,'ASSESSMENTS'),
       wellness};
   }
