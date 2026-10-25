@@ -61,6 +61,9 @@ jobs:
       - name: Family Passport V70 audit and access contract
         run: node tests/family-passport-v70.mjs
 
+      - name: Family Passport V71 historical scores and permissions
+        run: node tests/family-passport-legacy-v71.mjs
+
       - name: Player Passport route and RBAC
         run: node tests/player-passport-route-rbac.mjs
 
