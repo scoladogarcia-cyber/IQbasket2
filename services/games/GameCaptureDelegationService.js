@@ -164,13 +164,27 @@ export class GameCaptureDelegationService {
     const normalizedStarters = Array.isArray(starterIds)
       ? starterIds.map(playerId => requireUuid(playerId, "starterId"))
       : null;
+    // [] puede activar DELETE en el RPC de reemplazo. Sin cuartos medidos
+    // conservamos los existentes en vez de borrarlos involuntariamente.
+    const capturedPeriods = Array.isArray(periods) && periods.length > 0 ? periods : null;
+    if (capturedPeriods && teamScore !== null && opponentScore !== null) {
+      const total = capturedPeriods.reduce((acc, period) => ({
+        team: acc.team + Number(period.team_score ?? period.teamScore ?? 0),
+        opponent: acc.opponent + Number(period.opponent_score ?? period.opponentScore ?? 0)
+      }), { team: 0, opponent: 0 });
+      if (!Number.isFinite(total.team) || !Number.isFinite(total.opponent) ||
+          total.team !== Number(teamScore) || total.opponent !== Number(opponentScore)) {
+        throw new Error("Los parciales no cuadran con el marcador. Se ha protegido la captura; revisa los cuartos antes de sincronizar.");
+      }
+    }
+
     const baseArgs = {
       p_game_id: id,
       p_team_score: teamScore,
       p_opponent_score: opponentScore,
       p_starter_ids: normalizedStarters,
       p_stats: Array.isArray(stats) ? stats : null,
-      p_periods: Array.isArray(periods) ? periods : null,
+      p_periods: capturedPeriods,
       p_events: Array.isArray(events) ? events : null
     };
     const token = String(
