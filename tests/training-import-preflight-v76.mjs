@@ -31,5 +31,5 @@ assert.throws(()=>buildTrainingImportPreflightV76({preview,sessions:[{...session
 assert.throws(()=>buildTrainingImportPreflightV76({preview:{...preview,writable:true},sessions,teamSeasonId:"season1"}),/CSV completo/);
 const ui=fs.readFileSync(new URL("../views/TrainingView.js",import.meta.url),"utf8");
 assert.match(ui,/buildTrainingImportPreflightV76/);
-assert.match(ui,/verificación de versiones/);
+assert.match(ui,/[Vv]erificación de versiones/);
 console.log("PASS V76: versioned, identity-checked, read-only training import preflight.");
