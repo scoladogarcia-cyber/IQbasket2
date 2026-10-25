@@ -46,7 +46,7 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
   const ratio = (made, attempts) => attempts > 0 ? formatMetric(made * 100 / attempts, "%") : "—";
   const efficiency = (m, r) => [ratio(m.fg2m,m.fg2a),ratio(m.fg3m,m.fg3a),ratio(m.ftm,m.fta),madeAttempted(m.fg2m+m.fg3m,m.fga),ratio(m.fg2m+m.fg3m,m.fga),m.fga > 0 ? formatMetric(m.efg,"%") : "—",m.fga + 0.44*m.fta > 0 ? formatMetric(m.ts,"%") : "—",m.turnovers > 0 ? formatMetric(m.astTo) : "—",formatMetric(m.usage,"%"),show(raw(r,"game_score")),show(raw(r,"offensive_rating")),show(raw(r,"defensive_rating"))];
   const efficiencyRows = activeEntries.map(({m,source})=>`<tr>${named(m)}${efficiency(m,source).map(cell=>`<td>${cell}</td>`).join("")}</tr>`).join("");
-  const efficiencyTotal = [ratio(t.fg2m,t.fg2a),ratio(t.fg3m,t.fg3a),ratio(t.ftm,t.fta),madeAttempted(t.fg2m+t.fg3m,t.fga),ratio(t.fg2m+t.fg3m,t.fga),formatMetric(t.efg,"%"),formatMetric(t.ts,"%"),formatMetric(t.astTo),formatMetric(t.usage,"%"),"–","–","–"];
+  const efficiencyTotal = [ratio(t.fg2m,t.fg2a),ratio(t.fg3m,t.fg3a),ratio(t.ftm,t.fta),madeAttempted(t.fg2m+t.fg3m,t.fga),ratio(t.fg2m+t.fg3m,t.fga),t.fga > 0 ? formatMetric(t.efg,"%") : "—",t.fga + 0.44*t.fta > 0 ? formatMetric(t.ts,"%") : "—",t.turnovers > 0 ? formatMetric(t.astTo) : "—",formatMetric(t.usage,"%"),"–","–","–"];
 
   const detailGroups = [
     [["fg_rim_made","ARO C"],["fg_rim_attempted","ARO I"],["fg_mid_made","MEDIA C"],["fg_mid_attempted","MEDIA I"],["fg_corner3_made","ESQ3 C"],["fg_corner3_attempted","ESQ3 I"],["assisted_fg_made","TC asist."],["potential_assists","AST pot."],["secondary_assists","AST sec."]],
