@@ -127,6 +127,20 @@ export class FamilyWorkspaceService {
     });
   }
 
+  /**
+   * Read-only, player-scoped passport summary for an authorized family account.
+   * Supabase validates the verified relationship and every commercial entitlement.
+   * Errors are intentionally propagated so the UI never substitutes false zeros.
+   * @param {string} playerId Durable player UUID.
+   * @returns {Promise<object>} Authorized family brief.
+   */
+  getPassportBrief(playerId) {
+    requireValue(playerId, "playerId");
+    return rpc(this.supabase, "iq_v70_family_passport_brief", {
+      p_player_id: playerId
+    });
+  }
+
   getPlayer360Snapshot(playerId, teamSeasonId = null) {
     requireValue(playerId, "playerId");
     return progressiveRpc(
