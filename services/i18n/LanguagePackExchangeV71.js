@@ -29,7 +29,15 @@ export function serializeLanguagePackCsv(dictionary={},locale="es") {
   return "\uFEFF"+[LANGUAGE_CSV_HEADERS.map(csv).join(","),
     ...entries.map(([key,value])=>[csv(key),csv(cell(value))].join(","))].join("\r\n")+"\r\n";
 }
-export function parseLanguagePackCsv(csvText,{existingKeys=null,maxRows=3500}={}) {
+/**
+ * Preserve parameter placeholders so locale imports cannot silently corrupt UI
+ * interpolation (e.g. {player}, {team}). Only validate keys having a reference.
+ */
+export function languagePlaceholdersV75(value) {
+  return [...new Set([...String(value??"").matchAll(/\{([A-Za-z_][A-Za-z0-9_.-]{0,80})\}/g)]
+    .map(match=>match[1]))].sort();
+}
+export function parseLanguagePackCsv(csvText,{existingKeys=null,maxRows=3500,referenceDictionary=null}={}) {
   const matrix=parseBoxScoreCsv(csvText);
   if(!Array.isArray(matrix)||matrix.length<2||matrix.length>maxRows+1)throw new Error("El CSV de idiomas debe incluir entre 1 y "+maxRows+" traducciones.");
   if(matrix[0].length!==2||!LANGUAGE_CSV_HEADERS.every((key,i)=>matrix[0][i]===key))throw new Error("Usa la plantilla con columnas key,translation.");
@@ -39,6 +47,12 @@ export function parseLanguagePackCsv(csvText,{existingKeys=null,maxRows=3500}={}
     if(row.length!==2||!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)||seen.has(key) || value.length>3000)
       throw new Error("Fila "+(i+1)+": clave inválida, duplicada o texto demasiado largo.");
     if(permitted&&!permitted.has(key))throw new Error("Fila "+(i+1)+": clave desconocida. Actualiza antes el catálogo versionado.");
+    if(value && referenceDictionary && Object.prototype.hasOwnProperty.call(referenceDictionary,key)){
+      const expected=languagePlaceholdersV75(referenceDictionary[key]),received=languagePlaceholdersV75(value);
+      if(JSON.stringify(expected)!==JSON.stringify(received))
+        throw new Error("Fila "+(i+1)+": marcadores incompatibles con "+key+
+          ". Deben conservarse exactamente: "+(expected.join(", ")||"(ninguno)")+".");
+    }
     seen.add(key);
     if(value) entries[key]=value;
   }

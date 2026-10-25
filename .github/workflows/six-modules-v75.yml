@@ -1,0 +1,38 @@
+name: IQBasket Six Modules V75
+on:
+  push:
+    branches: ["feature/six-modules-v75-completeness", "main"]
+    paths:
+      - "domain/player360/PassportComparableTrendV75.js"
+      - "services/exchange/TrainingEvidenceExchangeV75.js"
+      - "services/i18n/LanguagePackExchangeV71.js"
+      - "views/TrainingView.js"
+      - "views/ReportsViewV53.js"
+      - "views/LanguageSettingsView.js"
+      - "views/player360/passport/PlayerPassportView.js"
+      - "tests/six-modules-v75.mjs"
+      - ".github/workflows/six-modules-v75.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/six-modules-v75.mjs
+      - run: node tests/product-six-modules-v74.mjs
+      - run: node tests/training-v65-contract.mjs
+      - run: node tests/family-p0-p1-v70.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/product-p1-v72.mjs
+      - run: node tests/passport-csv-v73.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: npm run build

@@ -2,7 +2,7 @@
  * @fileoverview Family motivation conversation, deliberately ephemeral.
  * @description No tracking, storage, federation import, scoring or medical claim.
  */
-import {MOTIVATION_QUESTIONS_V74,MOTIVATION_LANG_V74,reflectionV74} from "../../domain/motivation/MotivationReflectionV74.js";
+import {MOTIVATION_QUESTIONS_V74,MOTIVATION_LANG_V74,motivationConversationV75} from "../../domain/motivation/MotivationReflectionV74.js";
 const escape=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 export function renderFamilyMotivationV74(locale="es"){
   const lang=MOTIVATION_LANG_V74[locale]||MOTIVATION_LANG_V74.es;
@@ -25,7 +25,8 @@ export function bindFamilyMotivationV74(root,locale="es"){
   form.addEventListener("submit",event=>{
     event.preventDefault();
     const inputs=Object.fromEntries([...form.querySelectorAll("select[name]")].map(el=>[el.name,el.value]));
-    result.textContent=reflectionV74(inputs,locale).message;
+    const conversation=motivationConversationV75(inputs,locale);
+    result.textContent=conversation.message+(conversation.starter?" "+conversation.starter:"");
   });
   form.addEventListener("reset",()=>{result.textContent="";});
 }

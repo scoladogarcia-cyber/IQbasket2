@@ -26,3 +26,22 @@ export function reflectionV74(answers={},locale="es"){
   }
   return Object.freeze({answered:Object.keys(selected).length,message:Object.keys(selected).length?lang.result:lang.empty});
 }
+
+
+/**
+ * One optional conversation starter, derived locally from the child's chosen
+ * response. Not a score or psychological inference; answers never leave the UI.
+ */
+export function motivationConversationV75(answers={},locale="es"){
+  const result=reflectionV74(answers,locale);
+  if(!result.answered)return Object.freeze({message:result.message,starter:null});
+  const codes=Object.freeze({
+    es:{ENJOYMENT:"¿Qué cambiarías para disfrutar más jugando?",LEARNING:"¿Qué te gustaría aprender o probar a tu ritmo?",VOICE:"¿Qué te gustaría que los adultos escucháramos mejor?",POSITIVE:"¿Qué momento del baloncesto te gustaría repetir?"},
+    ca:{ENJOYMENT:"Què canviaries per gaudir més jugant?",LEARNING:"Què t'agradaria aprendre o provar al teu ritme?",VOICE:"Què t'agradaria que els adults escoltéssim millor?",POSITIVE:"Quin moment del bàsquet t'agradaria repetir?"},
+    en:{ENJOYMENT:"What would make playing more enjoyable for you?",LEARNING:"What would you like to learn or try at your own pace?",VOICE:"What would you like adults to listen to more closely?",POSITIVE:"What basketball moment would you like to repeat?"},
+    fr:{ENJOYMENT:"Qu'est-ce qui rendrait le jeu plus agréable pour toi ?",LEARNING:"Qu'aimerais-tu apprendre ou essayer à ton rythme ?",VOICE:"Qu'aimerais-tu que les adultes écoutent davantage ?",POSITIVE:"Quel moment de basket aimerais-tu revivre ?"}
+  });
+  const phrases=codes[locale]||codes.es;
+  const priority=["ENJOYMENT","LEARNING","VOICE"].find(id=>["NOT_NOW","SOMETIMES"].includes(String(answers?.[id]??"")));
+  return Object.freeze({message:result.message,starter:phrases[priority||"POSITIVE"]});
+}

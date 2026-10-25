@@ -18,6 +18,7 @@ import { PLAYER_PASSPORT_CONFIG } from "../../../config/player-passport.config.j
 import { exportPassportWord, exportPassportCardPng } from "../../../services/player360/PlayerPassportExportService.js";
 import { exportPassportAssessmentCsvV73, previewPassportAssessmentCsvV73 } from "../../../services/player360/PassportAssessmentCsvV73.js";
 import { exportPassportCoverageV74 } from "../../../domain/player360/PassportCoverageV74.js";
+import { exportPassportComparableTrendCsvV75 } from "../../../domain/player360/PassportComparableTrendV75.js";
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -544,7 +545,7 @@ export class PlayerPassportView {
     }
     var model=this._model();
     var exportActions=this._can(Permission.EXPORT_PLAYER_PASSPORT)
-      ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button><button type="button" id="pp-export-coverage" class="pp-top-action">📋 Cobertura CSV</button>'
+      ? '<button type="button" id="pp-export-word" class="pp-top-action">📝 Word</button><button type="button" id="pp-export-card" class="pp-top-action">🖼️ Cromos PNG</button><button type="button" id="pp-export-coverage" class="pp-top-action">📋 Cobertura CSV</button><button type="button" id="pp-export-trend-v75" class="pp-top-action">📈 Evolución comparable CSV</button>'
       : '';
     el.innerHTML='<section class="pp-page"><div class="pp-top"><a class="pp-back" href="#/players">← Jugadores</a><div class="pp-top-actions"><button type="button" id="pp-open-help" class="pp-top-action">❓ Cómo valorar</button>'+exportActions+'<a class="pp-back" href="#/player360/'+esc(this.playerId)+'">Player 360 →</a></div></div>'+this._hero(model)+this._sectionNav()+this._sectionContent(model)+'</section>'+this._helpPanel()+this._styles();
     this._bind();
@@ -573,6 +574,20 @@ export class PlayerPassportView {
         const url=URL.createObjectURL(new Blob([data],{type:"text/csv;charset=utf-8"}));
         const a=document.createElement("a");a.href=url;a.download="IQBasket_Cobertura_Pasaporte_"+String(self.playerId).replace(/[^a-z0-9_-]/gi,"")+".csv";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
       }catch(error){coverage.title=String(error.message||error);}
+    });
+    var trend=document.getElementById("pp-export-trend-v75");
+    if(trend)trend.addEventListener("click",function(){
+      if(!self._can(Permission.EXPORT_PLAYER_PASSPORT))return;
+      try{
+        const data=exportPassportComparableTrendCsvV75({
+          catalog:self.data?.catalog,evaluations:self.data?.evaluations||[]
+        });
+        const url=URL.createObjectURL(new Blob([data],{type:"text/csv;charset=utf-8"}));
+        const a=document.createElement("a");
+        a.href=url;a.download="IQBasket_Evolucion_Pasaporte_"+String(self.playerId).replace(/[^a-z0-9_-]/gi,"")+".csv";
+        document.body.append(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),10000);
+      }catch(error){trend.title=String(error.message||error);}
     });
     var card=document.getElementById("pp-export-card"); if(card)card.addEventListener("click",async function(){if(self.exportBusy)return;self.exportBusy=true;card.disabled=true;try{await exportPassportCardPng({player:self.data.player,team:self.data.team,summary:model.summary,roles:model.roles,quality:model.quality});}finally{self.exportBusy=false;if(card.isConnected)card.disabled=false;}});
     var date=document.getElementById("pp-date"); if(date)date.addEventListener("input",function(e){self.editorMeta.date=e.target.value;});
