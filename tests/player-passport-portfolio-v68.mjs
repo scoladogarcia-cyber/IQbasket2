@@ -81,4 +81,11 @@ for(const segment of ['overview','skills','evolution','training','games','eviden
 assert.match(view,/pp-assessment-minutes/);
 assert.match(view,/saveGuidedEvaluation/);
 assert.match(view,/Con evidencia suficiente/);
+const exportCode=readFileSync(new URL('../services/player360/PlayerPassportExportService.js',import.meta.url),'utf8');
+assert.doesNotMatch(exportCode,/VALOR GLOBAL|Media simple de los atributos|overallPassportScore/);
+assert.match(exportCode,/Horas acreditadas/);
+assert.match(exportCode,/Sin validar/);
+assert.match(exportCode,/ATRIBUTOS CON EVIDENCIA REGISTRADA/);
+assert.match(exportCode,/team\.category/);
+
 console.log('PASS Player Passport V68: category, licensed career, minutes, stats, wellness RBAC, evidence and UI');
