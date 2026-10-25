@@ -8,6 +8,10 @@ assert.match(gamesView, /period_number \?\? period\.periodNumber/);
 assert.match(gamesView, /return "—"/);
 assert.doesNotMatch(gamesView, /const quarterScore = index => quarters\[index\]/);
 
+/** The legacy BoxScore path must also preserve the local quarter cache. */
+const dataStore = readFileSync(new URL("../services/DataStore.js",import.meta.url), "utf8");
+assert.match(dataStore, /if \(formattedPeriods\.length > 0\) \{\s*this\.gamePeriodScores = this\.gamePeriodScores\.filter/);
+
 /** Regression: an empty capture payload must not delete persisted quarters. */
 const service = readFileSync(new URL("../services/games/GameCaptureDelegationService.js",import.meta.url), "utf8");
 assert.match(service, /Array\.isArray\(periods\) && periods\.length > 0/);
