@@ -18,6 +18,7 @@ import { buildBoxScoreExchangeRows,serializeBoxScoreCsv,parseBoxScoreCsv,parseBo
 import { renderStatsQualityInfo } from "../domain/stats/StatQualityV71.js";
 import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.js";
 import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
+import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
 const id = value => String(value ?? "");
@@ -205,6 +206,30 @@ export class ReportsViewV53 extends ReportsViewV50 {
       && Boolean(this.auth?.can?.(Permission.EDIT_GAME,context));
   }
 
+  /**
+   * Download one-game template from the same RLS-authorized report used by the
+   * normal export. Empty statistics stay blank; user edits never write to DB.
+   */
+  async _exportFederationTemplate(status) {
+    if(this._exchangeBusy)return;
+    const selected=this._selectionGames();
+    if(selected.length!==1){status.textContent="Selecciona exactamente un partido para generar su plantilla.";return;}
+    this._exchangeBusy=true;
+    try{
+      status.textContent="Preparando plantilla desde el acta autorizada…";
+      const report=(await this._readSelected(selected,true))[0];
+      const eligible=DataStore.getPlayersEligibleOnDate?.(report.game.team_id,report.game.date)||[];
+      const template=createFederationWorksheetV72({game:report.game,eligiblePlayers:eligible,stats:report.stats});
+      if(!this.reportAccessPolicy.canExport(ReportType.GAME_STATS,{...this._reportContext(),gameId:report.game.id}))
+        throw new Error("Permiso de exportación cambiado.");
+      this._download(template.content,"text/csv;charset=utf-8",template.filename);
+      status.textContent="Plantilla descargada: "+template.rows+" jugadores. "+
+        (template.missingCells?template.missingCells+" campos sin registrar aparecen vacíos (N/D); complétalos antes de importarla.":"Todos los campos de la plantilla tienen valores registrados.")+
+        " Puedes editarla en Excel o LibreOffice y guardarla como CSV UTF-8.";
+    }catch(error){status.textContent="No se ha generado la plantilla: "+error.message;}
+    finally{this._exchangeBusy=false;}
+  }
+
   async _importSelection(file,holder,status) {
     holder.replaceChildren();const games=this._selectionGames();
     if(games.length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}
@@ -314,11 +339,13 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const xlsx=button("Excel completo · Acta + BoxScore + Jugadas","#1d4ed8");
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
+    const templateCsv=button("Plantilla editable CSV · 1 partido","#0369a1");
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(summaryPdf,pdf,xlsx,eventsXlsx,csv,importButton,file);panel.append(toolbar);
+    toolbar.append(summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,file);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
     for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
+    templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
     importButton.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}if(!this._canImport(this._selectionGames()[0])){status.textContent="Sin permiso de edición o partido/temporada cerrado.";return;}file.click();});
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);
