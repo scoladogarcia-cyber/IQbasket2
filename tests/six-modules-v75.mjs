@@ -82,6 +82,12 @@ assert.match(reports,/this\._reportProfileOptionsV75/);
 assert.match(reports,/authorizeExport\(ReportType\.SEASON_DOSSIER/);
 assert.match(training,/previewTrainingEvidenceCsvV75/);
 assert.match(training,/EXPORT_REPORT/);
+// File upload listener belongs to the rendered view lifecycle, never to
+// repeated participant-search refreshes (which otherwise stack handlers).
+const trainingSearcher=training.slice(training.indexOf("async _refreshTrainingPlayerOptions"),training.indexOf("_renderTrainingForm()"));
+const trainingBinder=training.slice(training.indexOf("async _bindEvents(container)"));
+assert.doesNotMatch(trainingSearcher,/p360-evidence-file-v75/);
+assert.match(trainingBinder,/querySelector\("\.p360-evidence-file-v75"\)/);
 assert.match(language,/referenceDictionary:TranslationStore\.defaultDictionary/);
 assert.match(passport,/exportPassportComparableTrendCsvV75/);
 assert.match(passport,/EXPORT_PLAYER_PASSPORT/);
