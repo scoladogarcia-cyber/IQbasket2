@@ -655,27 +655,7 @@ export class TrainingView {
     target.innerHTML = this._renderParticipantChecklist(date, null, directory);
     this._bindParticipantSelectionTools(container);
 
-    // V75 exchange is read-only and scoped to the current team-season. The
-    // player-centric history may contain other clubs or historical seasons.
-    const trainingEvidenceFile=container.querySelector(".p360-evidence-file-v75");
-    trainingEvidenceFile?.addEventListener("change",async()=>{
-      const file=trainingEvidenceFile.files?.[0];
-      if(!file)return;
-      const status=container.querySelector(".p360-evidence-status-v75");
-      try{
-        if(!this._can(Permission.EXPORT_REPORT)||!this._can(Permission.VIEW_TRAINING))
-          throw new Error("No tienes permiso para consultar la plantilla.");
-        if(file.size>1_000_000)throw new Error("El CSV supera 1 MB.");
-        const selected=(this.sessions||[]).filter(s=>String(s.team_season_id)===String(this.teamSeasonId));
-        const preview=previewTrainingEvidenceCsvV75(await file.text(),{
-          sessions:selected,teamSeasonId:this.teamSeasonId
-        });
-        if(status)status.textContent=preview.changed+" participante(s) con cambios. "+
-          preview.warnings.slice(0,3).join(" ")+" "+preview.message;
-      }catch(error){
-        if(status)status.textContent="Revisión cancelada: "+String(error.message||error);
-      }finally{trainingEvidenceFile.value="";}
-    });
+
   }
 
   _renderTrainingForm() {
@@ -2171,6 +2151,28 @@ export class TrainingView {
     });
 
     this._bindParticipantSelectionTools(container);
+
+    // V75 exchange is read-only and scoped to the current team-season. The
+    // player-centric history may contain other clubs or historical seasons.
+    const trainingEvidenceFile=container.querySelector(".p360-evidence-file-v75");
+    trainingEvidenceFile?.addEventListener("change",async()=>{
+      const file=trainingEvidenceFile.files?.[0];
+      if(!file)return;
+      const status=container.querySelector(".p360-evidence-status-v75");
+      try{
+        if(!this._can(Permission.EXPORT_REPORT)||!this._can(Permission.VIEW_TRAINING))
+          throw new Error("No tienes permiso para consultar la plantilla.");
+        if(file.size>1_000_000)throw new Error("El CSV supera 1 MB.");
+        const selected=(this.sessions||[]).filter(s=>String(s.team_season_id)===String(this.teamSeasonId));
+        const preview=previewTrainingEvidenceCsvV75(await file.text(),{
+          sessions:selected,teamSeasonId:this.teamSeasonId
+        });
+        if(status)status.textContent=preview.changed+" participante(s) con cambios. "+
+          preview.warnings.slice(0,3).join(" ")+" "+preview.message;
+      }catch(error){
+        if(status)status.textContent="Revisión cancelada: "+String(error.message||error);
+      }finally{trainingEvidenceFile.value="";}
+    });
 
     const trainingForm = container.querySelector("#p360-training-form");
     const trainingDate = container.querySelector("#p360-training-date");
