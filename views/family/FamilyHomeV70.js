@@ -4,6 +4,7 @@
  * Reuses the existing Family RPC boundary, goals, cycles and longitudinal passport.
  */
 import { guideFamilyV72, renderGuidedFamilyV72 } from "../../domain/insights/GuidedSummaryV72.js";
+import { renderFamilyMotivationV74 } from "./FamilyMotivationReflectionV74.js";
 
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const rows = v => Array.isArray(v) ? v : [];
@@ -13,7 +14,7 @@ const sentence = (v, fallback) => String(v ?? "").trim() || fallback;
 const gameDate = v => /^\d{4}-\d{2}-\d{2}/.test(String(v||"")) ? String(v).slice(0,10) : null;
 
 /** Never treat a missing score/minute as zero. Never fabricate verified progress. */
-export function buildFamilyHomeV70({passport={},growth={},story=null,plan={},cycleProjection={},playerId="",selectedPlayer=null,contributionsAvailable=false}={}) {
+export function buildFamilyHomeV70({passport={},growth={},story=null,plan={},cycleProjection={},playerId="",selectedPlayer=null,contributionsAvailable=false,locale="es"}={}) {
   const totals=passport.career_totals||{};
   const player=passport.player||{};
   const name=[player.first_name,player.last_name].filter(Boolean).join(" ").trim()
@@ -32,7 +33,7 @@ export function buildFamilyHomeV70({passport={},growth={},story=null,plan={},cyc
     ? sentence(story?.evolution?.[0],"Hay registros disponibles, pero no una mejora concluyente.")
     : sentence(growth?.title,"Seguimos construyendo un historial de rendimiento.");
   return {
-    name, playerId:String(playerId||""),
+    name, locale, playerId:String(playerId||""),
     games: fmt(totals.games), minutes:fmt(totals.minutes), seasons:career.length,
     latest: latest ? {date:gameDate(latest.date),opponent:sentence(latest.opponent,"Rival"),points:fmt(latest.points),minutes:fmt(latest.minutes)} : null,
     evolution, objective:sentence(objective?.title||plan?.objectiveTitle,"Aún no hay un objetivo compartido."),
@@ -110,6 +111,7 @@ export function renderFamilyHomeV70(model) {
     '<a class="fh70-link secondary" href="#/player360/'+href+'">Ver objetivos y evaluaciones</a>'+
     (m.contributionsAvailable?'<a class="fh70-link secondary" href="#/player360/'+href+'">Añadir información del jugador</a>':'')+
     '</div></article>'+
+    renderFamilyMotivationV74(m.locale||"es")+
     '<p class="fh70-muted">Las tendencias dependen del contexto, el número de partidos y la calidad de los datos. N/D no significa cero.</p></section>';
 }
 export default renderFamilyHomeV70;

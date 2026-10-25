@@ -16,6 +16,8 @@ import { PlayerDataSubmissionService } from "../../services/player360/PlayerData
 import { PlayerSubmissionPanel } from "../player360/PlayerSubmissionPanel.js";
 import { Permission } from "../../security/PermissionService.js";
 import { buildFamilyHomeV70, renderFamilyHomeV70 } from "./FamilyHomeV70.js";
+import { bindFamilyMotivationV74 } from "./FamilyMotivationReflectionV74.js";
+import { I18n } from "../../services/I18nService.js";
 
 const escapeHtml = (value = "") => String(value)
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -132,6 +134,7 @@ export class FamilyWorkspaceView {
       story, developmentContext: this.state.developmentContext, developmentCycle, weeklyPlan
     });
 
+    const locale=I18n.getLocale?.()||"es";
     return `<section class="family-workspace" aria-labelledby="family-title">
       <header class="family-hero">
         <div><p class="family-eyebrow">IQBasket Family</p>
@@ -142,7 +145,7 @@ export class FamilyWorkspaceView {
           <small>${product.subject_covered ? "Jugador cubierto" : "Cobertura pendiente"}</small></div>
       </header>
       ${this._playerSwitcher()}
-      ${renderFamilyHomeV70(buildFamilyHomeV70({ passport, growth, story, plan:weeklyPlan, cycleProjection:developmentCycle, playerId:this.playerId, selectedPlayer:this.state.players.find(p=>String(p.player_id)===String(this.playerId)), contributionsAvailable:this.state.contributionsAvailable }))}
+      ${renderFamilyHomeV70(buildFamilyHomeV70({ passport, growth, story, plan:weeklyPlan, cycleProjection:developmentCycle, playerId:this.playerId, selectedPlayer:this.state.players.find(p=>String(p.player_id)===String(this.playerId)), contributionsAvailable:this.state.contributionsAvailable,locale }))}
       <details class="family-deep-dive" data-family-deep-dive><summary>Explorar estadísticas, entrenamientos, retos y análisis avanzados</summary>
       <div class="family-team-anchor" aria-hidden="true"></div>
       ${this._supportGuide(support)}
@@ -401,6 +404,7 @@ export class FamilyWorkspaceView {
   }
 
   _bind(container) {
+    bindFamilyMotivationV74(container,I18n.getLocale?.()||"es");
     container.querySelector("[data-family-retry]")?.addEventListener("click", () => this.render(container));
     container.querySelectorAll("[data-family-player-link]").forEach(link => {
       link.addEventListener("click", () => {

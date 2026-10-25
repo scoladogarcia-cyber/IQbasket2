@@ -13,6 +13,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
 import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale } from "../services/i18n/LanguagePackExchangeV71.js";
+import { localeCoverageV74, missingLanguageTemplateV74 } from "../services/i18n/LanguageCoverageV74.js";
 
 export class LanguageSettingsView {
   /**
@@ -170,6 +171,7 @@ export class LanguageSettingsView {
 
           <div class="lang-pack-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
             <button type="button" data-lang-pack-export style="min-height:44px;padding:9px;border-radius:9px">Descargar idioma CSV</button>
+            <button type="button" data-lang-pack-missing style="min-height:44px;padding:9px;border-radius:9px">CSV de claves pendientes</button>
             <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">Importar CSV y previsualizar</button>
             <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="Seleccionar archivo CSV de traducciones">
             <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios no se guardan hasta pulsar Guardar. Idiomas soportados: es, ca, en, fr.</span>
@@ -290,6 +292,17 @@ export class LanguageSettingsView {
       const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
       const a=document.createElement("a");a.href=url;a.download="IQBasket_idioma_"+this.selectedLocale+".csv";
       document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    });
+    host.querySelector("[data-lang-pack-missing]")?.addEventListener("click",()=>{
+      const source=TranslationStore.defaultDictionary.es||{};
+      const target={...(TranslationStore.defaultDictionary[this.selectedLocale]||{}),...this.importDraft};
+      const report=localeCoverageV74({source,target,locale:this.selectedLocale});
+      const status=host.querySelector("[data-lang-pack-status]");
+      if(!report.missing.length){if(status)status.textContent="Catálogo principal completo para "+report.locale+" ("+report.coveragePct+" %). Revisa aparte los textos legacy fijos.";return;}
+      const content=missingLanguageTemplateV74({source,target,locale:this.selectedLocale});
+      const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
+      const a=document.createElement("a");a.href=url;a.download="IQBasket_pendientes_"+report.locale+".csv";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+      if(status)status.textContent=report.missing.length+" claves pendientes de "+report.total+" ("+report.coveragePct+" %). La traducción de componentes legacy se revisa por separado.";
     });
     const fileInput=host.querySelector("[data-lang-pack-file]");
     host.querySelector("[data-lang-pack-import]")?.addEventListener("click",()=>{
