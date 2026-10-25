@@ -16,6 +16,7 @@ import { buildCompleteSeasonReport } from "../services/reports/CompleteSeasonRep
 import { renderSelectedGamesOverview } from "./reports/SelectedGamesOverviewV53.js";
 import { buildBoxScoreExchangeRows,serializeBoxScoreCsv,parseBoxScoreCsv,parseBoxScoreExcel,validateBoxScoreImport,commitBoxScoreImport } from "../services/reports/BoxScoreExchangeV53.js";
 import { renderStatsQualityInfo } from "../domain/stats/StatQualityV71.js";
+import { guideCoachV72, renderGuidedCoachV72 } from "../domain/insights/GuidedSummaryV72.js";
 import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.js";
 import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
 import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
@@ -139,7 +140,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
           ? buildCompleteSeasonReport({reports,teamName,seasonName})+quality
           : '<section class="iq-report-panel"><h1>Resumen visual · '+teamName.replace(/[&<>"']/g,"")+' · '+seasonName.replace(/[&<>"']/g,"")+'</h1>'+
             renderSelectedGamesOverview(reports.map(r=>({game:r.game,stats:r.stats})),{title:"Resumen visual · selección de partidos"})+
-            quality+renderGameStatisticsGlossary()+'</section>';
+            renderGuidedCoachV72(guideCoachV72(reports))+quality+renderGameStatisticsGlossary()+'</section>';
         const authorization=this.reportAccessPolicy.authorizeExport(ReportType.SEASON_DOSSIER,context);
         if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
       } else if(kind==="csv") {
@@ -304,7 +305,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     try{
       const reports=await this._readSelected(games,false);
       if(token!==this._overviewToken || this.reportMode!=="game"||this.selectedGameId!=="all")return;
-      target.innerHTML=renderSelectedGamesOverview(reports.map(report=>({game:report.game,stats:report.stats})),{title:"Resumen visual · partidos seleccionados"});
+      target.innerHTML=renderSelectedGamesOverview(reports.map(report=>({game:report.game,stats:report.stats})),{title:"Resumen visual · partidos seleccionados"})+renderGuidedCoachV72(guideCoachV72(reports))+reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
     }catch(error){if(token===this._overviewToken)target.textContent=`No se pudo elaborar el resumen: ${error.message}`;}
   }
 
