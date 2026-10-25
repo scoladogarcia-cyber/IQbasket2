@@ -15,6 +15,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { Permission } from "../security/PermissionService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
+import {exportTrainingEvidenceCsvV75,previewTrainingEvidenceCsvV75} from "../services/exchange/TrainingEvidenceExchangeV75.js";
 import {
   EXTERNAL_PROVIDER_LABELS,
   EXTERNAL_PROVIDER_TYPE,
@@ -653,6 +654,28 @@ export class TrainingView {
 
     target.innerHTML = this._renderParticipantChecklist(date, null, directory);
     this._bindParticipantSelectionTools(container);
+
+    // V75 exchange is read-only and scoped to the current team-season. The
+    // player-centric history may contain other clubs or historical seasons.
+    const trainingEvidenceFile=container.querySelector(".p360-evidence-file-v75");
+    trainingEvidenceFile?.addEventListener("change",async()=>{
+      const file=trainingEvidenceFile.files?.[0];
+      if(!file)return;
+      const status=container.querySelector(".p360-evidence-status-v75");
+      try{
+        if(!this._can(Permission.EXPORT_REPORT)||!this._can(Permission.VIEW_TRAINING))
+          throw new Error("No tienes permiso para consultar la plantilla.");
+        if(file.size>1_000_000)throw new Error("El CSV supera 1 MB.");
+        const selected=(this.sessions||[]).filter(s=>String(s.team_season_id)===String(this.teamSeasonId));
+        const preview=previewTrainingEvidenceCsvV75(await file.text(),{
+          sessions:selected,teamSeasonId:this.teamSeasonId
+        });
+        if(status)status.textContent=preview.changed+" participante(s) con cambios. "+
+          preview.warnings.slice(0,3).join(" ")+" "+preview.message;
+      }catch(error){
+        if(status)status.textContent="Revisión cancelada: "+String(error.message||error);
+      }finally{trainingEvidenceFile.value="";}
+    });
   }
 
   _renderTrainingForm() {
@@ -1247,6 +1270,10 @@ export class TrainingView {
             <div class="p360-report-actions">
               <button type="button" class="p360-secondary-btn p360-export-season-word">📄 Informe temporada</button>
               <button type="button" class="p360-secondary-btn p360-export-season-csv">📊 CSV</button>
+              <button type="button" class="p360-secondary-btn p360-export-evidence-v75">⬇ Plantilla asistencia CSV</button>
+              <button type="button" class="p360-secondary-btn p360-preview-evidence-v75">↥ Revisar CSV</button>
+              <input type="file" class="p360-evidence-file-v75" accept=".csv,text/csv" hidden aria-label="Seleccionar plantilla de asistencia">
+              <span role="status" class="p360-evidence-status-v75" style="font-size:12px;color:#475569">La revisión no modifica registros ni acredita minutos automáticamente.</span>
             </div>
           ` : ""}
         </div>
@@ -2361,6 +2388,25 @@ export class TrainingView {
         return;
       }
 
+      if(event.target.closest(".p360-export-evidence-v75")){
+        const status=container.querySelector(".p360-evidence-status-v75");
+        try{
+          if(!this._can(Permission.EXPORT_REPORT)||!this._can(Permission.VIEW_TRAINING))
+            throw new Error("Sin permiso de exportación.");
+          const sessions=(this.sessions||[]).filter(s=>String(s.team_season_id)===String(this.teamSeasonId));
+          const data=exportTrainingEvidenceCsvV75({sessions,teamSeasonId:this.teamSeasonId});
+          const url=URL.createObjectURL(new Blob([data.content],{type:"text/csv;charset=utf-8"}));
+          const a=document.createElement("a");a.href=url;a.download=data.filename;
+          document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+          if(status)status.textContent="Plantilla exportada: "+data.sessionCount+" entrenamientos, "+data.rows+" filas. Solo se puede revisar; no se guardan cambios por esta vía.";
+        }catch(error){if(status)status.textContent="Exportación cancelada: "+String(error.message||error);}
+        return;
+      }
+      if(event.target.closest(".p360-preview-evidence-v75")){
+        if(this._can(Permission.EXPORT_REPORT)&&this._can(Permission.VIEW_TRAINING))
+          container.querySelector(".p360-evidence-file-v75")?.click();
+        return;
+      }
       if (event.target.closest(".p360-export-season-csv")) {
         if (!this._can(Permission.EXPORT_REPORT)) return;
         exportTrainingSeasonCsv({
