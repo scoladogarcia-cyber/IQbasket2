@@ -166,7 +166,7 @@ export class PlayerPassportView {
       const merged=mergeAuthorizedCareer(this.data,career.career||[]);
       this.data.evaluations=merged.evaluations;
       this.data.measurements=merged.measurements;
-      this.trainingHours=portfolio.training.error?null:summarizeTrainingPortfolio(portfolio.training.rows);
+      this.trainingHours=portfolio.training.error?null:summarizeTrainingPortfolio(portfolio.training.rows,{asOfDate:today()});
     }catch(error){
       this.portfolioError=String(error?.message||error);
       console.warn("[PlayerPassport] Portfolio source unavailable",this.portfolioError);
