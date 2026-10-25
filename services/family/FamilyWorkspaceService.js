@@ -116,6 +116,17 @@ export class FamilyWorkspaceService {
     }
   }
 
+  /**
+   * Read-only family passport summary; server validates verified parent/player
+   * relationship and every independently licensed data group.
+   */
+  getPassportBrief(playerId) {
+    requireValue(playerId, "playerId");
+    return rpc(this.supabase, "iq_v70_family_passport_brief", {
+      p_player_id: playerId
+    });
+  }
+
   getPlayer360Snapshot(playerId, teamSeasonId = null) {
     requireValue(playerId, "playerId");
     return progressiveRpc(
