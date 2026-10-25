@@ -143,6 +143,9 @@ export class FamilyWorkspaceView {
       </header>
       ${this._playerSwitcher()}
       ${renderFamilyHomeV70(buildFamilyHomeV70({ passport, growth, story, plan:weeklyPlan, cycleProjection:developmentCycle, playerId:this.playerId, selectedPlayer:this.state.players.find(p=>String(p.player_id)===String(this.playerId)), contributionsAvailable:this.state.contributionsAvailable }))}
+      <div data-family-passport-brief role="status" aria-live="polite" aria-label="Resumen del pasaporte">
+        <p>Consultando su historial...</p>
+      </div>
       <details class="family-deep-dive" data-family-deep-dive><summary>Explorar estadísticas, entrenamientos, retos y análisis avanzados</summary>
       <div class="family-team-anchor" aria-hidden="true"></div>
       ${this._supportGuide(support)}
