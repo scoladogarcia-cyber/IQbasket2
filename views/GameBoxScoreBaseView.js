@@ -188,15 +188,15 @@ export class GameBoxScoreView {
               ${g.team_score ?? g.teamScore ?? 0} - ${g.opponent_score ?? g.opponentScore ?? 0}
             </span>
           </td>
-          <td style="padding: 14px 12px; text-align: center; font-weight: 800; color: #1e3a8a;">${efgVal}%</td>
+          <td style="padding: 14px 12px; text-align: center; font-weight: 800; color: #1e3a8a;">${efgVal === "N/D" ? "N/D" : efgVal + "%"}</td>
           <td style="padding: 14px 12px; text-align: center;">
-            <strong style="color: #0f172a;">${pct2p}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg2m}/${totFg2a})</span>
+            <strong style="color: #0f172a;">${pct2p === "N/D" ? "N/D" : pct2p + "%"}</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg2m}/${totFg2a})</span>
           </td>
           <td style="padding: 14px 12px; text-align: center;">
-            <strong style="color: #0f172a;">${pct3p}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg3m}/${totFg3a})</span>
+            <strong style="color: #0f172a;">${pct3p === "N/D" ? "N/D" : pct3p + "%"}</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFg3m}/${totFg3a})</span>
           </td>
           <td style="padding: 14px 12px; text-align: center;">
-            <strong style="color: #0f172a;">${pctFt}%</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFtm}/${totFta})</span>
+            <strong style="color: #0f172a;">${pctFt === "N/D" ? "N/D" : pctFt + "%"}</strong> <span style="font-size: 11px; color: #94a3b8;">(${totFtm}/${totFta})</span>
           </td>
           <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totReb}</td>
           <td style="padding: 14px 12px; text-align: center; font-weight: 700; color: #0f172a;">${totAst}</td>
@@ -478,7 +478,7 @@ export class GameBoxScoreView {
                 <td style="padding: 12px; text-align: center;">${totPer}</td>
                 <td style="padding: 12px; text-align: center;">${totFc}</td>
                 <td style="padding: 12px; text-align: center;">${totFr}</td>
-                <td style="padding: 12px; text-align: center; color: #a855f7;">${teamEfg}%</td>
+                <td style="padding: 12px; text-align: center; color: #a855f7;">${teamEfg === "N/D" ? "N/D" : teamEfg + "%"}</td>
                 <td style="padding: 12px; text-align: center; color: #a855f7;">${totVal}</td>
                 <td style="padding: 12px; text-align: center; color: #166534;">${teamAstTo}</td>
                 <td style="padding: 12px; text-align: center; color: #1e40af;">100.0%</td>
