@@ -509,7 +509,7 @@ export class PlayerPassportView {
   }
 
   _passportFaq(){
-    return '<details class="pp-panel pp-faq" aria-label="Preguntas frecuentes del pasaporte">'+
+    return '<details class="pp-faq" style="padding:16px;border:1px solid #cbd5e1;border-radius:14px;background:#fff;margin:12px 0" aria-label="Preguntas frecuentes del pasaporte">'+
       '<summary style="cursor:pointer;min-height:44px;font-weight:900">Guía rápida: interpretar el pasaporte y sus estadísticas</summary>'+
       '<dl>'+
       '<dt><strong>¿Qué representa la nota 1–5?</strong></dt><dd>Una descripción ordinal del comportamiento observado en una rúbrica y dificultad concretas. No es una nota absoluta de talento.</dd>'+
