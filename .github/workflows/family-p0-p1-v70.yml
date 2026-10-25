@@ -8,6 +8,10 @@ on:
       - "views/ReportsViewV53.js"
       - "tests/family-p0-p1-v70.mjs"
       - "tests/product-p1-v71.mjs"
+      - "tests/family-zero-evidence-v72.mjs"
+      - "domain/family/FamilyPlayer360Presenter.js"
+      - "views/family/FamilyWorkspaceV32View.js"
+      - "views/reports/PlayerCompleteBoxScore.js"
       - "tests/product-p1-v72.mjs"
       - "domain/stats/**"
       - "domain/insights/**"
@@ -36,6 +40,7 @@ jobs:
       - run: npm ci
       - run: node tests/family-p0-p1-v70.mjs
       - run: node tests/product-p1-v71.mjs
+      - run: node tests/family-zero-evidence-v72.mjs
       - run: node tests/product-p1-v72.mjs
       - run: node tests/product-p1-v71.mjs
       - run: node tests/player-passport-portfolio-v68.mjs
