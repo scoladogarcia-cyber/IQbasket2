@@ -1,0 +1,54 @@
+name: Family Passport V70 Browser
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'views/family/**'
+      - 'services/family/FamilyWorkspaceService.js'
+      - 'domain/family/FamilyPassportBriefPresenter.js'
+      - 'tests/family-passport-v70-browser.mjs'
+      - '.github/workflows/family-passport-v70-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'views/family/**'
+      - 'services/family/FamilyWorkspaceService.js'
+      - 'domain/family/FamilyPassportBriefPresenter.js'
+      - 'tests/family-passport-v70-browser.mjs'
+permissions:
+  contents: read
+jobs:
+  family-passport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium,webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start site
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/family-passport-v70.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/family-passport-v70.log
+          exit 1
+      - name: Verify family passport brief and responsive layout
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/family-passport-v70-browser.mjs
+      - name: Print server log on failure
+        if: failure()
+        run: cat /tmp/family-passport-v70.log || true

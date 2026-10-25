@@ -6,6 +6,7 @@
  */
 import { FamilyWorkspaceV31View } from "./FamilyWorkspaceV31View.js";
 import { presentFamilyPlayer360 } from "../../domain/family/FamilyPlayer360Presenter.js";
+import {renderFamilyPassportBrief} from "./FamilyPassportBriefPanel.js";
 
 const esc = (value = "") => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -31,6 +32,29 @@ function chronologicalRecentGames(passport = {}) {
 }
 
 export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
+  /**
+   * Load the family-only overview after the existing verified family workspace.
+   * A missing paid feature never removes the rest of the family dashboard.
+   */
+  async render(containerId = "dashboard-content-area", routeParams = {}) {
+    const requestId=(this._passportBriefRequestId||0)+1;
+    this._passportBriefRequestId=requestId;
+    await super.render(containerId,routeParams);
+    if(!this.playerId || this.state?.error) return;
+    const requestedPlayer=this.playerId;
+    const container=typeof containerId==="string"?document.getElementById(containerId):containerId;
+    const host=container?.querySelector("[data-family-passport-brief]");
+    if(!host) return;
+    try {
+      const brief=await this.service.getPassportBrief(requestedPlayer);
+      if(requestId!==this._passportBriefRequestId || this.playerId!==requestedPlayer) return;
+      host.innerHTML=renderFamilyPassportBrief(brief,this.state?.passport||{});
+    } catch(error) {
+      if(requestId!==this._passportBriefRequestId || this.playerId!==requestedPlayer) return;
+      console.warn("[FamilyPassport] Overview unavailable:",error?.code||"unavailable");
+      host.innerHTML='<section class="family-passport-brief" aria-label="Pasaporte del jugador"><h2>Pasaporte en un vistazo</h2><p>Ahora no podemos verificar los datos del pasaporte. La información del resto de la pantalla sigue disponible.</p></section>';
+    }
+  }
   _basicStory() {
     const games = newestRecentGames(this.state?.passport || {});
     if (!games.length) return null;
@@ -47,7 +71,7 @@ export class FamilyWorkspaceV32View extends FamilyWorkspaceV31View {
       weeklyPlan,
       developmentCycle
     );
-    return `${dashboard}${this._basicTrendCharts()}`;
+    return `<div data-family-passport-brief role="status" aria-live="polite" aria-label="Resumen del pasaporte"><p>Consultando su historial...</p></div>${dashboard}${this._basicTrendCharts()}`;
   }
 
   _basicTrendCharts() {
