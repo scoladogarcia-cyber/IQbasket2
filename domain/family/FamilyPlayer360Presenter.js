@@ -16,8 +16,9 @@ function finite(value) {
 }
 
 function average(rows, key) {
-  if (!rows.length) return 0;
-  return rows.reduce((sum, row) => sum + finite(row?.[key]), 0) / rows.length;
+  // Missing player evidence must not be manufactured into recorded zeros.
+  if (!rows.length || rows.some(row => row?.[key] === null || row?.[key] === undefined || row?.[key] === "" || !Number.isFinite(Number(row[key])))) return null;
+  return rows.reduce((sum, row) => sum + Number(row[key]), 0) / rows.length;
 }
 
 function round(value, digits = 1) {
@@ -39,6 +40,7 @@ function splitWindows(games = []) {
 function metricTrend(metric, recent, previous) {
   const current = average(recent, metric.key);
   const baseline = average(previous, metric.key);
+  if (current === null || baseline === null) return null;
   const delta = current - baseline;
   const relative = Math.abs(baseline) > 0.01 ? delta / Math.abs(baseline) : 0;
   const meaningful = Math.abs(delta) >= metric.minAbs && Math.abs(relative) >= metric.relative;
@@ -56,6 +58,7 @@ function metricTrend(metric, recent, previous) {
 function threePointTrend(recent, previous) {
   const made = rows => rows.reduce((sum, row) => sum + finite(row?.fg3_made), 0);
   const attempted = rows => rows.reduce((sum, row) => sum + finite(row?.fg3_attempted), 0);
+  if ([...recent,...previous].some(row=>row?.fg3_made === null || row?.fg3_made === undefined || row?.fg3_attempted === null || row?.fg3_attempted === undefined)) return null;
   const recentAttempts = attempted(recent);
   const previousAttempts = attempted(previous);
   if (recentAttempts < 5 || previousAttempts < 5) return null;
