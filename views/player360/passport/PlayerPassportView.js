@@ -6,6 +6,9 @@
  */
 import { DataStore } from "../../../services/DataStore.js";
 import { PlayerPassportService } from "../../../services/player360/PlayerPassportService.js";
+import { PlayerPassportPortfolioService } from "../../../services/player360/PlayerPassportPortfolioService.js";
+import { summarizeTrainingPortfolio, summarizeGamePortfolio, mergeAuthorizedCareer, evidenceQuality, summarizeAssessmentTime, formatBasketballMinutes, TRAINING_TYPE_LABELS } from "../../../domain/player360/PlayerPassportPortfolio.js";
+
 import { Permission } from "../../../security/PermissionService.js";
 import { ageOnDate } from "../../../domain/player360/PlayerAge.js";
 import { latestScoresByAttribute, summarizePassport, rightLeftAsymmetries } from "../../../domain/player360/PlayerPassportScoring.js";
@@ -37,6 +40,10 @@ export class PlayerPassportView {
     this.supabase = supabaseClient && (supabaseClient.supabase || supabaseClient.default) || supabaseClient;
     this.auth = authController;
     this.service = new PlayerPassportService(this.supabase);
+    this.portfolioService = new PlayerPassportPortfolioService(this.supabase);
+    this.portfolioData=null;
+    this.portfolioError=null;
+    this.activeSection="overview";
     this.containerId = "dashboard-content-area";
     this.teamId = null;
     this.teamSeasonId = null;
@@ -134,49 +141,53 @@ export class PlayerPassportView {
       if (!this.teamSeasonId) throw new Error("Selecciona una temporada antes de abrir el pasaporte.");
       this.data=await this.service.getPassport({playerId:this.playerId,teamSeasonId:this.teamSeasonId});
       this._applySeasonPlayerContext();
-      await this._loadTrainingHours();
+      await this._loadPortfolio();
     } catch (e) { this.error=e; console.error("[PlayerPassportView]",e); }
   }
 
-  /** Summarize validated individual training participation across authorized seasons. */
-  async _loadTrainingHours() {
-    if (!this.supabase?.from || !this.playerId) { this.trainingHours = null; return; }
-    const totals = {TEAM:0,TECHNIFICATION:0,PERSONAL:0,COGNITIVE:0};
-    let count=0,pending=0;
+  /**
+   * The core passport remains available if an optional evidence source fails;
+   * show an explicit data error instead of silently reporting zero.
+   */
+  async _loadPortfolio(){
+    this.portfolioData=null;this.portfolioError=null;this.trainingHours=null;
     try {
-      for (let offset=0; offset<10000; offset+=500) {
-        const {data,error}=await this.supabase.from("iq_training_player_hours_v64")
-          .select("training_session_id,accredited_minutes,session_kind,classification_review")
-          .eq("player_id",this.playerId).order("training_session_id",{ascending:true}).range(offset,offset+499);
-        if (error) throw error;
-        (data||[]).forEach(row => {
-          const code = row.session_kind in totals ? row.session_kind : "TEAM";
-          totals[code]+=Math.max(0,Number(row.accredited_minutes)||0);
-          if (row.classification_review==="PENDING") pending++;
-          count++;
-        });
-        if (!data||data.length<500) break;
+      const portfolio=await this.portfolioService.load({
+        playerId:this.playerId,teamSeasonId:this.teamSeasonId
+      });
+      this.portfolioData=portfolio;
+      const career=portfolio.career||{};
+      if(career.category){
+        this.data.team={...(this.data.team||{}),category:career.category,
+          competition:career.competition||null};
       }
-      this.trainingHours={totals,count,pending};
-    } catch(error) {
-      // Passport assessment remains available if training-hour access is denied.
-      console.warn("[Passport] No hay acceso a horas de formación:",error?.message||error);
-      this.trainingHours=null;
+      const merged=mergeAuthorizedCareer(this.data,career.career||[]);
+      this.data.evaluations=merged.evaluations;
+      this.data.measurements=merged.measurements;
+      this.trainingHours=portfolio.training.error?null:summarizeTrainingPortfolio(portfolio.training.rows);
+    }catch(error){
+      this.portfolioError=String(error?.message||error);
+      console.warn("[PlayerPassport] Portfolio source unavailable",this.portfolioError);
     }
   }
 
-  _trainingHoursCard() {
-    if(!this.trainingHours) return '';
-    const labels={TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"};
-    const format=m => Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";
-    const total=Object.values(this.trainingHours.totals).reduce((a,b)=>a+b,0);
-    return '<section class="pp-training-volume" aria-label="Historial de formación">'
-      +'<h2>Horas de formación</h2><strong>'+esc(format(total))+'</strong>'
-      +'<div class="pp-training-volume-grid">'+Object.entries(this.trainingHours.totals)
-        .map(([kind,minutes])=>'<div><span>'+esc(labels[kind])+'</span><b>'+esc(format(minutes))+'</b></div>').join('')
-      +'</div>'
-      +(this.trainingHours.pending?'<small>Hay '+this.trainingHours.pending+' registros con tipo de formación pendiente de revisar.</small>':'')
-      +'<p>Horas efectivamente registradas y sesiones completadas; los entrenamientos planificados no suman.</p></section>';
+  _trainingHoursCard(){
+    if(!this.trainingHours){
+      return '<section class="pp-training-volume"><h2>Horas de formación</h2><p>No se ha podido verificar el historial de entrenamientos. No mostramos cero como si fueran horas confirmadas.</p>'+
+       (this.portfolioData?.training?.error?'<small>'+esc(this.portfolioData.training.error)+'</small>':'')+'</section>';
+    }
+    const h=this.trainingHours;
+    const kinds=Object.entries(h.kinds).map(([kind,data])=>
+      '<div><span>'+esc(TRAINING_TYPE_LABELS[kind])+'</span><b>'+esc(formatBasketballMinutes(data.registered))+'</b><small>Validadas: '+esc(formatBasketballMinutes(data.accredited))+'</small></div>').join('');
+    return '<section class="pp-training-volume" aria-label="Historial de entrenamientos">'+
+      '<h2>Horas de formación</h2><div class="pp-training-totals">'+
+      '<div><small>Asistencia registrada</small><strong>'+esc(formatBasketballMinutes(h.totalRegistered))+'</strong></div>'+
+      '<div><small>Horas acreditadas</small><strong>'+esc(formatBasketballMinutes(h.totalAccredited))+'</strong></div>'+
+      '<div><small>Pendientes de validación</small><strong>'+esc(formatBasketballMinutes(h.pendingMinutes))+'</strong></div></div>'+
+      '<div class="pp-training-volume-grid">'+kinds+'</div>'+
+      (h.reviewPending?'<p class="pp-quality-note">'+h.reviewPending+' registros pendientes de revisar su tipo de entrenamiento.</p>':'')+
+      (h.unknownMinutes?'<p class="pp-quality-note">'+h.unknownMinutes+' asistencias sin minutos verificables.</p>':'')+
+      '<p>Las sesiones pendientes no se acreditan hasta confirmar asistencia y minutos; no se completan automáticamente.</p></section>';
   }
 
   _model() {
