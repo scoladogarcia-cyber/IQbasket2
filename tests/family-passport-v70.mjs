@@ -67,6 +67,12 @@ assert.match(corrected,/s\.score is not null/);
 assert.match(corrected,/ts\.session_date<=current_date/);
 assert.match(corrected,/iq_saas_entitlement_check\('PLAYER',p_player_id,null,'BASIC_TIMELINE',1\)/);
 assert.doesNotMatch(corrected,/\b(?:delete from|drop table|truncate table|update public\.player_evaluation_scores)\b/i);
+const shell=readFileSync(new URL('../views/family/FamilyWorkspaceView.js',import.meta.url),'utf8');
+assert.ok(shell.indexOf('data-family-passport-brief')>=0);
+assert.ok(shell.indexOf('data-family-passport-brief')<shell.indexOf('class="family-deep-dive"'),
+  'Families must see the passport outside the collapsed advanced disclosure');
+assert.equal((shell.match(/data-family-passport-brief/g)||[]).length,1);
+assert.doesNotMatch(sql,/\bs\.rubric_version\b/);
 const view=readFileSync(new URL('../views/family/FamilyWorkspaceV32View.js',import.meta.url),'utf8');
 assert.match(view,/data-family-passport-brief/);
 assert.match(view,/requestId!==this._passportBriefRequestId/);
