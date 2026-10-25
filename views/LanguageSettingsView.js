@@ -322,8 +322,10 @@ export class LanguageSettingsView {
         if(file.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
         const known=new Set([...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(TranslationStore.getDictionary(this.selectedLocale))]);
         const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known});
+        // Keep edits on the visible page, then let the newly imported pack take precedence.
+        host.querySelectorAll(".i18n-input").forEach(input=>{const key=input.getAttribute("data-key");if(key)this.importDraft[key]=input.value;});
         this.importDraft={...this.importDraft,...entries};
-        this.currentPage=1;refresh();
+        this.currentPage=1;refresh({carryEdits:false});
         const next=root.querySelector("[data-lang-pack-status]");
         if(next)next.textContent=Object.keys(entries).length+" traducciones cargadas para revisión. Pulsa Guardar para confirmarlas.";
       }catch(error){if(status)status.textContent=String(error.message||error);}
