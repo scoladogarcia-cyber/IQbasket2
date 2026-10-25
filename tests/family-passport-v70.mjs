@@ -67,8 +67,16 @@ assert.match(corrected,/s\.score is not null/);
 assert.match(corrected,/ts\.session_date<=current_date/);
 assert.match(corrected,/iq_saas_entitlement_check\('PLAYER',p_player_id,null,'BASIC_TIMELINE',1\)/);
 assert.doesNotMatch(corrected,/\b(?:delete from|drop table|truncate table|update public\.player_evaluation_scores)\b/i);
+const familyShell=readFileSync(new URL('../views/family/FamilyWorkspaceView.js',import.meta.url),'utf8');
+const shellSlot=familyShell.indexOf('data-family-passport-brief');
+const advancedDisclosure=familyShell.indexOf('class="family-deep-dive"');
+assert.ok(shellSlot>0 && advancedDisclosure>0 && shellSlot<advancedDisclosure,
+  'The passport must be visible before the collapsed advanced family section');
+assert.equal((familyShell.match(/data-family-passport-brief/g)||[]).length,1,
+  'Only one family passport overview slot is allowed');
 const view=readFileSync(new URL('../views/family/FamilyWorkspaceV32View.js',import.meta.url),'utf8');
-assert.match(view,/data-family-passport-brief/);
+assert.match(view,/\[data-family-passport-brief\]/);
+assert.doesNotMatch(view,/return `<div data-family-passport-brief/);
 assert.match(view,/requestId!==this._passportBriefRequestId/);
 assert.match(view,/await super\.render/);
 console.log('PASS V70 family passport: separate entitlements, unknown vs zero, no fabricated rating, UI scope');
