@@ -15,6 +15,8 @@ import { refreshGameBoxScore } from "../services/games/GameBoxScoreFreshReadServ
 import { buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
 import { renderSelectedGamesOverview } from "./reports/SelectedGamesOverviewV53.js";
 import { buildBoxScoreExchangeRows,serializeBoxScoreCsv,parseBoxScoreCsv,parseBoxScoreExcel,validateBoxScoreImport,commitBoxScoreImport } from "../services/reports/BoxScoreExchangeV53.js";
+import { renderStatsQualityInfo } from "../domain/stats/StatQualityV71.js";
+import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.js";
 import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
@@ -122,16 +124,23 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
     const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
-    const printWindow=kind==="pdf"?window.open("","_blank","width=1024,height=768"):null;
-    if(kind==="pdf"&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
+    const printWindow=(kind==="pdf"||kind==="summary-pdf")?window.open("","_blank","width=1024,height=768"):null;
+    if((kind==="pdf"||kind==="summary-pdf")&&!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
     this._exchangeBusy=true;status.textContent=`Consultando ${games.length} acta(s) autorizadas…`;
     if(printWindow)printWindow.document.body.textContent="Preparando informe completo…";
     try {
       const reports=await this._readSelected(games,true);
-      if(kind==="pdf") {
-        const html=buildCompleteSeasonReport({reports,teamName:DataStore.getTeamById?.(context.teamId)?.name||"Equipo",seasonName:DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada"});
+      if(kind==="pdf"||kind==="summary-pdf") {
+        const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
+        const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
+        const quality=reports.map(report=>renderStatsQualityInfo({rows:report.stats,game:report.game})).join("");
+        const html=kind==="pdf"
+          ? buildCompleteSeasonReport({reports,teamName,seasonName})+quality
+          : '<section class="iq-report-panel"><h1>Resumen visual · '+teamName.replace(/[&<>"']/g,"")+' · '+seasonName.replace(/[&<>"']/g,"")+'</h1>'+
+            renderSelectedGamesOverview(reports.map(r=>({game:r.game,stats:r.stats})),{title:"Resumen visual · selección de partidos"})+
+            quality+renderGameStatisticsGlossary()+'</section>';
         const authorization=this.reportAccessPolicy.authorizeExport(ReportType.SEASON_DOSSIER,context);
-        if(!authorization.allowed||!ReportExporter.printReport("IQBasket_Seleccion_Partidos",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
+        if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
       } else if(kind==="csv") {
         const rows=buildBoxScoreExchangeRows(reports);
         this._download(serializeBoxScoreCsv(rows),"text/csv;charset=utf-8","IQBasket_BoxScore_Seleccion.csv");
@@ -145,7 +154,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
       } else {
         throw new Error("Formato de exportación no compatible.");
       }
-      status.textContent=`Preparados ${games.length} partido(s). ${kind==="pdf"?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
+      status.textContent=`Preparados ${games.length} partido(s). ${(kind==="pdf"||kind==="summary-pdf")?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
     }catch(error){status.textContent=`Exportación cancelada: ${error.message}`;if(printWindow&&!printWindow.closed)printWindow.document.body.textContent=status.textContent;}
     finally{this._exchangeBusy=false;}
   }
@@ -300,15 +309,16 @@ export class ReportsViewV53 extends ReportsViewV50 {
       panel.append(select,actions);
     }
     const toolbar=document.createElement("div");toolbar.style.cssText="display:flex;flex-wrap:wrap;gap:8px";
-    const pdf=button("PDF · partidos seleccionados","#0f766e");
+    const pdf=button("PDF completo · mapas + gráficas + actas","#0f766e");
+    const summaryPdf=button("PDF visual breve · resumen","#2563eb");
     const xlsx=button("Excel completo · Acta + BoxScore + Jugadas","#1d4ed8");
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(pdf,xlsx,eventsXlsx,csv,importButton,file);panel.append(toolbar);
+    toolbar.append(summaryPdf,pdf,xlsx,eventsXlsx,csv,importButton,file);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
-    for(const [btn,kind] of [[pdf,"pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
+    for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
     importButton.addEventListener("click",()=>{if(this._selectionGames().length!==1){status.textContent="Selecciona exactamente un partido para importar.";return;}if(!this._canImport(this._selectionGames()[0])){status.textContent="Sin permiso de edición o partido/temporada cerrado.";return;}file.click();});
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);
