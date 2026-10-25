@@ -106,7 +106,10 @@ export class LanguageSettingsView {
       "edit_player_data", "cancel", "active", "inactive"
     ];
 
-    const totalItems = keysToTranslate.length;
+    // Preserve legacy administrative keys while discovering newly versioned catalog keys.
+    // This prevents new translations disappearing from the paginated admin interface.
+    const allKeys=Array.from(new Set([...keysToTranslate,...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(dict)])).filter(key=>/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)).sort();
+    const totalItems = allKeys.length;
     const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
 
     if (this.currentPage > totalPages) this.currentPage = totalPages;
@@ -114,7 +117,7 @@ export class LanguageSettingsView {
 
     const startIndex = (this.currentPage - 1) * this.pageSize;
     const endIndex = startIndex + this.pageSize;
-    const paginatedKeys = keysToTranslate.slice(startIndex, endIndex);
+    const paginatedKeys = allKeys.slice(startIndex, endIndex);
 
     let rowsHtml = "";
     paginatedKeys.forEach((key) => {
@@ -270,7 +273,8 @@ export class LanguageSettingsView {
   bindEvents(root, { canSave = () => false } = {}) {
     const host=root?.querySelector?.(".language-settings-view");
     if (!host) return;
-    const refresh=()=>{
+    const refresh=({carryEdits=true}={})=>{
+      if(carryEdits)host.querySelectorAll(".i18n-input").forEach(input=>{const key=input.getAttribute("data-key");if(key)this.importDraft[key]=input.value;});
       const shell=host.parentElement;
       if(!shell)return;
       shell.innerHTML=this.render(this.selectedLocale);
@@ -278,7 +282,7 @@ export class LanguageSettingsView {
     };
     host.querySelector("#langCodeInput")?.addEventListener("change", event=>{
       this.selectedLocale=supportedLocale(event.target.value);
-      this.currentPage=1;this.importDraft=Object.create(null);refresh();
+      this.currentPage=1;this.importDraft=Object.create(null);refresh({carryEdits:false});
     });
     for(const [code,offset] of [["prev",-1],["next",1]]){
       const id=code==="prev"?"#btn-prev-lang-page":"#btn-next-lang-page";
@@ -316,7 +320,7 @@ export class LanguageSettingsView {
       try{
         if(!canSave())throw new Error("Sin permiso de gestión de idiomas.");
         if(file.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
-        const known=new Set(Object.keys(TranslationStore.getDictionary(this.selectedLocale)));
+        const known=new Set([...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(TranslationStore.getDictionary(this.selectedLocale))]);
         const entries=parseLanguagePackCsv(await file.text(),{existingKeys:known});
         this.importDraft={...this.importDraft,...entries};
         this.currentPage=1;refresh();
