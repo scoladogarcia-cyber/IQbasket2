@@ -15,6 +15,7 @@ import { refreshGameBoxScore } from "../services/games/GameBoxScoreFreshReadServ
 import { buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
 import { renderSelectedGamesOverview } from "./reports/SelectedGamesOverviewV53.js";
 import { buildBoxScoreExchangeRows,serializeBoxScoreCsv,parseBoxScoreCsv,parseBoxScoreExcel,validateBoxScoreImport,commitBoxScoreImport } from "../services/reports/BoxScoreExchangeV53.js";
+import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
 const id = value => String(value ?? "");
@@ -204,15 +205,41 @@ export class ReportsViewV53 extends ReportsViewV50 {
     try{
       status.textContent="Leyendo y comprobando archivo…";
       const text=await file.text();
-      const matrix=/\.csv$/i.test(file.name)?parseBoxScoreCsv(text):/\.xls$/i.test(file.name)?parseBoxScoreExcel(text):null;
+      let matrix=/\.csv$/i.test(file.name)?parseBoxScoreCsv(text):/\.xls$/i.test(file.name)?parseBoxScoreExcel(text):null;
       if(!matrix)throw new Error("Formato no compatible: importa CSV o el Excel XML .xls exportado por IQBasket.");
       const [report,events]=await Promise.all([
         this._readSelected([game],true).then(items=>items[0]),
         supabase.from("game_events").select("id").eq("game_id",game.id).limit(1)
       ]);
       if(events.error||!Array.isArray(events.data))throw new Error("No se puede comprobar el play-by-play.");
-      if(events.data.length)throw new Error("Este partido contiene jugadas: su BoxScore se corrige en el editor de jugadas, no por importación.");
       const eligible=DataStore.getPlayersEligibleOnDate?.(game.team_id,game.date)||[];
+      const federated=isFederationCsv(matrix);
+      if(federated)matrix=adaptFederationCsv(matrix,{game:report.game,stats:report.stats,eligiblePlayers:eligible});
+      // Never overwrite a live play-by-play from a third-party boxscore.
+      // Federated data can still be compared, without mutation.
+      if(events.data.length){
+        if(!federated)throw new Error("Este partido contiene jugadas: su BoxScore se corrige en el editor de jugadas, no por importación.");
+        const current=new Map(report.stats.map(r=>[id(r.player_id??r.playerId),r]));
+        const head=matrix[0], col=n=>head.indexOf(n);
+        const diffs=matrix.slice(1).map(row=>{
+          const pid=row[col("player_id")], old=current.get(pid)||{};
+          const pts=Number(row[col("points")]), min=Number(row[col("minutes")]);
+          const oldPts=old.points==null?"N/D":old.points,oldMin=old.minutes==null?"N/D":old.minutes;
+          return {player:row[col("jugador")],oldPts,pts,oldMin,min,
+            changed:String(oldPts)!==String(pts)||String(oldMin)!==String(min)};
+        });
+        holder.append(note("Comparación oficial · modo solo lectura. Hay jugadas de anotación en vivo: no se modifica el acta ni se pierde el play-by-play."));
+        const table=document.createElement("table");table.style.cssText="width:100%;font-size:12px";
+        const th=document.createElement("tr");
+        ["Jugador","PTS IQBasket","PTS acta","MIN IQBasket","MIN acta"].forEach(label=>{const cell=document.createElement("th");cell.textContent=label;th.append(cell);});table.append(th);
+        diffs.filter(d=>d.changed).forEach(d=>{const tr=document.createElement("tr");
+          [d.player,d.oldPts,d.pts,d.oldMin,d.min].forEach(val=>{const td=document.createElement("td");td.textContent=String(val);tr.append(td);});table.append(tr);
+        });
+        if(diffs.some(d=>d.changed))holder.append(table);
+        else holder.append(note("Los puntos y minutos importados coinciden con los datos actuales."));
+        status.textContent="Comparación completada. Para corregir un partido con jugadas, utiliza el editor de anotación; ningún dato se ha sobrescrito.";
+        return;
+      }
       const preview=validateBoxScoreImport(matrix,{game:report.game,stats:report.stats,eligiblePlayers:eligible});
       holder.append(note(`Vista previa · ${preview.rows.length} jugadores · ${preview.differences} filas con cambios · ${preview.points} puntos. Solo se modificarían estadísticas individuales del partido, nunca jugadas, parciales ni marcador.`));
       const table=document.createElement("table");table.style.cssText="width:100%;font-size:12px;border-collapse:collapse";
@@ -259,7 +286,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     this._refreshCompleteSelectionButton(container);
     const panel=document.createElement("section");panel.style.cssText="background:white;border:1px solid #cbd5e1;border-radius:12px;padding:14px;margin:12px 0;display:grid;gap:9px";
     const title=document.createElement("h3");title.textContent="Selección de partidos y datos reutilizables";panel.append(title);
-    const status=note("Excel .xlsx exporta Acta, BoxScore y todas las jugadas reales. CSV se mantiene para intercambio de BoxScore; la importación .xls es solo compatibilidad legacy.");status.setAttribute("role","status");panel.append(status);
+    const status=note("Excel .xlsx exporta Acta, BoxScore y todas las jugadas reales. CSV permite también comparar o importar un acta federativa con columnas completas y dorsales verificados; no sustituye jugadas en vivo. El .xls es solo legacy.");status.setAttribute("role","status");panel.append(status);
     const games=this._visibleGames();
     if(this.selectedGameId==="all") {
       const select=document.createElement("div");select.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px";
@@ -277,7 +304,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const xlsx=button("Excel completo · Acta + BoxScore + Jugadas","#1d4ed8");
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
-    const importButton=button("Importar BoxScore CSV / .xls legacy","#b45309");
+    const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
     toolbar.append(pdf,xlsx,eventsXlsx,csv,importButton,file);panel.append(toolbar);
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
