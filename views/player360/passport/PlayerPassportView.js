@@ -380,7 +380,8 @@ export class PlayerPassportView {
       '<label>Dimensión<select id="pp-dimension"><option value="">Todas</option>'+dimOptions+'</select></label><label>Subdimensión<select id="pp-subdimension"><option value="">Todas</option>'+subOptions+'</select></label></div>'+
       '<label class="pp-title">Título<input id="pp-title" required maxlength="140" value="'+esc(defaultTitle)+'"></label>'+
       '<label class="pp-title">Tiempo real dedicado a esta evaluación (minutos, opcional)<input id="pp-assessment-minutes" type="number" min="1" max="600" step="1" value="'+esc(this.editorMeta.minutes||"")+'" placeholder="Sin registrar"></label>'+
-      '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
+      '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+
+      '<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
       '<div class="pp-eval-grid">'+cards+'</div><label class="pp-title">Resumen opcional<textarea id="pp-summary" rows="3">'+esc(this.editorMeta.summary||"")+'</textarea></label><div class="pp-save"><span id="pp-status" aria-live="polite">'+this._draftCount()+' atributo(s) pendientes de guardar.</span><button type="submit">Guardar cambios observados</button></div></form></section>';
   }
 
@@ -391,9 +392,9 @@ export class PlayerPassportView {
       '<p><strong>2. Elige el contexto correcto.</strong> T = tarea controlada; JR = juego reducido; P5 = partido/5x5; VIDEO = revisión de vídeo.</p>'+
       '<p><strong>3. Dificultad y categoría son diferentes.</strong> Selecciona D1–D5 según la prueba realmente observada: no se dan puntos por cumplir años ni por pasar de mini a júnior.</p>'+
       '<p><strong>4. Aporta el número mínimo de observaciones.</strong> Cada atributo indica su umbral y Supabase lo comprueba de nuevo. Sin evidencia suficiente, no se guarda una nota nueva.</p>'+
-      '<p><strong>4. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
-      '<p><strong>5. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
-      '<p><strong>6. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
+      '<p><strong>5. Separa decisión, ejecución y resultado.</strong> Una canasta no convierte automáticamente una mala decisión en una buena valoración.</p>'+
+      '<p><strong>6. Registra evidencia y confianza.</strong> Cuantas más observaciones relevantes y contextos consistentes existan, mayor puede ser la confianza.</p>'+
+      '<p><strong>7. Las valoraciones evolucionan.</strong> No se sobreescribe el pasado: cada nueva evaluación añade una fotografía temporal y el sistema usa la más reciente para el perfil actual.</p>'+
       '<button type="button" id="pp-help-start" class="pp-primary-action">Empezar una valoración</button></div></div>';
   }
 
