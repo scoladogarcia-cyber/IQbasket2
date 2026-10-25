@@ -1,0 +1,56 @@
+name: Player Passport V68 Browser
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'views/player360/passport/**'
+      - 'services/player360/PlayerPassport*'
+      - 'domain/player360/PlayerPassport*'
+      - 'config/player-passport*'
+      - 'config/playerPassportCategoriesV68.config.js'
+      - 'tests/player-passport-v68-browser.mjs'
+      - '.github/workflows/player-passport-v68-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'views/player360/passport/**'
+      - 'services/player360/PlayerPassport*'
+      - 'domain/player360/PlayerPassport*'
+      - 'tests/player-passport-v68-browser.mjs'
+permissions:
+  contents: read
+jobs:
+  passport-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium,webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install isolated Playwright browser
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Start local application
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/passport-v68-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/passport-v68-vite.log
+          exit 1
+      - name: Verify authorized Passport V68 workflow
+        env:
+          QA_BROWSER: ${{ matrix.browser }}
+        run: node tests/player-passport-v68-browser.mjs
+      - name: Debug local server
+        if: failure()
+        run: cat /tmp/passport-v68-vite.log || true
