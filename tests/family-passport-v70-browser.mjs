@@ -45,6 +45,8 @@ try{
  });
  assert.equal(result.selected,'11111111-1111-4111-8111-111111111111');
  assert.ok(result.workspace,'Existing family dashboard must remain visible');
+ assert.equal(await page.locator('[data-family-passport-brief]').count(),1);
+ assert.equal(await page.locator('[data-family-passport-brief]').isVisible(),true,'Family passport must appear without opening advanced analysis');
  for(const s of ['Cadete Masculino','12 h 30 min','0 h 00 min','Pendiente de validar','Valoraciones']){
    assert.ok(result.brief.includes(s),'Expected: '+s+' in '+result.brief.slice(0,1000));
  }
