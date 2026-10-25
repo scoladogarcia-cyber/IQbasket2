@@ -16,7 +16,7 @@ const coverage=buildPassportCoverageV74({catalog,latest});
 assert.deepEqual([coverage.total,coverage.assessed,coverage.verified,coverage.provisional,coverage.notEvaluated],[69,2,1,1,67]);
 assert.equal(coverage.rows[2].status,"NE");
 assert.match(exportPassportCoverageV74({catalog,latest}),/"'=injection"/);
-assert.throws(()=>buildPassportCoverageV74({catalog:{attributes:catalog.attributes.slice(1)},latest}),/69/);
+assert.throws(()=>buildPassportCoverageV74({catalog:{attributes:catalog.attributes.slice(1)},latest}),/Catálogo/);
 // Configurable reports: explicit profiles, invalid choices fail closed.
 assert.equal(resolveReportProfileV74("DEVELOPMENT").quality,true);
 assert.equal(resolveReportProfileV74("VISUAL").quality,false);
