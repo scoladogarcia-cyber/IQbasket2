@@ -56,6 +56,15 @@ const portfolio=await new PlayerPassportPortfolioService(client).load({playerId:
 assert.equal(portfolio.career.category,'Cadete Masculino');
 assert.equal(portfolio.training.rows.length,2);
 assert.equal(portfolio.wellness.recovery.allowed,false);
+const {PASSPORT_CATEGORY_VOCABULARY_V68,PASSPORT_DIFFICULTY_LEVELS_V68,passportCategoryContext}=
+  await import('../config/playerPassportCategoriesV68.config.js');
+assert.equal(PASSPORT_CATEGORY_VOCABULARY_V68.some(x=>x.code==='ESCOBOL'),true);
+assert.equal(PASSPORT_CATEGORY_VOCABULARY_V68.some(x=>x.code==='PREINFANTIL'),true);
+assert.equal(PASSPORT_CATEGORY_VOCABULARY_V68.some(x=>x.code==='SENIOR'),true);
+assert.equal(PASSPORT_DIFFICULTY_LEVELS_V68.length,5);
+assert.equal(passportCategoryContext('Cadete Masculino').canonicalCode,'CADET');
+assert.equal(passportCategoryContext('Infantil').automaticScoreBonus,0);
+
 
 const sql=readFileSync(new URL('../supabase/migrations/20261025120000_player_passport_portfolio_v68.sql',import.meta.url),'utf8');
 const guided=readFileSync(new URL('../supabase/migrations/20261025124500_player_passport_guided_scoring_v68.sql',import.meta.url),'utf8');
