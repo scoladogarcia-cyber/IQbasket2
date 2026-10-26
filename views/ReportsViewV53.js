@@ -21,6 +21,7 @@ import { renderGameStatisticsGlossary } from "./reports/GameStatisticsGlossary.j
 import { isFederationCsv, adaptFederationCsv } from "../services/reports/FederationCsvAdapterV70.js";
 import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
 import { REPORT_PROFILE_V74, resolveReportProfileV74 } from "../services/reports/ReportProfileV74.js";
+import { renderPlayerDevelopmentBriefV77 } from "../services/reports/PlayerDevelopmentBriefV77.js";
 import { exportRosterCsvV74, previewRosterCsvV74 } from "../services/exchange/RosterExchangeV74.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
@@ -170,6 +171,48 @@ export class ReportsViewV53 extends ReportsViewV50 {
       status.textContent=`Preparados ${games.length} partido(s). ${(kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf")?"Selecciona Guardar como PDF en la impresión.":"Archivo exportado."}`;
     }catch(error){status.textContent=`Exportación cancelada: ${error.message}`;if(printWindow&&!printWindow.closed)printWindow.document.body.textContent=status.textContent;}
     finally{this._exchangeBusy=false;}
+  }
+
+  /**
+   * Per-player report: never reuse the full-team report.html for a player
+   * export. All data is reduced to an authorized player BEFORE HTML creation.
+   */
+  async _exportPlayerBriefV77({status,playerId,fromDate="",toDate=""}={}) {
+    if(this._exchangeBusy)return;
+    const selected=this._selectionGames(),context=this._reportContext();
+    if(!selected.length){status.textContent="Selecciona partidos.";return;}
+    const player=this._authorizedPlayers().find(p=>id(p.id)===id(playerId));
+    if(!player){status.textContent="Jugador fuera de la temporada autorizada.";return;}
+    const playerScope={...context,playerId:player.id,playerTeamId:player.team_id||player.teamId||context.teamId};
+    if(!this.reportAccessPolicy.canExport(ReportType.PLAYER_STATS,playerScope)){
+      status.textContent="No tienes permiso de exportación sobre este jugador.";return;
+    }
+    const printWindow=window.open("","_blank","width=1024,height=768");
+    if(!printWindow){status.textContent="Permite ventanas emergentes para guardar el PDF.";return;}
+    this._exchangeBusy=true;printWindow.document.body.textContent="Consultando actas individuales…";
+    try{
+      const reports=await this._readSelected(selected,true);
+      if(id(this._reportContext().teamId)!==id(context.teamId) ||
+        id(this._reportContext().teamSeasonId)!==id(context.teamSeasonId) ||
+        !this.reportAccessPolicy.canExport(ReportType.PLAYER_STATS,playerScope))
+        throw new Error("Ha cambiado tu autorización, equipo o temporada.");
+      for(const report of reports){
+        const scoped={...report.context,playerId:player.id,
+          playerTeamId:player.team_id||player.teamId||context.teamId};
+        if(!report.policy.canExport(ReportType.PLAYER_STATS,scoped))
+          throw new Error("No puedes exportar este jugador para toda la selección.");
+      }
+      const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
+      const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
+      const html=renderPlayerDevelopmentBriefV77({reports,player,fromDate,toDate,teamName,seasonName});
+      const authorization=this.reportAccessPolicy.authorizeExport(ReportType.PLAYER_STATS,playerScope);
+      if(!authorization.allowed||!ReportExporter.printReport("IQBasket_Seguimiento_Jugador",html,{authorization,printWindow}))
+        throw new Error("No se pudo preparar el PDF individual.");
+      status.textContent="Informe individual preparado. Selecciona Guardar como PDF.";
+    }catch(error){
+      status.textContent="Informe individual cancelado: "+String(error.message||error);
+      if(!printWindow.closed)printWindow.document.body.textContent=status.textContent;
+    }finally{this._exchangeBusy=false;}
   }
 
   /** Reuse the same fresh, per-game authorized report for the roster read boundary. */
@@ -417,6 +460,26 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
     toolbar.append(profile,sectionOptions,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
+    const playerBrief=document.createElement("div");playerBrief.style.cssText="display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:9px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff";
+    const playerSelect=document.createElement("select");playerSelect.setAttribute("aria-label","Jugador para informe de seguimiento");playerSelect.style.cssText="min-height:44px;padding:8px;border:1px solid #94a3b8;border-radius:9px";
+    const first=document.createElement("option");first.value="";first.textContent="Seleccionar jugador";playerSelect.append(first);
+    this._authorizedPlayers().forEach(player=>{
+      const option=document.createElement("option");option.value=id(player.id);
+      option.textContent=[player.first_name,player.last_name].filter(Boolean).join(" ")||player.name||"Jugador";
+      playerSelect.append(option);
+    });
+    const range=(type,label)=>{
+      const wrapper=document.createElement("label");wrapper.textContent=label;wrapper.style.cssText="display:grid;gap:3px;font-size:12px";
+      const input=document.createElement("input");input.type="date";input.setAttribute("aria-label",label);input.style.cssText="min-height:44px;border:1px solid #94a3b8;border-radius:8px;padding:6px";
+      wrapper.append(input);playerBrief.append(wrapper);return input;
+    };
+    playerBrief.append(playerSelect);
+    const fromDate=range("from","Desde"),toDate=range("to","Hasta");
+    const playerPdf=button("PDF de seguimiento individual","#1d4ed8");playerBrief.append(playerPdf);
+    panel.append(playerBrief);
+    playerPdf.addEventListener("click",()=>{void this._exportPlayerBriefV77({
+      status,playerId:playerSelect.value,fromDate:fromDate.value,toDate:toDate.value
+    });});
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
     for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
     templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
