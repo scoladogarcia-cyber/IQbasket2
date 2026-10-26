@@ -1,0 +1,37 @@
+name: IQBasket Six Modules V77 Safety Gate
+on:
+  push:
+    branches: ["feature/six-modules-v77-transactional-training-import-reporting", "main"]
+    paths:
+      - "services/exchange/**"
+      - "services/reports/PlayerDevelopmentBriefV77.js"
+      - "views/ReportsViewV53.js"
+      - "views/TrainingView.js"
+      - "security/permissions.js"
+      - "supabase/drafts/training_attendance_import_v77.sql"
+      - "tests/training-attendance-import-v77.mjs"
+      - "tests/player-development-brief-v77.mjs"
+      - ".github/workflows/six-modules-v77.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/training-attendance-import-v77.mjs
+      - run: node tests/player-development-brief-v77.mjs
+      - run: node tests/training-import-preflight-v76.mjs
+      - run: node tests/six-modules-v75.mjs
+      - run: node tests/product-six-modules-v74.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: node tests/player-passport-portfolio-v68.mjs
+      - run: npm run build
