@@ -12,6 +12,7 @@ const plan={
 };
 const fresh=[{id:"s",team_season_id:"teamseason",updated_at:"2026-10-25T10:00:00Z",duration_minutes:60,
   participants:[{id:"att",player_id:"p",updated_at:"2026-10-25T10:00:00Z",attendance_status:"PRESENT",participated_minutes:40}]}];
+const freshSessions=fresh;
 assert.equal(toTrainingImportPayloadV77(plan)[0].proposed.minutes,30);
 assert.throws(()=>toTrainingImportPayloadV77({...plan,canWrite:true}),/vista previa/);
 let calls=0;
