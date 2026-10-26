@@ -17,6 +17,7 @@ import { Permission } from "../security/PermissionService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
 import {exportTrainingEvidenceCsvV75,previewTrainingEvidenceCsvV75} from "../services/exchange/TrainingEvidenceExchangeV75.js";
 import {buildTrainingImportPreflightV76} from "../services/exchange/TrainingImportPreflightV76.js";
+import {TRAINING_IMPORT_V77_CONFIG,TrainingAttendanceImportServiceV77} from "../services/exchange/TrainingAttendanceImportServiceV77.js";
 import {
   EXTERNAL_PROVIDER_LABELS,
   EXTERNAL_PROVIDER_TYPE,
@@ -122,6 +123,7 @@ export class TrainingView {
     this.editingTrainingId = null;
     this.trainingDetailId = null;
     this.trainingMinutesOverrides = new Map();
+    this._trainingImportPlanV77 = null;
     this.editingExternalId = null;
 
     // V56 training player selector state. Selection is independent from the
@@ -1253,6 +1255,8 @@ export class TrainingView {
               <button type="button" class="p360-secondary-btn p360-export-season-csv">📊 CSV</button>
               <button type="button" class="p360-secondary-btn p360-export-evidence-v75">⬇ Plantilla asistencia CSV</button>
               <button type="button" class="p360-secondary-btn p360-preview-evidence-v75">↥ Revisar CSV</button>
+              ${TRAINING_IMPORT_V77_CONFIG.enabled && this._can(Permission.IMPORT_TRAINING_ATTENDANCE) && this._can(Permission.EDIT_TRAINING)
+                ? `<button type="button" class="p360-secondary-btn p360-apply-evidence-v77" disabled>Aplicar revisión confirmada</button>` : ""}
               <input type="file" class="p360-evidence-file-v75" accept=".csv,text/csv" hidden aria-label="Seleccionar plantilla de asistencia">
               <span role="status" class="p360-evidence-status-v75" style="font-size:12px;color:#475569">La revisión no modifica registros ni acredita minutos automáticamente.</span>
             </div>
@@ -2169,6 +2173,9 @@ export class TrainingView {
           sessions:selected,teamSeasonId:this.teamSeasonId
         });
         // Preflight is audit metadata, never a permission or a write operation.
+        this._trainingImportPlanV77=null;
+        const apply=container.querySelector(".p360-apply-evidence-v77");
+        if(apply)apply.disabled=true;
         let revisionMessage="Verificación de versiones pendiente.";
         try{
           const plan=buildTrainingImportPreflightV76({
@@ -2176,6 +2183,10 @@ export class TrainingView {
             seasonStatus:this._seasonContext()?.data_status||"ACTIVE"
           });
           revisionMessage="Preflight de versiones preparado para "+plan.changed+" cambio(s), sin aplicar.";
+          if(plan.changed>0 && TRAINING_IMPORT_V77_CONFIG.enabled && this._can(Permission.IMPORT_TRAINING_ATTENDANCE) && this._can(Permission.EDIT_TRAINING)){
+            this._trainingImportPlanV77=plan;
+            if(apply)apply.disabled=false;
+          }
         }catch(preflightError){
           revisionMessage="Preflight no disponible: "+String(preflightError.message||preflightError)+
             " Revisa los registros en el editor antes de modificar nada.";
@@ -2185,6 +2196,29 @@ export class TrainingView {
       }catch(error){
         if(status)status.textContent="Revisión cancelada: "+String(error.message||error);
       }finally{trainingEvidenceFile.value="";}
+    });
+
+    container.querySelector(".p360-apply-evidence-v77")?.addEventListener("click",async event=>{
+      const button=event.currentTarget,status=container.querySelector(".p360-evidence-status-v75");
+      if(!TRAINING_IMPORT_V77_CONFIG.enabled || !this._trainingImportPlanV77 || button.disabled)return;
+      const plan=this._trainingImportPlanV77;
+      if(String(plan.teamSeasonId)!==String(this.teamSeasonId)){
+        if(status)status.textContent="Ha cambiado la temporada. Importación cancelada.";return;
+      }
+      if(!confirm("¿Aplicar "+plan.changed+" cambio(s) de asistencia después de volver a verificar los registros? Esta operación modifica datos reales."))return;
+      button.disabled=true;
+      try{
+        const fresh=await this.service.listSessions({teamSeasonId:this.teamSeasonId,limit:500});
+        const freshScoped=fresh.filter(item=>String(item.team_season_id)===String(this.teamSeasonId));
+        const gateway=new TrainingAttendanceImportServiceV77({client:this.supabase,auth:this.auth});
+        await gateway.apply({plan,freshSessions:freshScoped,teamId:this.teamId,confirmed:true});
+        this._trainingImportPlanV77=null;
+        if(status)status.textContent="Asistencias actualizadas y auditadas por el servidor.";
+        await this.render(this.containerId,this.teamId);
+      }catch(error){
+        this._trainingImportPlanV77=null;
+        if(status)status.textContent="No se ha modificado ninguna fila: "+String(error.message||error)+". Vuelve a cargar el CSV.";
+      }
     });
 
     const trainingForm = container.querySelector("#p360-training-form");
@@ -2922,6 +2956,7 @@ export class TrainingView {
   }
 
   async render(containerId = "dashboard-content-area", teamId = null) {
+    this._trainingImportPlanV77=null;
     this.containerId = containerId;
     this.teamId = teamId || DataStore.getActiveTeamId?.() || null;
     this.teamSeasonId = DataStore.getActiveTeamSeasonId?.(this.teamId) || null;
