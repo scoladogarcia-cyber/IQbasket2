@@ -78,7 +78,7 @@ assert.throws(()=>buildReportAuditManifestV78([{...report(g1),stats:[{player_id:
 const reference={greet:"Hola {player}, tu equipo {team}."};
 assert.equal(assertLanguagePlaceholderParityV78("greet","Bonjour {team}, {player}.",reference),true);
 assert.throws(()=>assertLanguagePlaceholderParityV78("greet","Bonjour {team}.",reference),/player/);
-assert.throws(()=>assertLanguagePlaceholderParityV78("greet","Bonjour {team}, {player}, {new}.",reference),/Marcadores/);
+assert.throws(()=>assertLanguagePlaceholderParityV78("greet","Bonjour {team}, {player}, {new}.",reference),/marcadores/i);
 const ok=csv([["key","translation"],["greet","Hello {player}, {team}!"]]);
 assert.equal(parseLanguagePackCsv(ok,{existingKeys:new Set(["greet"]),referenceDictionary:reference}).greet,"Hello {player}, {team}!");
 assert.throws(()=>parseLanguagePackCsv(csv([["key","translation"],["greet","Hello!"]]),{existingKeys:new Set(["greet"]),referenceDictionary:reference}),/marcadores/i);
