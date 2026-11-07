@@ -6,6 +6,7 @@
 import { Permission } from "../../security/PermissionService.js";
 import { GameCaptureDelegationService } from "../../services/games/GameCaptureDelegationService.js";
 import { GamePlayStateService } from "../../services/games/GamePlayStateService.js";
+import {blockedShotsIntegrityV82} from "../../domain/stats/BlockedShotIntegrityV82.js";
 
 const esc = (value = "") => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -20,7 +21,7 @@ const ZERO_STATS = Object.freeze({
 const ACTIONS = Object.freeze([
   ["+2","fg2_made",2],["2✕","fg2_miss",0],["+3","fg3_made",3],["3✕","fg3_miss",0],
   ["+1 TL","ft_made",1],["TL ✕","ft_miss",0],["REB O","off_reb",0],["REB D","def_reb",0],
-  ["AST","assists",0],["ROB","steals",0],["TAP","blocks_made",0],["PÉR","turnovers",0],
+  ["AST","assists",0],["ROB","steals",0],["TAP","blocks_made",0],["TAP REC","blocks_received",0],["PÉR","turnovers",0],
   ["FALTA","fouls_committed",0],["F. REC","fouls_drawn",0]
 ]);
 
@@ -144,6 +145,12 @@ export class DelegatedQuickEntryView {
 
   async _playerAction(action, points) {
     if (!this.selectedPlayerId) { alert("Selecciona primero un jugador."); return; }
+    if(action==="blocks_received"){
+      const previous={...ZERO_STATS,...(this.stats.get(this.selectedPlayerId)||{})};
+      try {
+        blockedShotsIntegrityV82({...previous,blocks_received:Number(previous.blocks_received||0)+1},previous);
+      }catch(error){alert(error.message||String(error));return;}
+    }
     try {
       await this._ensureWritable(); this._pushHistory();
       const row = { ...ZERO_STATS, ...(this.stats.get(this.selectedPlayerId) || {}), player_id:this.selectedPlayerId };

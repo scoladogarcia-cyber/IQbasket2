@@ -276,7 +276,7 @@ export class GameBoxScoreView {
     const readOnlyReason = this._readOnlyReason(currentGame);
 
     let totMin = 0, totPts = 0, totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFtm = 0, totFta = 0;
-    let totRo = 0, totRd = 0, totAst = 0, totRob = 0, totTap = 0, totPer = 0, totFc = 0, totFr = 0, totVal = 0;
+    let totRo = 0, totRd = 0, totAst = 0, totRob = 0, totTap = 0, totTapReceived = 0, totPer = 0, totFc = 0, totFr = 0, totVal = 0;
 
     const playerRowsMarkup = this.players.map((p) => {
       const st = this.gameStats.find(s => String(s.player_id ?? s.playerId) === String(p.id)) || {};
@@ -293,7 +293,8 @@ export class GameBoxScoreView {
       const valRd = Number(st.def_reb ?? st.defReb ?? 0);
       const valAst = Number(st.assists ?? st.ast ?? 0);
       const valRob = Number(st.steals ?? st.stl ?? 0);
-      const valTap = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+      const valTap = Number(st.blocks_made ?? st.blocksMade ?? st.blocks ?? st.blk ?? 0);
+      const valTapReceived = Number(st.blocks_received ?? st.blocksReceived ?? 0);
       const valPer = Number(st.turnovers ?? st.tov ?? 0);
       const valFc = Number(st.fouls_committed ?? st.fouls ?? 0);
       const valFr = Number(st.fouls_drawn ?? st.fouls_received ?? 0);
@@ -311,7 +312,8 @@ export class GameBoxScoreView {
         def_reb: valRd,
         assists: valAst,
         steals: valRob,
-        blocks: valTap,
+        blocks_made: valTap,
+        blocks_received: valTapReceived,
         turnovers: valPer,
         fouls_committed: valFc,
         fouls_drawn: valFr,
@@ -331,6 +333,7 @@ export class GameBoxScoreView {
       totAst += valAst;
       totRob += valRob;
       totTap += valTap;
+      totTapReceived += valTapReceived;
       totPer += valPer;
       totFc += valFc;
       totFr += valFr;
@@ -357,7 +360,8 @@ export class GameBoxScoreView {
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="def_reb" value="${valRd}" ${canEdit ? '' : 'disabled'} /></td>
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="assists" value="${valAst}" ${canEdit ? '' : 'disabled'} /></td>
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="steals" value="${valRob}" ${canEdit ? '' : 'disabled'} /></td>
-          <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="blocks" value="${valTap}" ${canEdit ? '' : 'disabled'} /></td>
+          <td style="padding: 8px 4px; text-align: center;"><input type="number" min="0" step="1" class="bs-input" data-field="blocks" aria-label="Tapones realizados" value="${valTap}" ${canEdit ? '' : 'disabled'} /></td>
+          <td style="padding: 8px 4px; text-align: center;"><input type="number" min="0" step="1" class="bs-input" data-field="blocks_received" aria-label="Tapones recibidos" title="Tiros propios taponados por el rival; restan en la valoración PIR" value="${valTapReceived}" ${canEdit ? '' : 'disabled'} /></td>
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="turnovers" value="${valPer}" ${canEdit ? '' : 'disabled'} /></td>
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="fouls_committed" value="${valFc}" ${canEdit ? '' : 'disabled'} /></td>
           <td style="padding: 8px 4px; text-align: center;"><input type="number" class="bs-input" data-field="fouls_drawn" value="${valFr}" ${canEdit ? '' : 'disabled'} /></td>
@@ -445,12 +449,13 @@ export class GameBoxScoreView {
                 <th style="padding: 10px; text-align: center;">RD</th>
                 <th style="padding: 10px; text-align: center;">AST</th>
                 <th style="padding: 10px; text-align: center;">ROB</th>
-                <th style="padding: 10px; text-align: center;">TAP</th>
+                <th style="padding: 10px; text-align: center;" title="Tapones realizados">TAP</th>
+                <th style="padding: 10px; text-align: center;" title="Tapones recibidos; restan en el PIR">TAP REC</th>
                 <th style="padding: 10px; text-align: center;">PER</th>
                 <th style="padding: 10px; text-align: center;">FC</th>
                 <th style="padding: 10px; text-align: center;">FR</th>
                 <th style="padding: 10px; text-align: center; color: #a855f7;">%EFG</th>
-                <th style="padding: 10px; text-align: center; color: #a855f7;">VAL (FIBA)</th>
+                <th style="padding: 10px; text-align: center; color: #a855f7;" title="PIR / valoración ACB-Euroliga; no confundir con EFF FIBA">PIR / VAL</th>
                 <th style="padding: 10px; text-align: center; color: #166534;">AST/TO</th>
                 <th style="padding: 10px; text-align: center; color: #1e40af;">%USG</th>
               </tr>
@@ -475,6 +480,7 @@ export class GameBoxScoreView {
                 <td style="padding: 12px; text-align: center;">${totAst}</td>
                 <td style="padding: 12px; text-align: center;">${totRob}</td>
                 <td style="padding: 12px; text-align: center;">${totTap}</td>
+                <td style="padding: 12px; text-align: center;">${totTapReceived}</td>
                 <td style="padding: 12px; text-align: center;">${totPer}</td>
                 <td style="padding: 12px; text-align: center;">${totFc}</td>
                 <td style="padding: 12px; text-align: center;">${totFr}</td>
@@ -536,6 +542,7 @@ export class GameBoxScoreView {
           const ast = getVal("assists");
           const stl = getVal("steals");
           const blk = getVal("blocks");
+          const blkr = getVal("blocks_received");
           const tov = getVal("turnovers");
           const fc = getVal("fouls_committed");
           const fd = getVal("fouls_drawn");
@@ -545,7 +552,7 @@ export class GameBoxScoreView {
             fg3_made: fg3m, fg3_attempted: fg3a,
             ft_made: ftm, ft_attempted: fta,
             off_reb: ro, def_reb: rd,
-            assists: ast, steals: stl, blocks: blk,
+            assists: ast, steals: stl, blocks_made: blk, blocks_received: blkr,
             turnovers: tov, fouls_committed: fc, fouls_drawn: fd
           });
 
@@ -604,6 +611,7 @@ export class GameBoxScoreView {
             steals: getInpVal("steals"),
             blocks: getInpVal("blocks"),
             blocks_made: getInpVal("blocks"),
+            blocks_received: getInpVal("blocks_received"),
             turnovers: getInpVal("turnovers"),
             fouls_committed: getInpVal("fouls_committed"),
             fouls_drawn: getInpVal("fouls_drawn"),

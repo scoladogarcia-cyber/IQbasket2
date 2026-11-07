@@ -391,7 +391,8 @@ export class EasyStatsEntryView {
       const valRd = Number(st.def_reb ?? st.defReb ?? 0);
       const valAst = Number(st.assists ?? st.ast ?? 0);
       const valRob = Number(st.steals ?? st.stl ?? 0);
-      const valTap = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+      const valTap = Number(st.blocks_made ?? st.blocksMade ?? st.blocks ?? st.blk ?? 0);
+      const valTapReceived = Number(st.blocks_received ?? st.blocksReceived ?? 0);
       const valPer = Number(st.turnovers ?? st.tov ?? 0);
       const valFc = Number(st.fouls_committed ?? st.fouls ?? 0);
       const valFr = Number(st.fouls_drawn ?? st.fouls_received ?? 0);
@@ -401,7 +402,8 @@ export class EasyStatsEntryView {
         minutes: valMin, fg2_made: valFg2m, fg2_attempted: valFg2a,
         fg3_made: valFg3m, fg3_attempted: valFg3a, ft_made: valFtm, ft_attempted: valFta,
         off_reb: valRo, def_reb: valRd, assists: valAst, steals: valRob,
-        blocks: valTap, turnovers: valPer, fouls_committed: valFc, fouls_drawn: valFr,
+        blocks_made: valTap, blocks_received: valTapReceived,
+        turnovers: valPer, fouls_committed: valFc, fouls_drawn: valFr,
         points: valPts
       });
 
@@ -422,7 +424,8 @@ export class EasyStatsEntryView {
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="def_reb" value="${valRd}" /></td>
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="assists" value="${valAst}" /></td>
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="steals" value="${valRob}" /></td>
-          <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="blocks" value="${valTap}" /></td>
+          <td style="padding: 6px; text-align: center;"><input type="number" min="0" step="1" class="acta-input" data-field="blocks" aria-label="Tapones realizados" value="${valTap}" /></td>
+          <td style="padding: 6px; text-align: center;"><input type="number" min="0" step="1" class="acta-input" data-field="blocks_received" aria-label="Tapones recibidos" title="Restan en la valoración PIR" value="${valTapReceived}" /></td>
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="turnovers" value="${valPer}" /></td>
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="fouls_committed" value="${valFc}" /></td>
           <td style="padding: 6px; text-align: center;"><input type="number" class="acta-input" data-field="fouls_drawn" value="${valFr}" /></td>
@@ -494,10 +497,11 @@ export class EasyStatsEntryView {
                 <th style="padding: 10px 6px; text-align: center;">AST</th>
                 <th style="padding: 10px 6px; text-align: center;">ROB</th>
                 <th style="padding: 10px 6px; text-align: center;">TAP</th>
+                <th style="padding: 10px 6px; text-align: center;" title="Tapones recibidos">TAP REC</th>
                 <th style="padding: 10px 6px; text-align: center;">PER</th>
                 <th style="padding: 10px 6px; text-align: center;">FC</th>
                 <th style="padding: 10px 6px; text-align: center;">FR</th>
-                <th style="padding: 10px 6px; text-align: center; color: #a855f7;">VAL</th>
+                <th style="padding: 10px 6px; text-align: center; color: #a855f7;" title="PIR ACB/Euroliga">PIR / VAL</th>
               </tr>
             </thead>
             <tbody id="acta-table-body">
@@ -648,6 +652,7 @@ export class EasyStatsEntryView {
           const ast = getVal("assists");
           const stl = getVal("steals");
           const blk = getVal("blocks");
+          const blkr = getVal("blocks_received");
           const tov = getVal("turnovers");
           const fc = getVal("fouls_committed");
           const fd = getVal("fouls_drawn");
@@ -657,7 +662,7 @@ export class EasyStatsEntryView {
             fg3_made: fg3m, fg3_attempted: fg3a,
             ft_made: ftm, ft_attempted: fta,
             off_reb: ro, def_reb: rd,
-            assists: ast, steals: stl, blocks: blk,
+            assists: ast, steals: stl, blocks_made: blk, blocks_received: blkr,
             turnovers: tov, fouls_committed: fc, fouls_drawn: fd
           });
 
@@ -704,6 +709,7 @@ export class EasyStatsEntryView {
           steals: getInpVal("steals"),
           blocks: getInpVal("blocks"),
           blocks_made: getInpVal("blocks"),
+          blocks_received: getInpVal("blocks_received"),
           turnovers: getInpVal("turnovers"),
           fouls_committed: getInpVal("fouls_committed"),
           fouls_drawn: getInpVal("fouls_drawn"),

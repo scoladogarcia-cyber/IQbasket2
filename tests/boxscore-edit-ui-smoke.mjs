@@ -232,6 +232,14 @@ async function runViewport(browser, viewportName, viewport) {
   await firstRow.locator('.bs-input[data-field="fg2_made"]').fill("3");
   await firstRow.locator('.bs-input[data-field="minutes"]').fill("32");
 
+  const pirBeforeBlockedShot = Number((await firstRow.locator(".cell-val").textContent()).trim());
+  await firstRow.locator('.bs-input[data-field="blocks_received"]').fill("1");
+  const pirAfterBlockedShot = Number((await firstRow.locator(".cell-val").textContent()).trim());
+  assertCondition(pirAfterBlockedShot === pirBeforeBlockedShot - 1, viewportName,
+    "Tapón recibido no descuenta exactamente un PIR");
+  assertCondition(await firstRow.locator('.bs-input[data-field="blocks_received"]').count() === 1,
+    viewportName, "Falta input único de tapón recibido");
+
   const visiblePoints = await firstRow.locator(".cell-pts").textContent();
   assertCondition(String(visiblePoints).trim() === "11", viewportName, "PTS no se recalcula al editar T2C");
 
@@ -244,6 +252,7 @@ async function runViewport(browser, viewportName, viewport) {
   assertCondition(victor.fg2_made === 3, viewportName, "BoxScore guarda T2C incorrecto");
   assertCondition(victor.minutes === 32, viewportName, "BoxScore guarda minutos incorrectos");
   assertCondition(victor.points === 11, viewportName, "BoxScore guarda PTS derivados incorrectos");
+  assertCondition(victor.blocks_received === 1, viewportName, "La captura pierde el tapón recibido al guardar");
 
   await page.evaluate(() => window.__renderBox({ role: "ENTRENADOR", gameId: "game-locked", frozen: false }));
   const lockedState = await inspectEditable(page);

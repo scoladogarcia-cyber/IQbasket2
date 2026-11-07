@@ -291,6 +291,7 @@ export class LiveScoreHUDViewV44 extends LiveScoreHUDViewV42Safe {
       st.ast = statNumber(row.assists);
       st.stl = statNumber(row.steals);
       st.blk = statNumber(row.blocks_made ?? row.blocks);
+      st.blkReceived = statNumber(row.blocks_received);
       st.tov = statNumber(row.turnovers);
       st.fouls = statNumber(row.fouls_committed);
       st.foulsDrawn = statNumber(row.fouls_drawn);
@@ -321,6 +322,7 @@ export class LiveScoreHUDViewV44 extends LiveScoreHUDViewV42Safe {
         assists: st.ast,
         steals: st.stl,
         blocks_made: st.blk,
+        blocks_received: st.blkReceived,
         turnovers: st.tov,
         fouls_committed: st.fouls,
         fouls_drawn: st.foulsDrawn
