@@ -69,6 +69,9 @@ assert.ok(!serializeReportAuditManifestV78([report(g1)],{generatedAt:"2026-11-07
 const unknown={...report(g1),stats:[{player_id:playerId,points:null}]};
 assert.equal(buildReportAuditManifestV78([unknown]).games[0].sum_player_points,null);
 assert.equal(buildReportAuditManifestV78([unknown]).games[0].score_consistent,null);
+const emptyGameReport={game:{...g1,team_score:0},players:[{id:playerId}],stats:[]};
+assert.equal(buildReportAuditManifestV78([emptyGameReport]).games[0].sum_player_points,null);
+assert.equal(buildReportAuditManifestV78([emptyGameReport]).games[0].score_consistent,null);
 assert.equal(buildReportAuditManifestV78([{...report(g1),game:{...g1,team_score:3}}]).games[0].score_consistent,false);
 assert.throws(()=>buildReportAuditManifestV78([report(g1),report(g1)]),/más de una vez/);
 assert.throws(()=>buildReportAuditManifestV78([report(g1),report({...g2,team_season_id:"other"})]),/mezclan/);
