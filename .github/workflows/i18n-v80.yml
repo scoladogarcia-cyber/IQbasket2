@@ -1,0 +1,29 @@
+name: IQBasket Language V80
+on:
+  push:
+    branches: ["feature/i18n-v80-bundled-catalog-20261107"]
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  i18n:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node --check services/TranslationStore.js
+      - run: node --check services/I18nService.js
+      - run: node --check views/TrainingView.js
+      - run: node --check views/LanguageSettingsView.js
+      - run: node tests/i18n-v80-bundled-contract.mjs
+      - run: node tests/six-modules-v78.mjs
+      - run: node tests/six-modules-v75.mjs
+      - run: node tests/training-v79-history-contract.mjs
+      - run: node scripts/audit-i18n-v80.mjs
+      - run: npm run build

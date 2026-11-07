@@ -1,10 +1,10 @@
 /**
  * @fileoverview Almacén y Servicio de Gestión de Idiomas, Diccionarios y Traducciones: TranslationStore.js
  * @description Exporta tanto `TranslationStore` como `TranslationService` para máxima compatibilidad.
- * Conexión reactiva a Supabase (`translations`), persistencia local en `localStorage` y diccionarios de fallback (ES, CA/CAT, EN, FR).
+ * Catálogos versionados ES/CA/EN/FR. Las traducciones no requieren Supabase.
  */
 
-import { supabase } from "../config/database.config.js";
+import { BUNDLED_LANGUAGE_CATALOG_V80, normalizeBundledLocaleV80, interpolateLanguageV80 } from "./i18n/BundledLanguageCatalogV80.js";
 import { I18n } from "./I18nService.js";
 
 export class TranslationStore {
@@ -647,135 +647,63 @@ export class TranslationStore {
     }
   };
 
-  static dictionaries = {
-    es: { ...TranslationStore.defaultDictionary.es },
-    ca: { ...TranslationStore.defaultDictionary.ca },
-    en: { ...TranslationStore.defaultDictionary.en },
-    fr: { ...TranslationStore.defaultDictionary.fr }
-  };
+  /** Legacy keys remain supported, with the full bundled catalogue taking priority. */
+  static dictionaries = Object.fromEntries(["es","ca","en","fr"].map(code=>[
+    code,{...TranslationStore.defaultDictionary[code],...BUNDLED_LANGUAGE_CATALOG_V80[code]}
+  ]));
 
-  static currentLang = localStorage.getItem("iq_lang") || "es";
+  static currentLang = normalizeBundledLocaleV80(
+    typeof localStorage!=="undefined"
+      ? localStorage.getItem("iq_locale")||localStorage.getItem("iq_lang")||"es"
+      : "es"
+  );
 
-  // Evita reconsultar el diccionario remoto en cada render/cambio de pantalla.
-  // Las traducciones editadas desde administración actualizan la caché local al guardar.
-  static remoteCacheTtlMs = 6 * 60 * 60 * 1000;
-
-  static normalizeLang(langCode = "es") {
-    const code = String(langCode || "es").trim().toLowerCase();
-    return code === "cat" ? "ca" : code;
+  static normalizeLang(langCode="es") {
+    return normalizeBundledLocaleV80(langCode);
   }
 
-  static t(key, fallbackOrParams = "", maybeFallback = "") {
-    if (!key) return "";
-    let fallback = typeof fallbackOrParams === "string" ? fallbackOrParams : maybeFallback;
-    const lang = this.normalizeLang(this.currentLang);
-    const dict = this.dictionaries[lang] || this.dictionaries.es || {};
-    const res = dict[key];
-    if (res !== undefined && res !== null && res !== "") {
-      return res;
-    }
-    return fallback || key;
+  /** Compatible with t(key,fallback) and t(key,params,fallback). */
+  static t(key,fallbackOrParams="",maybeFallback="") {
+    if(!key)return "";
+    const params=typeof fallbackOrParams==="object"&&fallbackOrParams!==null?fallbackOrParams:{};
+    const fallback=typeof fallbackOrParams==="string"?fallbackOrParams:maybeFallback;
+    const current=this.dictionaries[this.normalizeLang(this.currentLang)]||{};
+    const spanish=this.dictionaries.es||{};
+    const value=current[key]||spanish[key]||fallback||key;
+    return interpolateLanguageV80(value,params);
   }
 
-  static getDictionary(langCode = null) {
-    const code = this.normalizeLang(langCode || this.currentLang);
-    return this.dictionaries[code] || this.defaultDictionary[code] || this.defaultDictionary.es;
-  }
-
-  static saveDictionary(langCode, dict) {
-    const code = this.normalizeLang(langCode);
-    this.dictionaries[code] = { ...(this.dictionaries[code] || {}), ...dict };
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(`iq_dict_${code}`, JSON.stringify(this.dictionaries[code]));
-      localStorage.setItem(`iq_dict_sync_${code}`, String(Date.now()));
-    }
-  }
-
-  static async setLanguage(langCode) {
-    const code = this.normalizeLang(langCode);
-    this.currentLang = code;
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("iq_lang", code);
-      const cached = localStorage.getItem(`iq_dict_${code}`);
-      if (cached) {
-        try {
-          this.dictionaries[code] = { ...this.dictionaries[code], ...JSON.parse(cached) };
-        } catch {
-          // continuar
-        }
-      }
-    }
-    if (I18n && typeof I18n.setLocale === "function") {
-      I18n.setLocale(code);
-    }
+  static getDictionary(langCode=null) {
+    return this.dictionaries[this.normalizeLang(langCode||this.currentLang)];
   }
 
   /**
-   * Mantiene el nombre histórico por compatibilidad, pero carga únicamente
-   * el idioma activo y usa una caché temporal. Antes descargaba los 4 idiomas
-   * completos en cada sincronización.
+   * Legacy compatibility for previews; deliberately never persists translations
+   * on the user device or server. Changes must be committed to locales/*.js.
    */
-  static async initAllTranslations(forceRefresh = false) {
-    try {
-      const lang = this.normalizeLang(this.currentLang || "es");
-      let hasCachedDictionary = false;
+  static saveDictionary(langCode,dict) {
+    const locale=this.normalizeLang(langCode);
+    this.dictionaries[locale]={...this.dictionaries[locale],...dict};
+  }
 
-      // 1. Hidratar únicamente el idioma activo desde LocalStorage.
-      if (typeof localStorage !== "undefined") {
-        const cached = localStorage.getItem(`iq_dict_${lang}`);
-        if (cached) {
-          try {
-            this.dictionaries[lang] = {
-              ...this.dictionaries[lang],
-              ...JSON.parse(cached)
-            };
-            hasCachedDictionary = true;
-          } catch {
-            // Si la caché estuviera dañada, se recuperará desde Supabase.
-          }
-        }
-
-        if (!forceRefresh && hasCachedDictionary) {
-          const lastSync = Number(localStorage.getItem(`iq_dict_sync_${lang}`) || 0);
-          if (lastSync > 0 && (Date.now() - lastSync) < this.remoteCacheTtlMs) {
-            return;
-          }
-        }
-      }
-
-      // 2. Sincronizar solo el idioma activo y solo las columnas necesarias.
-      if (supabase) {
-        let query = supabase
-          .from("translations")
-          .select("key,language_code,translation,updated_at");
-
-        if (lang === "ca") {
-          query = query.in("language_code", ["ca", "cat"]);
-        } else {
-          query = query.eq("language_code", lang);
-        }
-
-        const { data, error } = await query;
-
-        if (!error && Array.isArray(data)) {
-          data.forEach(item => {
-            const itemLang = this.normalizeLang(item.language_code);
-            if (!this.dictionaries[itemLang]) this.dictionaries[itemLang] = {};
-            this.dictionaries[itemLang][item.key] = item.translation;
-          });
-
-          if (typeof localStorage !== "undefined") {
-            localStorage.setItem(
-              `iq_dict_${lang}`,
-              JSON.stringify(this.dictionaries[lang] || {})
-            );
-            localStorage.setItem(`iq_dict_sync_${lang}`, String(Date.now()));
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[TranslationStore] Inicialización offline:", err.message);
+  static async setLanguage(langCode) {
+    const locale=this.normalizeLang(langCode);
+    this.currentLang=locale;
+    if(typeof localStorage!=="undefined"){
+      localStorage.setItem("iq_locale",locale);
+      localStorage.setItem("iq_lang",locale);
     }
+    I18n.setLocale(locale);
+  }
+
+  /** Retained for compatibility with the app bootstrap; zero network calls. */
+  static async initAllTranslations() {
+    for(const code of ["es","ca","en","fr"]){
+      this.dictionaries[code]={
+        ...this.defaultDictionary[code],...BUNDLED_LANGUAGE_CATALOG_V80[code]
+      };
+    }
+    I18n.setLocale(this.currentLang);
   }
 }
 

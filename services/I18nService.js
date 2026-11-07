@@ -1,7 +1,7 @@
 /**
  * @fileoverview Servicio Principal de Internacionalización: I18nService.
  * @description Orquesta la resolución, detección de locale del sistema, sincronización con
- * Supabase Cloud (`translations`) e interpolación de variables.
+ * ficheros de idioma versionados e interpolación de variables.
  * 
  * Reglas de diseño:
  * 1. Prioridad en cascada: BBDD Supabase/LocalStorage (0ms) -> Diccionarios Estáticos -> Fallback 'es' -> Clave.
@@ -12,6 +12,7 @@
 
 import { I18N_CONFIG } from "../config/i18n.config.js";
 import { i18n } from "../core-modules/i18n/I18nEngine.js";
+import {BUNDLED_LANGUAGE_CATALOG_V80,normalizeBundledLocaleV80} from "./i18n/BundledLanguageCatalogV80.js";
 
 class I18nService {
   constructor() {
@@ -23,7 +24,10 @@ class I18nService {
     };
     this.listeners = new Set();
     this.currentLocale = this._resolveAndMigrateLocale();
-    this._hydrateLocalCustomTranslations();
+    for(const [code,words] of Object.entries(BUNDLED_LANGUAGE_CATALOG_V80)) {
+      this.dictionaries[code]={...words};
+      i18n.loadDictionary(code,words);
+    }
   }
 
   // =========================================================================
@@ -109,66 +113,12 @@ class I18nService {
    * @private
    */
   _hydrateLocalCustomTranslations() {
-    if (typeof localStorage === "undefined") return;
-    const locales = ["es", "ca", "en", "fr"];
-
-    locales.forEach((loc) => {
-      const savedDict = localStorage.getItem(`iq_dict_${loc}`);
-      if (savedDict) {
-        try {
-          const parsed = JSON.parse(savedDict);
-          if (!this.dictionaries[loc]) this.dictionaries[loc] = {};
-          Object.assign(this.dictionaries[loc], parsed);
-          // Inyecta en I18nEngine
-          i18n.loadDictionary(loc, parsed);
-        } catch {
-          console.warn(`[I18nService] Error parseando iq_dict_${loc}`);
-        }
-      }
-    });
+    // V80: retired. Translations are shipped with the app, not user overrides.
   }
 
-  /**
-   * Carga las traducciones desde la tabla `translations` de Supabase en caliente.
-   * @param {Object} supabaseClient - Cliente Supabase activo.
-   */
-  async loadRemoteTranslations(supabaseClient) {
-    if (!supabaseClient) return;
-
-    try {
-      const current = this.getLocale();
-      const queryLang = current === "ca" ? "cat" : current;
-
-      const { data, error } = await supabaseClient
-        .from("translations")
-        .select("key,language_code,translation,updated_at")
-        .or(`language_code.eq.${current},language_code.eq.${queryLang}`);
-
-      if (!error && Array.isArray(data) && data.length > 0) {
-        if (!this.dictionaries[current]) {
-          this.dictionaries[current] = {};
-        }
-
-        const remoteDict = {};
-        data.forEach((item) => {
-          if (item.key && item.translation !== undefined) {
-            this.dictionaries[current][item.key] = item.translation;
-            remoteDict[item.key] = item.translation;
-          }
-        });
-
-        // Actualizar caché de localStorage
-        if (typeof localStorage !== "undefined") {
-          const existing = JSON.parse(localStorage.getItem(`iq_dict_${current}`) || "{}");
-          localStorage.setItem(`iq_dict_${current}`, JSON.stringify({ ...existing, ...remoteDict }));
-        }
-
-        i18n.loadDictionary(current, remoteDict);
-        this.notify();
-      }
-    } catch (err) {
-      console.warn("[I18nService] No se pudieron sincronizar traducciones desde Supabase:", err.message);
-    }
+  /** @deprecated Remote translation table is no longer queried. */
+  async loadRemoteTranslations(_supabaseClient) {
+    return;
   }
 
   /**
@@ -185,10 +135,6 @@ class I18nService {
     Object.assign(this.dictionaries[target], translationsObj);
     i18n.loadDictionary(target, translationsObj);
 
-    if (typeof localStorage !== "undefined") {
-      const existing = JSON.parse(localStorage.getItem(`iq_dict_${target}`) || "{}");
-      localStorage.setItem(`iq_dict_${target}`, JSON.stringify({ ...existing, ...translationsObj }));
-    }
 
     if (target === this.currentLocale) {
       this.notify();
@@ -204,7 +150,7 @@ class I18nService {
   }
 
   setLocale(locale) {
-    const target = this._normalizeLocale(locale);
+    const target = normalizeBundledLocaleV80(locale);
     if (!this._isValidLocale(target)) return;
 
     this.currentLocale = target;
@@ -215,7 +161,7 @@ class I18nService {
       localStorage.setItem(storageKey, target);
 
       const legacyKeys = I18N_CONFIG?.legacyStorageKeys || ["iq_language", "language", "locale"];
-      legacyKeys.forEach((k) => localStorage.setItem(k, target));
+      // Old locale aliases remain readable, but no longer multiply stored keys.
     }
 
     if (typeof document !== "undefined" && document.documentElement) {

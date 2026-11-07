@@ -1,0 +1,67 @@
+/** @fileoverview Translations for the Git-versioned language administrator. */
+export const languageAdminV80 = Object.freeze({
+ es:{
+  "language.admin.title":"Administración de idiomas",
+  "language.admin.description":"Las traducciones se publican con archivos versionados en GitHub. La base de datos ya no almacena los textos de la interfaz.",
+  "language.admin.search":"Buscar clave de traducción",
+  "language.admin.searchExample":"Ejemplo: approvals, passport, reports",
+  "language.admin.count":"Mostrando {count} de {total} claves del catálogo.",
+  "language.admin.choose":"Idioma que quieres revisar",
+  "language.admin.download":"Descargar idioma CSV",
+  "language.admin.missing":"CSV de claves pendientes",
+  "language.admin.import":"Importar CSV y previsualizar",
+  "language.admin.chooseFile":"Seleccionar archivo CSV de traducciones",
+  "language.admin.instructions":"Los cambios se descargan como CSV para revisarlos e incorporarlos a GitHub. No se escriben en Supabase.",
+  "language.admin.downloadEdits":"Descargar cambios de idioma",
+  "language.admin.downloaded":"CSV descargado. Para publicar las traducciones, incorpora los cambios a los archivos de idioma en GitHub.",
+  "language.admin.noChanges":"No hay cambios para descargar."
+ },
+ ca:{
+  "language.admin.title":"Administració d'idiomes",
+  "language.admin.description":"Les traduccions es publiquen amb fitxers versionats a GitHub. La base de dades ja no desa els textos de la interfície.",
+  "language.admin.search":"Cerca una clau de traducció",
+  "language.admin.searchExample":"Exemple: approvals, passport, reports",
+  "language.admin.count":"Es mostren {count} de {total} claus del catàleg.",
+  "language.admin.choose":"Idioma que vols revisar",
+  "language.admin.download":"Descarrega l'idioma CSV",
+  "language.admin.missing":"CSV de claus pendents",
+  "language.admin.import":"Importa el CSV i previsualitza",
+  "language.admin.chooseFile":"Selecciona el fitxer CSV de traduccions",
+  "language.admin.instructions":"Els canvis es descarreguen com a CSV per revisar-los i incorporar-los a GitHub. No s'escriu res a Supabase.",
+  "language.admin.downloadEdits":"Descarrega els canvis d'idioma",
+  "language.admin.downloaded":"CSV descarregat. Per publicar les traduccions, incorpora els canvis als fitxers d'idioma a GitHub.",
+  "language.admin.noChanges":"No hi ha canvis per descarregar."
+ },
+ en:{
+  "language.admin.title":"Language administration",
+  "language.admin.description":"Translations ship as version-controlled GitHub files. The database no longer stores interface strings.",
+  "language.admin.search":"Search translation key",
+  "language.admin.searchExample":"Example: approvals, passport, reports",
+  "language.admin.count":"Showing {count} of {total} catalog keys.",
+  "language.admin.choose":"Language to review",
+  "language.admin.download":"Download language CSV",
+  "language.admin.missing":"Missing keys CSV",
+  "language.admin.import":"Import CSV and preview",
+  "language.admin.chooseFile":"Select translation CSV file",
+  "language.admin.instructions":"Download CSV changes for review and inclusion in GitHub. Nothing is written to Supabase.",
+  "language.admin.downloadEdits":"Download language changes",
+  "language.admin.downloaded":"CSV downloaded. To publish translations, commit the changes to the language files in GitHub.",
+  "language.admin.noChanges":"No changes to download."
+ },
+ fr:{
+  "language.admin.title":"Administration des langues",
+  "language.admin.description":"Les traductions sont publiées dans des fichiers versionnés sur GitHub. La base de données ne stocke plus les textes de l'interface.",
+  "language.admin.search":"Rechercher une clé de traduction",
+  "language.admin.searchExample":"Exemple : approvals, passport, reports",
+  "language.admin.count":"Affichage de {count} clés sur {total}.",
+  "language.admin.choose":"Langue à examiner",
+  "language.admin.download":"Télécharger le CSV de langue",
+  "language.admin.missing":"CSV des clés manquantes",
+  "language.admin.import":"Importer le CSV et prévisualiser",
+  "language.admin.chooseFile":"Choisir le fichier CSV de traductions",
+  "language.admin.instructions":"Téléchargez les modifications CSV pour les examiner et les intégrer à GitHub. Aucune écriture dans Supabase.",
+  "language.admin.downloadEdits":"Télécharger les modifications",
+  "language.admin.downloaded":"CSV téléchargé. Pour publier les traductions, intégrez les changements aux fichiers de langue sur GitHub.",
+  "language.admin.noChanges":"Aucune modification à télécharger."
+ }
+});

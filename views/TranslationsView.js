@@ -136,7 +136,7 @@ export class TranslationsView {
     this.isMarketLoaded = false;
     this.marketTransferStartDate = "";
 
-    // Idiomas y Diccionario en Supabase
+    // Idiomas desde catálogos versionados
     this.selectedLangForEdit = localStorage.getItem("iq_lang") || "es";
     this.availableLangs = [
       { code: "es", label: "Español (ES)" },
@@ -509,26 +509,12 @@ export class TranslationsView {
     }
   }
 
+  /** V80: translations are supplied by bundled locales, not a database. */
   async _fetchTranslationsForLang(langCode) {
-    try {
-      if (!supabase) return;
-      const normLang = langCode === "cat" ? "ca" : langCode;
-
-      let query = supabase
-        .from("translations")
-        .select("key,language_code,translation,created_at,updated_at");
-
-      query = normLang === "ca"
-        ? query.in("language_code", ["ca", "cat"])
-        : query.eq("language_code", normLang);
-
-      const { data, error } = await query;
-      if (!error && data) {
-        this.dbTranslations = data;
-      }
-    } catch (e) {
-      console.warn("Error cargando traducciones de Supabase:", e);
-    }
+    const locale=String(langCode||"es").toLowerCase()==="cat"?"ca":langCode;
+    this.dbTranslations=Object.entries(TranslationStore.getDictionary(locale)||{})
+      .map(([key,translation])=>({key,language_code:locale,translation}));
+    return this.dbTranslations;
   }
 
   async _fetchAllMarketPlayers(force = false) {
