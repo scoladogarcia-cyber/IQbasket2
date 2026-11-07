@@ -1,17 +1,17 @@
 /**
  * @fileoverview Vista de Administración Dinámica de Idiomas: LanguageSettingsView.js
- * @description Permite consultar, modificar y sincronizar directamente con Supabase las claves de traducción.
+ * @description Consulta y exporta cambios CSV para revisión y commit en GitHub.
  * 
  * Reglas de optimización y diseño:
  * 1. Paginación de seguridad (20 claves por página) para evitar bloqueos del DOM.
  * 2. Normalización de códigos ISO ('cat' -> 'ca').
- * 3. Persistencia atómica con upsert en `translations` y actualización en tiempo real de `TranslationStore` e `I18n`.
+ * 3. La traducción es estática y se despliega desde archivos locales versionados.
  * 4. Fallbacks contextuales sin cadenas fijas desnudas.
  */
 
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
-import { supabase } from "../config/database.config.js";
+
 import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale,assertLanguagePlaceholderParityV78 } from "../services/i18n/LanguagePackExchangeV71.js";
 import { localeCoverageV74, missingLanguageTemplateV74 } from "../services/i18n/LanguageCoverageV74.js";
 
@@ -55,7 +55,7 @@ export class LanguageSettingsView {
     overlay.innerHTML = `
       <div style="width: 48px; height: 48px; border: 4px solid var(--color-primary, #f97316); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;"></div>
       <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800;">${message}</h3>
-      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Actualizando diccionario en Supabase...</p>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">Preparando paquete de idioma local...</p>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
     overlay.style.display = "flex";
@@ -187,7 +187,7 @@ export class LanguageSettingsView {
             <button type="button" data-lang-pack-missing style="min-height:44px;padding:9px;border-radius:9px">CSV de claves pendientes</button>
             <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">Importar CSV y previsualizar</button>
             <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="Seleccionar archivo CSV de traducciones">
-            <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios no se guardan hasta pulsar Guardar. Idiomas soportados: es, ca, en, fr.</span>
+            <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios se descargan como CSV para revisarlos e incorporarlos a GitHub. No se escriben en Supabase.</span>
           </div>
           <div style="overflow-x: auto;">
             <table class="translations-table" style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -215,7 +215,7 @@ export class LanguageSettingsView {
               class="btn-primary" 
               style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;"
             >
-              💾 ${this.t("save_translations_btn", "Guardar Traducciones en Supabase")}
+              ⬇ Descargar cambios de idioma
             </button>
           </div>
         </div>
@@ -223,68 +223,38 @@ export class LanguageSettingsView {
     `;
   }
 
-  async handleSave(langCodeParam = null) {
-    const rawInput = document.getElementById("langCodeInput")?.value;
-    const targetLang = this._normalizeLang(langCodeParam || rawInput || (I18n.getLocale ? I18n.getLocale() : "es"));
-    const inputs = document.querySelectorAll(".i18n-input");
-
-    const payload = [];
-    const newDict = {...this.importDraft};
-
-    inputs.forEach((input) => {
-      const key = input.getAttribute("data-key");
-      const value = input.value.trim();
-
-      if (key && value) {
-        newDict[key] = value;
-
-      }
+  /**
+   * Export reviewed edits as a portable CSV. A GitHub commit is the only way
+   * to publish changes for all users; browser edits must not silently persist.
+   */
+  async handleSave(langCodeParam=null) {
+    const targetLang=this._normalizeLang(langCodeParam||this.selectedLocale||"es");
+    const edits={...this.importDraft};
+    document.querySelectorAll(".language-settings-view .i18n-input").forEach(input=>{
+      const key=input.getAttribute("data-key");
+      if(key&&input.value.trim())edits[key]=input.value.trim();
     });
-
-    for (const [key,translation] of Object.entries(newDict)) {
-      if (translation.trim()) payload.push({key,language_code:targetLang,translation:translation.trim()});
+    const reference=TranslationStore.defaultDictionary?.es||{};
+    for(const [key,value] of Object.entries(edits)){
+      if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)||value.length>3000)
+        throw new Error("Clave o longitud inválida: "+key);
+      assertLanguagePlaceholderParityV78(key,value,reference);
     }
-    if (payload.length === 0) {
-      alert("⚠️ No hay campos de traducción para guardar.");
-      return;
+    if(!Object.keys(edits).length){
+      window.alert("No hay cambios para descargar.");return;
     }
-
-    this.showSyncOverlay(`💾 Guardando traducciones [${targetLang.toUpperCase()}] en Supabase...`);
-
-    try {
-      const reference=TranslationStore.defaultDictionary?.es||{};
-      for(const row of payload){
-        if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(row.key)||row.translation.length>3000)
-          throw new Error("Clave o longitud de traducción inválida: "+row.key);
-        assertLanguagePlaceholderParityV78(row.key,row.translation,reference);
-      }
-      if (!supabase) throw new Error("Servicio de traducciones no disponible.");
-      // Backend grants/RLS must authorize every language mutation.
-      // Fail closed; never delete rows to bypass a rejected UPSERT.
-      const { error } = await supabase.from("translations").upsert(payload, { onConflict: "key,language_code" });
-      if (error) throw error;
-
-      if (TranslationStore) {
-        TranslationStore.saveDictionary(targetLang, newDict);
-        await TranslationStore.setLanguage(targetLang);
-      }
-
-      if (I18n && typeof I18n.notify === "function") {
-        I18n.notify();
-      }
-
-      this.importDraft=Object.create(null);
-      this.hideSyncOverlay();
-      alert(`✅ ¡Traducciones guardadas con éxito para [${targetLang.toUpperCase()}]!`);
-    } catch (err) {
-      this.hideSyncOverlay();
-      console.error("Error al guardar traducciones:", err);
-      alert(`❌ Error al conectar con Supabase: ${err.message}`);
-    }
+    const content=serializeLanguagePackCsv(edits,targetLang);
+    const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
+    const a=document.createElement("a");
+    a.href=url;a.download="IQBasket_cambios_"+targetLang+".csv";
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
+    const status=document.querySelector(".language-settings-view [data-lang-pack-status]");
+    if(status)status.textContent="CSV descargado. Para publicar traducciones, revisa e incorpora este paquete a los archivos locales del repositorio.";
   }
   /**
    * Local pack workflow: export, preview and apply. Caller must pass the current
-   * MANAGE_TRANSLATIONS authorization; Supabase remains the final write boundary.
+   * MANAGE_TRANSLATIONS authorization; GitHub review is the publication boundary.
    */
   bindEvents(root, { canSave = () => false } = {}) {
     const host=root?.querySelector?.(".language-settings-view");
@@ -347,13 +317,16 @@ export class LanguageSettingsView {
         this.importDraft={...this.importDraft,...entries};
         this.currentPage=1;refresh({carryEdits:false});
         const next=root.querySelector("[data-lang-pack-status]");
-        if(next)next.textContent=Object.keys(entries).length+" traducciones cargadas para revisión. Pulsa Guardar para confirmarlas.";
+        if(next)next.textContent=Object.keys(entries).length+" traducciones cargadas para revisión. Descarga el CSV para publicarlas mediante GitHub.";
       }catch(error){if(status)status.textContent=String(error.message||error);}
       fileInput.value="";
     });
     host.querySelector("#btnSaveLanguage")?.addEventListener("click",()=>{
       if(!canSave()){const status=host.querySelector("[data-lang-pack-status]");if(status)status.textContent="Sin permiso de modificar idiomas.";return;}
-      void this.handleSave(this.selectedLocale);
+      void this.handleSave(this.selectedLocale).catch(error=>{
+        const status=host.querySelector("[data-lang-pack-status]");
+        if(status)status.textContent=String(error.message||error);
+      });
     });
   }
 
