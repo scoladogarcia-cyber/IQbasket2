@@ -403,7 +403,7 @@ export class PlayerStatsView {
     const stats = (this.playerStats || []).filter(s => String(s.player_id ?? s.playerId) === String(playerId) && Number(s.minutes ?? s.minutesPlayed ?? 0) > 0);
     const gp = stats.length;
 
-    let totMin = 0, totPts = 0, totReb = 0, totAst = 0, totStl = 0, totBlk = 0, totTov = 0, totVal = 0;
+    let totMin = 0, totPts = 0, totReb = 0, totAst = 0, totStl = 0, totBlk = 0, totBlkReceived = 0, totTov = 0, totVal = 0;
     let totFga = 0, totFgm = 0, totFg2a = 0, totFg2m = 0, totFg3a = 0, totFg3m = 0, totFta = 0, totFtm = 0;
 
     const gameMetricsList = stats.map((r, idx) => {
@@ -413,7 +413,8 @@ export class PlayerStatsView {
       totReb += c.rebounds || 0;
       totAst += Number(r.assists ?? r.ast ?? 0);
       totStl += Number(r.steals ?? r.stl ?? 0);
-      totBlk += Number(r.blocks ?? r.blocks_made ?? r.blk ?? 0);
+      totBlk += c.blocksMade;
+      totBlkReceived += c.blocksReceived;
       totTov += Number(r.turnovers ?? r.tov ?? 0);
       totVal += c.pir || 0;
 
@@ -461,8 +462,9 @@ export class PlayerStatsView {
             <div class="kpi-card"><span class="kpi-title">${this.t("assists", "Asistencias")}</span><span class="kpi-val">${totAst}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("steals", "Robos")}</span><span class="kpi-val">${totStl}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("blocks", "Tapones")}</span><span class="kpi-val">${totBlk}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${this.t("blocks_received", "Tapones recibidos")}</span><span class="kpi-val">${totBlkReceived}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("turnovers", "Pérdidas")}</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
-            <div class="kpi-card"><span class="kpi-title">VAL (FIBA Total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
+            <div class="kpi-card"><span class="kpi-title">PIR / VAL (total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("val_per_game", "VAL / Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
           </div>
 
@@ -512,9 +514,9 @@ export class PlayerStatsView {
           <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_min", "PUNTOS POR MINUTO")}</span><span class="kpi-val">${ppm}</span></div>
           <div class="kpi-card"><span class="kpi-title">${this.t("pts_per_40", "PUNTOS POR 40 MIN")}</span><span class="kpi-val">${pts40}</span></div>
           <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">GAME SCORE</span> <span class="info-badge">?</span><span class="tooltip-box">Métrica Hollinger de impacto global directo.</span></span><span class="kpi-val">${gsAvg}</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">USG% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de posesiones finalizadas por el jugador en pista.</span></span><span class="kpi-val">19.5%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">AST% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de canastas asistidas por el jugador cuando está en pista.</span></span><span class="kpi-val">14.2%</span></div>
-          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">TRB% (ESTIMADO)</span> <span class="info-badge">?</span><span class="tooltip-box">% de rebotes totales capturados.</span></span><span class="kpi-val">8.8%</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">USG%</span> <span class="info-badge">?</span><span class="tooltip-box">Requiere posesiones y minutos individuales del equipo.</span></span><span class="kpi-val">N/D</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">AST%</span> <span class="info-badge">?</span><span class="tooltip-box">Requiere datos exactos del equipo en pista.</span></span><span class="kpi-val">N/D</span></div>
+          <div class="kpi-card"><span class="has-tooltip"><span class="kpi-title">TRB%</span> <span class="info-badge">?</span><span class="tooltip-box">Requiere rebotes disponibles en pista de ambos equipos.</span></span><span class="kpi-val">N/D</span></div>
         </div>
       `;
     }
@@ -557,7 +559,7 @@ export class PlayerStatsView {
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #ef4444; text-transform: uppercase;">PÉRDIDAS</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
-            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #a855f7; text-transform: uppercase;">VAL (FIBA)</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #a855f7; text-transform: uppercase;">PIR / VAL</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto;">
