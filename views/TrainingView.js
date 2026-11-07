@@ -1222,8 +1222,8 @@ export class TrainingView {
   _renderSessionCard(session, directory) {
     const participants=session.participants || [];
     const kind=session.metadata?.session_kind || 'TEAM';
-    const labels={TEAM:'Entrenamiento de equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Entrenamiento personal',COGNITIVE:'Entrenamiento cognitivo'};
-    const statusLabel={PLANNED:'Pendiente de validación',COMPLETED:'Validado',CANCELLED:'Cancelado',ARCHIVED:'Archivado'};
+    const labels={TEAM:this.t("training.history.team","Equipo"),TECHNIFICATION:this.t("training.history.tech","Tecnificación"),PERSONAL:this.t("training.history.personal","Personal"),COGNITIVE:this.t("training.history.cognitive","Cognitivo")};
+    const statusLabel={PLANNED:this.t("training.detail.pending","Pendiente de validación"),COMPLETED:this.t("training.detail.valid","Validado"),CANCELLED:this.t("training.detail.cancel","Cancelado"),ARCHIVED:this.t("training.detail.archived","Archivado")};
     const state=String(session.status||'PLANNED').toUpperCase();
     const duration=this._sessionDuration(session);
     const focuses=this._trainingFocusCodes(session);
@@ -1239,7 +1239,7 @@ export class TrainingView {
       const person=this.trainingPlayerIdentities?.get(id)||directory.get(id)||DataStore.getPlayerById?.(id)||{};
       const name=playerName(person)||('Jugador '+id.slice(0,8));
       const code=String(row.attendance_status||'PLANNED').toUpperCase();
-      const participation=code==='PRESENT'?'Presente':code==='PARTIAL'?'Parcial':code==='ABSENT'?'Ausente':code==='EXCUSED'?'Justificada':'Por confirmar';
+      const participation=code==='PRESENT'?this.t("training.detail.present","Presente"):code==='PARTIAL'?this.t("training.detail.partial","Parcial"):code==='ABSENT'?this.t("training.detail.absent","Ausente"):code==='EXCUSED'?this.t("training.detail.excused","Justificada"):this.t("training.detail.unconfirmed","Por confirmar");
       const individual=row.participated_minutes ?? row.duration_override_minutes ?? duration;
       return `<div class="p360-v66-player">
         <span class="p360-v66-player-name"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(participation)}</small></span>
@@ -1248,55 +1248,55 @@ export class TrainingView {
     }).join('');
     return `<article class="p360-session-card p360-v66-detail" data-session-id="${escapeHtml(session.id)}">
       <header class="p360-v66-header">
-        <div><span class="p360-v66-eyebrow">FICHA DEL ENTRENAMIENTO · ${escapeHtml(session.session_date||'')}</span>
+        <div><span class="p360-v66-eyebrow">${escapeHtml(this.t("training.detail.caption","Ficha del entrenamiento").toUpperCase())} · ${escapeHtml(session.session_date||'')}</span>
           <h2>${escapeHtml(session.title||'Entrenamiento')}</h2>
           <span class="p360-status p360-status-${escapeHtml(state.toLowerCase())}">${escapeHtml(statusLabel[state]||state)}</span></div>
         <div class="p360-v66-header-actions">
-          ${canEdit ? `<button type="button" class="p360-primary-btn p360-edit-session" data-session-id="${escapeHtml(session.id)}">${editing?'Editando':'✏️ Editar entrenamiento'}</button>` : ''}
-          ${this._can(Permission.CREATE_TRAINING)?`<button type="button" class="p360-secondary-btn p360-repeat-session" data-session-id="${escapeHtml(session.id)}">📋 Duplicar</button>`:''}
+          ${canEdit ? `<button type="button" class="p360-primary-btn p360-edit-session" data-session-id="${escapeHtml(session.id)}">${escapeHtml(editing?this.t("training.detail.editing","Editando"):this.t("training.detail.edit","Editar entrenamiento"))}</button>` : ''}
+          ${this._can(Permission.CREATE_TRAINING)?`<button type="button" class="p360-secondary-btn p360-repeat-session" data-session-id="${escapeHtml(session.id)}">📋 ${escapeHtml(this.t("training.detail.duplicate","Duplicar"))}</button>`:''}
         </div>
       </header>
       ${editing ? `${this._renderTrainingEditForm(session)}
-        <section class="p360-v66-section" aria-label="Bloques registrados">
-          <h3>Contenido guardado en esta sesión</h3>
+        <section class="p360-v66-section" aria-label="${escapeHtml(this.t("training.detail.blocks","Bloques registrados"))}">
+          <h3>${escapeHtml(this.t("training.detail.savedBlocks","Contenido guardado en esta sesión"))}</h3>
           <div class="p360-v66-blocks">${(session.blocks||[]).map(block=>
             `<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min</small></div>`).join('')}</div>
         </section>` : `
-      <section class="p360-v66-section" aria-label="Datos del entrenamiento">
-        <div class="p360-v66-section-title"><h3>Datos generales</h3></div>
+      <section class="p360-v66-section" aria-label="${escapeHtml(this.t("training.detail.general","Datos del entrenamiento"))}">
+        <div class="p360-v66-section-title"><h3>${escapeHtml(this.t("training.detail.general","Datos generales"))}</h3></div>
         <div class="p360-v66-overview">
-          <div><small>Fecha</small><strong>${escapeHtml(session.session_date||'—')}</strong></div>
-          <div><small>Duración</small><strong>${escapeHtml(duration??'—')} min</strong></div>
-          <div><small>Horario</small><strong>${escapeHtml(String(session.start_time||'—').slice(0,5))} – ${escapeHtml(String(session.end_time||'—').slice(0,5))}</strong></div>
-          <div><small>Intensidad</small><strong>${escapeHtml(session.intensity??'Sin valorar')}</strong></div>
+          <div><small>${escapeHtml(this.t("training.detail.date","Fecha"))}</small><strong>${escapeHtml(session.session_date||'—')}</strong></div>
+          <div><small>${escapeHtml(this.t("training.detail.duration","Duración"))}</small><strong>${escapeHtml(duration??'—')} min</strong></div>
+          <div><small>${escapeHtml(this.t("training.detail.schedule","Horario"))}</small><strong>${escapeHtml(String(session.start_time||'—').slice(0,5))} – ${escapeHtml(String(session.end_time||'—').slice(0,5))}</strong></div>
+          <div><small>${escapeHtml(this.t("training.detail.intensity","Intensidad"))}</small><strong>${escapeHtml(session.intensity??this.t('training.detail.unrated','Sin valorar'))}</strong></div>
         </div>
-        <label class="p360-v66-kind">Tipo de entrenamiento
+        <label class="p360-v66-kind">${escapeHtml(this.t("training.detail.type","Tipo de entrenamiento"))}
           <select class="p360-kind-select" data-session-id="${escapeHtml(session.id)}"
             ${canEdit?'':'disabled'}>
             ${Object.entries(labels).map(([code,label])=>`<option value="${code}" ${kind===code?'selected':''}>${label}</option>`).join('')}
           </select>
         </label>
-        ${session.metadata?.session_kind_review==='PENDING'?'<p class="p360-v66-warning">Clasificación provisional recuperada del histórico. Puedes revisarla y corregirla.</p>':''}
-        ${!canEdit?'<p class="p360-v66-warning">Solo lectura: esta sesión está archivada, la temporada está cerrada o no tienes permisos de edición sobre su temporada de origen.</p>':''}
+        ${session.metadata?.session_kind_review==='PENDING'?`<p class="p360-v66-warning">${escapeHtml(this.t("training.detail.provisional","Clasificación provisional del histórico. Puedes revisarla y corregirla."))}</p>`:''}
+        ${!canEdit?`<p class="p360-v66-warning">${escapeHtml(this.t("training.detail.readOnly","Solo lectura: esta sesión está archivada, la temporada está cerrada o no tienes permisos para editarla."))}</p>`:''}
       </section>
-      <section class="p360-v66-section" aria-label="Participantes">
-        <div class="p360-v66-section-title"><h3>Jugadores y tiempo individual</h3>
-          <span>${present} confirmados · ${participants.length} participantes</span></div>
-        <div class="p360-v66-roster">${participantRows||'<p>No hay asistentes registrados.</p>'}</div>
-        <p class="p360-v66-footnote">Minutos de la sesión: ${escapeHtml(duration??'—')}. Minutos de asistencia registrados entre jugadores: ${minutes}. Los tiempos previstos no se acreditan hasta validar.</p>
+      <section class="p360-v66-section" aria-label="${escapeHtml(this.t("training.detail.participants","Participantes"))}">
+        <div class="p360-v66-section-title"><h3>${escapeHtml(this.t("training.detail.playerMinutes","Jugadores y tiempo individual"))}</h3>
+          <span>${escapeHtml(this.t("training.detail.confirmed","{count} confirmados · {total} participantes",{count:present,total:participants.length}))}</span></div>
+        <div class="p360-v66-roster">${participantRows||`<p>${escapeHtml(this.t("training.detail.noParticipants","No hay asistentes registrados."))}</p>`}</div>
+        <p class="p360-v66-footnote">${escapeHtml(this.t("training.detail.minutesNote","Minutos de la sesión: {duration}. Minutos registrados entre jugadores: {minutes}. Los tiempos previstos no se acreditan hasta validar.",{duration:duration??"—",minutes}))}</p>
         ${canEdit?this._renderAttendanceEditor(session,directory):''}
       </section>
-      <section class="p360-v66-section" aria-label="Contenido y observaciones">
-        <div class="p360-v66-section-title"><h3>Contenido trabajado</h3></div>
-        ${session.objective?`<p><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>`:''}
+      <section class="p360-v66-section" aria-label="${escapeHtml(this.t("training.detail.content","Contenido trabajado"))}">
+        <div class="p360-v66-section-title"><h3>${escapeHtml(this.t("training.detail.content","Contenido trabajado"))}</h3></div>
+        ${session.objective?`<p><strong>${escapeHtml(this.t("training.detail.objective","Objetivo"))}:</strong> ${escapeHtml(session.objective)}</p>`:''}
         ${focuses.length?`<div class="p360-focus-summary">${focuses.map(code=>`<span>✓ ${escapeHtml(this._trainingFocusLabel(code))}</span>`).join('')}</div>`:''}
-        ${(session.blocks||[]).length?`<div class="p360-v66-blocks">${session.blocks.map(block=>`<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min · ${escapeHtml(block.activity_code||'Actividad')}</small></div>`).join('')}</div>`:'<p>No hay bloques desglosados en este entrenamiento.</p>'}
-        ${session.notes?`<p><strong>Observaciones:</strong> ${escapeHtml(session.notes)}</p>`:''}
+        ${(session.blocks||[]).length?`<div class="p360-v66-blocks">${session.blocks.map(block=>`<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min · ${escapeHtml(block.activity_code||'Actividad')}</small></div>`).join('')}</div>`:`<p>${escapeHtml(this.t("training.detail.noBlocks","No hay bloques desglosados en este entrenamiento."))}</p>`}
+        ${session.notes?`<p><strong>${escapeHtml(this.t("training.detail.notes","Observaciones"))}:</strong> ${escapeHtml(session.notes)}</p>`:''}
       </section>`}
       <div class="p360-card-actions p360-v66-bottom-actions">
-        ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?'↶ Reabrir':'✓ Validar entrenamiento'}</button>`:''}
-        ${this._can(Permission.EXPORT_REPORT)?`<button type="button" class="p360-secondary-btn p360-export-session-word" data-session-id="${escapeHtml(session.id)}">📄 Exportar Word</button>`:''}
-        ${canEdit&&this._canForTrainingSession(session,Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">Archivar</button>`:''}
+        ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?this.t("training.detail.reopen","Reabrir"):this.t("training.detail.validate","Validar entrenamiento")}</button>`:''}
+        ${this._can(Permission.EXPORT_REPORT)?`<button type="button" class="p360-secondary-btn p360-export-session-word" data-session-id="${escapeHtml(session.id)}">📄 ${escapeHtml(this.t("training.detail.export","Exportar Word"))}</button>`:''}
+        ${canEdit&&this._canForTrainingSession(session,Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">${escapeHtml(this.t("training.detail.archive","Archivar"))}</button>`:''}
       </div>
     </article>`;
   }
