@@ -25,4 +25,5 @@ jobs:
       - run: node tests/six-modules-v78.mjs
       - run: node tests/six-modules-v75.mjs
       - run: node tests/training-v79-history-contract.mjs
+      - run: node scripts/audit-i18n-v80.mjs
       - run: npm run build
