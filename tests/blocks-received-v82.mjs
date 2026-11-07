@@ -48,6 +48,9 @@ for(const [source,path] of [[box,"BoxScore"],[easy,"Acta"]]){
  assert.match(source,/blocks_received: getInpVal\("blocks_received"\)/,path+" save missing");
  assert.match(source,/const blkr = getVal\("blocks_received"\)/,path+" live PIR missing");
 }
+const delegated=read("views/games/DelegatedQuickEntryView.js");
+assert.match(delegated,/\["TAP REC","blocks_received",0\]/);
+assert.match(delegated,/blockedShotsIntegrityV82\(/);
 const live=read("views/GameLiveEditorView.js");
 assert.match(live,/data-action="blocks_received"/);
 assert.match(live,/blocks_received: 0/);
