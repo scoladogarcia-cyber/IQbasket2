@@ -239,11 +239,11 @@ export class BoxScoreCalculator {
 
     const oreb = Number(row.off_reb ?? row.offReb ?? row.rebounds_offensive ?? 0);
     const dreb = Number(row.def_reb ?? row.defReb ?? row.rebounds_defensive ?? 0);
-    const trb = Number(row.rebounds ?? row.totalRebounds ?? (oreb + dreb));
+    const trb = oreb + dreb; // Canonical rebound total: recorded offensive + defensive.
 
     const ast = Number(row.assists ?? row.ast ?? 0);
     const stl = Number(row.steals ?? row.stl ?? 0);
-    const blk = Number(row.blocks ?? row.blocks_made ?? row.blocksMade ?? row.blk ?? 0);
+    const blk = Number(row.blocks_made ?? row.blocksMade ?? row.blocks ?? row.blk ?? 0);
     const blkr = Number(row.blocks_received ?? row.blocksReceived ?? row.ba ?? 0);
     const tov = Number(row.turnovers ?? row.tov ?? 0);
     const pf = Number(row.fouls_committed ?? row.foulsCommitted ?? row.fouls ?? row.pf ?? 0);
