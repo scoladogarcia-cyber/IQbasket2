@@ -29,4 +29,9 @@ export function bindFamilyMotivationV74(root,locale="es"){
     result.textContent=conversation.message+(conversation.starter?" "+conversation.starter:"");
   });
   form.addEventListener("reset",()=>{result.textContent="";});
+  // Responses are only a conversation starter: clear ephemeral values when
+  // the family closes the panel, not merely on route/page changes.
+  form.closest("[data-iqb-family-motivation]")?.addEventListener("toggle",event=>{
+    if(!event.currentTarget.open){form.reset();result.textContent="";}
+  });
 }
