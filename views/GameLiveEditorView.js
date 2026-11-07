@@ -11,6 +11,7 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import {blockedShotsIntegrityV82} from "../domain/stats/BlockedShotIntegrityV82.js";
 import { LiveScoreHUDView } from "./LiveScoreHUDView.js";
 import { Permission } from "../security/PermissionService.js";
 import { GameLockService } from "../services/games/GameLockService.js";
@@ -1042,7 +1043,7 @@ async _openEditForm(gameId, container) {
                 <button type="button" class="btn-opp-action" data-field="tov" style="background: #fed7aa; color: #9a3412; border: none; padding: 6px 2px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">Pérdida Riv</button>
                 <button type="button" class="btn-opp-action" data-field="oreb" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Of Riv</button>
                 <button type="button" class="btn-opp-action" data-field="dreb" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Reb Def Riv</button>
-                <button type="button" class="btn-opp-action" data-field="blk_made" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Tapón Riv</button>
+                <button type="button" class="btn-opp-action" data-field="blk_made" title="Tapones del rival como estadística colectiva. Para atribuirlos a un jugador usa Tapón Recibido." style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Tapón Riv</button>
                 <button type="button" class="btn-opp-action" data-field="fouls" style="background: #fed7aa; color: #9a3412; border: none; padding: 8px 2px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Riv</button>
               </div>
             </div>
@@ -1661,6 +1662,14 @@ async _openEditForm(gameId, container) {
 
   _recordLiveEvent(playerId, playerName, action, points, coordinates) {
     const pStat = this.currentGameStats.find(s => String(s.player_id ?? s.playerId) === String(playerId));
+    if(action==="blocks_received"){
+      if(!pStat){alert("No se ha encontrado la estadística del jugador seleccionado.");return;}
+      try {
+        blockedShotsIntegrityV82({
+          ...pStat,blocks_received:Number(pStat.blocks_received??pStat.blocksReceived??0)+1
+        },pStat);
+      }catch(error){alert(error.message||String(error));return;}
+    }
     if (pStat) {
       if (action === "fg2_made") { pStat.fg2_made = (pStat.fg2_made || 0) + 1; pStat.fg2_attempted = (pStat.fg2_attempted || 0) + 1; }
       else if (action === "fg3_made") { pStat.fg3_made = (pStat.fg3_made || 0) + 1; pStat.fg3_attempted = (pStat.fg3_attempted || 0) + 1; }
