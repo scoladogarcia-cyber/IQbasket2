@@ -33,7 +33,7 @@ export function buildReportAuditManifestV78(reports,{generatedAt=new Date().toIS
     const sum=points.every(p=>p!==null)?points.reduce((a,b)=>a+b,0):null;
     games.push(Object.freeze({
       game_id:gid,date:text(g.date??g.game_date).slice(0,10)||null,
-      status:text(g.status)||null,capture_revision:Number.isInteger(Number(g.capture_revision))?Number(g.capture_revision):null,
+      status:text(g.status)||null,capture_revision:number(g.capture_revision)!==null&&Number.isInteger(number(g.capture_revision))?number(g.capture_revision):null,
       team_score:teamScore,opponent_score:score(g.opponent_score),player_rows:points.length,
       players_with_recorded_points:points.filter(p=>p!==null).length,
       sum_player_points:sum,score_consistent:sum===null||teamScore===null?null:sum===teamScore
