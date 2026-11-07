@@ -122,6 +122,8 @@ export class TrainingView {
     this.containerId = "dashboard-content-area";
     this.editingTrainingId = null;
     this.trainingDetailId = null;
+    this.trainingHistoryFilters = {from:"",to:"",kind:"",player:"",status:"PENDING"};
+    this.trainingHistoryPage = 1;
     this.trainingMinutesOverrides = new Map();
     this._trainingImportPlanV77 = null;
     this.editingExternalId = null;
@@ -657,6 +659,76 @@ export class TrainingView {
 
     target.innerHTML = this._renderParticipantChecklist(date, null, directory);
     this._bindParticipantSelectionTools(container);
+    // V79: client-side searching/pagination never changes the authorized source.
+    const history=container.querySelector(".p360-v79-history");
+    if(history){
+      const filters=history.querySelectorAll(".p360-v79-filter");
+      const rows=[...history.querySelectorAll(".p360-v79-history-row")];
+      const selected=()=>[...history.querySelectorAll(".p360-v79-select:checked")].filter(input=>!input.closest(".p360-v79-history-row").hidden);
+      const pageSize=20;
+      const refresh=()=>{
+        const f=this.trainingHistoryFilters;
+        const matched=rows.filter(row=>{
+          const date=row.dataset.date||"";
+          return (!f.from||date>=f.from)&&(!f.to||date<=f.to)
+            &&(!f.kind||row.dataset.kind===f.kind)
+            &&(!f.player||row.dataset.players.split(",").includes(f.player))
+            &&(f.status==="ALL"||(f.status==="PENDING"?row.dataset.status==="PLANNED":f.status==="OTHER"?!["PLANNED","COMPLETED"].includes(row.dataset.status):row.dataset.status===f.status));
+        });
+        const pages=Math.max(1,Math.ceil(matched.length/pageSize));
+        this.trainingHistoryPage=Math.min(Math.max(1,this.trainingHistoryPage),pages);
+        rows.forEach(row=>{row.hidden=true;row.querySelector(".p360-v79-select").checked=false;});
+        matched.slice((this.trainingHistoryPage-1)*pageSize,this.trainingHistoryPage*pageSize).forEach(row=>{row.hidden=false;});
+        history.querySelector(".p360-v79-result-count").textContent=matched.length+" entrenamiento(s) encontrados · "+rows.length+" en el historial.";
+        history.querySelector(".p360-v79-page-label").textContent="Página "+this.trainingHistoryPage+" de "+pages;
+        history.querySelector(".p360-v79-prev").disabled=this.trainingHistoryPage<=1;
+        history.querySelector(".p360-v79-next").disabled=this.trainingHistoryPage>=pages;
+        history.querySelector(".p360-v79-select-page").checked=false;
+        updateSelection();
+      };
+      const updateSelection=()=>{
+        const count=selected().length,button=history.querySelector(".p360-v79-validate");
+        button.disabled=count===0;
+        button.textContent="✓ Validar seleccionados ("+count+")";
+      };
+      filters.forEach(input=>input.addEventListener("change",()=>{
+        this.trainingHistoryFilters[input.dataset.filter]=input.value;
+        this.trainingHistoryPage=1;refresh();
+      }));
+      history.querySelector(".p360-v79-prev").addEventListener("click",()=>{this.trainingHistoryPage--;refresh();});
+      history.querySelector(".p360-v79-next").addEventListener("click",()=>{this.trainingHistoryPage++;refresh();});
+      history.querySelector(".p360-v79-select-page").addEventListener("change",event=>{
+        rows.filter(row=>!row.hidden).forEach(row=>{
+          const input=row.querySelector(".p360-v79-select");
+          if(!input.disabled)input.checked=event.target.checked;
+        });updateSelection();
+      });
+      history.querySelectorAll(".p360-v79-select").forEach(input=>input.addEventListener("change",updateSelection));
+      history.querySelector(".p360-v79-validate").addEventListener("click",async event=>{
+        const ids=selected().map(input=>input.closest(".p360-v79-history-row").dataset.sessionId);
+        const candidates=ids.map(id=>this.sessions.find(s=>String(s.id)===id)).filter(s=>
+          this._canEditTrainingSession(s)&&String(s.status).toUpperCase()==="PLANNED"&&s.session_date<=localIsoDate());
+        if(!candidates.length)return;
+        if(!confirm("Validar "+candidates.length+" entrenamiento(s)? Se verificará cada sesión en el servidor. Si faltan asistencias o minutos, quedará pendiente y se informará del error."))return;
+        const button=event.currentTarget,status=history.querySelector(".p360-v79-batch-status");
+        button.disabled=true;
+        const failures=[];let succeeded=0;
+        for(const session of candidates){
+          try{
+            const {error}=await this.supabase.rpc("iq_v65_set_training_validation",{
+              p_session_id:session.id,p_team_season_id:session.team_season_id,p_validate:true
+            });
+            if(error)throw error;
+            succeeded++;
+          }catch(error){failures.push((session.session_date||"—")+" · "+(session.title||"Entrenamiento")+": "+String(error.message||error));}
+        }
+        status.textContent=succeeded+" validados; "+failures.length+" pendientes con errores. "+failures.slice(0,5).join(" | ");
+        // The individual RPC is not an atomic batch; report partial success honestly.
+        if(failures.length)alert(status.textContent);
+        await this.render(this.containerId,this.teamId);
+      });
+      refresh();
+    }
 
 
   }
@@ -1266,18 +1338,51 @@ export class TrainingView {
         <div class="p360-session-list">
           ${this.sessions.length
             ? this.trainingDetailId
-              ? `<button type="button" class="p360-secondary-btn p360-training-back">← Volver al listado</button>
+              ? `<button type="button" class="p360-secondary-btn p360-training-back">← Volver a resultados</button>
                  ${this.sessions.filter(session => String(session.id) === String(this.trainingDetailId))
                     .map(session => this._renderSessionCard(session,directory)).join("")}`
-              : `<div class="p360-training-table" role="list">
-                  ${this.sessions.map(session => `
-                    <button type="button" role="listitem" class="p360-training-list-item" data-session-id="${escapeHtml(session.id)}">
-                      <span><strong>${escapeHtml(session.title || 'Entrenamiento')}</strong>
-                        <small>${escapeHtml(session.session_date)} · ${escapeHtml(({TEAM:'Equipo',TECHNIFICATION:'Tecnificación',PERSONAL:'Personal',COGNITIVE:'Cognitivo'})[session.metadata?.session_kind] || 'Sin clasificar')}</small>
-                      </span>
-                      <span>${escapeHtml(String(this._sessionDuration(session) ?? '—'))} min · ${(session.participants||[]).length} jugadores →</span>
-                    </button>`).join("")}
-                </div>`
+              : `<section class="p360-v79-history" aria-label="Buscar entrenamientos">
+                   <div class="p360-v79-filters">
+                     <label>Desde <input type="date" class="p360-v79-filter" data-filter="from" value="${escapeHtml(this.trainingHistoryFilters.from)}"></label>
+                     <label>Hasta <input type="date" class="p360-v79-filter" data-filter="to" value="${escapeHtml(this.trainingHistoryFilters.to)}"></label>
+                     <label>Tipo <select class="p360-v79-filter" data-filter="kind">
+                       ${Object.entries({ALL:"Todos",TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo",UNCLASSIFIED:"Sin clasificar"}).map(([value,label])=>`<option value="${value==='ALL'?'':value}" ${this.trainingHistoryFilters.kind===(value==='ALL'?'':value)?'selected':''}>${label}</option>`).join("")}
+                     </select></label>
+                     <label>Jugador <select class="p360-v79-filter" data-filter="player">
+                       <option value="">Todos los jugadores</option>
+                       ${[...new Set(this.sessions.flatMap(s=>(s.participants||[]).map(p=>String(p.player_id||""))))].filter(Boolean).map(id=>{
+                         const person=this.trainingPlayerIdentities?.get(id)||directory.get(id)||DataStore.getPlayerById?.(id)||{};
+                         return {id,name:playerName(person)||('Jugador '+id.slice(0,8))};
+                       }).sort((a,b)=>a.name.localeCompare(b.name,'es')).map(p=>`<option value="${escapeHtml(p.id)}" ${this.trainingHistoryFilters.player===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join("")}
+                     </select></label>
+                     <label>Estado <select class="p360-v79-filter" data-filter="status">
+                       ${Object.entries({PENDING:"Pendientes",ALL:"Todos",COMPLETED:"Validados",OTHER:"Otros"}).map(([value,label])=>`<option value="${value}" ${this.trainingHistoryFilters.status===value?'selected':''}>${label}</option>`).join("")}
+                     </select></label>
+                   </div>
+                   <p class="p360-v79-result-count" role="status"></p>
+                   <div class="p360-v79-batch">
+                     <label><input type="checkbox" class="p360-v79-select-page"> Seleccionar entrenamientos pendientes de esta página</label>
+                     <button type="button" class="p360-secondary-btn p360-v79-validate" disabled>✓ Validar seleccionados (0)</button>
+                     <span class="p360-v79-batch-status" role="status">Solo se validarán sesiones con asistencia y minutos correctos.</span>
+                   </div>
+                   <div class="p360-training-table" role="list">
+                     ${[...this.sessions].sort((a,b)=>String(b.session_date||"").localeCompare(String(a.session_date||""))).map(session=>{
+                       const kind=String(session.metadata?.session_kind||"").toUpperCase();
+                       const state=String(session.status||"PLANNED").toUpperCase();
+                       const pending=state==="PLANNED" && this._canEditTrainingSession(session) && session.session_date<=localIsoDate();
+                       return `<div class="p360-v79-history-row" data-session-id="${escapeHtml(session.id)}" data-date="${escapeHtml(session.session_date||"")}" data-kind="${escapeHtml(kind||"UNCLASSIFIED")}" data-status="${escapeHtml(state)}" data-players="${escapeHtml((session.participants||[]).map(p=>p.player_id).join(","))}">
+                         <input type="checkbox" class="p360-v79-select" aria-label="Seleccionar entrenamiento del ${escapeHtml(session.session_date||"")}" ${pending?'':'disabled'} />
+                         <button type="button" role="listitem" class="p360-training-list-item" data-session-id="${escapeHtml(session.id)}">
+                           <span><strong>${escapeHtml(session.title||"Entrenamiento")}</strong>
+                             <small>${escapeHtml(session.session_date||"—")} · ${escapeHtml(({TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"})[kind]||"Sin clasificar")} · ${state==="COMPLETED"?"Validado":state==="PLANNED"?"Pendiente":escapeHtml(state)}</small>
+                           </span>
+                           <span>${escapeHtml(String(this._sessionDuration(session)??"—"))} min · ${(session.participants||[]).length} jugadores →</span>
+                         </button>
+                       </div>`;
+                     }).join("")}
+                   </div>
+                   <div class="p360-v79-pagination"><button type="button" class="p360-secondary-btn p360-v79-prev">← Anteriores</button><span class="p360-v79-page-label"></span><button type="button" class="p360-secondary-btn p360-v79-next">Siguientes →</button></div>
+                 </section>`
             : `<div class="p360-empty-state">No hay entrenamientos visibles en este contexto.</div>`}
         </div>
       </section>
@@ -1694,6 +1799,15 @@ export class TrainingView {
         .p360-section-head { display: flex; justify-content: space-between; gap: 12px; align-items: end; }
         .p360-section-head h2 { margin: 0; font-size: 18px; }
         .p360-section-head p { margin: 4px 0 0; color: #64748b; font-size: 12px; }
+.p360-v79-filters { display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:14px; }
+        .p360-v79-filters label {display:grid;gap:5px;font-size:13px;font-weight:600;}
+        .p360-v79-filters input,.p360-v79-filters select {width:100%;min-width:0;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;}
+        .p360-v79-batch {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;font-size:13px;}
+        .p360-v79-batch-status {color:#475569;}
+        .p360-v79-history-row {display:flex;align-items:center;gap:8px;}
+        .p360-v79-history-row[hidden] {display:none!important;}
+        .p360-v79-history-row .p360-training-list-item {flex:1;min-width:0;}
+        .p360-v79-pagination {display:flex;gap:12px;align-items:center;justify-content:center;margin:14px 0;}
         .p360-session-list, .p360-external-list { display: grid; gap: 12px; }
         .p360-v66-detail{padding:0!important;overflow:hidden;gap:0!important}
         .p360-v66-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;background:#f5f8fc;padding:20px;flex-wrap:wrap}
