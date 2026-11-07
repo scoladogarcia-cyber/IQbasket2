@@ -1,0 +1,81 @@
+/**
+ * @fileoverview Shared training history UI strings (V80).
+ * The training domain keeps presentation keys separate from validation logic.
+ */
+export const trainingHistoryV80 = Object.freeze({
+  es: {
+    "training.history.title":"Histórico de entrenamientos",
+    "training.history.from":"Desde",
+    "training.history.to":"Hasta",
+    "training.history.kind":"Tipo",
+    "training.history.player":"Jugador",
+    "training.history.status":"Estado",
+    "training.history.all":"Todos",
+    "training.history.allPlayers":"Todos los jugadores",
+    "training.history.pending":"Pendientes",
+    "training.history.validated":"Validados",
+    "training.history.other":"Otros",
+    "training.history.team":"Equipo",
+    "training.history.tech":"Tecnificación",
+    "training.history.personal":"Personal",
+    "training.history.cognitive":"Cognitivo",
+    "training.history.unclassified":"Sin clasificar",
+    "training.history.selectPage":"Seleccionar entrenamientos pendientes de esta página",
+    "training.history.validate":"Validar seleccionados ({count})",
+    "training.history.validationHint":"Solo se validarán sesiones con asistencia y minutos correctos.",
+    "training.history.found":"{count} entrenamiento(s) encontrados · {total} en el historial.",
+    "training.history.page":"Página {page} de {pages}",
+    "training.history.previous":"Anteriores",
+    "training.history.next":"Siguientes",
+    "training.history.back":"Volver a resultados",
+    "training.history.training":"Entrenamiento",
+    "training.history.minutes":"min",
+    "training.history.participants":"jugadores",
+    "training.history.selectionLabel":"Seleccionar entrenamiento del {date}",
+    "training.history.validateConfirm":"¿Validar {count} entrenamientos? El servidor revisará asistencia y minutos de cada sesión. Las sesiones incorrectas permanecerán pendientes.",
+    "training.history.validateResult":"{passed} validados; {failed} pendientes con errores.",
+    "training.history.none":"No hay entrenamientos visibles en este contexto."
+  },
+  ca: {
+    "training.history.title":"Historial d'entrenaments","training.history.from":"Des de","training.history.to":"Fins a","training.history.kind":"Tipus",
+    "training.history.player":"Jugador","training.history.status":"Estat","training.history.all":"Tots","training.history.allPlayers":"Tots els jugadors",
+    "training.history.pending":"Pendents","training.history.validated":"Validats","training.history.other":"Altres",
+    "training.history.team":"Equip","training.history.tech":"Tecnificació","training.history.personal":"Personal","training.history.cognitive":"Cognitiu",
+    "training.history.unclassified":"Sense classificar","training.history.selectPage":"Selecciona els entrenaments pendents d'aquesta pàgina",
+    "training.history.validate":"Valida els seleccionats ({count})","training.history.validationHint":"Només es validaran sessions amb assistència i minuts correctes.",
+    "training.history.found":"{count} entrenament(s) trobats · {total} a l'historial.","training.history.page":"Pàgina {page} de {pages}",
+    "training.history.previous":"Anteriors","training.history.next":"Següents","training.history.back":"Torna als resultats",
+    "training.history.training":"Entrenament","training.history.minutes":"min","training.history.participants":"jugadors",
+    "training.history.selectionLabel":"Selecciona l'entrenament del {date}",
+    "training.history.validateConfirm":"Vols validar {count} entrenaments? El servidor comprovarà l'assistència i els minuts. Les sessions incorrectes continuaran pendents.",
+    "training.history.validateResult":"{passed} validats; {failed} pendents amb errors.","training.history.none":"No hi ha entrenaments visibles en aquest context."
+  },
+  en: {
+    "training.history.title":"Training history","training.history.from":"From","training.history.to":"To","training.history.kind":"Type",
+    "training.history.player":"Player","training.history.status":"Status","training.history.all":"All","training.history.allPlayers":"All players",
+    "training.history.pending":"Pending","training.history.validated":"Validated","training.history.other":"Other",
+    "training.history.team":"Team","training.history.tech":"Skills training","training.history.personal":"Personal","training.history.cognitive":"Cognitive",
+    "training.history.unclassified":"Unclassified","training.history.selectPage":"Select pending training sessions on this page",
+    "training.history.validate":"Validate selected ({count})","training.history.validationHint":"Only sessions with correct attendance and minutes can be validated.",
+    "training.history.found":"{count} training session(s) found · {total} in history.","training.history.page":"Page {page} of {pages}",
+    "training.history.previous":"Previous","training.history.next":"Next","training.history.back":"Back to results",
+    "training.history.training":"Training","training.history.minutes":"min","training.history.participants":"players",
+    "training.history.selectionLabel":"Select training on {date}",
+    "training.history.validateConfirm":"Validate {count} sessions? The server checks each session's attendance and minutes. Invalid sessions remain pending.",
+    "training.history.validateResult":"{passed} validated; {failed} pending with errors.","training.history.none":"No training sessions available in this context."
+  },
+  fr: {
+    "training.history.title":"Historique des entraînements","training.history.from":"Du","training.history.to":"Au","training.history.kind":"Type",
+    "training.history.player":"Joueur","training.history.status":"Statut","training.history.all":"Tous","training.history.allPlayers":"Tous les joueurs",
+    "training.history.pending":"En attente","training.history.validated":"Validés","training.history.other":"Autres",
+    "training.history.team":"Équipe","training.history.tech":"Perfectionnement","training.history.personal":"Individuel","training.history.cognitive":"Cognitif",
+    "training.history.unclassified":"Non classé","training.history.selectPage":"Sélectionner les entraînements en attente sur cette page",
+    "training.history.validate":"Valider la sélection ({count})","training.history.validationHint":"Seules les séances avec présence et minutes correctes seront validées.",
+    "training.history.found":"{count} entraînement(s) trouvés · {total} dans l'historique.","training.history.page":"Page {page} sur {pages}",
+    "training.history.previous":"Précédents","training.history.next":"Suivants","training.history.back":"Retour aux résultats",
+    "training.history.training":"Entraînement","training.history.minutes":"min","training.history.participants":"joueurs",
+    "training.history.selectionLabel":"Sélectionner l'entraînement du {date}",
+    "training.history.validateConfirm":"Valider {count} séances ? Le serveur vérifiera les présences et les minutes. Les séances incorrectes resteront en attente.",
+    "training.history.validateResult":"{passed} validés ; {failed} en attente avec erreurs.","training.history.none":"Aucune séance d'entraînement visible ici."
+  }
+});
