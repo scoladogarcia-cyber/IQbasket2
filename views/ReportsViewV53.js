@@ -418,6 +418,9 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const title=document.createElement("h3");title.textContent="Selección de partidos y datos reutilizables";panel.append(title);
     const status=note("Excel .xlsx exporta Acta, BoxScore y todas las jugadas reales. CSV permite también comparar o importar un acta federativa con columnas completas y dorsales verificados; no sustituye jugadas en vivo. El .xls es solo legacy.");status.setAttribute("role","status");panel.append(status);
     const games=this._visibleGames();
+    // Shared lexical reference for selection callbacks and the preview panel.
+    // Previously the callbacks referenced a block-scoped variable from below.
+    let overview=null;
     if(this.selectedGameId==="all") {
       const select=document.createElement("div");select.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px";
       games.forEach(game=>{const label=document.createElement("label");label.style.cssText="display:flex;gap:6px;align-items:center;font-size:12px";
@@ -516,7 +519,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);
     if(this.selectedGameId==="all") {
-      const overview=document.createElement("div");overview.dataset.reportOverviewV78="";panel.after(overview);void this._refreshOverview(overview);
+      overview=document.createElement("div");overview.dataset.reportOverviewV78="";panel.after(overview);void this._refreshOverview(overview);
     }
   }
 }
