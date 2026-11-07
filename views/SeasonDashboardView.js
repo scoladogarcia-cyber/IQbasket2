@@ -741,22 +741,22 @@ export class SeasonDashboardView {
       }
 
       syncBtn.disabled = true;
-      syncBtn.innerHTML = `⏳ Sincronizando...`;
+      syncBtn.textContent = "⏳ Auditando sin modificar datos...";
       syncBtn.style.opacity = "0.7";
 
       if (DataStore.init) await DataStore.init(teamId || this.currentTeamId, true);
       const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
-        syncBtn.innerHTML = `✅ ¡Datos Al Día!`;
+        syncBtn.textContent = `✅ ${result.compared} registros revisados · ${result.discrepancies} discrepancias PIR`;
         setTimeout(() => {
           this.render(container, teamId || this.currentTeamId);
         }, 1000);
       } else {
-        syncBtn.innerHTML = `❌ Error al sincronizar`;
+        syncBtn.textContent = "❌ Auditoría no disponible";
         setTimeout(() => {
           syncBtn.disabled = false;
-          syncBtn.innerHTML = `🔄 Sincronizar y Auditar Datos`;
+          syncBtn.textContent = "🔎 Auditar estadísticas";
           syncBtn.style.opacity = "1";
         }, 2000);
       }
@@ -979,7 +979,7 @@ export class SeasonDashboardView {
 
             <div class="dash-top-actions">
               <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
-                🔄 Sincronizar${canSyncPreview ? '' : ' 🔒'}
+                🔎 Auditar estadísticas${canSyncPreview ? '' : ' 🔒'}
               </button>
             </div>
           </div>
