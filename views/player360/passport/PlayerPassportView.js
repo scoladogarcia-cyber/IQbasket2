@@ -17,6 +17,7 @@ import { deriveFunctionalRoles } from "../../../domain/player360/PlayerPassportR
 import { PLAYER_PASSPORT_CONFIG } from "../../../config/player-passport.config.js";
 import { exportPassportWord, exportPassportCardPng } from "../../../services/player360/PlayerPassportExportService.js";
 import { exportPassportAssessmentCsvV73, previewPassportAssessmentCsvV73 } from "../../../services/player360/PassportAssessmentCsvV73.js";
+import {exportPassportAssessmentCsvV78,previewPassportAssessmentCsvV78,isLegacyPassportCsvV73} from "../../../services/player360/PassportAssessmentCsvV78.js";
 import { exportPassportCoverageV74 } from "../../../domain/player360/PassportCoverageV74.js";
 import { exportPassportComparableTrendCsvV75 } from "../../../domain/player360/PassportComparableTrendV75.js";
 
@@ -387,7 +388,7 @@ export class PlayerPassportView {
       '<div class="pp-note"><strong>Protocolo:</strong> IQB-RUBRIC-1.0 · D1–D5 representa la dificultad observada, no la categoría federativa. No se asignan puntos por cumplir años. Para guardar una nota necesitas el mínimo de observaciones de su rúbrica.</div>'+
       '<div class="pp-note"><strong>Edición segura:</strong> se cargan las valoraciones actuales del jugador para que tengas siempre la referencia. <strong>No se vuelven a guardar automáticamente.</strong> Solo se crea una nueva observación para los atributos que toques. Así puedes completar los que faltan o corregir un 1–5 sin alterar el histórico.</div>'+
       '<div class="pp-csv-toolbar"><strong>Valoraciones fuera de IQBasket</strong>'+
-      '<p>Descarga los 69 atributos, completa solo los observados y vuelve a importar el CSV. Primero se revisan aquí; no se guardan sin confirmación.</p>'+
+      '<p>Descarga una plantilla vinculada a este jugador y temporada, completa solo los atributos observados y vuelve a importarla. El CSV se revisa antes de guardar; los archivos antiguos requieren confirmación adicional.</p>'+
       '<button type="button" id="pp-csv-download" class="pp-top-action">Descargar plantilla CSV</button> '+
       '<button type="button" id="pp-csv-choose" class="pp-top-action">Importar CSV y revisar</button>'+
       '<input type="file" id="pp-csv-file" accept=".csv,text/csv" hidden aria-label="Archivo de evaluación CSV">'+
@@ -601,7 +602,7 @@ export class PlayerPassportView {
     if(csvDownload)csvDownload.addEventListener("click",function(){
       if(!self._can(Permission.CREATE_PLAYER_EVALUATION))return;
       try{
-        const text=exportPassportAssessmentCsvV73(self.data?.catalog,self._model().latest);
+        const text=exportPassportAssessmentCsvV78({catalog:self.data?.catalog,latest:self._model().latest,playerId:self.playerId,teamSeasonId:self.teamSeasonId});
         const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
         const url=URL.createObjectURL(blob),a=document.createElement("a");
         a.href=url;a.download="IQBasket_Pasaporte_Evaluacion_"+String(self.playerId||"jugador").replace(/[^a-z0-9_-]/gi,"")+".csv";
@@ -620,9 +621,14 @@ export class PlayerPassportView {
       try{
         if(!self._can(Permission.CREATE_PLAYER_EVALUATION))throw new Error("Sin permiso para valorar al jugador.");
         if(selected.size>4_000_000)throw new Error("CSV mayor que 4 MB.");
-        const preview=previewPassportAssessmentCsvV73(await selected.text(),{
-          catalog:self.data?.catalog,context:self.filterContext
-        });
+        const csvText=await selected.text();
+        // Older V73 sheets lack athlete identity; require manual acknowledgement.
+        // V78 sheets fail closed on cross-player, cross-season and stale baselines.
+        const legacy=isLegacyPassportCsvV73(csvText);
+        if(legacy&&!confirm("La plantilla antigua no identifica al jugador ni la temporada. Verifica que corresponde al pasaporte seleccionado. ¿Importar SOLO para revisión?"))return;
+        const preview=legacy
+          ?previewPassportAssessmentCsvV73(csvText,{catalog:self.data?.catalog,context:self.filterContext})
+          :previewPassportAssessmentCsvV78(csvText,{catalog:self.data?.catalog,latest:self._model().latest,playerId:self.playerId,teamSeasonId:self.teamSeasonId,context:self.filterContext});
         if(self._draftCount()&&!confirm("La importación sustituirá los cambios locales no guardados. ¿Continuar?"))return;
         self.editorDraft=new Map(preview.drafts);
         self.filterDimension="";self.filterSubdimension="";
