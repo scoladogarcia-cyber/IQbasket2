@@ -100,5 +100,8 @@ assert.match(languages,/escapeLangAttrV78/);
 const reports=read("views/ReportsViewV53.js");
 assert.match(reports,/filterReportGamesByDateV78/);
 assert.match(reports,/manifest-json/);
+assert.match(reports,/let overview=null/);
+assert.match(reports,/overview=document\.createElement\("div"\)/);
+assert.doesNotMatch(reports,/const overview=document\.createElement\("div"\)/);
 assert.match(reports,/_readSelected\(games,true\)/);
 console.log("PASS V78: identity-scoped passport, read-only imports, date-scoped reports, audit JSON, languages, Family and motivation.");
