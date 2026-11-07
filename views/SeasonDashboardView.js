@@ -6,6 +6,7 @@
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { selectScopedPlayerStatsV81 } from "../domain/stats/StatScopeV81.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
 import { AdvancedTeamStatsCalculator } from "../domain/stats/AdvancedTeamStatsCalculator.js";
 import { DataStore } from "../services/DataStore.js";
@@ -62,30 +63,9 @@ export class SeasonDashboardView {
     return I18n && typeof I18n.formatDate === "function" ? I18n.formatDate(dateStr) : dateStr;
   }
 
+  /** Historical API name; metric is the canonical PIR, not FIBA EFF. */
   _calculateFibaVal(st = {}) {
-    const pts = Number(st.points ?? (Number(st.fg2_made ?? st.fg2Made ?? 0) * 2 + Number(st.fg3_made ?? st.fg3Made ?? 0) * 3 + Number(st.ft_made ?? st.ftMade ?? 0)));
-    const oreb = Number(st.off_reb ?? st.offReb ?? st.rebounds_offensive ?? 0);
-    const dreb = Number(st.def_reb ?? st.defReb ?? st.rebounds_defensive ?? 0);
-    const reb = Number(st.rebounds ?? (oreb + dreb));
-    const ast = Number(st.assists ?? st.ast ?? 0);
-    const stl = Number(st.steals ?? st.stl ?? 0);
-    const blk = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
-    const foulsDrawn = Number(st.fouls_drawn ?? st.foulsDrawn ?? st.fouls_received ?? 0);
-
-    const fg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
-    const fg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
-    const fg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
-    const fg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
-    const ftm = Number(st.ft_made ?? st.ftMade ?? 0);
-    const fta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
-
-    const missedFg = Math.max(0, (fg2a + fg3a) - (fg2m + fg3m));
-    const missedFt = Math.max(0, fta - ftm);
-    const tov = Number(st.turnovers ?? st.tov ?? 0);
-    const blkAgainst = Number(st.blocks_received ?? st.blocksReceived ?? 0);
-    const foulsCommitted = Number(st.fouls_committed ?? st.fouls ?? 0);
-
-    return (pts + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + blkAgainst + foulsCommitted);
+    return BoxScoreCalculator.calculatePlayerBoxScore(st).pir;
   }
 
   _normalizeGameScore(g) {
@@ -105,33 +85,16 @@ export class SeasonDashboardView {
     };
   }
 
+  /** Only publish persisted, attributable ratings; no guessed 60 FGA/70 poss. */
   _calculateGameRatings(game) {
-    const { teamPts, oppPts, hasPlayed } = this._normalizeGameScore(game);
-
-    if (!hasPlayed) {
-      return { off: "-", def: "-", offNum: -999, defNum: 999 };
-    }
-
-    const offStored = game.off_rating ?? game.ortg ?? game.offensiveRating;
-    const defStored = game.def_rating ?? game.drtg ?? game.defensiveRating;
-
-    if (offStored !== undefined && defStored !== undefined && offStored !== null) {
-      const o = Number(offStored);
-      const d = Number(defStored);
-      return { off: o.toFixed(1), def: d.toFixed(1), offNum: o, defNum: d };
-    }
-
-    const fga = Number(game.fg2_attempted || 0) + Number(game.fg3_attempted || 0) || Number(game.fga || 60);
-    const fta = Number(game.ft_attempted || game.fta || 15);
-    const tov = Number(game.turnovers || game.tov || 12);
-    const possessions = (fga + 0.44 * fta + tov) || 70;
-
-    if (possessions <= 0) return { off: "-", def: "-", offNum: -999, defNum: 999 };
-
-    const o = Number(((teamPts / possessions) * 100).toFixed(1));
-    const d = Number(((oppPts / possessions) * 100).toFixed(1));
-
-    return { off: o.toFixed(1), def: d.toFixed(1), offNum: o, defNum: d };
+    const unavailable={off:"-",def:"-",offNum:-999,defNum:999};
+    if (!this._normalizeGameScore(game).hasPlayed) return unavailable;
+    const offRaw=game.off_rating ?? game.ortg ?? game.offensiveRating;
+    const defRaw=game.def_rating ?? game.drtg ?? game.defensiveRating;
+    if(offRaw===null||offRaw===undefined||defRaw===null||defRaw===undefined) return unavailable;
+    const off=Number(offRaw),def=Number(defRaw);
+    if(!Number.isFinite(off)||!Number.isFinite(def))return unavailable;
+    return {off:off.toFixed(1),def:def.toFixed(1),offNum:off,defNum:def};
   }
 
   _getTopPlayers(playerStatsRows = [], playersMap = new Map()) {
@@ -139,7 +102,7 @@ export class SeasonDashboardView {
 
     if (playerStatsRows && playerStatsRows.length > 0) {
       playerStatsRows.forEach((row) => {
-        const pId = String(row.player_id || row.playerId || row.id || "");
+        const pId = String(row.player_id ?? row.playerId ?? "");
         if (!pId) return;
 
         const pInfo = playersMap.get(pId);
@@ -334,7 +297,8 @@ export class SeasonDashboardView {
         : null;
       const poss = totFga + 0.44 * totFta + totTov;
       const ortg = poss > 0 ? (teamPts / poss) * 100 : null;
-      const drtg = poss > 0 ? (oppPts / poss) * 100 : null;
+      // Opponent defensive possessions are not given by own-player statistics.
+      const drtg = null;
 
       const rawNet = ortg !== null && drtg !== null
         ? Number((ortg - drtg).toFixed(1))
@@ -829,7 +793,7 @@ export class SeasonDashboardView {
         : (DataStore.getPlayers?.(this.currentTeamId) || []);
       const gameIds = new Set(games.map(g => String(g.id)));
       const allPlayerStats = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats() || []) : [];
-      const playerStats = allPlayerStats.filter(s => gameIds.has(String(s.game_id || s.gameId || "")));
+      const playerStats = selectScopedPlayerStatsV81(allPlayerStats, games);
 
       this.cachedGames = games;
       this.cachedPlayerStats = playerStats;
@@ -847,7 +811,8 @@ export class SeasonDashboardView {
         kpis = StatsEngine.calculateTeamDashboardKPIs(this.cachedGames, playerStats) || kpis;
       }
       
-      const topPlayers = this._getTopPlayers(playerStats, playersMap);
+      const playedGameIds=new Set(StatsEngine.filterPlayedGames(games).map(g=>String(g.id)));
+      const topPlayers = this._getTopPlayers(playerStats.filter(row=>playedGameIds.has(String(row.game_id??row.gameId))), playersMap);
       const sortedGames = this._sortGames(this.cachedGames);
       const gamesTableRows = this._renderTableRows(sortedGames);
 
@@ -1073,7 +1038,7 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("off_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.ortg}</div>
+              <div class="kpi-main-number">${kpis.ortg ?? "N/D"}</div>
             </div>
 
             <div class="kpi-box-card">
@@ -1084,7 +1049,7 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("def_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.drtg}</div>
+              <div class="kpi-main-number">${kpis.drtg ?? "N/D"}</div>
             </div>
 
             <div class="kpi-box-card">
@@ -1095,8 +1060,8 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("net_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.netRtg > 0 ? '+' : ''}${kpis.netRtg}</div>
-              <span class="kpi-sub-trend ${kpis.netRtg < 0 ? 'trend-down' : 'trend-up'}">▼ ${kpis.netRtg < 0 ? kpis.netRtg : '+0.0'} vs previos</span>
+              <div class="kpi-main-number">${kpis.netRtg===null || kpis.netRtg===undefined ? "N/D" : (kpis.netRtg>0?"+":"")+kpis.netRtg}</div>
+              <span class="kpi-sub-trend">Rendimiento neto no calculable sin posesiones rivales.</span>
             </div>
 
             <div class="kpi-box-card">
@@ -1107,7 +1072,7 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("pace_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.pace}</div>
+              <div class="kpi-main-number">${kpis.pace ?? "N/D"}</div>
             </div>
 
             <div class="kpi-box-card">
@@ -1118,7 +1083,7 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("efg_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.efg}%</div>
+              <div class="kpi-main-number">${kpis.efg===null||kpis.efg===undefined?"N/D":kpis.efg+"%"}</div>
               <span class="kpi-sub-trend trend-down">▼ -1.8 vs previos</span>
             </div>
 
@@ -1130,7 +1095,7 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("tov_pct_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.tovPct}%</div>
+              <div class="kpi-main-number">${kpis.tovPct===null||kpis.tovPct===undefined?"N/D":kpis.tovPct+"%"}</div>
               <span class="kpi-sub-trend trend-up">▲ +4.0 vs previos</span>
             </div>
           </div>
