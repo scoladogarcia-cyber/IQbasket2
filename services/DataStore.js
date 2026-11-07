@@ -7,6 +7,7 @@
 import { supabase } from "../config/database.config.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { valuationDiscrepancyV81 } from "../domain/stats/StatScopeV81.js";
+import { blockedShotsIntegrityV82 } from "../domain/stats/BlockedShotIntegrityV82.js";
 import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
@@ -1447,6 +1448,11 @@ class DataStoreService {
       const existing = existingStatsByPlayer.get(playerId) || {};
       return this._normalizeStat({...existing, ...st, game_id:gId});
     });
+    // Verify consistency before touching local state, PBP or the database.
+    // Legacy mismatches survive unchanged until an evidence-backed repair.
+    for(const stat of formattedStats){
+      blockedShotsIntegrityV82(stat,existingStatsByPlayer.get(String(stat.player_id))||null);
+    }
     const eligiblePlayerIds = new Set(
       this.getPlayersEligibleOnDate(targetTeamId, normalizedGame.date)
         .map(player => String(player.id))
@@ -1485,6 +1491,13 @@ class DataStoreService {
       );
     }
 
+    // Snapshot for local rollback when Supabase rejects any write.
+    const priorLocalState = {
+      games:[...this.games],
+      playerGameStats:[...this.playerGameStats],
+      gamePeriodScores:[...this.gamePeriodScores],
+      gameEvents:[...this.gameEvents]
+    };
     // 1. Estado en memoria local
     const gIdx = this.games.findIndex((g) => String(g.id) === String(gId));
     if (gIdx >= 0) this.games[gIdx] = normalizedGame;
@@ -1618,8 +1631,19 @@ class DataStoreService {
           if (evErr) throw new Error(`[game_events] ${evErr.message}`);
         }
       } catch (err) {
-        console.error("[DataStore] Error guardando en Supabase:", err);
-        throw err;
+        // Local edits cannot be advertised as persisted when any remote write
+        // failed. Restore the exact old caches and persist that rollback.
+        this.games=priorLocalState.games;
+        this.playerGameStats=priorLocalState.playerGameStats;
+        this.gamePeriodScores=priorLocalState.gamePeriodScores;
+        this.gameEvents=priorLocalState.gameEvents;
+        this._persistToStorage();
+        console.error("[DataStore] Error guardando en Supabase:",err);
+        throw new Error(
+          "Guardado no completado. La copia local se ha restaurado; " +
+          "algunas escrituras remotas pueden haberse producido. Recarga y revisa el partido antes de reintentar. " +
+          String(err?.message||err)
+        );
       }
     }
 
