@@ -22,6 +22,8 @@ import { isFederationCsv, adaptFederationCsv } from "../services/reports/Federat
 import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
 import { REPORT_PROFILE_V74, resolveReportProfileV74 } from "../services/reports/ReportProfileV74.js";
 import { renderPlayerDevelopmentBriefV77 } from "../services/reports/PlayerDevelopmentBriefV77.js";
+import {filterReportGamesByDateV78} from "../services/reports/ReportDateRangeV78.js";
+import {serializeReportAuditManifestV78} from "../services/reports/ReportAuditManifestV78.js";
 import { exportRosterCsvV74, previewRosterCsvV74 } from "../services/exchange/RosterExchangeV74.js";
 import { buildMatchWorkbookXlsx } from "../services/reports/MatchWorkbookExportV60.js";
 
@@ -42,6 +44,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     this._exchangeBusy=false;
     this._playerEvents=[];
     this._playerEventsScope=new Set();
+    this._reportDateRangeV78={fromDate:"",toDate:""};
     this._reportProfileOptionsV75=null;
   }
 
@@ -127,7 +130,9 @@ export class ReportsViewV53 extends ReportsViewV50 {
   }
   async _exportSelection(kind,status,gamesOverride=null) {
     if(this._exchangeBusy)return;
-    const games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
+    let games=Array.isArray(gamesOverride) ? gamesOverride : this._selectionGames();
+    try{games=filterReportGamesByDateV78(games,this._reportDateRangeV78);}
+    catch(error){status.textContent="Selección de fechas: "+error.message;return;}
     const context=this._reportContext();
     if(!games.length){status.textContent="Selecciona partidos para exportar.";return;}
     const printWindow=(kind==="pdf"||kind==="summary-pdf"||kind==="profile-pdf")?window.open("","_blank","width=1024,height=768"):null;
@@ -155,6 +160,8 @@ export class ReportsViewV53 extends ReportsViewV50 {
             renderGuidedCoachV72(guideCoachV72(reports))+quality+renderGameStatisticsGlossary()+'</section>';
         const authorization=this.reportAccessPolicy.authorizeExport(ReportType.SEASON_DOSSIER,context);
         if(!authorization.allowed||!ReportExporter.printReport(kind==="pdf"?"IQBasket_Informe_Completo":kind==="profile-pdf"?"IQBasket_"+profile.key:"IQBasket_Resumen_Visual",html,{authorization,printWindow})) throw new Error("No se pudo preparar el PDF o faltan permisos.");
+      } else if(kind==="manifest-json") {
+        this._download(serializeReportAuditManifestV78(reports),"application/json;charset=utf-8","IQBasket_Auditoria_Informes_V78.json");
       } else if(kind==="csv") {
         const rows=buildBoxScoreExchangeRows(reports);
         this._download(serializeBoxScoreCsv(rows),"text/csv;charset=utf-8","IQBasket_BoxScore_Seleccion.csv");
@@ -385,7 +392,9 @@ export class ReportsViewV53 extends ReportsViewV50 {
   }
 
   async _refreshOverview(target) {
-    const token=++this._overviewToken;const games=this._selectionGames();
+    const token=++this._overviewToken;let games;
+    try{games=filterReportGamesByDateV78(this._selectionGames(),this._reportDateRangeV78);}
+    catch(error){target.textContent="Filtro de fechas: "+error.message;return;}
     if(!games.length){target.textContent="Selecciona partidos para ver su resumen visual.";return;}
     target.textContent="Preparando resumen de la selección con actas guardadas…";
     try{
@@ -420,12 +429,28 @@ export class ReportsViewV53 extends ReportsViewV50 {
       for(const [name,selected] of [["Seleccionar todos",true],["Ninguno",false]]){const btn=button(name,"#475569");btn.addEventListener("click",()=>{this._selectedReportIds=new Set(selected?games.map(g=>id(g.id)):[]);select.querySelectorAll('input').forEach(box=>box.checked=selected);this._refreshCompleteSelectionButton(container);void this._refreshOverview(overview);});actions.append(btn);}
       panel.append(select,actions);
     }
+    const reportDates=document.createElement("fieldset");
+    reportDates.setAttribute("aria-label","Periodo de exportación del informe de equipo");
+    reportDates.style.cssText="display:flex;flex-wrap:wrap;gap:9px;padding:9px;border:1px solid #cbd5e1;border-radius:10px;align-items:center";
+    const reportDateLegend=document.createElement("legend");reportDateLegend.textContent="Periodo para informes de equipo y datos exportados";reportDates.append(reportDateLegend);
+    for(const [key,label] of [["fromDate","Desde"],["toDate","Hasta"]]){
+      const wrapper=document.createElement("label");wrapper.textContent=label;wrapper.style.cssText="display:grid;gap:4px;font-size:12px";
+      const input=document.createElement("input");input.type="date";input.value=this._reportDateRangeV78[key]||"";input.style.cssText="min-height:44px;border:1px solid #94a3b8;border-radius:8px;padding:6px";
+      input.addEventListener("change",()=>{
+        this._reportDateRangeV78[key]=input.value;
+        const preview=content.querySelector("[data-report-overview-v78]");
+        if(preview)void this._refreshOverview(preview);
+      });
+      wrapper.append(input);reportDates.append(wrapper);
+    }
+    panel.append(reportDates);
     const toolbar=document.createElement("div");toolbar.style.cssText="display:flex;flex-wrap:wrap;gap:8px";
     const pdf=button("PDF completo · mapas + gráficas + actas","#0f766e");
     const summaryPdf=button("PDF visual breve · resumen","#2563eb");
     const xlsx=button("Excel completo · Acta + BoxScore + Jugadas","#1d4ed8");
     const eventsXlsx=button("Jugadas Excel .xlsx","#4338ca");
     const csv=button("BoxScore CSV","#475569");
+    const auditJson=button("Auditoría de datos JSON","#475569");
     const templateCsv=button("Plantilla editable CSV · 1 partido","#0369a1");
     const profile=document.createElement("select");profile.setAttribute("aria-label","Perfil de informe PDF");profile.style.cssText="min-height:44px;border-radius:9px;padding:8px;border:1px solid #94a3b8";
     Object.values(REPORT_PROFILE_V74).forEach(p=>{const item=document.createElement("option");item.value=p.key;item.textContent=p.title;profile.append(item);});profile.value=this._reportProfileV74||"DEVELOPMENT";
@@ -459,7 +484,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const rosterFile=document.createElement("input");rosterFile.type="file";rosterFile.accept=".csv,text/csv";rosterFile.hidden=true;
     const importButton=button("Importar BoxScore / comparar CSV federativo","#b45309");
     const file=document.createElement("input");file.type="file";file.accept=".csv,.xls,text/csv,application/vnd.ms-excel";file.hidden=true;
-    toolbar.append(profile,sectionOptions,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
+    toolbar.append(profile,sectionOptions,profilePdf,summaryPdf,pdf,xlsx,eventsXlsx,csv,auditJson,templateCsv,importButton,rosterCsv,rosterPreview,file,rosterFile);panel.append(toolbar);
     const playerBrief=document.createElement("div");playerBrief.style.cssText="display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:9px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff";
     const playerSelect=document.createElement("select");playerSelect.setAttribute("aria-label","Jugador para informe de seguimiento");playerSelect.style.cssText="min-height:44px;padding:8px;border:1px solid #94a3b8;border-radius:9px";
     const first=document.createElement("option");first.value="";first.textContent="Seleccionar jugador";playerSelect.append(first);
@@ -481,7 +506,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
       status,playerId:playerSelect.value,fromDate:fromDate.value,toDate:toDate.value
     });});
     const holder=document.createElement("div");holder.style.cssText="max-width:100%;overflow-x:auto";panel.append(holder);
-    for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
+    for(const [btn,kind] of [[pdf,"pdf"],[summaryPdf,"summary-pdf"],[xlsx,"xlsx"],[eventsXlsx,"events-xlsx"],[csv,"csv"],[auditJson,"manifest-json"]])btn.addEventListener("click",()=>{void this._exportSelection(kind,status);});
     templateCsv.addEventListener("click",()=>{void this._exportFederationTemplate(status);});
     profilePdf.addEventListener("click",()=>{this._reportProfileV74=profile.value;this._reportProfileOptionsV75=Object.fromEntries([...sectionInputs].map(([key,box])=>[key,Boolean(box.checked)]));void this._exportSelection("profile-pdf",status);});
     rosterCsv.addEventListener("click",()=>{void this._rosterExchangeV74(status,holder);});
@@ -491,7 +516,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
     file.addEventListener("change",()=>{const selected=file.files?.[0];if(selected)void this._importSelection(selected,holder,status);file.value="";});
     content.prepend(panel);
     if(this.selectedGameId==="all") {
-      const overview=document.createElement("div");panel.after(overview);void this._refreshOverview(overview);
+      const overview=document.createElement("div");overview.dataset.reportOverviewV78="";panel.after(overview);void this._refreshOverview(overview);
     }
   }
 }
