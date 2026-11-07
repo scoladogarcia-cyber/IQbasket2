@@ -1,0 +1,37 @@
+name: IQBasket Stats V81 Audit
+on:
+  push:
+    branches: ["fix/stats-v81-canonical-source-audit-20261107"]
+    paths:
+      - "domain/stats/**"
+      - "engine/StatsEngine.js"
+      - "services/DataStore.js"
+      - "services/StatsSyncService.js"
+      - "views/AdvancedStatsView.js"
+      - "views/SeasonDashboardView.js"
+      - "tests/stats-v81-canonical.mjs"
+      - ".github/workflows/stats-v81.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node --check engine/StatsEngine.js
+      - run: node --check services/DataStore.js
+      - run: node --check views/AdvancedStatsView.js
+      - run: node --check views/SeasonDashboardView.js
+      - run: node tests/stats-v81-canonical.mjs
+      - run: node tests/player-complete-report-v51.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: node tests/boxscore-final-acta-freshness-v47.mjs
+      - run: npm run build

@@ -30,11 +30,11 @@ export function canonicalPlayerRow(row = {}) {
   const shootingPoints = 2 * fg2m + 3 * fg3m + ftm;
   const attempts = fg2a + fg3a;
   return {
-    id: String(row.player_id ?? row.playerId ?? row.id ?? ""), starter: Boolean(row.starter), minutes,
+    id: String(row.player_id ?? row.playerId ?? ""), starter: Boolean(row.starter), minutes,
     fg2m, fg2a, fg3m, fg3a, ftm, fta, offReb, defReb, rebounds: offReb + defReb,
     assists, steals: take(row, "steals"), blocks: take(row, "blocks_made", "blocks"), turnovers,
     foulsCommitted: take(row, "fouls_committed"), foulsDrawn: take(row, "fouls_drawn", "fouls_received"),
-    shootingPoints, points: shootingPoints, fga: attempts, usageActions: attempts + 0.44 * fta + turnovers,
+    shootingPoints, points: box.points, fga: attempts, usageActions: attempts + 0.44 * fta + turnovers,
     efg: ratio(fg2m + 1.5 * fg3m, attempts),
     ts: ratio(shootingPoints, 2 * (attempts + 0.44 * fta)),
     astTo: turnovers > 0 ? round(assists / turnovers) : null,

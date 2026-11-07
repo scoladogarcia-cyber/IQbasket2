@@ -13,6 +13,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { AdvancedPlayerStatsCalculator } from "../domain/stats/AdvancedPlayerStatsCalculator.js";
 import { AdvancedTeamStatsCalculator } from "../domain/stats/AdvancedTeamStatsCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+import {selectScopedPlayerStatsV81} from "../domain/stats/StatScopeV81.js";
 
 /**
  * Catálogo de tipos de eventos estándar para Event Sourcing.
@@ -576,7 +577,10 @@ export class StatsEngine {
     // Desglose de lanzamientos y pérdidas acumuladas
     let totFga = 0, totFgm = 0, totFg3m = 0, totFta = 0, totTov = 0;
 
-    (playerStatsRows || []).forEach((s) => {
+    const scopedStats = selectScopedPlayerStatsV81(playerStatsRows || [],validGames);
+    let totOrb = 0;
+    scopedStats.forEach((s) => {
+      totOrb += Number(s.off_reb ?? s.offReb ?? s.rebounds_offensive ?? 0);
       const fg2m = Number(s.fg2_made ?? s.fg2Made ?? s.points_2_made ?? 0);
       const fg3m = Number(s.fg3_made ?? s.fg3Made ?? s.points_3_made ?? 0);
       const fg2a = Number(s.fg2_attempted ?? s.fg2Attempted ?? s.points_2_attempted ?? 0);
@@ -588,15 +592,17 @@ export class StatsEngine {
       totTov += Number(s.turnovers ?? s.tov ?? 0);
     });
 
-    // Estimación oficial de posesiones
-    const totalPossessions = (totFga + 0.44 * totFta + totTov) || (gp * 70) || 70;
-    const ortg = totalPossessions > 0 ? Number(((totFor / totalPossessions) * 100).toFixed(1)) : (ppg > 0 ? Number(((ppg / 70) * 100).toFixed(1)) : 65.4);
-    const drtg = totalPossessions > 0 ? Number(((totAgainst / totalPossessions) * 100).toFixed(1)) : (oppPpg > 0 ? Number(((oppPpg / 70) * 100).toFixed(1)) : 108.5);
-    const netRtg = Number((ortg - drtg).toFixed(1));
+    // Estimated own possessions, only if source shot attempts exist.
+    // We do NOT know opponent possessions from individual box scores.
+    const totalPossessions = totFga > 0 ? totFga + 0.44 * totFta - totOrb + totTov : null;
+    const ortg = totalPossessions > 0 ? Number(((totFor / totalPossessions) * 100).toFixed(1)) : null;
+    const drtg = null; // Needs opponent possessions in the same played games.
+    const netRtg = null; // Not derived by reusing own possessions as rival possessions.
 
-    const efg = totFga > 0 ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1)) : 29.0;
-    const tovPct = totalPossessions > 0 ? Number(((totTov / totalPossessions) * 100).toFixed(1)) : 16.5;
-    const pace = gp > 0 ? Number((totalPossessions / gp).toFixed(1)) : 72.4;
+    const efg = totFga > 0 ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1)) : null;
+    const tovDenom = totFga + 0.44 * totFta + totTov;
+    const tovPct = tovDenom > 0 ? Number(((totTov / tovDenom) * 100).toFixed(1)) : null;
+    const pace = null; // Requires exact game minutes and possessions, not 70/game.
 
     return {
       gp,

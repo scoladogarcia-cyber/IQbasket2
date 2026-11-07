@@ -165,164 +165,71 @@ export class StatsSyncService {
    * @param {Array<Object>|null} [memoryRows=null] - Filas opcionales en memoria.
    * @returns {Promise<{ success: boolean, statsFixed: number, ppgFixed: number, error?: string }>}
    */
+  /**
+   * V81: read-only audit. Never rewrites historical PIR, team totals or PPG.
+   * Historical rows require evidence-backed reconciliation before any write.
+   * The existing UI method name is retained for route compatibility.
+   */
   async runFullAuditAndSync(teamId = null, memoryRows = null) {
     this._assertCanSync(teamId);
-    if (!this.supabase) {
-      return { success: false, statsFixed: 0, ppgFixed: 0, error: "Sin conexión a Supabase." };
+    if (!teamId || !this.supabase) {
+      return {success:false,error:"Se necesita un equipo autorizado para auditar."};
     }
-
     try {
-      console.log("🔄 [StatsSyncService] Iniciando auditoría y recálculo integral...");
-
-      // 1. Obtener filas de player_game_stats
-      let rowsToProcess = memoryRows;
-      if (!rowsToProcess || !Array.isArray(rowsToProcess) || rowsToProcess.length === 0) {
-        let targetGameIds = [];
-
-        if (teamId) {
-          const { data: teamGames, error: teamGamesErr } = await this.supabase
-            .from("games")
-            .select("id")
-            .eq("team_id", teamId);
-
-          if (teamGamesErr) throw teamGamesErr;
-          targetGameIds = (teamGames || []).map(g => g.id).filter(Boolean);
+      const {data:games,error:gameError}=await this.supabase.from("games")
+        .select("id,team_id,team_season_id").eq("team_id",teamId);
+      if(gameError)throw gameError;
+      const allowedIds=new Set((games||[]).map(game=>String(game.id)));
+      const rows=[];
+      if(Array.isArray(memoryRows)) {
+        for(const row of memoryRows) {
+          const gameId=String(row.game_id??row.gameId??"");
+          if(!allowedIds.has(gameId))throw new Error("Filas fuera del equipo autorizado: auditoría cancelada.");
+          rows.push(row);
         }
-
-        let pgsQuery = this.supabase.from("player_game_stats").select("*");
-        if (teamId) {
-          if (targetGameIds.length === 0) {
-            rowsToProcess = [];
-          } else {
-            pgsQuery = pgsQuery.in("game_id", targetGameIds);
-            const { data: scopedPlayerStats, error: pgsErr } = await pgsQuery;
-            if (pgsErr) throw pgsErr;
-            rowsToProcess = scopedPlayerStats || [];
+      } else {
+        const ids=[...allowedIds];
+        // Batch by game_id and page each query to avoid Supabase's default limit.
+        for(let i=0;i<ids.length;i+=30) {
+          const batch=ids.slice(i,i+30);
+          for(let offset=0; ;offset+=1000) {
+            const {data,error}=await this.supabase.from("player_game_stats")
+              .select("*").in("game_id",batch).range(offset,offset+999);
+            if(error)throw error;
+            rows.push(...(data||[]));
+            if((data||[]).length<1000)break;
           }
-        } else {
-          const { data: allPlayerStats, error: pgsErr } = await pgsQuery;
-          if (pgsErr) throw pgsErr;
-          rowsToProcess = allPlayerStats || [];
         }
       }
-
-      const playerRowsMap = {};
-      const updatedPlayerStatsBatch = [];
-
-      // 2. Recalcular cada registro individual mediante BoxScoreCalculator oficial
-      for (const row of rowsToProcess) {
-        const computed = BoxScoreCalculator.calculatePlayerBoxScore(row);
-
-        if (row.id) {
-          updatedPlayerStatsBatch.push({
-            id: row.id,
-            game_id: row.game_id,
-            player_id: row.player_id,
-            points: computed.points,
-            evaluation: computed.pir,
-            game_score: computed.gameScore,
-            true_shooting_pct: computed.tsPct,
-            efg_pct: computed.eFG
-          });
+      const seen=new Set();
+      let discrepancies=0,pointsDiscrepancies=0;
+      const flaggedGames=new Set();
+      for(const row of rows) {
+        const gameId=String(row.game_id??row.gameId??"");
+        const playerId=String(row.player_id??row.playerId??"");
+        if(!allowedIds.has(gameId)||!playerId)throw new Error("Identidad estadística no verificable.");
+        const key=JSON.stringify([gameId,playerId]);
+        if(seen.has(key))throw new Error("Duplicado jugador-partido; revisión manual necesaria.");
+        seen.add(key);
+        const result=BoxScoreCalculator.calculatePlayerBoxScore(row);
+        if(row.evaluation!==undefined&&row.evaluation!==null&&Number(row.evaluation)!==result.pir) {
+          discrepancies++;flaggedGames.add(gameId);
         }
-
-        if (row.player_id) {
-          if (!playerRowsMap[row.player_id]) {
-            playerRowsMap[row.player_id] = [];
-          }
-          playerRowsMap[row.player_id].push({
-            ...row,
-            points: computed.points,
-            evaluation: computed.pir,
-            pir: computed.pir
-          });
+        const derivedPoints=BoxScoreCalculator.calculatePoints(result.fg2Made,result.fg3Made,result.ftMade);
+        if(row.points!==null&&row.points!==undefined&&Number(row.points)!==derivedPoints) {
+          pointsDiscrepancies++;flaggedGames.add(gameId);
         }
       }
-
-      // Inyección en bloque en player_game_stats
-      if (updatedPlayerStatsBatch.length > 0) {
-        const { error: batchErr } = await this.supabase
-          .from("player_game_stats")
-          .upsert(updatedPlayerStatsBatch, { onConflict: "id" });
-
-        if (batchErr) throw batchErr;
-      }
-
-      // 3. Recalcular métricas colectivas en `team_game_stats`
-      const auditGameIds = [...new Set((rowsToProcess || []).map(r => r.game_id).filter(Boolean))];
-      let teamStatsQuery = this.supabase.from("team_game_stats").select("*");
-      if (auditGameIds.length > 0) {
-        teamStatsQuery = teamStatsQuery.in("game_id", auditGameIds);
-      } else if (teamId) {
-        // Un equipo sin estadísticas individuales no debe provocar una auditoría global.
-        teamStatsQuery = teamStatsQuery.limit(0);
-      }
-
-      const { data: allTeamStats, error: tgFetchErr } = await teamStatsQuery;
-      if (!tgFetchErr && Array.isArray(allTeamStats) && allTeamStats.length > 0) {
-        const updatedTeamStatsBatch = allTeamStats.map((tRow) => {
-          const computedTeam = AdvancedTeamStatsCalculator.calculateAdvancedTeamMetrics(tRow, {
-            points: tRow.opp_points || 0,
-            fga: tRow.opp_fg_attempted || 0,
-            fta: tRow.opp_ft_attempted || 0,
-            orb: tRow.opp_off_reb || 0,
-            tov: tRow.opp_turnovers || 0
-          });
-
-          return {
-            id: tRow.id,
-            game_id: tRow.game_id,
-            points: Number(tRow.points || 0),
-            opp_points: Number(tRow.opp_points || 0),
-            estimated_possessions: computedTeam.possessions,
-            pace: computedTeam.pace,
-            ortg: computedTeam.offensiveRating,
-            drtg: computedTeam.defensiveRating,
-            net_rating: computedTeam.netRating,
-            efg: computedTeam.fourFactors?.team?.eFG || 0
-          };
-        });
-
-        await this.supabase
-          .from("team_game_stats")
-          .upsert(updatedTeamStatsBatch, { onConflict: "id" });
-      }
-
-      // 4. Actualizar medias de temporada en la tabla `players` (PPG, RPG, APG, PIR, GP)
-      let playersQuery = this.supabase.from("players").select("id, team_id");
-      if (teamId) playersQuery = playersQuery.eq("team_id", teamId);
-      const { data: playersList, error: pListErr } = await playersQuery;
-      if (pListErr) throw pListErr;
-
-      let updatedPlayersCount = 0;
-      const playerUpdates = (playersList || []).map(async (p) => {
-        const pRows = playerRowsMap[p.id] || [];
-        const seasonAgg = StatsAggregator.aggregatePlayerSeasonStats(pRows);
-
-        const ppg = seasonAgg ? seasonAgg.perGame.ppg : 0.0;
-
-        const { error: updateErr } = await this.supabase
-          .from("players")
-          .update({ ppg })
-          .eq("id", p.id);
-
-        if (!updateErr) updatedPlayersCount++;
-      });
-
-      await Promise.all(playerUpdates);
-
-      console.log(`✅ [StatsSyncService] Auditoría finalizada: ${updatedPlayerStatsBatch.length} stats y ${updatedPlayersCount} fichas sincronizadas.`);
-
       return {
-        success: true,
-        statsFixed: updatedPlayerStatsBatch.length,
-        ppgFixed: updatedPlayersCount
+        success:true,dryRun:true,compared:rows.length,discrepancies,
+        pointsDiscrepancies,flaggedGames:flaggedGames.size,
+        statsFixed:0,ppgFixed:0
       };
-    } catch (err) {
-      console.error("❌ [StatsSyncService] Error en runFullAuditAndSync:", err);
-      return { success: false, statsFixed: 0, ppgFixed: 0, error: err.message || err };
+    }catch(err){
+      return {success:false,dryRun:true,compared:0,statsFixed:0,ppgFixed:0,error:err?.message||String(err)};
     }
   }
+
 }
 
 export default StatsSyncService;

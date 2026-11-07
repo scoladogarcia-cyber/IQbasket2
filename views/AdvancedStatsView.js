@@ -6,6 +6,7 @@
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { selectScopedPlayerStatsV81 } from "../domain/stats/StatScopeV81.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
@@ -32,35 +33,9 @@ export class AdvancedStatsView {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
   }
 
+  /** Legacy method name retained for compatibility; the metric shown is PIR. */
   _calculateFibaVal(st = {}) {
-    if (BoxScoreCalculator && typeof BoxScoreCalculator.calculatePlayerBoxScore === "function") {
-      const comp = BoxScoreCalculator.calculatePlayerBoxScore(st);
-      return Number(comp.pir ?? comp.evaluation ?? comp.val ?? 0);
-    }
-
-    const pts = Number(st.points ?? (Number(st.fg2_made ?? st.fg2Made ?? 0) * 2 + Number(st.fg3_made ?? st.fg3Made ?? 0) * 3 + Number(st.ft_made ?? st.ftMade ?? 0)));
-    const oreb = Number(st.off_reb ?? st.offReb ?? st.rebounds_offensive ?? 0);
-    const dreb = Number(st.def_reb ?? st.defReb ?? st.rebounds_defensive ?? 0);
-    const reb = Number(st.rebounds ?? (oreb + dreb));
-    const ast = Number(st.assists ?? st.ast ?? 0);
-    const stl = Number(st.steals ?? st.stl ?? 0);
-    const blk = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
-    const foulsDrawn = Number(st.fouls_drawn ?? st.foulsDrawn ?? st.fouls_received ?? 0);
-
-    const fg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
-    const fg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
-    const fg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
-    const fg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
-    const ftm = Number(st.ft_made ?? st.ftMade ?? 0);
-    const fta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
-
-    const missedFg = Math.max(0, (fg2a + fg3a) - (fg2m + fg3m));
-    const missedFt = Math.max(0, fta - ftm);
-    const tov = Number(st.turnovers ?? st.tov ?? 0);
-    const blkAgainst = Number(st.blocks_received ?? st.blocksReceived ?? 0);
-    const foulsCommitted = Number(st.fouls_committed ?? st.fouls ?? 0);
-
-    return (pts + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + blkAgainst + foulsCommitted);
+    return BoxScoreCalculator.calculatePlayerBoxScore(st).pir;
   }
 
   async render(containerId = "dashboard-content-area") {
@@ -68,19 +43,22 @@ export class AdvancedStatsView {
     if (!container) return;
 
     const activeTeamId = DataStore.getActiveTeamId();
-    const games = DataStore.getGames(activeTeamId) || DataStore.getGames() || [];
+    const games = DataStore.getGamesForActiveSeason?.(activeTeamId)
+      || DataStore.getGames(activeTeamId) || [];
     const playedGames = StatsEngine && typeof StatsEngine.filterPlayedGames === "function" 
       ? StatsEngine.filterPlayedGames(games) 
       : games.filter(g => Number(g.team_score ?? g.teamScore ?? 0) > 0 || Number(g.opponent_score ?? g.opponentScore ?? 0) > 0);
 
-    const totalTeamGamesCount = Math.max(1, playedGames.length);
+    const totalTeamGamesCount = playedGames.length;
     const players = DataStore.getSeasonParticipantPlayers?.(activeTeamId)
       || DataStore.getPlayers(activeTeamId)
       || DataStore.getPlayers()
       || [];
-    const allStats = DataStore.getPlayerGameStats() || [];
+    // Scope by the exact IDs of played games from the active team-season.
+    // The shared DataStore cache may include players from other clubs/seasons.
+    const allStats = selectScopedPlayerStatsV81(DataStore.getPlayerGameStats() || [], playedGames);
 
-    if (games.length === 0) {
+    if (playedGames.length === 0) {
       container.innerHTML = `
         <div style="padding: 24px; color: #475569; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">
           ${this.t("no_games_recorded", "No hay partidos registrados para analizar estadísticas avanzadas.")}
@@ -107,12 +85,13 @@ export class AdvancedStatsView {
     const totFgm = totFg2m + totFg3m;
     const totFga = totFg2a + totFg3a;
 
-    const efg = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "0.0";
-    const poss = (totFga + 0.44 * totFta + totTo) || (totalTeamGamesCount * 70) || 70;
-    const tovPct = poss > 0 ? ((totTo / poss) * 100).toFixed(1) : "0.0";
-    const estimatedOppDefReb = (totOffReb * 1.5) || 30;
-    const orbPct = (totOffReb + estimatedOppDefReb) > 0 ? ((totOffReb / (totOffReb + estimatedOppDefReb)) * 100).toFixed(1) : "0.0";
-    const ftRate = totFga > 0 ? (totFtm / totFga).toFixed(2) : "0.00";
+    const efg = totFga > 0 ? (((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1) : "N/D";
+    const poss = totFga + 0.44 * totFta + totTo; // No fabricated 70 possessions.
+    const tovPct = poss > 0 ? ((totTo / poss) * 100).toFixed(1) : "N/D";
+    // Opponent defensive rebounds are not present in player_game_stats.
+    // ORB% is not identifiable from the team offensive rebounds alone.
+    const orbPct = "N/D";
+    const ftRate = totFga > 0 ? (totFtm / totFga).toFixed(2) : "N/D";
 
     const getSortArrow = (field, currentField, isAsc) => {
       if (currentField !== field) return `<span style="color:#cbd5e1;">↕</span>`;
@@ -124,7 +103,7 @@ export class AdvancedStatsView {
     let mobileCardsMarkup = "";
 
     if (this.viewMode === "team") {
-      const teamDataList = games.map((g) => {
+      const teamDataList = playedGames.map((g) => {
         const teamScore = Number(g.team_score ?? g.teamScore ?? g.our_score ?? 0);
         const oppScore = Number(g.opponent_score ?? g.opponentScore ?? g.opp_score ?? 0);
         const isWin = teamScore > oppScore;
@@ -147,7 +126,7 @@ export class AdvancedStatsView {
         const gFga = gFg2a + gFg3a;
         const gFgm = gFg2m + gFg3m;
         const gEfgNum = gFga > 0 ? Number((((gFgm + 0.5 * gFg3m) / gFga) * 100).toFixed(1)) : 0;
-        const gPoss = (gFga + 0.44 * gFta + gTo) || 70;
+        const gPoss = gFga + 0.44 * gFta + gTo;
         const gTovNum = gPoss > 0 ? Number(((gTo / gPoss) * 100).toFixed(1)) : 0;
         const gFtRateNum = gFga > 0 ? Number((gFtm / gFga).toFixed(2)) : 0;
 
@@ -288,7 +267,7 @@ export class AdvancedStatsView {
           pAst  += Number(s.assists ?? s.ast ?? 0);   
           pTo   += Number(s.turnovers ?? s.tov ?? 0);
           
-          pPts += (s.points !== undefined && s.points !== null && Number(s.points) > 0) ? Number(s.points) : (fg2m * 2 + fg3m * 3 + ftm);
+          pPts += BoxScoreCalculator.calculatePlayerBoxScore(s).points;
           pVal += this._calculateFibaVal(s);
         });
 
@@ -438,7 +417,7 @@ export class AdvancedStatsView {
                 <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de tiro bonificando en un 50% los triples anotados. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
               </span>
             </div>
-            <div style="font-size: 26px; font-weight: 900; color: #7c3aed; margin-top: 4px;">${efg}%</div>
+            <div style="font-size: 26px; font-weight: 900; color: #7c3aed; margin-top: 4px;">${efg === "N/D" ? efg : efg+"%"}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${this.t("efg_desc", "Eficiencia en tiros de campo")}</div>
           </div>
 
@@ -449,7 +428,7 @@ export class AdvancedStatsView {
                 <span class="tooltip-box">Turnover Percentage: Porcentaje de posesiones propias que terminan en pérdida de balón. Fórmula: [TOV / Posesiones].</span>
               </span>
             </div>
-            <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${tovPct}%</div>
+            <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${tovPct === "N/D" ? tovPct : tovPct+"%"}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${this.t("tov_desc", "Pérdidas estimadas por 100 pos.")}</div>
           </div>
 
@@ -460,7 +439,7 @@ export class AdvancedStatsView {
                 <span class="tooltip-box">Offensive Rebound %: Porcentaje de rebotes ofensivos capturados sobre los rechaces en ataque disponibles. Fórmula: [ORB / (ORB + Opp DRB)].</span>
               </span>
             </div>
-            <div style="font-size: 26px; font-weight: 900; color: #2563eb; margin-top: 4px;">${orbPct}%</div>
+            <div style="font-size: 26px; font-weight: 900; color: #2563eb; margin-top: 4px;">${orbPct}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${this.t("orb_desc", "Porcentaje de rechaces ofensivos")}</div>
           </div>
 

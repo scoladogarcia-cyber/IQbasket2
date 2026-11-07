@@ -5,6 +5,8 @@
  */
 
 import { supabase } from "../config/database.config.js";
+import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { valuationDiscrepancyV81 } from "../domain/stats/StatScopeV81.js";
 import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
@@ -269,25 +271,31 @@ class DataStoreService {
     const fta = Number(s.ft_attempted ?? s.ftAttempted ?? s.free_throws_attempted ?? 0);
     const oreb = Number(s.off_reb ?? s.offReb ?? s.rebounds_offensive ?? 0);
     const dreb = Number(s.def_reb ?? s.defReb ?? s.rebounds_defensive ?? 0);
-    const reb = Number(s.rebounds ?? (oreb + dreb));
+    const reb = oreb + dreb; // Canonical totals derive from the same two source columns.
     const ast = Number(s.assists ?? s.ast ?? 0);
     const stl = Number(s.steals ?? s.stl ?? 0);
-    const blk = Number(s.blocks ?? s.blocks_made ?? s.blocksMade ?? 0);
+    const blk = Number(s.blocks_made ?? s.blocksMade ?? s.blocks ?? 0);
+    const blocksReceived = Number(s.blocks_received ?? s.blocksReceived ?? 0);
     const tov = Number(s.turnovers ?? s.tov ?? 0);
     const fouls = Number(s.fouls_committed ?? s.foulsCommitted ?? s.fouls ?? 0);
     const foulsDrawn = Number(s.fouls_drawn ?? s.foulsDrawn ?? s.fouls_received ?? 0);
     const plusMinus = Number(s.plus_minus ?? s.plusMinus ?? 0);
     const isStarter = Boolean(s.starter || s.isStarter);
 
-    const points = (s.points !== undefined && s.points !== null && Number(s.points) > 0)
+    // A recorded 0 is evidence, not a missing value. Never silently replace it.
+    const points = s.points !== undefined && s.points !== null && s.points !== ""
       ? Number(s.points)
-      : (fg2m * 2 + fg3m * 3 + ftm);
+      : BoxScoreCalculator.calculatePoints(fg2m, fg3m, ftm);
 
-    const fga = fg2a + fg3a;
-    const fgm = fg2m + fg3m;
-    const missedFg = Math.max(0, fga - fgm);
-    const missedFt = Math.max(0, fta - ftm);
-    const val = (points + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + fouls);
+    const payload = {
+      points, fg2Made:fg2m, fg2Attempted:fg2a, fg3Made:fg3m, fg3Attempted:fg3a,
+      ftMade:ftm, ftAttempted:fta, offReb:oreb, defReb:dreb,
+      assists:ast, steals:stl, blocksMade:blk, blocksReceived,
+      turnovers:tov, foulsCommitted:fouls, foulsDrawn
+    };
+    const pir = BoxScoreCalculator.calculatePIR(payload);
+    const efficiency = BoxScoreCalculator.calculateEFF(payload);
+    const valuationAudit = valuationDiscrepancyV81(s,pir);
 
     return {
       ...s,
@@ -322,6 +330,8 @@ class DataStoreService {
       stl,
       blocks: blk,
       blocks_made: blk,
+      blocks_received: blocksReceived,
+      blocksReceived,
       turnovers: tov,
       tov,
       fouls_committed: fouls,
@@ -329,9 +339,13 @@ class DataStoreService {
       fouls_drawn: foulsDrawn,
       foulsDrawn,
       plus_minus: plusMinus,
-      evaluation: Number(s.evaluation ?? val),
-      val: Number(s.evaluation ?? val),
-      pir: Number(s.evaluation ?? val)
+      // Legacy DB value is retained for audits; all visible PIR aliases agree.
+      storedEvaluation: valuationAudit.stored,
+      valuationMismatch: valuationAudit.mismatch,
+      evaluation: pir,
+      val: pir,
+      pir,
+      efficiency
     };
   }
 
