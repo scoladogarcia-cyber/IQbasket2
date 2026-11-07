@@ -43,7 +43,9 @@ const files={
 };
 assert.match(files.language,/bindEvents\(root/);
 assert.match(files.language,/parseLanguagePackCsv/);
-assert.match(files.language,/if \(error\) throw error;/);
+// V80: reviewed CSV export is the publication gate; there must be no database UPSERT.
+assert.match(files.language,/IQBasket_cambios_/);
+assert.doesNotMatch(files.language,/\.from\(["\x27]translations["\x27]\)/);
 assert.doesNotMatch(files.language,/.delete\(\)\s*\.eq/);
 assert.match(files.settings,/canSave:\s*\(\)\s*=>\s*this\._can\("MANAGE_TRANSLATIONS"\)/);
 assert.match(files.report,/summary-pdf/);
