@@ -12,8 +12,10 @@
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { supabase } from "../config/database.config.js";
-import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale } from "../services/i18n/LanguagePackExchangeV71.js";
+import { serializeLanguagePackCsv,parseLanguagePackCsv,supportedLocale,assertLanguagePlaceholderParityV78 } from "../services/i18n/LanguagePackExchangeV71.js";
 import { localeCoverageV74, missingLanguageTemplateV74 } from "../services/i18n/LanguageCoverageV74.js";
+
+const escapeLangAttrV78=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 
 export class LanguageSettingsView {
   /**
@@ -30,6 +32,7 @@ export class LanguageSettingsView {
     this.pageSize = 20;
     this.selectedLocale = I18n.getLocale?.() || "es";
     this.importDraft = Object.create(null);
+    this.searchQueryV78 = "";
   }
 
   t(key, fallback = "") {
@@ -109,7 +112,8 @@ export class LanguageSettingsView {
     // Preserve legacy administrative keys while discovering newly versioned catalog keys.
     // This prevents new translations disappearing from the paginated admin interface.
     const allKeys=Array.from(new Set([...keysToTranslate,...Object.keys(TranslationStore.defaultDictionary?.es||{}),...Object.keys(dict)])).filter(key=>/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)).sort();
-    const totalItems = allKeys.length;
+    const visibleKeys=allKeys.filter(key=>key.toLocaleLowerCase().includes(this.searchQueryV78.trim().toLocaleLowerCase()));
+    const totalItems = visibleKeys.length;
     const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
 
     if (this.currentPage > totalPages) this.currentPage = totalPages;
@@ -117,13 +121,14 @@ export class LanguageSettingsView {
 
     const startIndex = (this.currentPage - 1) * this.pageSize;
     const endIndex = startIndex + this.pageSize;
-    const paginatedKeys = allKeys.slice(startIndex, endIndex);
+    const paginatedKeys = visibleKeys.slice(startIndex, endIndex);
 
     let rowsHtml = "";
     paginatedKeys.forEach((key) => {
       const dbEntry = Array.isArray(currentDictionary) ? currentDictionary.find((d) => d.key === key) : null;
       const val = this.importDraft[key] ?? (dbEntry ? (dbEntry.translation || dbEntry.value) : (dict[key] || ""));
-      const safeVal=String(val).replace(/[&<>"']/g,ch=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+      const safeVal=escapeLangAttrV78(val);
+      const safePlaceholder=escapeLangAttrV78(this.t(key,key));
 
       rowsHtml += `
         <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -135,7 +140,7 @@ export class LanguageSettingsView {
               type="text" 
               data-key="${key}" 
               value="${safeVal}" 
-              placeholder="${this.t(key, key)}" 
+              placeholder="${safePlaceholder}" 
               class="i18n-input" 
               style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; box-sizing: border-box;"
             />
@@ -154,6 +159,11 @@ export class LanguageSettingsView {
         </div>
 
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+          <label for="langKeySearchV78" style="display:grid;gap:5px;margin-bottom:12px;font-size:13px;font-weight:700;color:#334155">
+            Buscar clave de traducción
+            <input type="search" id="langKeySearchV78" value="${escapeLangAttrV78(this.searchQueryV78)}" placeholder="Ejemplo: approvals, passport, reports" style="min-height:44px;border:1px solid #94a3b8;border-radius:9px;padding:9px 12px">
+          </label>
+          <p role="status" style="font-size:12px;color:#475569">Mostrando ${totalItems} de ${allKeys.length} claves del catálogo.</p>
           <div class="lang-selector" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 12px;">
               <label for="langCodeInput" style="font-weight: 700; font-size: 13px; color: #334155;">${this.t("select_lang_to_modify", "Selección de Idioma a Modificar:")}</label>
@@ -196,7 +206,7 @@ export class LanguageSettingsView {
           <div class="actions" style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #64748b;">
               <button type="button" id="btn-prev-lang-page-bottom" class="btn-outline-sm" ${this.currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>⬅️ ${this.t("previous", "Anterior")}</button>
-              <span>${this.t("showing", "Mostrando")} ${startIndex + 1}-${Math.min(endIndex, totalItems)} ${this.t("of", "de")} ${totalItems} ${this.t("keys_unit", "claves")}</span>
+              <span>${this.t("showing", "Mostrando")} ${totalItems ? startIndex + 1 : 0}-${Math.min(endIndex, totalItems)} ${this.t("of", "de")} ${totalItems} ${this.t("keys_unit", "claves")}</span>
               <button type="button" id="btn-next-lang-page-bottom" class="btn-outline-sm" ${this.currentPage >= totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>${this.t("next", "Siguiente")} ➡️</button>
             </div>
 
@@ -242,6 +252,12 @@ export class LanguageSettingsView {
     this.showSyncOverlay(`💾 Guardando traducciones [${targetLang.toUpperCase()}] en Supabase...`);
 
     try {
+      const reference=TranslationStore.defaultDictionary?.es||{};
+      for(const row of payload){
+        if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(row.key)||row.translation.length>3000)
+          throw new Error("Clave o longitud de traducción inválida: "+row.key);
+        assertLanguagePlaceholderParityV78(row.key,row.translation,reference);
+      }
       if (!supabase) throw new Error("Servicio de traducciones no disponible.");
       // Backend grants/RLS must authorize every language mutation.
       // Fail closed; never delete rows to bypass a rejected UPSERT.
@@ -280,6 +296,10 @@ export class LanguageSettingsView {
       shell.innerHTML=this.render(this.selectedLocale);
       this.bindEvents(root,{canSave});
     };
+    host.querySelector("#langKeySearchV78")?.addEventListener("change",event=>{
+      this.searchQueryV78=String(event.target.value||"").slice(0,120);
+      this.currentPage=1;refresh();
+    });
     host.querySelector("#langCodeInput")?.addEventListener("change", event=>{
       this.selectedLocale=supportedLocale(event.target.value);
       this.currentPage=1;this.importDraft=Object.create(null);refresh({carryEdits:false});

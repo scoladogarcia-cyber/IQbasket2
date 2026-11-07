@@ -1,0 +1,40 @@
+name: IQBasket Six Modules V78 Integrity
+on:
+  push:
+    branches: ["main", "feature/six-modules-v78-integrity-20261107"]
+    paths:
+      - "services/player360/PassportAssessmentCsvV78.js"
+      - "views/player360/passport/PlayerPassportView.js"
+      - "services/i18n/LanguagePackExchangeV71.js"
+      - "views/LanguageSettingsView.js"
+      - "services/reports/ReportAuditManifestV78.js"
+      - "services/reports/ReportDateRangeV78.js"
+      - "views/ReportsViewV53.js"
+      - "views/family/FamilyMotivationReflectionV74.js"
+      - "tests/six-modules-v78.mjs"
+      - ".github/workflows/six-modules-v78.yml"
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node tests/six-modules-v78.mjs
+      - run: node tests/six-modules-v75.mjs
+      - run: node tests/training-import-preflight-v76.mjs
+      - run: node tests/training-attendance-import-v77.mjs
+      - run: node tests/player-development-brief-v77.mjs
+      - run: node tests/passport-csv-v73.mjs
+      - run: node tests/product-p1-v71.mjs
+      - run: node tests/product-p1-v72.mjs
+      - run: node tests/selected-reports-v53.mjs
+      - run: npm run build
