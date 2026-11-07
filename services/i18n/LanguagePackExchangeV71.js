@@ -46,7 +46,7 @@ export function assertLanguagePlaceholderParityV78(key,value,referenceDictionary
   const expected=languagePlaceholdersV75(referenceDictionary[key]);
   const received=languagePlaceholdersV75(value);
   if(JSON.stringify(expected)!==JSON.stringify(received))
-    throw new Error("Marcadores incompatibles con "+key+
+    throw new Error("marcadores incompatibles con "+key+
       ". Deben conservarse exactamente: "+(expected.join(", ")||"(ninguno)")+".");
   return true;
 }
