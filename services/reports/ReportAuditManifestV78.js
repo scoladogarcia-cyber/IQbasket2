@@ -30,7 +30,7 @@ export function buildReportAuditManifestV78(reports,{generatedAt=new Date().toIS
     const roster=new Set(report.players.map(p=>text(p.id)));
     if([...playerIds].some(pid=>!roster.has(pid)))throw new Error("Acta con jugador fuera de la plantilla autorizada.");
     const teamScore=score(g.team_score);
-    const sum=points.every(p=>p!==null)?points.reduce((a,b)=>a+b,0):null;
+    const sum=points.length&&points.every(p=>p!==null)?points.reduce((a,b)=>a+b,0):null;
     games.push(Object.freeze({
       game_id:gid,date:text(g.date??g.game_date).slice(0,10)||null,
       status:text(g.status)||null,capture_revision:number(g.capture_revision)!==null&&Number.isInteger(number(g.capture_revision))?number(g.capture_revision):null,
