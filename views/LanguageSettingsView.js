@@ -152,21 +152,21 @@ export class LanguageSettingsView {
     return `
       <div class="language-settings-view" style="max-width: 1000px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
         <div style="margin-bottom: 24px;">
-          <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">🌐 ${this.t("languages_mgmt_title", "Administración de Idiomas")}</h2>
+          <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0;">🌐 ${this.t("language.admin.title","Administración de idiomas")}</h2>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
-            ${this.t("languages_mgmt_desc", "Catálogo versionado por idioma; exporta/edita un CSV sin necesidad de mantener miles de celdas en la base de datos. Las personalizaciones autorizadas se guardan como excepciones.")}
+            ${this.t("language.admin.description","Las traducciones se publican con archivos versionados en GitHub. La base de datos ya no almacena los textos de la interfaz.")}
           </p>
         </div>
 
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
           <label for="langKeySearchV78" style="display:grid;gap:5px;margin-bottom:12px;font-size:13px;font-weight:700;color:#334155">
-            Buscar clave de traducción
-            <input type="search" id="langKeySearchV78" value="${escapeLangAttrV78(this.searchQueryV78)}" placeholder="Ejemplo: approvals, passport, reports" style="min-height:44px;border:1px solid #94a3b8;border-radius:9px;padding:9px 12px">
+            ${this.t("language.admin.search","Buscar clave de traducción")}
+            <input type="search" id="langKeySearchV78" value="${escapeLangAttrV78(this.searchQueryV78)}" placeholder="${escapeLangAttrV78(this.t("language.admin.searchExample","Ejemplo: approvals, passport, reports"))}" style="min-height:44px;border:1px solid #94a3b8;border-radius:9px;padding:9px 12px">
           </label>
-          <p role="status" style="font-size:12px;color:#475569">Mostrando ${totalItems} de ${allKeys.length} claves del catálogo.</p>
+          <p role="status" style="font-size:12px;color:#475569">${this.t("language.admin.count","Mostrando {count} de {total} claves del catálogo.").replace("{count}",String(totalItems)).replace("{total}",String(allKeys.length))}</p>
           <div class="lang-selector" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <label for="langCodeInput" style="font-weight: 700; font-size: 13px; color: #334155;">${this.t("select_lang_to_modify", "Selección de Idioma a Modificar:")}</label>
+              <label for="langCodeInput" style="font-weight: 700; font-size: 13px; color: #334155;">${this.t("language.admin.choose","Idioma que quieres revisar")}</label>
               <select id="langCodeInput" style="padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 13px; min-height: 44px; background: white;">
                 <option value="es" ${langCode === 'es' ? 'selected' : ''}>es (Español)</option>
                 <option value="ca" ${langCode === 'ca' ? 'selected' : ''}>ca (Català)</option>
@@ -183,11 +183,11 @@ export class LanguageSettingsView {
           </div>
 
           <div class="lang-pack-tools" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-            <button type="button" data-lang-pack-export style="min-height:44px;padding:9px;border-radius:9px">Descargar idioma CSV</button>
-            <button type="button" data-lang-pack-missing style="min-height:44px;padding:9px;border-radius:9px">CSV de claves pendientes</button>
-            <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">Importar CSV y previsualizar</button>
-            <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="Seleccionar archivo CSV de traducciones">
-            <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">Los cambios se descargan como CSV para revisarlos e incorporarlos a GitHub. No se escriben en Supabase.</span>
+            <button type="button" data-lang-pack-export style="min-height:44px;padding:9px;border-radius:9px">${this.t("language.admin.download","Descargar idioma CSV")}</button>
+            <button type="button" data-lang-pack-missing style="min-height:44px;padding:9px;border-radius:9px">${this.t("language.admin.missing","CSV de claves pendientes")}</button>
+            <button type="button" data-lang-pack-import style="min-height:44px;padding:9px;border-radius:9px">${this.t("language.admin.import","Importar CSV y previsualizar")}</button>
+            <input type="file" data-lang-pack-file accept=".csv,text/csv" hidden aria-label="${escapeLangAttrV78(this.t("language.admin.chooseFile","Seleccionar archivo CSV de traducciones"))}">
+            <span role="status" data-lang-pack-status style="font-size:12px;color:#475569">${this.t("language.admin.instructions","Los cambios se descargan como CSV para revisarlos e incorporarlos a GitHub. No se escriben en Supabase.")}</span>
           </div>
           <div style="overflow-x: auto;">
             <table class="translations-table" style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -215,7 +215,7 @@ export class LanguageSettingsView {
               class="btn-primary" 
               style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 44px;"
             >
-              ⬇ Descargar cambios de idioma
+              ⬇ ${this.t("language.admin.downloadEdits","Descargar cambios de idioma")}
             </button>
           </div>
         </div>
@@ -234,14 +234,16 @@ export class LanguageSettingsView {
       const key=input.getAttribute("data-key");
       if(key&&input.value.trim())edits[key]=input.value.trim();
     });
-    const reference=TranslationStore.defaultDictionary?.es||{};
+    const reference=TranslationStore.getDictionary("es")||{};
+    const baseline=TranslationStore.getDictionary(targetLang)||{};
     for(const [key,value] of Object.entries(edits)){
+      if(value===baseline[key]){delete edits[key];continue;}
       if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(key)||value.length>3000)
         throw new Error("Clave o longitud inválida: "+key);
       assertLanguagePlaceholderParityV78(key,value,reference);
     }
     if(!Object.keys(edits).length){
-      window.alert("No hay cambios para descargar.");return;
+      window.alert(this.t("language.admin.noChanges","No hay cambios para descargar."));return;
     }
     const content=serializeLanguagePackCsv(edits,targetLang);
     const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
@@ -250,7 +252,7 @@ export class LanguageSettingsView {
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
     const status=document.querySelector(".language-settings-view [data-lang-pack-status]");
-    if(status)status.textContent="CSV descargado. Para publicar traducciones, revisa e incorpora este paquete a los archivos locales del repositorio.";
+    if(status)status.textContent=this.t("language.admin.downloaded","CSV descargado. Para publicar las traducciones, incorpora los cambios a los archivos de idioma en GitHub.");
   }
   /**
    * Local pack workflow: export, preview and apply. Caller must pass the current
