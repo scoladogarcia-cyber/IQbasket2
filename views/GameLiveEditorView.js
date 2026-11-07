@@ -922,6 +922,7 @@ async _openEditForm(gameId, container) {
         assists: `Asistencia`,
         steals: `Robo de Balón`,
         blocks_made: `Tapón Realizado`,
+        blocks_received: `Tapón Recibido`,
         turnovers: `Pérdida de Balón`,
         fouls_committed: `Falta Cometida`,
         fouls_drawn: `Falta Recibida`
@@ -1026,6 +1027,7 @@ async _openEditForm(gameId, container) {
               <button type="button" class="btn-fast-action" data-action="assists" style="background: #6366f1; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Asistencia</button>
               <button type="button" class="btn-fast-action" data-action="steals" style="background: #8b5cf6; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Robo</button>
               <button type="button" class="btn-fast-action" data-action="blocks_made" style="background: #a855f7; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Tapón</button>
+              <button type="button" class="btn-fast-action" data-action="blocks_received" style="background: #7c3aed; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;" title="Registra el tapón del rival a este jugador. El tiro fallado se registra por separado.">Tapón Rec.</button>
               <button type="button" class="btn-fast-action" data-action="turnovers" style="background: #ea580c; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Pérdida</button>
               <button type="button" class="btn-fast-action" data-action="fouls_committed" style="background: #f59e0b; color: #ffffff; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Com.</button>
               <button type="button" class="btn-fast-action" data-action="fouls_drawn" style="background: #fbbf24; color: #78350f; border: none; padding: 8px 2px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; cursor: pointer;">Falta Rec.</button>
@@ -1249,7 +1251,7 @@ async _openEditForm(gameId, container) {
                 <th style="padding: 8px;">T3C</th><th style="padding: 8px;">T3I</th>
                 <th style="padding: 8px;">TLC</th><th style="padding: 8px;">TLI</th>
                 <th style="padding: 8px;">RO</th><th style="padding: 8px;">RD</th>
-                <th style="padding: 8px;">AST</th><th style="padding: 8px;">ROB</th><th style="padding: 8px;">TAP</th>
+                <th style="padding: 8px;">AST</th><th style="padding: 8px;">ROB</th><th style="padding: 8px;">TAP</th><th style="padding: 8px;" title="Tapones recibidos; resta un punto PIR">TAP REC</th>
                 <th style="padding: 8px;">PER</th><th style="padding: 8px;">FC</th><th style="padding: 8px;">FR</th>
                 <th style="padding: 8px; background: #fefce8; color: #854d0e; font-weight: 900;">VAL</th>
               </tr>
@@ -1269,7 +1271,8 @@ async _openEditForm(gameId, container) {
                 const valRd = Number(st.def_reb ?? st.defReb ?? 0);
                 const valAst = Number(st.assists ?? st.ast ?? 0);
                 const valRob = Number(st.steals ?? st.stl ?? 0);
-                const valTap = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
+                const valTap = Number(st.blocks_made ?? st.blocksMade ?? st.blocks ?? st.blk ?? 0);
+                const valTapReceived = Number(st.blocks_received ?? st.blocksReceived ?? 0);
                 const valPer = Number(st.turnovers ?? st.tov ?? 0);
                 const valFc = Number(st.fouls_committed ?? st.fouls ?? 0);
                 const valFr = Number(st.fouls_drawn ?? st.fouls_received ?? 0);
@@ -1279,7 +1282,8 @@ async _openEditForm(gameId, container) {
                   minutes: valMin, fg2_made: valFg2m, fg2_attempted: valFg2a,
                   fg3_made: valFg3m, fg3_attempted: valFg3a, ft_made: valFtm, ft_attempted: valFta,
                   off_reb: valRo, def_reb: valRd, assists: valAst, steals: valRob,
-                  blocks: valTap, turnovers: valPer, fouls_committed: valFc, fouls_drawn: valFr,
+                  blocks_made: valTap, blocks_received: valTapReceived,
+                  turnovers: valPer, fouls_committed: valFc, fouls_drawn: valFr,
                   points: valPts
                 });
 
@@ -1302,7 +1306,8 @@ async _openEditForm(gameId, container) {
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="def_reb" value="${valRd}" /></td>
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="assists" value="${valAst}" /></td>
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="steals" value="${valRob}" /></td>
-                    <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="blocks_made" value="${valTap}" /></td>
+                    <td style="padding: 2px;"><input type="number" min="0" step="1" class="st-input" data-player-id="${p.id}" data-field="blocks_made" value="${valTap}" /></td>
+                    <td style="padding: 2px;"><input type="number" min="0" step="1" class="st-input" data-player-id="${p.id}" data-field="blocks_received" aria-label="Tapones recibidos" value="${valTapReceived}" /></td>
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="turnovers" value="${valPer}" /></td>
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_committed" value="${valFc}" /></td>
                     <td style="padding: 2px;"><input type="number" class="st-input" data-player-id="${p.id}" data-field="fouls_drawn" value="${valFr}" /></td>
