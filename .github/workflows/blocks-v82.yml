@@ -1,0 +1,30 @@
+name: IQBasket V82 Received Blocks Integrity
+on:
+  push:
+    branches: ["fix/v82-blocks-received-safe-capture-20261107"]
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  received-blocks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node --check services/DataStore.js
+      - run: node --check views/GameBoxScoreBaseView.js
+      - run: node --check views/EasyStatsEntryView.js
+      - run: node --check views/GameLiveEditorView.js
+      - run: node --check views/PlayerStatsView.js
+      - run: node tests/blocks-received-v82.mjs
+      - run: node tests/stats-v81-canonical.mjs
+      - run: node tests/game-minutes-recovery-v63-contract.mjs
+      - run: node tests/boxscore-final-acta-freshness-v47.mjs
+      - run: node tests/match-xlsx-export-v60.mjs
+      - run: npm run build
