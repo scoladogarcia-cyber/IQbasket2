@@ -39,6 +39,7 @@ export class TrainingCompleteEditV54View extends TrainingView {
     this.intelligencePanel=new TrainingIntelligencePanelV58({
       client:this.supabase,
       can:permission=>this._can(permission),
+      canEditSession:session=>this._canEditTrainingSession(session),
       getSessions:()=>this.sessions||[],
       getTeamSeasonId:()=>this.teamSeasonId,
       onRefresh:()=>this.render(this.containerId,this.teamId)
