@@ -667,14 +667,17 @@ export class TranslationStore {
     if(!key)return "";
     const params=typeof fallbackOrParams==="object"&&fallbackOrParams!==null?fallbackOrParams:{};
     const fallback=typeof fallbackOrParams==="string"?fallbackOrParams:maybeFallback;
-    const current=this.dictionaries[this.normalizeLang(this.currentLang)]||{};
+    // I18nService is the single source of truth even when legacy callers use setLocale directly.
+    const locale=this.normalizeLang(I18n.getLocale?.() || this.currentLang);
+    this.currentLang=locale;
+    const current=this.dictionaries[locale]||{};
     const spanish=this.dictionaries.es||{};
     const value=current[key]||spanish[key]||fallback||key;
     return interpolateLanguageV80(value,params);
   }
 
   static getDictionary(langCode=null) {
-    return this.dictionaries[this.normalizeLang(langCode||this.currentLang)];
+    return this.dictionaries[this.normalizeLang(langCode||I18n.getLocale?.()||this.currentLang)];
   }
 
   /**
@@ -703,6 +706,7 @@ export class TranslationStore {
         ...this.defaultDictionary[code],...BUNDLED_LANGUAGE_CATALOG_V80[code]
       };
     }
+    this.currentLang=this.normalizeLang(I18n.getLocale?.()||this.currentLang);
     I18n.setLocale(this.currentLang);
   }
 }
