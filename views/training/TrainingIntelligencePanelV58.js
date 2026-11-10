@@ -139,13 +139,13 @@ export class TrainingIntelligencePanelV58 {
         });
         const total=Object.values(allocations).reduce((sum,value)=>sum+value,0);
         const duration=Number(row.dataset.sessionDuration||0);
-        if(duration>0&&total>duration){globalThis.alert?.("La suma de minutos por foco no puede superar la duración de la sesión.");return;}
+        if(duration>0&&total>duration){globalThis.alert?.(this.t("training.v58.errorDuration","Los minutos por foco no pueden superar la duración de la sesión."));return;}
         button.disabled=true;
         try{
           await this.service.setFocusAllocation({sessionId:row.dataset.sessionId,teamSeasonId:row.dataset.teamSeasonId,allocations});
           await this.onRefresh();
         }catch(error){
-          globalThis.alert?.("No se pudo guardar la dosis: "+String(error?.message||error));
+          globalThis.alert?.(this.t("training.v58.errorDose","No se pudo guardar la dosis: {error}",{error:String(error?.message||error)}));
           button.disabled=false;
         }
       });
@@ -154,13 +154,13 @@ export class TrainingIntelligencePanelV58 {
       button.addEventListener("click",async()=>{
         const row=button.closest(".v58-class-row"); if(!row)return;
         const codes=[...row.querySelectorAll('input[type="checkbox"]:checked')].map(input=>input.value);
-        if(!codes.length){globalThis.alert?.("Selecciona al menos un foco.");return;}
+        if(!codes.length){globalThis.alert?.(this.t("training.v58.errorFocus","Selecciona al menos un foco."));return;}
         button.disabled=true;
         try{
           await this.service.setFocusCodes({sessionId:row.dataset.sessionId,teamSeasonId:row.dataset.teamSeasonId,focusCodes:codes});
           await this.onRefresh();
         }catch(error){
-          globalThis.alert?.("No se pudo clasificar: "+String(error?.message||error));
+          globalThis.alert?.(this.t("training.v58.errorClassify","No se pudo clasificar: {error}",{error:String(error?.message||error)}));
           button.disabled=false;
         }
       });
