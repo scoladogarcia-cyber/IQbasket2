@@ -40,7 +40,7 @@ for (const marker of [
   "p360-training-notes",
   "p360-clone-training",
   "Duplicar",
-  "Informe temporada",
+  "training.ui.reportSeason",
   "CSV"
 ]) assert.ok(view.includes(marker), `Missing V55 UI marker: ${marker}`);
 
