@@ -710,9 +710,10 @@ export class TrainingView {
       history.querySelector(".p360-v79-validate").addEventListener("click",async event=>{
         const ids=selected().map(input=>input.closest(".p360-v79-history-row").dataset.sessionId);
         const candidates=ids.map(id=>this.sessions.find(s=>String(s.id)===id)).filter(s=>
-          this._canEditTrainingSession(s)&&String(s.status).toUpperCase()==="PLANNED"&&s.session_date<=localIsoDate());
+          this._canEditTrainingSession(s)&&String(s.status).toUpperCase()==="PLANNED"&&s.session_date<=localIsoDate()
+          && this._validationIssues(s).length===0);
         if(!candidates.length)return;
-        if(!confirm(this.t("training.history.validateConfirm","¿Validar {count} entrenamientos? El servidor revisará asistencia y minutos de cada sesión. Las sesiones incorrectas permanecerán pendientes.",{count:candidates.length})))return;
+        if(!confirm(this.t("training.validation.confirm","¿Validar {count} entrenamientos con asistencia y minutos comprobados?",{count:candidates.length})))return;
         const button=event.currentTarget,status=history.querySelector(".p360-v79-batch-status");
         button.disabled=true;
         const failures=[];let succeeded=0;
@@ -723,12 +724,15 @@ export class TrainingView {
             });
             if(error)throw error;
             succeeded++;
-          }catch(error){failures.push((session.session_date||"—")+" · "+(session.title||"Entrenamiento")+": "+String(error.message||error));}
+          }catch(error){
+            failures.push({date:session.session_date,title:session.title,code:trainingValidationErrorCodeV83(error)});
+          }
         }
-        status.textContent=this.t("training.history.validateResult","{passed} validados; {failed} pendientes con errores.",{passed:succeeded,failed:failures.length})+" "+failures.slice(0,5).join(" | ");
-        // The individual RPC is not an atomic batch; report partial success honestly.
-        if(failures.length)alert(status.textContent);
+        this.trainingValidationFeedback={passed:succeeded,details:failures};
+        status.textContent=this._validationFeedbackCopy();
+        // These RPC calls are not an atomic batch: preserve partial-success evidence.
         await this.render(this.containerId,this.teamId);
+        if(failures.length)alert(this._validationFeedbackCopy());
       });
       refresh();
     }
@@ -2564,28 +2568,47 @@ export class TrainingView {
     }
 
     this._delegatedClickHandler = async event => {
+      if (event.target.closest(".p360-overview-filter-pending")) {
+        this.trainingHistoryFilters.status = "PENDING";
+        this.trainingHistoryPage = 1;
+        this.trainingDetailId = null;
+        await this.render(this.containerId, this.teamId);
+        document.getElementById("p360-training-history")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+        return;
+      }
       const validateTraining = event.target.closest(".p360-validation-toggle");
       if (validateTraining) {
         const session = (this.sessions||[]).find(x=>String(x.id)===String(validateTraining.dataset.sessionId));
         if (!this._canEditTrainingSession(session)) return;
-        const desired = validateTraining.dataset.validate === 'true';
+        const desired = validateTraining.dataset.validate === "true";
+        if (desired) {
+          const issues = this._validationIssues(session);
+          if (issues.length) {
+            alert(this.t("training.validation.issues","Antes de validar: {issues}",{issues:this._validationIssueCopy(issues)}));
+            this.trainingDetailId = String(session.id);
+            const attendance = container.querySelector(".p360-attendance-panel");
+            if (attendance) attendance.open = true;
+            return;
+          }
+        }
         if (!confirm(desired
-          ? 'Confirma asistencia y minutos individuales antes de validar. ¿Validar entrenamiento?'
-          : '¿Reabrir la sesión para corregir los datos?')) return;
+          ? this.t("training.validation.singleConfirm","¿Validar este entrenamiento con asistencia y minutos confirmados?")
+          : this.t("training.validation.reopenConfirm","¿Reabrir la sesión para corregir los datos?"))) return;
         validateTraining.disabled = true;
         try {
-          const {error}=await this.supabase.rpc('iq_v65_set_training_validation',{
+          const {error}=await this.supabase.rpc("iq_v65_set_training_validation",{
             p_session_id:session.id,p_team_season_id:session.team_season_id,p_validate:desired
           });
-          if(error) throw error;
+          if(error)throw error;
+          this.trainingValidationFeedback={passed:desired?1:0,details:[]};
           await this.render(this.containerId,this.teamId);
         } catch(error) {
           validateTraining.disabled=false;
-          alert('No se puede cambiar el estado: '+(error?.message||error));
+          alert(this._validationIssueCopy([{code:trainingValidationErrorCodeV83(error),count:1}]));
         }
         return;
       }
-      const openTraining = event.target.closest(".p360-training-list-item");
+            const openTraining = event.target.closest(".p360-training-list-item");
       if (openTraining) {
         this.trainingDetailId = openTraining.dataset.sessionId;
         this.editingTrainingId = null;
@@ -2838,6 +2861,7 @@ export class TrainingView {
         );
         if (!session || !planned.length) return;
 
+        if (!confirm(this.t("training.validation.allPresentConfirm", "¿Confirmas que todos los participantes pendientes realmente asistieron durante la sesión completa?"))) return;
         confirmPlanned.disabled = true;
         try {
           const duration = this._sessionDuration(session);
@@ -3197,11 +3221,8 @@ export class TrainingView {
 
         <header class="p360-hero">
           <div>
-            <h1>Player 360 · Entrenamiento</h1>
-            <p>
-              Registra qué se entrena, quién participa y qué carga genera.
-              El desarrollo externo se mantiene separado para conservar la procedencia real de cada mejora.
-            </p>
+            <h1>${escapeHtml(this.t("training.ui.heroTitle", "Player 360 · Entrenamientos"))}</h1>
+            <p>${escapeHtml(this.t("training.ui.heroSubtitle", "Planifica, confirma la asistencia real y revisa el progreso."))}</p>
           </div>
           <span class="p360-context-pill">
             ${escapeHtml(teamName)} · ${escapeHtml(seasonName)}
@@ -3228,7 +3249,7 @@ export class TrainingView {
             role="tab"
             aria-selected="${this.activeTab !== "external"}"
           >
-            🏀 Entrenamientos
+            🏀 ${escapeHtml(this.t("training.ui.tabTraining", "Entrenamientos"))}
           </button>
 
           ${this._can(Permission.VIEW_EXTERNAL_DEVELOPMENT) ? `
@@ -3239,7 +3260,7 @@ export class TrainingView {
               role="tab"
               aria-selected="${this.activeTab === "external"}"
             >
-              ⚡ Desarrollo externo
+              ⚡ ${escapeHtml(this.t("training.ui.tabExternal", "Desarrollo externo"))}
             </button>
           ` : ""}
         </div>
