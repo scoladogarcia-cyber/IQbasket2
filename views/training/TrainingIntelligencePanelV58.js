@@ -7,6 +7,8 @@
 import { DataStore } from "../../services/DataStore.js";
 import { TranslationStore } from "../../services/TranslationStore.js";
 import { I18n } from "../../services/I18nService.js";
+import { trainingIntelligenceV85 } from "../../locales/trainingIntelligenceV85.js";
+import { interpolateLanguageV80 } from "../../services/i18n/BundledLanguageCatalogV80.js";
 import { Permission } from "../../security/PermissionService.js";
 import { TRAINING_FOCUS_OPTIONS, TRAINING_FOCUS_LABELS } from "../../config/trainingEditV54.config.js";
 import { buildTrainingIntelligence } from "../../domain/player360/TrainingIntelligenceAnalytics.js";
@@ -30,10 +32,16 @@ export class TrainingIntelligencePanelV58 {
     this.onRefresh=onRefresh;
   }
 
-  /** Resolve UI copy from the versioned product catalog. */
+  /**
+   * Resolve feature-specific copy from its lazy-loaded catalog.
+   * Shared navigation/taxonomy strings still use the central TranslationStore.
+   * This keeps the initial mobile JS bundle below its strict size budget.
+   */
   t(key, fallback="", params={}) {
-    const value=TranslationStore.t(key,params,fallback);
-    return value && value!==key ? value : fallback || key;
+    const lang=I18n.getLocale?.() || "es";
+    const featureValue=trainingIntelligenceV85[lang]?.[key] ?? trainingIntelligenceV85.es[key];
+    const value=featureValue ?? TranslationStore.t(key,params,fallback);
+    return interpolateLanguageV80(value && value!==key ? value : fallback || key,params);
   }
 
   _focusLabel(code) {
