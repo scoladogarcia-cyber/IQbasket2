@@ -26,7 +26,7 @@ export class AuthView {
   }
 
   render(params = {}) {
-    const currentLang = localStorage.getItem("iq_lang") || "es";
+    const currentLang = I18n.getLocale?.() || "es";
     const errorMessage = params.errorMessage 
       ? (I18n.t("auth.error", {}, params.errorMessage) || params.errorMessage)
       : "";
