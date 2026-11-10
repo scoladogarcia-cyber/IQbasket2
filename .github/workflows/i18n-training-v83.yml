@@ -1,0 +1,42 @@
+name: IQBasket V83 Mobile Languages and Training
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "views/TrainingView.js"
+      - "views/LayoutView.js"
+      - "views/AuthView.js"
+      - "services/TranslationStore.js"
+      - "services/I18nService.js"
+      - "services/i18n/**"
+      - "services/player360/Training*V83.js"
+      - "locales/trainingOperationalV83.js"
+      - "styles/training-overview-v83.css"
+      - "index.html"
+      - "index.js"
+      - "tests/i18n-training-v83-contract.mjs"
+      - ".github/workflows/i18n-training-v83.yml"
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node --check views/TrainingView.js
+      - run: node --check views/LayoutView.js
+      - run: node --check services/I18nService.js
+      - run: node --check services/TranslationStore.js
+      - run: node --check services/player360/TrainingValidationPreflightV83.js
+      - run: node --check services/player360/TrainingOverviewAnalyticsV83.js
+      - run: node tests/i18n-training-v83-contract.mjs
+      - run: node tests/i18n-v80-bundled-contract.mjs
+      - run: node tests/training-v79-history-contract.mjs
+      - run: node tests/training-v65-contract.mjs
+      - run: npm run build
