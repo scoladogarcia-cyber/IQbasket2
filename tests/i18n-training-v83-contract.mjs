@@ -71,6 +71,9 @@ assert.equal(overview.sessionMinutesValidated, 90);
 assert.equal(overview.playerMinutesValidated, 90, "Planned minutes must never be credited");
 assert.equal(overview.attendancePct, 50);
 assert.equal(overview.focusCoveragePct, 100);
+assert.equal(overview.unclassifiedValidated, 0);
+assert.equal(buildTrainingOverviewV83([base, ready, completed], today, () => false).ready, 0, "Read-only seasons must not be actionable");
+assert.equal(buildTrainingOverviewV83([base, ready, completed], today, () => false).readonlyPending, 2);
 assert.equal(overview.weeks.reduce((sum, week) => sum + week.validated, 0), 1);
 
 const source = readFileSync(new URL("../views/TrainingView.js", import.meta.url), "utf8");
