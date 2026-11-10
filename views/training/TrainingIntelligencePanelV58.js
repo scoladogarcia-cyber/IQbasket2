@@ -18,9 +18,11 @@ function playerName(id){
 }
 
 export class TrainingIntelligencePanelV58 {
-  constructor({client=null,can=()=>false,getSessions=()=>[],getTeamSeasonId=()=>null,onRefresh=async()=>{}}={}){
+  constructor({client=null,can=()=>false,canEditSession=()=>false,getSessions=()=>[],getTeamSeasonId=()=>null,onRefresh=async()=>{}}={}){
     this.service=new TrainingIntelligenceService(client);
     this.can=can;
+    // Historical sessions may belong to a different season with different permissions.
+    this.canEditSession=canEditSession;
     this.getSessions=getSessions;
     this.getTeamSeasonId=getTeamSeasonId;
     this.onRefresh=onRefresh;
@@ -31,12 +33,12 @@ export class TrainingIntelligencePanelV58 {
   _classificationRows(analytics){
     if(!this.can(Permission.EDIT_TRAINING)) return "";
     const ids=new Set(analytics.unclassifiedSessionIds||[]);
-    const sessions=(this.getSessions()||[]).filter(s=>ids.has(String(s.id))).slice(0,12);
+    const sessions=(this.getSessions()||[]).filter(s=>ids.has(String(s.id)) && this.canEditSession(s)).slice(0,12);
     if(!sessions.length) return "";
-    return '<details class="v58-classifier"><summary>Clasificar histórico · '+ids.size+' sesiones pendientes</summary>'+
+    return '<details class="v58-classifier"><summary>Clasificar histórico · '+sessions.length+' sesiones editables</summary>'+
       '<p>Solo se guardan los focos que confirmes; IQBasket no inventa clasificaciones históricas.</p>'+
       '<div class="v58-classifier-list">'+sessions.map(session=>
-        '<div class="v58-class-row" data-session-id="'+esc(session.id)+'">'+
+        '<div class="v58-class-row" data-session-id="'+esc(session.id)+'" data-team-season-id="'+esc(session.team_season_id)+'">'+
           '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||"Entrenamiento")+'</span></div>'+
           '<div class="v58-focus-mini">'+TRAINING_FOCUS_OPTIONS.map(item=>
             '<label><input type="checkbox" value="'+esc(item.code)+'"><span>'+esc(item.label)+'</span></label>'
@@ -49,7 +51,7 @@ export class TrainingIntelligencePanelV58 {
   _allocationRows(){
     if(!this.can(Permission.EDIT_TRAINING)) return "";
     const sessions=(this.getSessions()||[])
-      .filter(s=>Array.isArray(s?.metadata?.training_focus_codes)&&s.metadata.training_focus_codes.length)
+      .filter(s=>this.canEditSession(s) && Array.isArray(s?.metadata?.training_focus_codes)&&s.metadata.training_focus_codes.length)
       .slice(0,12);
     if(!sessions.length)return "";
     return '<details class="v58-classifier v58-dose"><summary>Dosis por foco · opcional</summary>'+
@@ -57,7 +59,7 @@ export class TrainingIntelligencePanelV58 {
       '<div class="v58-classifier-list">'+sessions.map(session=>{
         const codes=session.metadata.training_focus_codes||[];
         const allocation=session.metadata.training_focus_minutes||{};
-        return '<div class="v58-class-row v58-dose-row" data-session-id="'+esc(session.id)+'" data-session-duration="'+esc(session.duration_minutes||0)+'">'+
+        return '<div class="v58-class-row v58-dose-row" data-session-id="'+esc(session.id)+'" data-team-season-id="'+esc(session.team_season_id)+'" data-session-duration="'+esc(session.duration_minutes||0)+'">'+
           '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||"Entrenamiento")+' · '+fmt(session.duration_minutes)+' min</span></div>'+
           '<div class="v58-dose-inputs">'+codes.map(code=>
             '<label><span>'+esc(this._focusLabel(code))+'</span><input type="number" min="0" max="'+esc(session.duration_minutes||600)+'" step="1" inputmode="numeric" data-focus-code="'+esc(code)+'" value="'+esc(allocation[code]??"")+'" placeholder="min"></label>'
@@ -129,7 +131,7 @@ export class TrainingIntelligencePanelV58 {
         if(duration>0&&total>duration){globalThis.alert?.("La suma de minutos por foco no puede superar la duración de la sesión.");return;}
         button.disabled=true;
         try{
-          await this.service.setFocusAllocation({sessionId:row.dataset.sessionId,teamSeasonId:this.getTeamSeasonId(),allocations});
+          await this.service.setFocusAllocation({sessionId:row.dataset.sessionId,teamSeasonId:row.dataset.teamSeasonId,allocations});
           await this.onRefresh();
         }catch(error){
           globalThis.alert?.("No se pudo guardar la dosis: "+String(error?.message||error));
@@ -144,7 +146,7 @@ export class TrainingIntelligencePanelV58 {
         if(!codes.length){globalThis.alert?.("Selecciona al menos un foco.");return;}
         button.disabled=true;
         try{
-          await this.service.setFocusCodes({sessionId:row.dataset.sessionId,teamSeasonId:this.getTeamSeasonId(),focusCodes:codes});
+          await this.service.setFocusCodes({sessionId:row.dataset.sessionId,teamSeasonId:row.dataset.teamSeasonId,focusCodes:codes});
           await this.onRefresh();
         }catch(error){
           globalThis.alert?.("No se pudo clasificar: "+String(error?.message||error));
