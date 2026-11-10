@@ -98,25 +98,25 @@ export class TrainingIntelligencePanelV58 {
     ).join("");
 
     return '<section class="v58-training-intelligence" aria-label="Training Intelligence">'+
-      '<div class="v58-head"><div><span>IQBASKET · TRAINING INTELLIGENCE</span><h2>Qué entrenamos, cuánto y quién recibe la exposición</h2></div>'+
-      '<b>'+fmt(a.totals.focusCoveragePct,1)+'% clasificado</b></div>'+
+      '<div class="v58-head"><div><span>IQBASKET · TRAINING INTELLIGENCE</span><h2>'+esc(this.t("training.v58.heading","Qué entrenamos, cuánto y quién recibe la exposición"))+'</h2></div>'+
+      '<b>'+esc(this.t("training.v58.classified","{percent}% clasificado",{percent:fmt(a.totals.focusCoveragePct,1)}))+'</b></div>'+
       '<div class="v58-kpis">'+
-        '<article><span>Sesiones</span><strong>'+fmt(a.totals.sessions)+'</strong></article>'+
-        '<article><span>Horas</span><strong>'+fmt((a.totals.sessionMinutes||0)/60,1)+'</strong></article>'+
-        '<article><span>Asistencia</span><strong>'+fmt(a.totals.attendancePct,1)+'%</strong></article>'+
-        '<article><span>RPE medio</span><strong>'+fmt(a.totals.avgRpe,1)+'</strong></article>'+
-        '<article><span>Carga acumulada</span><strong>'+fmt(a.totals.totalLoad)+'</strong></article>'+
-        '<article><span>Sin clasificar</span><strong>'+fmt((a.unclassifiedSessionIds||[]).length)+'</strong></article>'+
-        '<article><span>Dosis explícita</span><strong>'+fmt(a.totals.explicitFocusAllocationCoveragePct,1)+'%</strong></article>'+
-        '<article><span>Carga 7 d</span><strong>'+fmt(a.rolling?.last7?.totalLoad)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.sessions","Sesiones"))+'</span><strong>'+fmt(a.totals.sessions)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.hours","Horas"))+'</span><strong>'+fmt((a.totals.sessionMinutes||0)/60,1)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.attendance","Asistencia"))+'</span><strong>'+fmt(a.totals.attendancePct,1)+'%</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.avgRpe","RPE medio"))+'</span><strong>'+fmt(a.totals.avgRpe,1)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.totalLoad","Carga acumulada"))+'</span><strong>'+fmt(a.totals.totalLoad)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.unclassified","Sin clasificar"))+'</span><strong>'+fmt((a.unclassifiedSessionIds||[]).length)+'</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.explicitDose","Dosis explícita"))+'</span><strong>'+fmt(a.totals.explicitFocusAllocationCoveragePct,1)+'%</strong></article>'+
+        '<article><span>'+esc(this.t("training.v58.load7","Carga 7 d"))+'</span><strong>'+fmt(a.rolling?.last7?.totalLoad)+'</strong></article>'+
       '</div>'+
       '<div class="v58-focus-grid">'+focusCards+'</div>'+
-      '<details class="v58-table-block" open><summary>Jugadores</summary><div class="v58-scroll"><table><thead><tr><th>Jugador</th><th>Asistencia</th><th>Min</th><th>RPE</th><th>Carga</th></tr></thead><tbody>'+
-        (playerRows||'<tr><td colspan="5">Sin datos.</td></tr>')+'</tbody></table></div></details>'+
-      '<details class="v58-table-block"><summary>Últimas semanas</summary><div class="v58-scroll"><table><thead><tr><th>Semana</th><th>Ses.</th><th>Min sesión</th><th>RPE</th><th>Carga</th></tr></thead><tbody>'+
-        (weekRows||'<tr><td colspan="5">Sin datos.</td></tr>')+'</tbody></table></div></details>'+
-      '<p class="v58-method">La dosis de foco usa minutos explícitos cuando el entrenador los registra; en caso contrario mantiene la exposición por sesión. Las asociaciones son descriptivas y no demuestran causalidad.</p>'+
-      '<div class="v58-window-note"><strong>Ventanas:</strong> 7 d · '+fmt(a.rolling?.last7?.sessionMinutes)+' min sesión · '+fmt(a.rolling?.last7?.totalLoad)+' carga &nbsp;|&nbsp; 14 d · '+fmt(a.rolling?.last14?.sessionMinutes)+' min &nbsp;|&nbsp; 28 d · '+fmt(a.rolling?.last28?.sessionMinutes)+' min · '+fmt(a.rolling?.last28?.totalLoad)+' carga</div>'+
+      '<details class="v58-table-block" open><summary>'+esc(this.t("training.v58.players","Jugadores"))+'</summary><div class="v58-scroll"><table><thead><tr><th>'+esc(this.t("training.v58.player","Jugador"))+'</th><th>'+esc(this.t("training.v58.attendance","Asistencia"))+'</th><th>'+esc(this.t("training.v58.minutes","Min"))+'</th><th>RPE</th><th>'+esc(this.t("training.v58.load","Carga"))+'</th></tr></thead><tbody>'+
+        (playerRows||'<tr><td colspan="5">'+esc(this.t("training.v58.noData","Sin datos."))+'</td></tr>')+'</tbody></table></div></details>'+
+      '<details class="v58-table-block"><summary>'+esc(this.t("training.v58.latestWeeks","Últimas semanas"))+'</summary><div class="v58-scroll"><table><thead><tr><th>'+esc(this.t("training.v58.week","Semana"))+'</th><th>'+esc(this.t("training.v58.sessionAbbr","Ses."))+'</th><th>'+esc(this.t("training.v58.sessionMinutes","Min sesión"))+'</th><th>RPE</th><th>'+esc(this.t("training.v58.load","Carga"))+'</th></tr></thead><tbody>'+
+        (weekRows||'<tr><td colspan="5">'+esc(this.t("training.v58.noData","Sin datos."))+'</td></tr>')+'</tbody></table></div></details>'+
+      '<p class="v58-method">'+esc(this.t("training.v58.method","La exposición es descriptiva, no causal."))+'</p>'+
+      '<div class="v58-window-note"><strong>'+esc(this.t("training.v58.windows","Ventanas"))+':</strong> 7 d · '+fmt(a.rolling?.last7?.sessionMinutes)+' '+esc(this.t("training.v58.sessionMinutesShort","min sesión"))+' · '+fmt(a.rolling?.last7?.totalLoad)+' carga &nbsp;|&nbsp; 14 d · '+fmt(a.rolling?.last14?.sessionMinutes)+' min &nbsp;|&nbsp; 28 d · '+fmt(a.rolling?.last28?.sessionMinutes)+' min · '+fmt(a.rolling?.last28?.totalLoad)+' carga</div>'+
       this._classificationRows(a)+this._allocationRows()+
     '</section>'+this.styles();
   }
