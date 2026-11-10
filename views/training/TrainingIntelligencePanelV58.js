@@ -5,13 +5,15 @@
  */
 
 import { DataStore } from "../../services/DataStore.js";
+import { TranslationStore } from "../../services/TranslationStore.js";
+import { I18n } from "../../services/I18nService.js";
 import { Permission } from "../../security/PermissionService.js";
 import { TRAINING_FOCUS_OPTIONS, TRAINING_FOCUS_LABELS } from "../../config/trainingEditV54.config.js";
 import { buildTrainingIntelligence } from "../../domain/player360/TrainingIntelligenceAnalytics.js";
 import { TrainingIntelligenceService } from "../../services/player360/TrainingIntelligenceService.js";
 
 function esc(value=""){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function fmt(value,digits=0){const n=Number(value);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:digits}):"—";}
+function fmt(value,digits=0){const n=Number(value);return Number.isFinite(n)?n.toLocaleString(I18n.getLocale?.() || "es",{maximumFractionDigits:digits}):"—";}
 function playerName(id){
   const p=DataStore.getPlayerById?.(id)||{};
   return p.name||[p.first_name,p.last_name].filter(Boolean).join(" ")||"Jugador";
@@ -28,22 +30,31 @@ export class TrainingIntelligencePanelV58 {
     this.onRefresh=onRefresh;
   }
 
-  _focusLabel(code){return TRAINING_FOCUS_LABELS[String(code||"").toUpperCase()]||String(code||"");}
+  /** Resolve UI copy from the versioned product catalog. */
+  t(key, fallback="", params={}) {
+    const value=TranslationStore.t(key,params,fallback);
+    return value && value!==key ? value : fallback || key;
+  }
+
+  _focusLabel(code) {
+    const normalized=String(code||"").toUpperCase();
+    return this.t("training.focus."+normalized,TRAINING_FOCUS_LABELS[normalized]||normalized);
+  }
 
   _classificationRows(analytics){
     if(!this.can(Permission.EDIT_TRAINING)) return "";
     const ids=new Set(analytics.unclassifiedSessionIds||[]);
     const sessions=(this.getSessions()||[]).filter(s=>ids.has(String(s.id)) && this.canEditSession(s)).slice(0,12);
     if(!sessions.length) return "";
-    return '<details class="v58-classifier"><summary>Clasificar histórico · '+sessions.length+' sesiones editables</summary>'+
-      '<p>Solo se guardan los focos que confirmes; IQBasket no inventa clasificaciones históricas.</p>'+
+    return '<details class="v58-classifier"><summary>'+esc(this.t("training.v58.classifyTitle","Clasificar histórico · {count} sesiones editables",{count:sessions.length}))+'</summary>'+
+      '<p>'+esc(this.t("training.v58.classifyHelp","Solo se guardan los focos confirmados."))+'</p>'+
       '<div class="v58-classifier-list">'+sessions.map(session=>
         '<div class="v58-class-row" data-session-id="'+esc(session.id)+'" data-team-season-id="'+esc(session.team_season_id)+'">'+
-          '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||"Entrenamiento")+'</span></div>'+
+          '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||this.t("training.v58.fallbackTraining","Entrenamiento"))+'</span></div>'+
           '<div class="v58-focus-mini">'+TRAINING_FOCUS_OPTIONS.map(item=>
-            '<label><input type="checkbox" value="'+esc(item.code)+'"><span>'+esc(item.label)+'</span></label>'
+            '<label><input type="checkbox" value="'+esc(item.code)+'"><span>'+esc(this._focusLabel(item.code))+'</span></label>'
           ).join("")+'</div>'+
-          '<button type="button" data-v58-save-focus>Guardar</button>'+
+          '<button type="button" data-v58-save-focus>'+esc(this.t("training.v58.save","Guardar"))+'</button>'+
         '</div>'
       ).join("")+'</div></details>';
   }
@@ -54,17 +65,17 @@ export class TrainingIntelligencePanelV58 {
       .filter(s=>this.canEditSession(s) && Array.isArray(s?.metadata?.training_focus_codes)&&s.metadata.training_focus_codes.length)
       .slice(0,12);
     if(!sessions.length)return "";
-    return '<details class="v58-classifier v58-dose"><summary>Dosis por foco · opcional</summary>'+
-      '<p>Si quieres más precisión analítica, reparte minutos aproximados entre los focos. La suma no puede superar la duración de la sesión. Si lo dejas vacío, se conserva la semántica ligera por exposición.</p>'+
+    return '<details class="v58-classifier v58-dose"><summary>'+esc(this.t("training.v58.allocationTitle","Dosis por foco · opcional"))+'</summary>'+
+      '<p>'+esc(this.t("training.v58.allocationHelp","Los minutos por foco son opcionales."))+'</p>'+
       '<div class="v58-classifier-list">'+sessions.map(session=>{
         const codes=session.metadata.training_focus_codes||[];
         const allocation=session.metadata.training_focus_minutes||{};
         return '<div class="v58-class-row v58-dose-row" data-session-id="'+esc(session.id)+'" data-team-season-id="'+esc(session.team_season_id)+'" data-session-duration="'+esc(session.duration_minutes||0)+'">'+
-          '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||"Entrenamiento")+' · '+fmt(session.duration_minutes)+' min</span></div>'+
+          '<div><strong>'+esc(session.session_date||"")+'</strong><span>'+esc(session.title||this.t("training.v58.fallbackTraining","Entrenamiento"))+' · '+fmt(session.duration_minutes)+' min</span></div>'+
           '<div class="v58-dose-inputs">'+codes.map(code=>
             '<label><span>'+esc(this._focusLabel(code))+'</span><input type="number" min="0" max="'+esc(session.duration_minutes||600)+'" step="1" inputmode="numeric" data-focus-code="'+esc(code)+'" value="'+esc(allocation[code]??"")+'" placeholder="min"></label>'
           ).join("")+'</div>'+
-          '<button type="button" data-v58-save-dose>Guardar dosis</button>'+
+          '<button type="button" data-v58-save-dose>'+esc(this.t("training.v58.allocationSave","Guardar dosis"))+'</button>'+
         '</div>';
       }).join("")+'</div></details>';
   }
@@ -74,8 +85,8 @@ export class TrainingIntelligencePanelV58 {
     const a=buildTrainingIntelligence(this.getSessions()||[]);
     const focusCards=(a.focuses||[]).map(f=>
       '<div class="v58-focus-card"><span>'+esc(this._focusLabel(f.code))+'</span><strong>'+fmt(f.sessions)+'</strong>'+
-      '<small>'+fmt(f.focusSessionMinutes)+' min de sesiones con este foco</small></div>'
-    ).join("") || '<div class="v58-empty">Aún no hay focos clasificados.</div>';
+      '<small>'+esc(this.t("training.v58.focusMinutes","{minutes} min de sesiones con este foco",{minutes:fmt(f.focusSessionMinutes)}))+'</small></div>'
+    ).join("") || '<div class="v58-empty">'+esc(this.t("training.v58.focusEmpty","Aún no hay focos clasificados."))+'</div>';
 
     const playerRows=(a.players||[]).slice(0,20).map(p=>
       '<tr><td>'+esc(playerName(p.playerId))+'</td><td>'+fmt(p.attendancePct,1)+'%</td><td>'+fmt(p.participatedMinutes)+
