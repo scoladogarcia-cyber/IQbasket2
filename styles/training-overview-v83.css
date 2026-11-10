@@ -1,0 +1,30 @@
+/**
+ * Training overview V83. Purely presentational; data and eligibility are server-scoped.
+ */
+.p360-training-overview{display:grid;gap:14px;margin-bottom:20px}
+.p360-training-overview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.p360-training-overview-head h2{font-size:21px;font-weight:800;color:#0f172a;margin:0 0 6px}
+.p360-training-overview-head p{font-size:13px;color:#475569;margin:0;max-width:720px;line-height:1.5}
+.p360-overview-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.p360-overview-kpis .p360-kpi{border-left:4px solid #cbd5e1}
+.p360-overview-kpis .p360-kpi[data-kind="done"]{border-left-color:#0d9488}
+.p360-overview-kpis .p360-kpi[data-kind="action"]{border-left-color:#ea580c}
+.p360-overview-kpis .p360-kpi[data-kind="review"]{border-left-color:#dc2626}
+.p360-overview-bottom{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px}
+.p360-overview-graph,.p360-overview-actions{background:#fff;border:1px solid #dbe3ee;border-radius:14px;padding:14px;min-width:0}
+.p360-overview-graph h3,.p360-overview-actions h3{margin:0 0 10px;font-size:14px;color:#0f172a}
+.p360-overview-week{display:grid;grid-template-columns:85px minmax(0,1fr) 25px;align-items:center;gap:9px;min-height:27px;font-size:11px;color:#475569}
+.p360-overview-week-track{display:flex;overflow:hidden;background:#f1f5f9;height:13px;border-radius:7px}
+.p360-overview-week-validated{background:#0d9488;height:100%}
+.p360-overview-week-pending{background:#f59e0b;height:100%}
+.p360-overview-week-label{font-variant-numeric:tabular-nums}
+.p360-overview-legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;color:#475569;font-size:11px}
+.p360-overview-legend span::before{content:"";display:inline-block;vertical-align:middle;width:9px;height:9px;border-radius:2px;margin-right:5px;background:#0d9488}
+.p360-overview-legend span:last-child::before{background:#f59e0b}
+.p360-overview-actions ul{margin:0;padding-left:20px;display:grid;gap:8px;font-size:13px;line-height:1.45;color:#334155}
+.p360-overview-note{font-size:11px;color:#64748b;line-height:1.5;margin:2px 0 0}
+.p360-v83-check{display:block;margin-top:3px;font-size:11px;font-weight:600;color:#92400e;line-height:1.35}
+.p360-v83-check[data-ready="true"]{color:#0f766e}
+.p360-v79-batch-status{overflow-wrap:anywhere}
+@media(max-width:900px){.p360-overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.p360-overview-bottom{grid-template-columns:1fr}}
+@media(max-width:480px){.p360-training-overview-head h2{font-size:18px}.p360-overview-kpis .p360-kpi{padding:10px}.p360-overview-kpis .p360-kpi-value{font-size:19px}.p360-overview-week{grid-template-columns:76px minmax(0,1fr) 22px;gap:5px}}
