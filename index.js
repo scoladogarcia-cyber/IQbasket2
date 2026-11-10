@@ -72,7 +72,7 @@ export class IQBasketApp {
    * Genera textos de fallback limpios según el idioma de preferencia.
    */
   _getPreloadFallbackTexts(key) {
-    const lang = (localStorage.getItem("iq_lang") || "es").toLowerCase();
+    const lang = (I18n.getLocale?.() || "es").toLowerCase();
     
     const messages = {
       es: {
