@@ -31,5 +31,5 @@ for(const path of ["services/TranslationStore.js","services/I18nService.js","vie
   assert.doesNotMatch(read(path),/\.from\(["']translations["']\)/,path+" still queries the retired table");
 }
 assert.match(read("views/LanguageSettingsView.js"),/IQBasket_cambios_/);
-assert.match(read("views/TrainingView.js"),/training\.history\.validateResult/);
+assert.match(read("views/TrainingView.js"),/training\.validation\.result/);
 console.log("PASS V80 bundled locales, one fallback, no remote translation calls.");

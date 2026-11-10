@@ -233,7 +233,7 @@ export class LayoutView {
 
     const navGroups = [
       {
-        titleKey: "general",
+        titleKey: "navigation.groups.general",
         defaultTitle: "GENERAL",
         items: [
           { key: "dashboard", labelKey: "dashboard", fallback: "Dashboard", route: "dashboard", svg: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' },
@@ -242,7 +242,7 @@ export class LayoutView {
         ]
       },
       {
-        titleKey: "team",
+        titleKey: "navigation.groups.team",
         defaultTitle: "EQUIPO",
         items: [
           { key: "team", labelKey: "team", fallback: "Equipo", route: "team", svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle>' },
@@ -252,7 +252,7 @@ export class LayoutView {
         ]
       },
       {
-        titleKey: "player360.development",
+        titleKey: "navigation.groups.development",
         defaultTitle: "DESARROLLO",
         items: [
           {
@@ -282,7 +282,7 @@ export class LayoutView {
         ]
       },
       {
-        titleKey: "advanced_stats",
+        titleKey: "navigation.groups.analysis",
         defaultTitle: "ESTADÍSTICA AVANZADA",
         items: [
           { key: "advanced", labelKey: "advanced_stats", fallback: "Stats Avanzadas", route: "advanced", svg: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>' },
@@ -293,7 +293,7 @@ export class LayoutView {
         ]
       },
       {
-        titleKey: "welfare",
+        titleKey: "navigation.groups.welfare",
         defaultTitle: "BIENESTAR",
         items: [
           { key: myPlayerKey, labelKey: myPlayerLabelKey, fallback: myPlayerFallback, route: myPlayerRoute, svg: '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path><path d="M18 5l2 2 3-3"></path>' },
@@ -301,7 +301,7 @@ export class LayoutView {
         ]
       },
       {
-        titleKey: "profile",
+        titleKey: "navigation.groups.account",
         defaultTitle: "MI PERFIL",
         items: [
           { key: "profile", labelKey: "profile", fallback: "Mi Perfil", route: "profile", svg: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>' },
@@ -335,7 +335,7 @@ export class LayoutView {
       <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
         ${t.name} (${t.category || 'Senior'})
       </option>
-    `).join("") : `<option value="" disabled selected>⚠️ Sin equipos asignados</option>`;
+    `).join("") : `<option value="" disabled selected>⚠️ ${LayoutView.t("training.ui.noTeams", "Sin equipos asignados")}</option>`;
 
     const seasonOptionsMarkup = seasonsToRender.length > 0 ? seasonsToRender.map(s => {
       const optionValue = s.team_season_id || s.teamSeasonId || s.name;
@@ -352,7 +352,7 @@ export class LayoutView {
           ${optionLabel}
         </option>
       `;
-    }).join("") : `<option value="" disabled selected>⚠️ Sin temporadas</option>`;
+    }).join("") : `<option value="" disabled selected>⚠️ ${LayoutView.t("training.ui.noSeasons", "Sin temporadas")}</option>`;
 
     const langOptionsMarkup = `
       <option value="es" ${currentLang === 'es' ? 'selected' : ''}>ES</option>
@@ -535,7 +535,7 @@ export class LayoutView {
               </a>
               <a href="#/feedback" class="drawer-item" data-route-key="feedback">
                 <span class="drawer-icon">ðŸ’¬</span>
-                <span>Enviar feedback</span>
+                <span>${LayoutView.t("feedback", "Enviar comentarios")}</span>
               </a>
               <a href="#/settings" class="drawer-item">
                 <span class="drawer-icon">⚙️</span>

@@ -10,6 +10,7 @@ import {fr} from "../../locales/fr.js";
 import {trainingHistoryV80} from "../../locales/trainingHistoryV80.js";
 import {languageAdminV80} from "../../locales/languageAdminV80.js";
 import {trainingDetailV80} from "../../locales/trainingDetailV80.js";
+import {TRAINING_OPERATIONAL_V83} from "../../locales/trainingOperationalV83.js";
 import {I18N_CONFIG} from "../../config/i18n.config.js";
 
 const SUPPORTED = new Set(I18N_CONFIG.supportedLocales.map(item=>item.code));
@@ -36,7 +37,7 @@ export function flattenLanguageDictionaryV80(source) {
 const originals={es,ca,en,fr};
 export const BUNDLED_LANGUAGE_CATALOG_V80=Object.freeze(
   Object.fromEntries(Object.entries(originals).map(([locale,words])=>
-    [locale,Object.freeze({...flattenLanguageDictionaryV80(words),...trainingHistoryV80[locale],...languageAdminV80[locale],...trainingDetailV80[locale]})]))
+    [locale,Object.freeze({...flattenLanguageDictionaryV80(words),...trainingHistoryV80[locale],...languageAdminV80[locale],...trainingDetailV80[locale],...TRAINING_OPERATIONAL_V83[locale]})]))
 );
 export function bundledLanguageDictionaryV80(locale){
   return BUNDLED_LANGUAGE_CATALOG_V80[normalizeBundledLocaleV80(locale)];

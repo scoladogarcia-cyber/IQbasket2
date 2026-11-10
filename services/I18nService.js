@@ -28,6 +28,9 @@ class I18nService {
       this.dictionaries[code]={...words};
       i18n.loadDictionary(code,words);
     }
+    // Reconcile the engine after the dictionaries have been registered.
+    i18n.setLanguage(this.currentLocale);
+    if (typeof document !== "undefined" && document.documentElement) document.documentElement.lang = this.currentLocale;
   }
 
   // =========================================================================
@@ -159,6 +162,8 @@ class I18nService {
     if (typeof localStorage !== "undefined") {
       const storageKey = I18N_CONFIG?.storageKey || "iq_locale";
       localStorage.setItem(storageKey, target);
+      // Compatibility with older language selectors; the canonical key remains iq_locale.
+      localStorage.setItem("iq_lang", target);
 
       const legacyKeys = I18N_CONFIG?.legacyStorageKeys || ["iq_language", "language", "locale"];
       // Old locale aliases remain readable, but no longer multiply stored keys.
