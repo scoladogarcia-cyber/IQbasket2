@@ -13,7 +13,7 @@ import { buildTrainingIntelligence } from "../../domain/player360/TrainingIntell
 import { TrainingIntelligenceService } from "../../services/player360/TrainingIntelligenceService.js";
 
 function esc(value=""){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function fmt(value,digits=0){const n=Number(value);return Number.isFinite(n)?n.toLocaleString(I18n.getLocale?.() || "es",{maximumFractionDigits:digits}):"—";}
+function fmt(value,digits=0){if(value===null||value===undefined||value==="")return "—";const n=Number(value);return Number.isFinite(n)?n.toLocaleString(I18n.getLocale?.() || "es",{maximumFractionDigits:digits}):"—";}
 function playerName(id){
   const p=DataStore.getPlayerById?.(id)||{};
   return p.name||[p.first_name,p.last_name].filter(Boolean).join(" ")||"Jugador";
