@@ -1228,6 +1228,7 @@ export class TrainingView {
     const labels={TEAM:this.t("training.history.team","Equipo"),TECHNIFICATION:this.t("training.history.tech","Tecnificación"),PERSONAL:this.t("training.history.personal","Personal"),COGNITIVE:this.t("training.history.cognitive","Cognitivo")};
     const statusLabel={PLANNED:this.t("training.detail.pending","Pendiente de validación"),COMPLETED:this.t("training.detail.valid","Validado"),CANCELLED:this.t("training.detail.cancel","Cancelado"),ARCHIVED:this.t("training.detail.archived","Archivado")};
     const state=String(session.status||'PLANNED').toUpperCase();
+    const validationIssues=state==='PLANNED'?this._validationIssues(session):[];
     const duration=this._sessionDuration(session);
     const focuses=this._trainingFocusCodes(session);
     const isCurrent=String(session.team_season_id)===String(this.teamSeasonId);
@@ -1296,8 +1297,9 @@ export class TrainingView {
         ${(session.blocks||[]).length?`<div class="p360-v66-blocks">${session.blocks.map(block=>`<div><strong>${escapeHtml(block.title||'Bloque')}</strong><small>${escapeHtml(block.duration_minutes??'—')} min · ${escapeHtml(block.activity_code||'Actividad')}</small></div>`).join('')}</div>`:`<p>${escapeHtml(this.t("training.detail.noBlocks","No hay bloques desglosados en este entrenamiento."))}</p>`}
         ${session.notes?`<p><strong>${escapeHtml(this.t("training.detail.notes","Observaciones"))}:</strong> ${escapeHtml(session.notes)}</p>`:''}
       </section>`}
+      ${canEdit&&state==='PLANNED'&&validationIssues.length?`<p class="p360-v83-check">${escapeHtml(this._validationIssueCopy(validationIssues))}</p>`:""}
       <div class="p360-card-actions p360-v66-bottom-actions">
-        ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?this.t("training.detail.reopen","Reabrir"):this.t("training.detail.validate","Validar entrenamiento")}</button>`:''}
+        ${canEdit&&['PLANNED','COMPLETED'].includes(state)?`<button type="button" class="p360-secondary-btn p360-validation-toggle" data-session-id="${escapeHtml(session.id)}" data-validate="${state==='COMPLETED'?'false':'true'}">${state==='COMPLETED'?this.t("training.detail.reopen","Reabrir"):validationIssues.length?this.t("training.validation.openDetails","Abrir ficha para corregirlo"):this.t("training.detail.validate","Validar entrenamiento")}</button>`:''}
         ${this._can(Permission.EXPORT_REPORT)?`<button type="button" class="p360-secondary-btn p360-export-session-word" data-session-id="${escapeHtml(session.id)}">📄 ${escapeHtml(this.t("training.detail.export","Exportar Word"))}</button>`:''}
         ${canEdit&&this._canForTrainingSession(session,Permission.DELETE_TRAINING)?`<button type="button" class="p360-danger-link p360-archive-session" data-session-id="${escapeHtml(session.id)}">${escapeHtml(this.t("training.detail.archive","Archivar"))}</button>`:''}
       </div>
@@ -1396,14 +1398,14 @@ export class TrainingView {
 
         ${this._renderTrainingForm()}
 
-        <div class="p360-section-head">
+        <div class="p360-section-head" id="p360-training-history">
           <div>
-            <h2>${escapeHtml(this.t("player360.training.history", "training.history.title", "Histórico de entrenamientos"))}</h2>
-            <p>Los focos rápidos permiten documentar la temporada y preparar análisis longitudinales posteriores.</p>
+            <h2>${escapeHtml(this.t("training.history.title", "Histórico de entrenamientos"))}</h2>
+            <p>${escapeHtml(this.t("training.ui.historySubtitle", "Filtra por fecha, tipo, jugador o estado y valida únicamente datos confirmados."))}</p>
           </div>
           ${this._can(Permission.EXPORT_REPORT) && this.sessions.length ? `
             <div class="p360-report-actions">
-              <button type="button" class="p360-secondary-btn p360-export-season-word">📄 Informe temporada</button>
+              <button type="button" class="p360-secondary-btn p360-export-season-word">📄 ${escapeHtml(this.t("training.ui.reportSeason", "Informe de temporada"))}</button>
               <button type="button" class="p360-secondary-btn p360-export-season-csv">📊 CSV</button>
               <button type="button" class="p360-secondary-btn p360-export-evidence-v75">⬇ Plantilla asistencia CSV</button>
               <button type="button" class="p360-secondary-btn p360-preview-evidence-v75">↥ Revisar CSV</button>
@@ -1426,7 +1428,7 @@ export class TrainingView {
                      <label>${escapeHtml(this.t("training.history.from","Desde"))} <input type="date" class="p360-v79-filter" data-filter="from" value="${escapeHtml(this.trainingHistoryFilters.from)}"></label>
                      <label>${escapeHtml(this.t("training.history.to","Hasta"))} <input type="date" class="p360-v79-filter" data-filter="to" value="${escapeHtml(this.trainingHistoryFilters.to)}"></label>
                      <label>${escapeHtml(this.t("training.history.kind","Tipo"))} <select class="p360-v79-filter" data-filter="kind">
-                       ${Object.entries({ALL:"Todos",TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo",UNCLASSIFIED:"Sin clasificar"}).map(([value,label])=>`<option value="${value==='ALL'?'':value}" ${this.trainingHistoryFilters.kind===(value==='ALL'?'':value)?'selected':''}>${label}</option>`).join("")}
+                       ${Object.entries({ALL:this.t("training.ui.kinds.all","Todos"),TEAM:this.t("training.history.team","Equipo"),TECHNIFICATION:this.t("training.history.tech","Tecnificación"),PERSONAL:this.t("training.history.personal","Personal"),COGNITIVE:this.t("training.history.cognitive","Cognitivo"),UNCLASSIFIED:this.t("training.ui.kinds.unclassified","Sin clasificar")}).map(([value,label])=>`<option value="${value==='ALL'?'':value}" ${this.trainingHistoryFilters.kind===(value==='ALL'?'':value)?'selected':''}>${label}</option>`).join("")}
                      </select></label>
                      <label>${escapeHtml(this.t("training.history.player","Jugador"))} <select class="p360-v79-filter" data-filter="player">
                        <option value="">${escapeHtml(this.t("training.history.allPlayers","Todos los jugadores"))}</option>
@@ -1436,25 +1438,28 @@ export class TrainingView {
                        }).sort((a,b)=>a.name.localeCompare(b.name,'es')).map(p=>`<option value="${escapeHtml(p.id)}" ${this.trainingHistoryFilters.player===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join("")}
                      </select></label>
                      <label>${escapeHtml(this.t("training.history.status","Estado"))} <select class="p360-v79-filter" data-filter="status">
-                       ${Object.entries({PENDING:"Pendientes",ALL:"Todos",COMPLETED:"Validados",OTHER:"Otros"}).map(([value,label])=>`<option value="${value}" ${this.trainingHistoryFilters.status===value?'selected':''}>${label}</option>`).join("")}
+                       ${Object.entries({PENDING:this.t("training.ui.status.pending","Pendientes"),ALL:this.t("training.ui.status.all","Todos"),COMPLETED:this.t("training.ui.status.validated","Validados"),OTHER:this.t("training.ui.status.other","Otros")}).map(([value,label])=>`<option value="${value}" ${this.trainingHistoryFilters.status===value?'selected':''}>${label}</option>`).join("")}
                      </select></label>
                    </div>
                    <p class="p360-v79-result-count" role="status"></p>
                    <div class="p360-v79-batch">
                      <label><input type="checkbox" class="p360-v79-select-page"> ${escapeHtml(this.t("training.history.selectPage","Seleccionar entrenamientos pendientes de esta página"))}</label>
                      <button type="button" class="p360-secondary-btn p360-v79-validate" disabled>${escapeHtml(this.t("training.history.validate","Validar seleccionados (0)",{count:0}))}</button>
-                     <span class="p360-v79-batch-status" role="status">${escapeHtml(this.t("training.history.validationHint","Solo se validarán sesiones con asistencia y minutos correctos."))}</span>
+                     <span class="p360-v79-batch-status" role="status">${escapeHtml(this._validationFeedbackCopy())}</span>
                    </div>
                    <div class="p360-training-table" role="list">
                      ${[...this.sessions].sort((a,b)=>String(b.session_date||"").localeCompare(String(a.session_date||""))).map(session=>{
                        const kind=String(session.metadata?.session_kind||"").toUpperCase();
                        const state=String(session.status||"PLANNED").toUpperCase();
                        const pending=state==="PLANNED" && this._canEditTrainingSession(session) && session.session_date<=localIsoDate();
+                       const validationIssues=pending?this._validationIssues(session):[];
+                       const selectable=pending&&validationIssues.length===0;
                        return `<div class="p360-v79-history-row" data-session-id="${escapeHtml(session.id)}" data-date="${escapeHtml(session.session_date||"")}" data-kind="${escapeHtml(kind||"UNCLASSIFIED")}" data-status="${escapeHtml(state)}" data-players="${escapeHtml((session.participants||[]).map(p=>p.player_id).join(","))}">
-                         <input type="checkbox" class="p360-v79-select" aria-label="${escapeHtml(this.t("training.history.selectionLabel","Seleccionar entrenamiento del {date}",{date:session.session_date||""}))}" ${pending?'':'disabled'} />
+                         <input type="checkbox" class="p360-v79-select" aria-label="${escapeHtml(this.t("training.history.selectionLabel","Seleccionar entrenamiento del {date}",{date:session.session_date||""}))}" ${selectable?'':'disabled'} />
                          <button type="button" role="listitem" class="p360-training-list-item" data-session-id="${escapeHtml(session.id)}">
                            <span><strong>${escapeHtml(session.title||this.t("training.history.training","Entrenamiento"))}</strong>
-                             <small>${escapeHtml(session.session_date||"—")} · ${escapeHtml(({TEAM:"Equipo",TECHNIFICATION:"Tecnificación",PERSONAL:"Personal",COGNITIVE:"Cognitivo"})[kind]||"Sin clasificar")} · ${state==="COMPLETED"?escapeHtml(this.t("training.history.validated","Validado")):state==="PLANNED"?escapeHtml(this.t("training.history.pending","Pendiente")):escapeHtml(state)}</small>
+                             <small>${escapeHtml(session.session_date||"—")} · ${escapeHtml(({TEAM:this.t("training.history.team","Equipo"),TECHNIFICATION:this.t("training.history.tech","Tecnificación"),PERSONAL:this.t("training.history.personal","Personal"),COGNITIVE:this.t("training.history.cognitive","Cognitivo")})[kind]||this.t("training.ui.kinds.unclassified","Sin clasificar"))} · ${state==="COMPLETED"?escapeHtml(this.t("training.history.validated","Validado")):state==="PLANNED"?escapeHtml(this.t("training.history.pending","Pendiente")):escapeHtml(state)}</small>
+                             ${pending?`<small class="p360-v83-check" data-ready="${selectable}">${escapeHtml(selectable?this.t("training.validation.ready","Preparado para validar"):this._validationIssueCopy(validationIssues))}</small>`:""}
                            </span>
                            <span>${escapeHtml(String(this._sessionDuration(session)??"—"))} ${escapeHtml(this.t("training.history.minutes","min"))} · ${(session.participants||[]).length} ${escapeHtml(this.t("training.history.participants","jugadores"))} →</span>
                          </button>
