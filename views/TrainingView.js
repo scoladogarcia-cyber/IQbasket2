@@ -15,6 +15,8 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { Permission } from "../security/PermissionService.js";
 import { TrainingService } from "../services/player360/TrainingService.js";
+import { trainingValidationIssuesV83, trainingValidationErrorCodeV83 } from "../services/player360/TrainingValidationPreflightV83.js";
+import { buildTrainingOverviewV83 } from "../services/player360/TrainingOverviewAnalyticsV83.js";
 import {exportTrainingEvidenceCsvV75,previewTrainingEvidenceCsvV75} from "../services/exchange/TrainingEvidenceExchangeV75.js";
 import {buildTrainingImportPreflightV76} from "../services/exchange/TrainingImportPreflightV76.js";
 import {TRAINING_IMPORT_V77_CONFIG,TrainingAttendanceImportServiceV77} from "../services/exchange/TrainingAttendanceImportServiceV77.js";
@@ -122,7 +124,8 @@ export class TrainingView {
     this.containerId = "dashboard-content-area";
     this.editingTrainingId = null;
     this.trainingDetailId = null;
-    this.trainingHistoryFilters = {from:"",to:"",kind:"",player:"",status:"PENDING"};
+    this.trainingHistoryFilters = {from:"",to:"",kind:"",player:"",status:"ALL"};
+    this.trainingValidationFeedback = null;
     this.trainingHistoryPage = 1;
     this.trainingMinutesOverrides = new Map();
     this._trainingImportPlanV77 = null;
@@ -1301,18 +1304,95 @@ export class TrainingView {
     </article>`;
   }
 
+
+  /**
+   * Diagnostics mirror the server contract but never replace its permission
+   * and data validation. No unattended records are auto-confirmed.
+   */
+  _validationIssues(session) {
+    return trainingValidationIssuesV83(session, localIsoDate());
+  }
+
+  _validationIssueCopy(issues = []) {
+    return issues.map(issue => this.t(
+      "training.validation.reason." + issue.code,
+      issue.code, { count: issue.count || 1 }
+    )).join(" · ");
+  }
+
+  _validationFeedbackCopy() {
+    if (!this.trainingValidationFeedback) return this.t("training.history.validationHint", "Solo se validarán sesiones con asistencia y minutos correctos.");
+    const { passed = 0, details = [] } = this.trainingValidationFeedback;
+    const result = this.t("training.validation.result", "Validados: {passed}. Con errores: {failed}.", { passed, failed: details.length });
+    const reasons = details.slice(0, 4).map(item =>
+      (item.date || "—") + " · " + (item.title || "Entrenamiento") + ": " +
+      this._validationIssueCopy([{ code: item.code, count: 1 }])
+    );
+    return result + (reasons.length ? " " + reasons.join(" | ") : "");
+  }
+
+  /** Trusted training metrics: pending sessions must not be counted as delivered. */
+  _renderTrainingOverview(overview) {
+    const label = (key, fallback) => escapeHtml(this.t("training.overview." + key, fallback));
+    const metric = (key, fallback, value, kind) =>
+      `<article class="p360-kpi" data-kind="${kind"><span class="p360-kpi-label">${label(key, fallback)</span><strong class="p360-kpi-value">${escapeHtml(String(value))</strong></article>`;
+    const weekMax = Math.max(1, ...overview.weeks.map(w => w.validated + w.pending));
+    const chart = overview.weeks.map(week => {
+      const validWidth = Math.round(100 * week.validated / weekMax);
+      const pendingWidth = Math.round(100 * week.pending / weekMax);
+      return `<div class="p360-overview-week">
+        <span class="p360-overview-week-label">${escapeHtml(week.week.slice(5))</span>
+        <div class="p360-overview-week-track" role="img" aria-label="${label("weeklyValidated", "Validadas"): ${week.validated}; ${label("weeklyPending", "Pendientes"): ${week.pending}">
+          <span class="p360-overview-week-validated" style="width:${validWidth}%"></span>
+          <span class="p360-overview-week-pending" style="width:${pendingWidth}%"></span>
+        </div><strong>${week.validated + week.pending}</strong>
+      </div>`;
+    }).join("");
+    const actions = [];
+    if (overview.needsReview) actions.push(this.t("training.overview.reviewAction", "Revisa la asistencia o los minutos de {count} entrenamiento(s).", { count: overview.needsReview }));
+    if (overview.ready) actions.push(this.t("training.overview.readyAction", "Puedes validar {count} entrenamiento(s).", { count: overview.ready }));
+    if (!actions.length) actions.push(this.t("training.overview.allClear", "No hay sesiones vencidas pendientes de revisión."));
+    if (!overview.validated) actions.push(this.t("training.overview.empty", "Todavía no hay sesiones validadas. Los minutos planificados no se acreditan."));
+    const attendance = overview.attendancePct === null ? "—" : displayNumber(overview.attendancePct, 1) + "%";
+    const sessionHours = displayNumber(overview.sessionMinutesValidated / 60, 1);
+    const focusCoverage = overview.focusCoveragePct === null ? "—" : displayNumber(overview.focusCoveragePct) + "%";
+
+    return `<section class="p360-training-overview" aria-label="${label("title", "Seguimiento de entrenamientos")">
+      <header class="p360-training-overview-head"><div>
+        <h2>${label("title", "Seguimiento de entrenamientos")</h2>
+        <p>${label("subtitle", "Solo se acreditan sesiones validadas.")</p>
+      </div></header>
+      <div class="p360-overview-kpis">
+        ${metric("validated", "Sesiones validadas", overview.validated, "done")}
+        ${metric("pending", "Pendientes vencidas", overview.pending, "action")}
+        ${metric("ready", "Listas para validar", overview.ready, "done")}
+        ${metric("review", "Requieren revisión", overview.needsReview, "review")}
+        ${metric("playerHours", "Horas de participación confirmadas", displayNumber(overview.playerMinutesValidated / 60, 1), "done")}
+        ${metric("attendance", "Asistencia confirmada", attendance, "done")}
+      </div>
+      <div class="p360-overview-bottom">
+        <section class="p360-overview-graph"><h3>${label("weekly", "Últimas seis semanas")</h3>
+          ${chart}
+          <div class="p360-overview-legend"><span>${label("weeklyValidated", "Validadas")</span><span>${label("weeklyPending", "Pendientes")</span></div>
+          <p class="p360-overview-note">${label("weeklyNote", "Sesiones por fecha, no rendimiento.")</p>
+        </section>
+        <section class="p360-overview-actions"><h3>${label("priorities", "Acciones recomendadas")</h3>
+          <ul>${actions.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+          ${overview.pending ? `<button type="button" class="p360-secondary-btn p360-overview-filter-pending">${escapeHtml(this.t("training.ui.status.pending", "Pendientes"))}</button>` : ""}
+          <p class="p360-overview-note">${label("upcoming", "Próximas sesiones"): ${overview.upcoming}. ${label("hours", "Horas de sesión validadas"): ${sessionHours}. ${label("focusCoverage", "Focos clasificados"): ${focusCoverage}.</p>
+        </section>
+      </div>
+      <p class="p360-overview-note">${label("scope", "Indicadores calculados sobre el histórico visible.")</p>
+    </section>`;
+  }
+
   _renderTrainingPanel() {
-    const summary = this._sessionSummary();
+    const overview = buildTrainingOverviewV83(this.sessions, localIsoDate());
     const directory = this._playerDirectory();
 
     return `
       <section id="p360-panel-training" class="p360-tab-panel">
-        <div class="p360-kpi-grid">
-          ${this._renderKpi("Sesiones", String(summary.sessions), "Historial accesible")}
-          ${this._renderKpi("Minutos planificados", displayNumber(summary.totalMinutes), "Suma de sesiones")}
-          ${this._renderKpi("Intensidad media", displayNumber(summary.avgIntensity, 1), "Escala 0-10")}
-          ${this._renderKpi("Carga registrada", displayNumber(summary.participantLoad, 1), "Minutos × RPE")}
-        </div>
+        ${this._renderTrainingOverview(overview)}
 
         ${this._renderTrainingForm()}
 
