@@ -325,7 +325,8 @@ export class TrainingView {
   }
 
   _trainingFocusLabel(code) {
-    return TRAINING_FOCUS_LABELS[String(code || "").toUpperCase()] || String(code || "");
+    const normalized = String(code || "").toUpperCase();
+    return this.t("training.focus." + normalized, TRAINING_FOCUS_LABELS[normalized] || normalized);
   }
 
   _renderTrainingFocusChecks(selectedCodes = [], inputName = "p360-training-focus") {
@@ -341,7 +342,7 @@ export class TrainingView {
               ${selected.has(item.code) ? "checked" : ""}
             />
             <span class="p360-focus-icon">${escapeHtml(item.icon)}</span>
-            <span>${escapeHtml(item.label)}</span>
+            <span>${escapeHtml(this._trainingFocusLabel(item.code))}</span>
           </label>
         `).join("")}
       </div>
@@ -1359,9 +1360,12 @@ export class TrainingView {
     if (overview.ready) actions.push(this.t("training.overview.readyAction", "Puedes validar {count} entrenamiento(s).", { count: overview.ready }));
     if (!actions.length) actions.push(this.t("training.overview.allClear", "No hay sesiones vencidas pendientes de revisión."));
     if (!overview.validated) actions.push(this.t("training.overview.empty", "Todavía no hay sesiones validadas. Los minutos planificados no se acreditan."));
+    if (overview.unclassifiedValidated) actions.push(this.t("training.overview.classificationAction", "Clasifica los focos de {count} entrenamiento(s) para mejorar los análisis.", {count:overview.unclassifiedValidated}));
+    if (overview.readonlyPending) actions.push(this.t("training.overview.readonlyNotice", "{count} sesiones pendientes están en temporadas de solo lectura.", {count:overview.readonlyPending}));
     const attendance = overview.attendancePct === null ? "—" : displayNumber(overview.attendancePct, 1) + "%";
     const sessionHours = displayNumber(overview.sessionMinutesValidated / 60, 1);
     const focusCoverage = overview.focusCoveragePct === null ? "—" : displayNumber(overview.focusCoveragePct) + "%";
+    const focusRows = overview.focuses.slice(0, 6).map(focus => `<li><span>${escapeHtml(this._trainingFocusLabel(focus.code))}</span><strong>${focus.sessions}</strong></li>`).join("");
 
     return `<section class="p360-training-overview" aria-label="${label("title", "Seguimiento de entrenamientos")}">
       <header class="p360-training-overview-head"><div>
@@ -1388,12 +1392,15 @@ export class TrainingView {
           <p class="p360-overview-note">${label("upcoming", "Próximas sesiones")}: ${overview.upcoming}. ${label("hours", "Horas de sesión validadas")}: ${sessionHours}. ${label("focusCoverage", "Focos clasificados")}: ${focusCoverage}.</p>
         </section>
       </div>
+      <section class="p360-overview-graph"><h3>${label("focusHeading", "Contenidos trabajados en sesiones validadas")}</h3>
+        ${focusRows?`<ul class="p360-overview-focus-list">${focusRows}</ul>`:`<p class="p360-overview-note">${label("focusEmpty", "Faltan focos clasificados para mostrar contenidos.")}</p>`}
+      </section>
       <p class="p360-overview-note">${label("scope", "Indicadores calculados sobre el histórico visible.")}</p>
     </section>`;
   }
 
   _renderTrainingPanel() {
-    const overview = buildTrainingOverviewV83(this.sessions, localIsoDate());
+    const overview = buildTrainingOverviewV83(this.sessions, localIsoDate(), session => this._canEditTrainingSession(session));
     const directory = this._playerDirectory();
 
     return `
