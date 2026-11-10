@@ -1335,13 +1335,13 @@ export class TrainingView {
   _renderTrainingOverview(overview) {
     const label = (key, fallback) => escapeHtml(this.t("training.overview." + key, fallback));
     const metric = (key, fallback, value, kind) =>
-      `<article class="p360-kpi" data-kind="${kind"><span class="p360-kpi-label">${label(key, fallback)</span><strong class="p360-kpi-value">${escapeHtml(String(value))</strong></article>`;
+      `<article class="p360-kpi" data-kind="${kind}"><span class="p360-kpi-label">${label(key, fallback)}</span><strong class="p360-kpi-value">${escapeHtml(String(value))}</strong></article>`;
     const weekMax = Math.max(1, ...overview.weeks.map(w => w.validated + w.pending));
     const chart = overview.weeks.map(week => {
       const validWidth = Math.round(100 * week.validated / weekMax);
       const pendingWidth = Math.round(100 * week.pending / weekMax);
       return `<div class="p360-overview-week">
-        <span class="p360-overview-week-label">${escapeHtml(week.week.slice(5))</span>
+        <span class="p360-overview-week-label">${escapeHtml(week.week.slice(5))}</span>
         <div class="p360-overview-week-track" role="img" aria-label="${label("weeklyValidated", "Validadas")}: ${week.validated}; ${label("weeklyPending", "Pendientes")}: ${week.pending}">
           <span class="p360-overview-week-validated" style="width:${validWidth}%"></span>
           <span class="p360-overview-week-pending" style="width:${pendingWidth}%"></span>
