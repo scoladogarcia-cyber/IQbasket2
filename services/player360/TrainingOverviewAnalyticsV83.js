@@ -29,13 +29,14 @@ function previousWeek(iso, offset) {
  * @param {object[]} sessions - Sesiones visibles según RLS.
  * @param {string} today - Fecha local (inyectable para pruebas).
  */
-export function buildTrainingOverviewV83(sessions = [], today = trainingTodayLocalV83()) {
+export function buildTrainingOverviewV83(sessions = [], today = trainingTodayLocalV83(), canEdit = () => true) {
   const relevant = rows(sessions).filter(s => !["ARCHIVED", "CANCELLED"].includes(state(s)));
   const completed = relevant.filter(s => state(s) === "COMPLETED" && dateIso(s.session_date) <= today);
   const due = relevant.filter(s => state(s) === "PLANNED" && dateIso(s.session_date) <= today);
   const upcoming = relevant.filter(s => state(s) === "PLANNED" && dateIso(s.session_date) > today);
-  const ready = due.filter(s => trainingValidationIssuesV83(s, today).length === 0);
-  const needsReview = due.filter(s => trainingValidationIssuesV83(s, today).length > 0);
+  const actionableDue = due.filter(s => canEdit(s));
+  const ready = actionableDue.filter(s => trainingValidationIssuesV83(s, today).length === 0);
+  const needsReview = actionableDue.filter(s => trainingValidationIssuesV83(s, today).length > 0);
   let creditedPlayerMinutes = 0, attended = 0, confirmed = 0;
   const focuses = new Map();
 
@@ -75,7 +76,9 @@ export function buildTrainingOverviewV83(sessions = [], today = trainingTodayLoc
     pending: due.length,
     ready: ready.length,
     needsReview: needsReview.length,
+    readonlyPending: due.length - actionableDue.length,
     upcoming: upcoming.length,
+    unclassifiedValidated: completed.filter(s => rows(s?.metadata?.training_focus_codes).length === 0).length,
     sessionMinutesValidated: completed.reduce((sum, s) => sum + positiveMinutes(s.duration_minutes), 0),
     playerMinutesValidated: creditedPlayerMinutes,
     attendancePct: confirmed ? Math.round((attended / confirmed) * 1000) / 10 : null,
