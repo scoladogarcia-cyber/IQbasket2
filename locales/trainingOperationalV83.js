@@ -57,7 +57,17 @@ export const TRAINING_OPERATIONAL_V83 = Object.freeze({
     "training.ui.noSeasons": "Sin temporadas",
     "navigation.groups.development": "DESARROLLO",
     "navigation.groups.welfare": "BIENESTAR",
-    "feedback": "Enviar comentarios"
+    "feedback": "Enviar comentarios",
+    "training.overview.focusHeading": "Contenidos trabajados en sesiones validadas",
+    "training.overview.focusEmpty": "Faltan focos clasificados para mostrar los contenidos trabajados.",
+    "training.overview.classificationAction": "Clasifica los focos de {count} entrenamiento(s) validados para poder analizar qué se trabaja.",
+    "training.overview.readonlyNotice": "{count} sesión(es) pendientes pertenecen a contextos donde no tienes permiso para validar.",
+    "training.focus.TECHNICAL": "Técnica individual",
+    "training.focus.SHOOT_FINISH": "Tiro y finalizaciones",
+    "training.focus.TACTICAL_TEAM": "Táctica colectiva",
+    "training.focus.GAME_5V5": "Juego 5 contra 5",
+    "training.focus.PHYSICAL": "Preparación física",
+    "training.focus.RECOVERY_PREMATCH": "Recuperación / prepartido"
   },
   "ca": {
     "training.overview.title": "Seguiment dels entrenaments",
@@ -116,7 +126,17 @@ export const TRAINING_OPERATIONAL_V83 = Object.freeze({
     "training.ui.noSeasons": "Sense temporades",
     "navigation.groups.development": "DESENVOLUPAMENT",
     "navigation.groups.welfare": "BENESTAR",
-    "feedback": "Enviar comentaris"
+    "feedback": "Enviar comentaris",
+    "training.overview.focusHeading": "Continguts treballats en sessions validades",
+    "training.overview.focusEmpty": "Cal classificar els focus per mostrar els continguts treballats.",
+    "training.overview.classificationAction": "Classifica els focus de {count} entrenament(s) validats per analitzar què es treballa.",
+    "training.overview.readonlyNotice": "{count} sessió(ns) pendent(s) pertanyen a contextos on no pots validar.",
+    "training.focus.TECHNICAL": "Tècnica individual",
+    "training.focus.SHOOT_FINISH": "Tir i finalitzacions",
+    "training.focus.TACTICAL_TEAM": "Tàctica col·lectiva",
+    "training.focus.GAME_5V5": "Joc 5 contra 5",
+    "training.focus.PHYSICAL": "Preparació física",
+    "training.focus.RECOVERY_PREMATCH": "Recuperació / prepartit"
   },
   "en": {
     "training.overview.title": "Training overview",
@@ -175,7 +195,17 @@ export const TRAINING_OPERATIONAL_V83 = Object.freeze({
     "training.ui.noSeasons": "No seasons",
     "navigation.groups.development": "DEVELOPMENT",
     "navigation.groups.welfare": "WELLBEING",
-    "feedback": "Send feedback"
+    "feedback": "Send feedback",
+    "training.overview.focusHeading": "Focus areas covered in validated sessions",
+    "training.overview.focusEmpty": "Classify training focuses to see which skills have been covered.",
+    "training.overview.classificationAction": "Classify focuses for {count} validated session(s) to see what was trained.",
+    "training.overview.readonlyNotice": "{count} pending session(s) belong to a context you cannot validate.",
+    "training.focus.TECHNICAL": "Individual technique",
+    "training.focus.SHOOT_FINISH": "Shooting and finishing",
+    "training.focus.TACTICAL_TEAM": "Team tactics",
+    "training.focus.GAME_5V5": "Five-on-five game",
+    "training.focus.PHYSICAL": "Physical conditioning",
+    "training.focus.RECOVERY_PREMATCH": "Recovery / pregame"
   },
   "fr": {
     "training.overview.title": "Suivi des entraînements",
@@ -234,6 +264,16 @@ export const TRAINING_OPERATIONAL_V83 = Object.freeze({
     "training.ui.noSeasons": "Aucune saison",
     "navigation.groups.development": "DÉVELOPPEMENT",
     "navigation.groups.welfare": "BIEN-ÊTRE",
-    "feedback": "Envoyer un avis"
+    "feedback": "Envoyer un avis",
+    "training.overview.focusHeading": "Axes travaillés lors des séances validées",
+    "training.overview.focusEmpty": "Classez les axes pour afficher les contenus réellement travaillés.",
+    "training.overview.classificationAction": "Classez les axes de {count} séance(s) validée(s) pour analyser le travail réalisé.",
+    "training.overview.readonlyNotice": "{count} séance(s) en attente appartiennent à un contexte où vous ne pouvez pas valider.",
+    "training.focus.TECHNICAL": "Technique individuelle",
+    "training.focus.SHOOT_FINISH": "Tir et finition",
+    "training.focus.TACTICAL_TEAM": "Tactique collective",
+    "training.focus.GAME_5V5": "Jeu à cinq contre cinq",
+    "training.focus.PHYSICAL": "Préparation physique",
+    "training.focus.RECOVERY_PREMATCH": "Récupération / avant-match"
   }
 });
