@@ -24,6 +24,8 @@ on:
       - "services/player360/Player360ObservationAssembler.js"
       - "config/player360-analytics.config.js"
       - "views/training/TrainingIntelligencePanelV58.js"
+      - "tests/training-v84-private-rpc-contract.mjs"
+      - "supabase/migrations/20261110203000_v58_training_focus_public_rpcs.sql"
       - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
       - "supabase/migrations/20261004220500_v58_intelligence_integrity.sql"
@@ -67,6 +69,9 @@ on:
       - "views/LiveScoreHUDViewV38.js"
       - "views/LiveScoreHUDViewV58.js"
       - "views/training/TrainingIntelligencePanelV58.js"
+      - "views/training/TrainingCompleteEditV54View.js"
+      - "tests/training-v84-private-rpc-contract.mjs"
+      - "supabase/migrations/20261110203000_v58_training_focus_public_rpcs.sql"
       - "views/player360/Player360BenchmarkPanelV58.js"
       - "domain/player360/TrainingIntelligenceAnalytics.js"
       - "domain/stats/BenchmarkEngine.js"
@@ -125,6 +130,8 @@ jobs:
           node --check services/LazyViewRegistry.js
       - name: V58 contracts
         run: node tests/v58-intelligence-contract.mjs
+      - name: V84 training focus RPC contract
+        run: node tests/training-v84-private-rpc-contract.mjs
       - name: V61 live sync recovery contract
         run: node tests/live-sync-v61-contract.mjs
       - name: V62 live minutes contract
