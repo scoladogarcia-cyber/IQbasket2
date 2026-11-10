@@ -1342,7 +1342,7 @@ export class TrainingView {
       const pendingWidth = Math.round(100 * week.pending / weekMax);
       return `<div class="p360-overview-week">
         <span class="p360-overview-week-label">${escapeHtml(week.week.slice(5))</span>
-        <div class="p360-overview-week-track" role="img" aria-label="${label("weeklyValidated", "Validadas"): ${week.validated}; ${label("weeklyPending", "Pendientes"): ${week.pending}">
+        <div class="p360-overview-week-track" role="img" aria-label="${label("weeklyValidated", "Validadas")}: ${week.validated}; ${label("weeklyPending", "Pendientes")}: ${week.pending}">
           <span class="p360-overview-week-validated" style="width:${validWidth}%"></span>
           <span class="p360-overview-week-pending" style="width:${pendingWidth}%"></span>
         </div><strong>${week.validated + week.pending}</strong>
@@ -1357,10 +1357,10 @@ export class TrainingView {
     const sessionHours = displayNumber(overview.sessionMinutesValidated / 60, 1);
     const focusCoverage = overview.focusCoveragePct === null ? "—" : displayNumber(overview.focusCoveragePct) + "%";
 
-    return `<section class="p360-training-overview" aria-label="${label("title", "Seguimiento de entrenamientos")">
+    return `<section class="p360-training-overview" aria-label="${label("title", "Seguimiento de entrenamientos")}">
       <header class="p360-training-overview-head"><div>
-        <h2>${label("title", "Seguimiento de entrenamientos")</h2>
-        <p>${label("subtitle", "Solo se acreditan sesiones validadas.")</p>
+        <h2>${label("title", "Seguimiento de entrenamientos")}</h2>
+        <p>${label("subtitle", "Solo se acreditan sesiones validadas.")}</p>
       </div></header>
       <div class="p360-overview-kpis">
         ${metric("validated", "Sesiones validadas", overview.validated, "done")}
@@ -1371,18 +1371,18 @@ export class TrainingView {
         ${metric("attendance", "Asistencia confirmada", attendance, "done")}
       </div>
       <div class="p360-overview-bottom">
-        <section class="p360-overview-graph"><h3>${label("weekly", "Últimas seis semanas")</h3>
+        <section class="p360-overview-graph"><h3>${label("weekly", "Últimas seis semanas")}</h3>
           ${chart}
-          <div class="p360-overview-legend"><span>${label("weeklyValidated", "Validadas")</span><span>${label("weeklyPending", "Pendientes")</span></div>
-          <p class="p360-overview-note">${label("weeklyNote", "Sesiones por fecha, no rendimiento.")</p>
+          <div class="p360-overview-legend"><span>${label("weeklyValidated", "Validadas")}</span><span>${label("weeklyPending", "Pendientes")}</span></div>
+          <p class="p360-overview-note">${label("weeklyNote", "Sesiones por fecha, no rendimiento.")}</p>
         </section>
-        <section class="p360-overview-actions"><h3>${label("priorities", "Acciones recomendadas")</h3>
+        <section class="p360-overview-actions"><h3>${label("priorities", "Acciones recomendadas")}</h3>
           <ul>${actions.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
           ${overview.pending ? `<button type="button" class="p360-secondary-btn p360-overview-filter-pending">${escapeHtml(this.t("training.ui.status.pending", "Pendientes"))}</button>` : ""}
-          <p class="p360-overview-note">${label("upcoming", "Próximas sesiones"): ${overview.upcoming}. ${label("hours", "Horas de sesión validadas"): ${sessionHours}. ${label("focusCoverage", "Focos clasificados"): ${focusCoverage}.</p>
+          <p class="p360-overview-note">${label("upcoming", "Próximas sesiones")}: ${overview.upcoming}. ${label("hours", "Horas de sesión validadas")}: ${sessionHours}. ${label("focusCoverage", "Focos clasificados")}: ${focusCoverage}.</p>
         </section>
       </div>
-      <p class="p360-overview-note">${label("scope", "Indicadores calculados sobre el histórico visible.")</p>
+      <p class="p360-overview-note">${label("scope", "Indicadores calculados sobre el histórico visible.")}</p>
     </section>`;
   }
 
