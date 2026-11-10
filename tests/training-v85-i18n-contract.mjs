@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { trainingIntelligenceV85 } from "../locales/trainingIntelligenceV85.js";
+import { interpolateLanguageV80 } from "../services/i18n/BundledLanguageCatalogV80.js";
 
 const panel = readFileSync(new URL("../views/training/TrainingIntelligencePanelV58.js", import.meta.url), "utf8");
 const locales = ["es", "ca", "en", "fr"];
@@ -18,7 +20,7 @@ for (const locale of locales) {
   assert.equal(I18n.getLocale(), locale);
   for (const key of keys) {
     const full = "training.v58." + key;
-    assert.notEqual(TranslationStore.t(full), full, locale + ": " + full);
+    assert.equal(typeof trainingIntelligenceV85[locale]?.[full], "string", locale + ": " + full);
   }
   for (const code of ["TECHNICAL","SHOOT_FINISH","TACTICAL_TEAM","GAME_5V5","PHYSICAL","RECOVERY_PREMATCH"]) {
     const full = "training.focus." + code;
@@ -26,11 +28,12 @@ for (const locale of locales) {
   }
 }
 await TranslationStore.setLanguage("en");
-assert.equal(TranslationStore.t("training.v58.save"), "Save");
+assert.equal(trainingIntelligenceV85.en["training.v58.save"], "Save");
 assert.equal(TranslationStore.t("training.focus.PHYSICAL"), "Physical conditioning");
 await TranslationStore.setLanguage("fr");
-assert.match(TranslationStore.t("training.v58.classifyTitle", {count:2}), /2/);
+assert.match(interpolateLanguageV80(trainingIntelligenceV85.fr["training.v58.classifyTitle"], {count:2}), /2/);
 assert.match(panel, /this\.t\("training\.v58\.classifyTitle"/);
+assert.match(panel, /trainingIntelligenceV85\[lang\]/);
 assert.match(panel, /this\._focusLabel\(item\.code\)/);
 assert.match(panel, /min-height:44px/);
 assert.doesNotMatch(panel, /<summary>Clasificar histórico/);
