@@ -775,7 +775,7 @@ export class SeasonDashboardView {
       const activeSeason = DataStore.getActiveSeasonDisplayName?.(this.currentTeamId)
         || activeSeasonContext?.name
         || DataStore.getActiveSeason?.()
-        || "Sin temporada";
+        || this.t("dashboard.v86.noSeason");
       const activeTeamSeasonId = activeSeasonContext?.team_season_id
         || activeSeasonContext?.teamSeasonId
         || DataStore.getActiveTeamSeasonId?.(this.currentTeamId)
@@ -801,9 +801,9 @@ export class SeasonDashboardView {
       const playersMap = new Map((players || []).map(p => [String(p.id), p]));
       const activeTeamObj = DataStore.getTeamById ? (DataStore.getTeamById(this.currentTeamId) || {}) : {};
       
-      const teamName = activeTeamObj.name || "JMJ Manyanet Sant Andreu";
-      const teamCategory = activeTeamObj.category || "Cadete Masculino";
-      const teamCompetition = activeTeamObj.competition || "B1";
+      const teamName = activeTeamObj.name || this.t("dashboard.v86.noTeam");
+      const teamCategory = activeTeamObj.category || "—";
+      const teamCompetition = activeTeamObj.competition || "—";
       const canSyncPreview = this._canSync(this.currentTeamId);
 
       let kpis = { wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0 };
@@ -818,17 +818,17 @@ export class SeasonDashboardView {
 
       const topPlayersMarkup = topPlayers.map((p, index) => `
         <div class="purple-leader-col">
-          <span class="leader-pill-yellow">#${index + 1} LÍDER</span>
+          <span class="leader-pill-yellow">#${index + 1} ${this.t("dashboard.v86.leader")}</span>
           <div class="leader-main-info">
             <strong class="leader-player-name">${p.number} ${p.name}</strong>
-            <span class="leader-player-meta">${p.position} · ${p.gamesPlayed} PJ</span>
+            <span class="leader-player-meta">${p.position} · ${p.gamesPlayed} ${this.t("dashboard.v86.playedShort")}</span>
           </div>
           <div class="leader-val-box">
             <span class="leader-val-num">${p.avgVal}</span>
-            <span class="leader-val-txt">VAL / PJ</span>
+            <span class="leader-val-txt">${this.t("dashboard.v86.valuePerGame")}</span>
           </div>
         </div>
-      `).join("");
+      `).join("") || `<div class="dash-empty-leaders">${this.t("dashboard.v86.noLeaders")}</div>`;
 
       container.innerHTML = `
         <div class="clean-dashboard-wrapper">
@@ -971,15 +971,15 @@ export class SeasonDashboardView {
                 <span class="dash-category-badge">${teamCategory}</span>
               </div>
               <div class="dash-meta-line">
-                Temporada ${activeSeason} · ${teamCompetition} &nbsp;·&nbsp; 
-                <span class="dash-win-loss"><span class="w-text">${kpis.wins}V</span> <span class="l-text">${kpis.losses}D</span></span> &nbsp;·&nbsp; 
-                ${this.cachedGames.length} partidos
+                ${this.t("dashboard.v86.season")} ${activeSeason} · ${teamCompetition} &nbsp;·&nbsp; 
+                <span class="dash-win-loss"><span class="w-text">${kpis.wins}${this.t("dashboard.v86.winShort")}</span> <span class="l-text">${kpis.losses}${this.t("dashboard.v86.lossShort")}</span></span> &nbsp;·&nbsp; 
+                ${this.t("dashboard.v86.gamesCount","",{count:this.cachedGames.length})}
               </div>
             </div>
 
             <div class="dash-top-actions">
               <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
-                🔎 Auditar estadísticas${canSyncPreview ? '' : ' 🔒'}
+                🔎 ${this.t("dashboard.v86.audit")}${canSyncPreview ? "" : " 🔒"}
               </button>
             </div>
           </div>
@@ -988,42 +988,42 @@ export class SeasonDashboardView {
           <div class="kpi-cards-grid">
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PARTIDOS JUGADOS</span>
+                <span>${this.t("dashboard.v86.played")}</span>
               </div>
               <div class="kpi-main-number">${this.cachedGames.length}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>VICTORIAS</span>
+                <span>${this.t("dashboard.v86.wins")}</span>
               </div>
               <div class="kpi-main-number">${kpis.wins}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DERROTAS</span>
+                <span>${this.t("dashboard.v86.losses")}</span>
               </div>
               <div class="kpi-main-number">${kpis.losses}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PUNTOS POR PARTIDO</span>
+                <span>${this.t("dashboard.v86.pointsPerGame")}</span>
               </div>
               <div class="kpi-main-number">${kpis.ppg}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PUNTOS RECIBIDOS</span>
+                <span>${this.t("dashboard.v86.pointsAgainst")}</span>
               </div>
               <div class="kpi-main-number">${kpis.oppPpg}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DIFERENCIA MEDIA</span>
+                <span>${this.t("dashboard.v86.avgDiff")}</span>
               </div>
               <div class="kpi-main-number" style="color: ${kpis.diffPpg < 0 ? '#0f172a' : '#16a34a'};">
                 ${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}
@@ -1032,47 +1032,47 @@ export class SeasonDashboardView {
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>OFFENSIVE RATING</span>
+                <span>${this.t("dashboard.v86.offensiveRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("off_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.ortg ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.ortg ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DEFENSIVE RATING</span>
+                <span>${this.t("dashboard.v86.defensiveRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("def_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.drtg ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.drtg ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>NET RATING</span>
+                <span>${this.t("dashboard.v86.netRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("net_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.netRtg===null || kpis.netRtg===undefined ? "N/D" : (kpis.netRtg>0?"+":"")+kpis.netRtg}</div>
-              <span class="kpi-sub-trend">Rendimiento neto no calculable sin posesiones rivales.</span>
+              <div class="kpi-main-number">${kpis.netRtg===null || kpis.netRtg===undefined ? this.t("dashboard.v86.notAvailable") : (kpis.netRtg>0?"+":"")+kpis.netRtg}</div>
+              ${kpis.netRtg===null||kpis.netRtg===undefined ? `<span class="kpi-sub-trend">${this.t("dashboard.v86.netNotAvailable")}</span>` : ""}
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PACE</span>
+                <span>${this.t("dashboard.v86.pace")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("pace_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.pace ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.pace ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
@@ -1083,8 +1083,8 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("efg_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.efg===null||kpis.efg===undefined?"N/D":kpis.efg+"%"}</div>
-              <span class="kpi-sub-trend trend-down">▼ -1.8 vs previos</span>
+              <div class="kpi-main-number">${kpis.efg===null||kpis.efg===undefined?this.t("dashboard.v86.notAvailable"):kpis.efg+"%"}</div>
+              
             </div>
 
             <div class="kpi-box-card">
@@ -1095,15 +1095,15 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("tov_pct_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.tovPct===null||kpis.tovPct===undefined?"N/D":kpis.tovPct+"%"}</div>
-              <span class="kpi-sub-trend trend-up">▲ +4.0 vs previos</span>
+              <div class="kpi-main-number">${kpis.tovPct===null||kpis.tovPct===undefined?this.t("dashboard.v86.notAvailable"):kpis.tovPct+"%"}</div>
+              
             </div>
           </div>
 
           <!-- HERO CARD PURPLE LÍDERES FIBA (Texto en blanco) -->
           <div class="purple-leaders-banner">
             <div class="purple-card-title">
-              <span>🏆 LÍDERES EN VALORACIÓN FIBA (VAL/PJ)</span>
+              <span>🏆 ${this.t("dashboard.v86.fibaLeaders")}</span>
             </div>
             <div class="purple-leaders-grid">
               ${topPlayersMarkup}
@@ -1115,19 +1115,19 @@ export class SeasonDashboardView {
 
           <!-- TABLA DE ÚLTIMOS PARTIDOS -->
           <div class="clean-table-card">
-            <h3 class="clean-table-title">ÚLTIMOS PARTIDOS</h3>
+            <h3 class="clean-table-title">${this.t("dashboard.v86.recentGames")}</h3>
             <div style="overflow-x: auto;">
               <table class="clean-table">
                 <thead>
                   <tr>
-                    <th data-sort="date" style="cursor: pointer;">FECHA ↕</th>
-                    <th data-sort="opponent" style="cursor: pointer;">RIVAL ↕</th>
-                    <th data-sort="venue" style="cursor: pointer;">SEDE ↕</th>
-                    <th data-sort="score" style="cursor: pointer;">RESULTADO ↕</th>
-                    <th data-sort="diff" style="cursor: pointer;">DIF. ↕</th>
+                    <th data-sort="date" style="cursor: pointer;">${this.t("dashboard.v86.date")} ↕</th>
+                    <th data-sort="opponent" style="cursor: pointer;">${this.t("dashboard.v86.opponent")} ↕</th>
+                    <th data-sort="venue" style="cursor: pointer;">${this.t("dashboard.v86.venue")} ↕</th>
+                    <th data-sort="score" style="cursor: pointer;">${this.t("dashboard.v86.result")} ↕</th>
+                    <th data-sort="diff" style="cursor: pointer;">${this.t("dashboard.v86.difference")} ↕</th>
                     <th data-sort="off" style="cursor: pointer;">OFF ↕</th>
                     <th data-sort="def" style="cursor: pointer;">DEF ↕</th>
-                    <th style="text-align: right;">ACCIÓN</th>
+                    <th style="text-align: right;">${this.t("dashboard.v86.action")}</th>
                   </tr>
                 </thead>
                 <tbody id="games-table-body">
@@ -1140,7 +1140,7 @@ export class SeasonDashboardView {
           <!-- LO MÁS IMPORTANTE (ALERTAS Y DEBILIDADES) -->
           <div class="insights-box-card">
             <div class="insights-header">
-              <span>💡 LO MÁS IMPORTANTE</span>
+              <span>💡 ${this.t("dashboard.v86.insightsTitle")}</span>
             </div>
             <div class="insights-list">
               ${this._renderEvidenceInsights(kpis, this.cachedGames)}
