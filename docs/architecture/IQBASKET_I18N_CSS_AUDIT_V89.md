@@ -23,7 +23,7 @@ Ejecución: `node scripts/audit-i18n-v89.mjs --strict-core`.
 | Candidatas sin clave global | 142 | Revisar: incluyen claves de subcatálogos/no globales y algunas realmente inexistentes |
 | Candidatas de texto literal en HTML | 703 | Búsqueda heurística, no errores confirmados uno a uno |
 | Candidatas de atributos literales | 85 | Especialmente `placeholder`, `title`, `aria-label` |
-| Candidatas idénticas a ES | 4 | Algunas coincidencias son lingüísticamente correctas |
+| Candidatas idénticas a ES | 1 | La coincidencia restante («Eliminar jugador») es natural en ambos idiomas; se corrigieron las demás en CA |
 | Hojas CSS especiales por idioma | 0 | Correcto: estilos compartidos, no CSS de traducción |
 | Riesgos `nowrap` en selectores relevantes de CSS externos | 0 | Se corrigió también la definición CSS **interna** de `LayoutView` |
 
