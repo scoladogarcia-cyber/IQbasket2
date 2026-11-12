@@ -9,6 +9,7 @@ import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { CORE_STATS_V87 } from "../locales/coreStatsV87.js";
+import {formatBasketballCategoryLabelV88} from "../services/i18n/BasketballCategoryDisplayV88.js";
 
 export class TeamStatsView {
   constructor(supabaseClient = null, authController = null) {
@@ -281,7 +282,7 @@ export class TeamStatsView {
     const mobileCardsMarkup = this._renderPlayerCardsMobile(sortedPlayers);
 
     const teamName = team.name || this.t("team.v87.noTeam");
-    const teamCategory = team.category || this.t("team.v87.general");
+    const teamCategory = formatBasketballCategoryLabelV88(team.category,I18n.getLocale?.()||"es") || this.t("team.v87.general");
     const teamCompetition = team.competition || this.t("team.v87.league");
     const activeSeason = DataStore.getActiveSeasonDisplayName?.(team.id || teamId)
       || DataStore.getActiveSeason?.()
