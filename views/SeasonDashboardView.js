@@ -14,6 +14,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
 import { Permission } from "../security/PermissionService.js";
+import { interpolateLanguageV80 } from "../services/i18n/BundledLanguageCatalogV80.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
@@ -29,27 +30,21 @@ export class SeasonDashboardView {
     this.cachedGames = [];
     this.cachedPlayerStats = [];
     this.currentTeamId = null;
+    // Feature locale catalog is lazy-loaded before render; no initial-bundle penalty.
+    this.dashboardLocalePack = null;
   }
 
-  t(key, fallback = "") {
-    const text = TranslationStore ? TranslationStore.t(key, "") : (I18n ? I18n.t(key) : "");
-    if (!text || text === key) {
-      const fallbacks = {
-        val_fiba_tooltip: "Valoración FIBA Oficial: (Pts + Reb + Ast + Rob + Tap + FR) - (Tiros Fallados + TO + FC)",
-        off_rating_tooltip: "Puntos anotados por el equipo por cada 100 posesiones de juego.",
-        def_rating_tooltip: "Puntos recibidos por el equipo por cada 100 posesiones de juego.",
-        net_rating_tooltip: "Diferencia neta entre Offensive Rating y Defensive Rating.",
-        pace_tooltip: "Número estimado de posesiones que el equipo juega por cada 40 minutos.",
-        ts_tooltip: "True Shooting %: Eficiencia de tiro real incluyendo 2P, 3P y TL.",
-        efg_tooltip: "Effective Field Goal %: Eficiencia de tiro ajustada al valor de triples.",
-        turnovers_tooltip: "Total de pérdidas de balón cometidas por el equipo en cada encuentro.",
-        rebound_tooltip: "Volumen de rebotes ofensivos y defensivos capturados por partido.",
-        orb_pct_tooltip: "% de rebotes ofensivos disponibles que captura el equipo.",
-        tov_pct_tooltip: "% de posesiones que terminan en pérdida de balón."
-      };
-      return fallbacks[key] || fallback || key;
-    }
-    return text;
+  /**
+   * Resolve view-specific copy through its on-demand catalog, falling back to
+   * shared translations only for legacy consumers. Never translate sport data.
+   */
+  t(key, fallback = "", params = {}) {
+    const locale = I18n.getLocale?.() || "es";
+    const alias = key.startsWith("dashboard.v86.") ? key.slice("dashboard.v86.".length) : key;
+    const value = this.dashboardLocalePack?.[locale]?.[alias]
+      ?? this.dashboardLocalePack?.es?.[alias]
+      ?? TranslationStore.t(key, params, fallback);
+    return interpolateLanguageV80(value || fallback || key, params);
   }
 
   _canSync(teamId = null) {
@@ -129,7 +124,7 @@ export class SeasonDashboardView {
           map[pId] = {
             name: fullName,
             number: jerseyNum,
-            position: pInfo.primary_position || pInfo.primaryPosition || pInfo.position || "Jugador",
+            position: pInfo.primary_position || pInfo.primaryPosition || pInfo.position || this.t("dashboard.v86.player"),
             gamesPlayed: 0,
             totalMinutes: 0,
             totalVal: 0
@@ -185,8 +180,8 @@ export class SeasonDashboardView {
     if (!Array.isArray(games) || games.length === 0) {
       return `
         <div class="insight-item">
-          <div><strong>ℹ️ Sin partidos en el contexto activo</strong></div>
-          <span>No se generan conclusiones hasta disponer de partidos para el equipo y temporada seleccionados.</span>
+          <div><strong>ℹ️ ${this.t("dashboard.v86.noGamesInsight")}</strong></div>
+          <span>${this.t("dashboard.v86.noGamesDetail")}</span>
         </div>
       `;
     }
@@ -199,15 +194,15 @@ export class SeasonDashboardView {
       if (tovPct > 18) {
         items.push(`
           <div class="insight-item insight-warning">
-            <div><strong>⚠️ Volumen de pérdidas elevado</strong> <span class="insight-badge badge-alerta">Dato</span></div>
-            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%. Conviene revisar su evolución antes de atribuir una causa.</span>
+            <div><strong>⚠️ ${this.t("dashboard.v86.highTurnovers")}</strong> <span class="insight-badge badge-alerta">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.highTurnoversDetail","",{pct:tovPct.toFixed(1)})}</span>
           </div>
         `);
       } else {
         items.push(`
           <div class="insight-item">
-            <div><strong>✅ Control de pérdidas</strong> <span class="insight-badge">Dato</span></div>
-            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%.</span>
+            <div><strong>✅ ${this.t("dashboard.v86.controlledTurnovers")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.turnoversDetail","",{pct:tovPct.toFixed(1)})}</span>
           </div>
         `);
       }
@@ -216,8 +211,8 @@ export class SeasonDashboardView {
     if (Number.isFinite(netRtg) && netRtg !== 0) {
       items.push(`
         <div class="insight-item ${netRtg < 0 ? 'insight-warning' : ''}">
-          <div><strong>${netRtg < 0 ? '⚠️' : '📈'} Net Rating ${netRtg < 0 ? 'negativo' : 'positivo'}</strong> <span class="insight-badge">Dato</span></div>
-          <span>El Net Rating del contexto activo es ${netRtg > 0 ? '+' : ''}${netRtg.toFixed(1)}. Es una descripción del rendimiento observado, no una explicación causal.</span>
+          <div><strong>${netRtg < 0 ? "⚠️" : "📈"} ${this.t(netRtg < 0 ? "dashboard.v86.netNegative" : "dashboard.v86.netPositive")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+          <span>${this.t("dashboard.v86.netDetail","",{rating:`${netRtg > 0 ? "+" : ""}${netRtg.toFixed(1)}`})}</span>
         </div>
       `);
     }
@@ -248,16 +243,16 @@ export class SeasonDashboardView {
         const worst = ranked[0];
         items.push(`
           <div class="insight-item ${worst.avgDiff < 0 ? 'insight-warning' : ''}">
-            <div><strong>🧭 Balance por cuartos</strong> <span class="insight-badge">Dato</span></div>
-            <span>El Q${worst.q} presenta el menor diferencial medio (${worst.avgDiff > 0 ? '+' : ''}${worst.avgDiff.toFixed(1)} puntos) entre los parciales registrados.</span>
+            <div><strong>🧭 ${this.t("dashboard.v86.quarterBalance")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.quarterDetail","",{quarter:worst.q,difference:`${worst.avgDiff > 0 ? "+" : ""}${worst.avgDiff.toFixed(1)}`})}</span>
           </div>
         `);
       }
     } else {
       items.push(`
         <div class="insight-item">
-          <div><strong>ℹ️ Parciales no evaluables</strong></div>
-          <span>No hay suficientes datos de cuartos para generar una conclusión sobre rendimiento por periodo.</span>
+          <div><strong>ℹ️ ${this.t("dashboard.v86.periodsMissing")}</strong></div>
+          <span>${this.t("dashboard.v86.periodsMissingDetail")}</span>
         </div>
       `);
     }
@@ -765,6 +760,11 @@ export class SeasonDashboardView {
 
   async render(containerId = "dashboard-content-area", teamId = null) {
     try {
+      // Resolve only when the dashboard is actually opened. Locale is read on every t() call.
+      if (!this.dashboardLocalePack) {
+        const { SEASON_DASHBOARD_V86 } = await import("../locales/seasonDashboardV86.js");
+        this.dashboardLocalePack = SEASON_DASHBOARD_V86;
+      }
       this.currentTeamId = teamId || DataStore.getActiveTeamId();
       const container = typeof containerId === "string" 
         ? (document.getElementById(containerId) || document.getElementById("main-content") || document.getElementById("app"))
