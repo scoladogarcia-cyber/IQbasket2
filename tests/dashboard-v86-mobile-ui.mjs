@@ -22,7 +22,7 @@ try {
     DataStore.getActiveTeamId=()=>teamId;
     DataStore.getActiveSeasonContext=()=>({team_id:teamId,team_season_id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",name:"2026/2027"});
     DataStore.getActiveSeasonDisplayName=()=>"2026/2027";
-    DataStore.getTeamById=()=>({id:teamId,name:"Club de Prova",category:"Mini",competition:"B1"});
+    DataStore.getTeamById=()=>({id:teamId,name:"Club de Prova",category:"Cadete Masculino",competition:"B1"});
     const game={id:"22222222-2222-4222-8222-222222222222",date:"2026-10-18",opponent:"Rival de Prova",team_score:68,opponent_score:55,status:"COMPLETED",venue:"home"};
     DataStore.getGamesForActiveSeason=()=>[game];
     DataStore.getSeasonParticipantPlayers=()=>[];
@@ -41,7 +41,8 @@ try {
         table:container.querySelector(".clean-table-title")?.textContent?.trim(),
         action:container.querySelector(".clean-análisis-link")?.textContent?.trim(),
         audit:container.querySelector("#btn-sync-data")?.textContent?.trim(),
-        team:container.querySelector(".dash-main-title")?.textContent?.trim()
+        team:container.querySelector(".dash-main-title")?.textContent?.trim(),
+        category:container.querySelector(".dash-category-badge")?.textContent?.trim()
       };
     }
     return rows;
@@ -61,6 +62,10 @@ try {
     assert.equal(row.team,"Club de Prova","Team names must not be translated");
   }
   assert.ok(!results.ca.kpis.some(k=>["PARTIDOS JUGADOS","VICTORIAS"].includes(k)));
+  assert.equal(results.es.category,"Cadete Masculino");
+  assert.equal(results.ca.category,"Cadet · masculí");
+  assert.equal(results.en.category,"Cadet · boys");
+  assert.equal(results.fr.category,"Cadet · garçons");
   assert.ok(results.ca.header.includes("partits"),"Catalan game count");
   assert.ok(results.en.action.includes("Analysis"),"English game action");
   assert.ok(results.fr.header.includes("matchs"),"French game count");
