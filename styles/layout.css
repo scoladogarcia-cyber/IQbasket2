@@ -236,6 +236,8 @@
   overflow: hidden;
   text-overflow: clip;
   overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
 }
 
 .mobile-svg {
