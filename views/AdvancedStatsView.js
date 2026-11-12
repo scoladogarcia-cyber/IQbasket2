@@ -10,6 +10,7 @@ import { selectScopedPlayerStatsV81 } from "../domain/stats/StatScopeV81.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { CORE_STATS_V87 } from "../locales/coreStatsV87.js";
 
 export class AdvancedStatsView {
   /**
@@ -29,8 +30,13 @@ export class AdvancedStatsView {
     this.playerSortAsc = false;
   }
 
+  /** UI-only translations; does not change metric definitions or inputs. */
   t(key, fallback = "") {
-    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
+    const locale=I18n.getLocale?.()||"es";
+    return CORE_STATS_V87[locale]?.[key]
+      || CORE_STATS_V87.es[key]
+      || TranslationStore.t(key,fallback)
+      || fallback;
   }
 
   /** Legacy method name retained for compatibility; the metric shown is PIR. */
@@ -61,7 +67,7 @@ export class AdvancedStatsView {
     if (playedGames.length === 0) {
       container.innerHTML = `
         <div style="padding: 24px; color: #475569; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center;">
-          ${this.t("no_games_recorded", "No hay partidos registrados para analizar estadísticas avanzadas.")}
+          ${this.t("stats.v87.noGames")}
         </div>`;
       return;
     }
@@ -198,28 +204,28 @@ export class AdvancedStatsView {
               <th class="th-sort-team" data-field="efg" style="padding: 12px; text-align: center; color: #7c3aed; cursor: pointer;">
                 <span class="has-tooltip">
                   eFG% <span class="info-badge">?</span>
-                  <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de tiro premiando en un 50% el triple. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipEfg")}</span>
                 </span>
                 ${getSortArrow('efg', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="tovPct" style="padding: 12px; text-align: center; color: #dc2626; cursor: pointer;">
                 <span class="has-tooltip">
                   TOV% <span class="info-badge">?</span>
-                  <span class="tooltip-box">Turnover Ratio: Porcentaje estimado de posesiones que terminan en pérdida de balón. Fórmula: [TOV / Posesiones].</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipTov")}</span>
                 </span>
                 ${getSortArrow('tovPct', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="offReb" style="padding: 12px; text-align: center; color: #2563eb; cursor: pointer;">
                 <span class="has-tooltip">
                   REB OFF <span class="info-badge">?</span>
-                  <span class="tooltip-box">Rebotes ofensivos capturados por el equipo en el partido.</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipOffReb")}</span>
                 </span>
                 ${getSortArrow('offReb', this.teamSortField, this.teamSortAsc)}
               </th>
               <th class="th-sort-team" data-field="ftRate" style="padding: 12px; text-align: center; color: #16a34a; cursor: pointer;">
                 <span class="has-tooltip">
                   FT RATE <span class="info-badge">?</span>
-                  <span class="tooltip-box">Free Throw Rate: Tiros libres convertidos en relación con los tiros de campo intentados. Fórmula: [FTM / FGA].</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipFtr")}</span>
                 </span>
                 ${getSortArrow('ftRate', this.teamSortField, this.teamSortAsc)}
               </th>
@@ -329,35 +335,35 @@ export class AdvancedStatsView {
               <th class="th-sort-player" data-field="pts" style="padding: 12px; text-align: center; cursor: pointer;">
                 <span class="has-tooltip">
                   ${this.t("total_points", "PTS TOTALES").toUpperCase()} <span class="info-badge">?</span>
-                  <span class="tooltip-box">Puntos totales acumulados: 2×T2C + 3×T3C + TLC.</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipPoints")}</span>
                 </span>
                 ${getSortArrow('pts', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="efg" style="padding: 12px; text-align: center; color: #7c3aed; cursor: pointer;">
                 <span class="has-tooltip">
-                  eFG% ACUM. <span class="info-badge">?</span>
-                  <span class="tooltip-box">Porcentaje de tiro efectivo acumulado. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
+                  ${this.t("stats.v87.accumEfg")} <span class="info-badge">?</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipEfgAccum")}</span>
                 </span>
                 ${getSortArrow('efg', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="valAvg" style="padding: 12px; text-align: center; color: #a855f7; cursor: pointer;">
                 <span class="has-tooltip">
-                  VAL / PJ <span class="info-badge">?</span>
-                  <span class="tooltip-box">Valoración Oficial FIBA por Partido: (PTS + REB + AST + ROB + TAP + FP_REC) - (TC_FALL + TL_FALL + PER + TAP_REC + FP_COM) dividido entre los partidos disputados (MIN > 0).</span>
+                  ${this.t("stats.v87.pirPerGame")} <span class="info-badge">?</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipPir")}</span>
                 </span>
                 ${getSortArrow('valAvg', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="astTo" style="padding: 12px; text-align: center; color: #166534; cursor: pointer;">
                 <span class="has-tooltip">
-                  RATIO AST/TO <span class="info-badge">?</span>
-                  <span class="tooltip-box">Ratio de pase: Asistencias repartidas por cada pérdida de balón cometida. Fórmula: [AST / TOV].</span>
+                  ${this.t("stats.v87.astTo")} <span class="info-badge">?</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipAstTo")}</span>
                 </span>
                 ${getSortArrow('astTo', this.playerSortField, this.playerSortAsc)}
               </th>
               <th class="th-sort-player" data-field="tov" style="padding: 12px; text-align: center; color: #dc2626; cursor: pointer;">
                 <span class="has-tooltip">
                   ${this.t("turnovers", "PÉRDIDAS").toUpperCase()} <span class="info-badge">?</span>
-                  <span class="tooltip-box">Total acumulado de pérdidas de balón en la temporada.</span>
+                  <span class="tooltip-box">${this.t("stats.v87.tooltipTurnovers")}</span>
                 </span>
                 ${getSortArrow('tov', this.playerSortField, this.playerSortAsc)}
               </th>
@@ -376,7 +382,7 @@ export class AdvancedStatsView {
           <div style="display: flex; justify-content: space-between; background: #f8fafc; padding: 8px 12px; border-radius: 8px;">
             <div><span style="font-size: 9px; font-weight: 800; color: #64748b; display: block;">PTS</span><strong style="font-size: 14px; color: #0f172a;">${p.pts}</strong></div>
             <div><span style="font-size: 9px; font-weight: 800; color: #64748b; display: block;">eFG%</span><strong style="color: #7c3aed; font-size: 14px;">${p.efg.toFixed(1)}%</strong></div>
-            <div><span style="font-size: 9px; font-weight: 800; color: #64748b; display: block;">VAL/PJ</span><strong style="color: #a855f7; font-size: 14px;">${p.valAvg.toFixed(1)}</strong></div>
+            <div><span style="font-size: 9px; font-weight: 800; color: #64748b; display: block;">${this.t("stats.v87.pirPerGame")}</span><strong style="color: #a855f7; font-size: 14px;">${p.valAvg.toFixed(1)}</strong></div>
             <div><span style="font-size: 9px; font-weight: 800; color: #64748b; display: block;">AST/TO</span><strong style="color: #166534; font-size: 14px;">${p.astTo.toFixed(1)}</strong></div>
           </div>
         </div>
@@ -414,10 +420,10 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 EFECTIVE FG (eFG%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Effective Field Goal %: Mide la eficacia de tiro bonificando en un 50% los triples anotados. Fórmula: [(FGM + 0.5 × 3PM) / FGA].</span>
+                <span class="tooltip-box">${this.t("stats.v87.tooltipEfgFactor")}</span>
               </span>
             </div>
-            <div style="font-size: 26px; font-weight: 900; color: #7c3aed; margin-top: 4px;">${efg === "N/D" ? efg : efg+"%"}</div>
+            <div style="font-size: 26px; font-weight: 900; color: #7c3aed; margin-top: 4px;">${efg === "N/D" ? this.t("common.notAvailable","N/D") : efg+"%"}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${this.t("efg_desc", "Eficiencia en tiros de campo")}</div>
           </div>
 
@@ -425,18 +431,18 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 TURNOVER RATIO (TOV%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Turnover Percentage: Porcentaje de posesiones propias que terminan en pérdida de balón. Fórmula: [TOV / Posesiones].</span>
+                <span class="tooltip-box">${this.t("stats.v87.tooltipTovFactor")}</span>
               </span>
             </div>
-            <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${tovPct === "N/D" ? tovPct : tovPct+"%"}</div>
+            <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${tovPct === "N/D" ? this.t("common.notAvailable","N/D") : tovPct+"%"}</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${this.t("tov_desc", "Pérdidas estimadas por 100 pos.")}</div>
           </div>
 
           <div class="card" style="padding: 18px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
-                REBOTE OFENSIVO (ORB%) <span class="info-badge">?</span>
-                <span class="tooltip-box">Offensive Rebound %: Porcentaje de rebotes ofensivos capturados sobre los rechaces en ataque disponibles. Fórmula: [ORB / (ORB + Opp DRB)].</span>
+                ${this.t("stats.v87.offReb")} <span class="info-badge">?</span>
+                <span class="tooltip-box">${this.t("stats.v87.tooltipOrbFactor")}</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #2563eb; margin-top: 4px;">${orbPct}</div>
@@ -447,7 +453,7 @@ export class AdvancedStatsView {
             <div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
               <span class="has-tooltip">
                 FREE THROW RATE (FTR) <span class="info-badge">?</span>
-                <span class="tooltip-box">Free Throw Rate: Capacidad de generar puntos desde el tiro libre por cada tiro de campo lanzado. Fórmula: [FTM / FGA].</span>
+                <span class="tooltip-box">${this.t("stats.v87.tooltipFtrFactor")}</span>
               </span>
             </div>
             <div style="font-size: 26px; font-weight: 900; color: #16a34a; margin-top: 4px;">${ftRate}</div>
