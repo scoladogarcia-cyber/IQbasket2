@@ -372,15 +372,15 @@ export class LayoutView {
           </div>
 
           <div class="mobile-selectors-row">
-            <select id="mobile-select-team" class="mobile-select">
+            <select id="mobile-select-team" class="mobile-select" aria-label="${LayoutView.t("team","Equipo")}">
               ${teamOptionsMarkup}
             </select>
-            <select id="mobile-select-season" class="mobile-select">
+            <select id="mobile-select-season" class="mobile-select" aria-label="${LayoutView.t("season","Temporada")}">
               ${seasonOptionsMarkup}
             </select>
             <div class="mobile-lang-box">
               <span class="mobile-lang-icon">🌐</span>
-              <select id="mobile-select-lang-toggle" class="mobile-select mobile-lang-select">
+              <select id="mobile-select-lang-toggle" class="mobile-select mobile-lang-select" aria-label="${LayoutView.t("language","Idioma")}">
                 ${langOptionsMarkup}
               </select>
             </div>
