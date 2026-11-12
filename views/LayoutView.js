@@ -901,10 +901,12 @@ export class LayoutView {
             gap: 4px;
             align-items: center;
             flex: 1;
+            min-width: 0;
             justify-content: flex-end;
           }
 
           .mobile-select {
+            min-width: 0;
             background-color: #1e293b;
             border: 1px solid #334155;
             color: #ffffff;
@@ -995,12 +997,20 @@ export class LayoutView {
             margin-bottom: 2px;
           }
 
+          /* Keep translated navigation labels readable (CAT/EN/FR may wrap).
+             Match the shared layout.css rule: two accessible text lines. */
           .mobile-label {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
             display: block;
+            min-width: 0;
+            max-width: 100%;
+            max-height: 2.4em;
+            line-height: 1.2;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            overflow: hidden;
+            text-overflow: clip;
           }
 
           .mobile-drawer-overlay {
