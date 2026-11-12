@@ -514,6 +514,22 @@ export class AppLayout {
             font-weight: 700;
           }
 
+          /* Legacy AppLayout uses the same locale-safe mobile navigation rules
+             as LayoutView. Prevent single-line clipping in long translations. */
+          .mobile-bottom-bar .mobile-nav-item .mobile-label {
+            display: block;
+            min-width: 0;
+            max-width: 100%;
+            max-height: 2.4em;
+            line-height: 1.2;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            overflow: hidden;
+            text-overflow: clip;
+          }
+
           .mobile-svg {
             width: 20px;
             height: 20px;
