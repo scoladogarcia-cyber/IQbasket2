@@ -372,15 +372,15 @@ export class LayoutView {
           </div>
 
           <div class="mobile-selectors-row">
-            <select id="mobile-select-team" class="mobile-select">
+            <select id="mobile-select-team" class="mobile-select" aria-label="${LayoutView.t("team","Equipo")}">
               ${teamOptionsMarkup}
             </select>
-            <select id="mobile-select-season" class="mobile-select">
+            <select id="mobile-select-season" class="mobile-select" aria-label="${LayoutView.t("season","Temporada")}">
               ${seasonOptionsMarkup}
             </select>
             <div class="mobile-lang-box">
               <span class="mobile-lang-icon">🌐</span>
-              <select id="mobile-select-lang-toggle" class="mobile-select mobile-lang-select">
+              <select id="mobile-select-lang-toggle" class="mobile-select mobile-lang-select" aria-label="${LayoutView.t("language","Idioma")}">
                 ${langOptionsMarkup}
               </select>
             </div>
@@ -901,10 +901,12 @@ export class LayoutView {
             gap: 4px;
             align-items: center;
             flex: 1;
+            min-width: 0;
             justify-content: flex-end;
           }
 
           .mobile-select {
+            min-width: 0;
             background-color: #1e293b;
             border: 1px solid #334155;
             color: #ffffff;
@@ -995,12 +997,20 @@ export class LayoutView {
             margin-bottom: 2px;
           }
 
+          /* Keep translated navigation labels readable (CAT/EN/FR may wrap).
+             Match the shared layout.css rule: two accessible text lines. */
           .mobile-label {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
             display: block;
+            min-width: 0;
+            max-width: 100%;
+            max-height: 2.4em;
+            line-height: 1.2;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            overflow: hidden;
+            text-overflow: clip;
           }
 
           .mobile-drawer-overlay {
