@@ -8,6 +8,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
+import { CORE_STATS_V87 } from "../locales/coreStatsV87.js";
 
 export class TeamStatsView {
   constructor(supabaseClient = null, authController = null) {
@@ -22,9 +23,23 @@ export class TeamStatsView {
     this.cachedPlayers = [];
   }
 
+  /** Versioned display strings only: team and player metadata remains unchanged. */
   t(key, fallback = "") {
-    return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
+    const locale=I18n.getLocale?.()||"es";
+    return CORE_STATS_V87[locale]?.[key]
+      || CORE_STATS_V87.es[key]
+      || TranslationStore.t(key,fallback)
+      || fallback;
   }
+
+  /** Translate known status enums only, never modify persisted values. */
+  _statusLabel(value) {
+    const code=String(value||"").toLowerCase().trim();
+    if(["activo","active","actiu","actif"].includes(code))return this.t("team.v87.active");
+    if(["inactivo","inactive","inactiu","inactif"].includes(code))return this.t("team.v87.inactive");
+    return String(value||"");
+  }
+
 
   _fetchTeamData(teamId) {
     try {
@@ -33,7 +48,7 @@ export class TeamStatsView {
       
       const activeSeason = DataStore.getActiveSeasonDisplayName?.(activeTeamId)
         || DataStore.getActiveSeason?.()
-        || "Sin temporada";
+        || this.t("team.v87.noSeason");
       const games = DataStore.getGamesForActiveSeason?.(activeTeamId)
         || DataStore.getGames(activeTeamId)
         || [];
@@ -46,10 +61,10 @@ export class TeamStatsView {
 
       const team = {
         id: activeTeamId,
-        name: activeTeam.name || "Equipo",
-        category: activeTeam.category || "General",
-        competition: activeTeam.competition || "Liga",
-        coach_name: DataStore.getTeamCoach?.(activeTeamId, activeSeason) || activeTeam.coach_name || activeTeam.coachName || activeTeam.coach || "Por definir",
+        name: activeTeam.name || this.t("team.v87.noTeam"),
+        category: activeTeam.category || this.t("team.v87.general"),
+        competition: activeTeam.competition || this.t("team.v87.league"),
+        coach_name: DataStore.getTeamCoach?.(activeTeamId, activeSeason) || activeTeam.coach_name || activeTeam.coachName || activeTeam.coach || this.t("team.v87.noCoach"),
         periods_count: activeTeam.periods_count || 4,
         period_minutes: activeTeam.period_minutes || 10,
         color: activeTeam.primary_color || activeTeam.color || "#1e3a8a"
@@ -163,7 +178,7 @@ export class TeamStatsView {
           <td style="padding: 12px; color: #475569;">${p.position}</td>
           <td style="padding: 12px;">
             <span style="background: ${isActivo ? '#dcfce7' : '#f1f5f9'}; color: ${isActivo ? '#15803d' : '#64748b'}; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 11px;">
-              ${p.statusTxt}
+              ${this._statusLabel(p.statusTxt)}
             </span>
           </td>
           <td style="padding: 12px; color: #64748b;">${heightStr}</td>
@@ -197,7 +212,7 @@ export class TeamStatsView {
           </div>
           <div style="text-align: right;">
             <span style="font-size: 18px; font-weight: 900; color: var(--color-primary, #f97316); display: block;">${p.ppg.toFixed(1)} <span style="font-size: 10px; color: #64748b;">PPG</span></span>
-            <span style="background: ${isActivo ? '#dcfce7' : '#f1f5f9'}; color: ${isActivo ? '#15803d' : '#64748b'}; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;">${p.statusTxt}</span>
+            <span style="background: ${isActivo ? '#dcfce7' : '#f1f5f9'}; color: ${isActivo ? '#15803d' : '#64748b'}; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;">${this._statusLabel(p.statusTxt)}</span>
           </div>
         </div>
       `;
@@ -265,13 +280,13 @@ export class TeamStatsView {
     const tableRowsMarkup = this._renderPlayerRows(sortedPlayers);
     const mobileCardsMarkup = this._renderPlayerCardsMobile(sortedPlayers);
 
-    const teamName = team.name || "Equipo";
-    const teamCategory = team.category || "General";
-    const teamCompetition = team.competition || "Liga";
+    const teamName = team.name || this.t("team.v87.noTeam");
+    const teamCategory = team.category || this.t("team.v87.general");
+    const teamCompetition = team.competition || this.t("team.v87.league");
     const activeSeason = DataStore.getActiveSeasonDisplayName?.(team.id || teamId)
       || DataStore.getActiveSeason?.()
-      || "Sin temporada";
-    const teamCoach = DataStore.getTeamCoach?.(team.id || teamId, activeSeason) || team.coach_name || "Por definir";
+      || this.t("team.v87.noSeason");
+    const teamCoach = DataStore.getTeamCoach?.(team.id || teamId, activeSeason) || team.coach_name || this.t("team.v87.noCoach");
     const teamPeriods = team.periods_count ? `${team.periods_count} × ${team.period_minutes || 10} min` : "4 × 10 min";
     const teamColor = team.color || "#1e3a8a";
 
@@ -301,7 +316,7 @@ export class TeamStatsView {
           <div class="team-stat-card card" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
             <span style="font-size: 10px; font-weight: 800; color: #64748b;">🏆 ${this.t("record", "BALANCE").toUpperCase()}</span>
             <span style="font-size: 22px; font-weight: 900; margin-top: 4px;">
-              <strong style="color: #16a34a;">${data.wins}W</strong> - <strong style="color: #dc2626;">${data.losses}L</strong>
+              <strong style="color: #16a34a;">${data.wins}${this.t("team.v87.winShort")}</strong> - <strong style="color: #dc2626;">${data.losses}${this.t("team.v87.lossShort")}</strong>
             </span>
           </div>
 
