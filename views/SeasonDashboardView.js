@@ -337,7 +337,7 @@ export class SeasonDashboardView {
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
             <line x1="0" y1="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" stroke="#e2e8f0" stroke-dasharray="4 4" stroke-width="1.5"/>
-            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de posesiones</text>`}
+            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">${this.t("dashboard.v86.insufficientPoss")}</text>`}
             ${netPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#1e3a8a" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -355,8 +355,8 @@ export class SeasonDashboardView {
       return `
         <div class="bar-col">
           <div class="bar-pair">
-            <div class="bar-bar bar-blue" style="height: ${hUs}%;" title="A favor: ${m.ptsUs}"></div>
-            <div class="bar-bar bar-orange" style="height: ${hThem}%;" title="En contra: ${m.ptsThem}"></div>
+            <div class="bar-bar bar-blue" style="height: ${hUs}%;" title="${this.t("dashboard.v86.pointsForLabel","",{count:m.ptsUs})}"></div>
+            <div class="bar-bar bar-orange" style="height: ${hThem}%;" title="${this.t("dashboard.v86.pointsAgainstLabel","",{count:m.ptsThem})}"></div>
           </div>
           <span class="bar-label">${m.label}</span>
         </div>
@@ -375,8 +375,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> A favor</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> En contra</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
       </div>
     `;
 
@@ -400,7 +400,7 @@ export class SeasonDashboardView {
         </div>
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
-            ${efgCurveD ? `<path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de tiro</text>`}
+            ${efgCurveD ? `<path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">${this.t("dashboard.v86.insufficientShooting")}</text>`}
             ${efgPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#22c55e" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}%</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -417,7 +417,7 @@ export class SeasonDashboardView {
       return `
         <div class="bar-col">
           <div class="bar-pair">
-            <div class="bar-bar bar-red" style="height: ${hTov}%;" title="Pérdidas: ${m.tov}"></div>
+            <div class="bar-bar bar-red" style="height: ${hTov}%;" title="${this.t("dashboard.v86.turnoversLabel","",{count:m.tov})}"></div>
           </div>
           <span class="bar-label">${m.label}</span>
         </div>
@@ -463,8 +463,8 @@ export class SeasonDashboardView {
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
             <path d="${orbCurveD}" fill="none" stroke="#f97316" stroke-width="2.5" />
             <path d="${drbCurveD}" fill="none" stroke="#1e3a8a" stroke-width="2.5" />
-            ${orbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#f97316"><title>${p.label}: ${p.val} rebotes ofensivos</title></circle>`).join("")}
-            ${drbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#1e3a8a"><title>${p.label}: ${p.val} rebotes defensivos</title></circle>`).join("")}
+            ${orbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#f97316"><title>${p.label}: ${this.t("dashboard.v86.offReboundsLabel","",{count:p.val})}</title></circle>`).join("")}
+            ${drbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#1e3a8a"><title>${p.label}: ${this.t("dashboard.v86.defReboundsLabel","",{count:p.val})}</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
             ${gameMetrics.map(m => `<span>${m.label}</span>`).join("")}
@@ -472,8 +472,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> Reb. ofensivos</span>
-        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> Reb. defensivos</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> ${this.t("dashboard.v86.offRebounds")}</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.defRebounds")}</span>
       </div>
     `;
 
@@ -536,8 +536,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> a favor</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> en contra</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
       </div>
     ` : `
       <div style="padding: 28px; text-align: center; color: #64748b; font-size: 12px;">
@@ -563,7 +563,7 @@ export class SeasonDashboardView {
             <span>${this.t("pts_scored_vs_received", "PUNTOS A FAVOR VS EN CONTRA")}</span>
             <div class="dash-tooltip-wrapper">
               <span class="tooltip-trigger">?</span>
-              <div class="dash-tooltip-popup">Comparación de puntos anotados frente a recibidos por partido.</div>
+              <div class="dash-tooltip-popup">${this.t("dashboard.v86.pointsCompareTooltip")}</div>
             </div>
           </div>
           ${chartPts}
@@ -607,7 +607,7 @@ export class SeasonDashboardView {
             <span>${this.t("quarter_performance", "RENDIMIENTO POR CUARTOS")}</span>
             <div class="dash-tooltip-wrapper">
               <span class="tooltip-trigger">?</span>
-              <div class="dash-tooltip-popup">Puntos medios anotados y recibidos en cada cuarto.</div>
+              <div class="dash-tooltip-popup">${this.t("dashboard.v86.quarterTooltip")}</div>
             </div>
           </div>
           ${chartQuarters}
@@ -653,7 +653,7 @@ export class SeasonDashboardView {
 
   _renderTableRows(sortedGames = []) {
     if (!sortedGames || sortedGames.length === 0) {
-      return `<tr><td colspan="8" style="padding: 20px; text-align: center; color: #94a3b8;">${this.t("no_games_recorded", "No hay partidos registrados para este equipo.")}</td></tr>`;
+      return `<tr><td colspan="8" style="padding: 20px; text-align: center; color: #94a3b8;">${this.t("dashboard.v86.noGames")}</td></tr>`;
     }
 
     return sortedGames.map((g) => {
@@ -665,9 +665,9 @@ export class SeasonDashboardView {
       const venueLower = String(g.venue || "").toLowerCase();
       const isHome = venueLower === "home" || venueLower === "local" || g.is_home === true || g.isHome === true;
       
-      const venueText = isHome ? "Local" : "Visitante";
+      const venueText = isHome ? this.t("dashboard.v86.home") : this.t("dashboard.v86.away");
       const scoreText = hasPlayed ? `${teamPts}-${oppPts}` : "-";
-      const opponentName = g.opponent || g.opponent_name || g.opponentName || "Rival";
+      const opponentName = g.opponent || g.opponent_name || g.opponentName || this.t("dashboard.v86.unknownOpponent");
       const formattedDate = this._formatDateES(g.date || "-");
       const ratings = this._calculateGameRatings(g);
 
@@ -694,7 +694,7 @@ export class SeasonDashboardView {
           </td>
           <td style="text-align: right;">
             <a href="#/boxscore/${g.id}" class="clean-análisis-link">
-              Análisis
+              ${this.t("dashboard.v86.analysis")}
             </a>
           </td>
         </tr>
@@ -731,27 +731,27 @@ export class SeasonDashboardView {
       if (!this._canSync()) {
         e.preventDefault();
         e.stopPropagation();
-        alert("⚠️ Esta función no está disponible para tu rol de usuario.");
+        alert(this.t("dashboard.v86.auditForbidden"));
         return;
       }
 
       syncBtn.disabled = true;
-      syncBtn.textContent = "⏳ Auditando sin modificar datos...";
+      syncBtn.textContent = `⏳ ${this.t("dashboard.v86.auditing")}`;
       syncBtn.style.opacity = "0.7";
 
       if (DataStore.init) await DataStore.init(teamId || this.currentTeamId, true);
       const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
-        syncBtn.textContent = `✅ ${result.compared} registros revisados · ${result.discrepancies} discrepancias PIR`;
+        syncBtn.textContent = `✅ ${this.t("dashboard.v86.audited","",{compared:result.compared,discrepancies:result.discrepancies})}`;
         setTimeout(() => {
           this.render(container, teamId || this.currentTeamId);
         }, 1000);
       } else {
-        syncBtn.textContent = "❌ Auditoría no disponible";
+        syncBtn.textContent = `❌ ${this.t("dashboard.v86.auditUnavailable")}`;
         setTimeout(() => {
           syncBtn.disabled = false;
-          syncBtn.textContent = "🔎 Auditar estadísticas";
+          syncBtn.textContent = `🔎 ${this.t("dashboard.v86.audit")}`;
           syncBtn.style.opacity = "1";
         }, 2000);
       }
