@@ -87,6 +87,9 @@ jobs:
       - name: Global shell acceptance
         run: node tests/global-ui-shell-qa.mjs
 
+      - name: Dashboard iPhone language switching ES/CA/EN/FR
+        run: node tests/dashboard-v86-mobile-ui.mjs
+
       - name: Role acceptance
         run: node tests/role-acceptance-ui-smoke.mjs
 

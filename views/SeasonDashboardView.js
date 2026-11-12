@@ -14,6 +14,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { StatsSyncService } from "../services/StatsSyncService.js";
 import { Permission } from "../security/PermissionService.js";
+import { interpolateLanguageV80 } from "../services/i18n/BundledLanguageCatalogV80.js";
 
 export class SeasonDashboardView {
   constructor(supabaseClient, authController) {
@@ -29,27 +30,21 @@ export class SeasonDashboardView {
     this.cachedGames = [];
     this.cachedPlayerStats = [];
     this.currentTeamId = null;
+    // Feature locale catalog is lazy-loaded before render; no initial-bundle penalty.
+    this.dashboardLocalePack = null;
   }
 
-  t(key, fallback = "") {
-    const text = TranslationStore ? TranslationStore.t(key, "") : (I18n ? I18n.t(key) : "");
-    if (!text || text === key) {
-      const fallbacks = {
-        val_fiba_tooltip: "Valoración FIBA Oficial: (Pts + Reb + Ast + Rob + Tap + FR) - (Tiros Fallados + TO + FC)",
-        off_rating_tooltip: "Puntos anotados por el equipo por cada 100 posesiones de juego.",
-        def_rating_tooltip: "Puntos recibidos por el equipo por cada 100 posesiones de juego.",
-        net_rating_tooltip: "Diferencia neta entre Offensive Rating y Defensive Rating.",
-        pace_tooltip: "Número estimado de posesiones que el equipo juega por cada 40 minutos.",
-        ts_tooltip: "True Shooting %: Eficiencia de tiro real incluyendo 2P, 3P y TL.",
-        efg_tooltip: "Effective Field Goal %: Eficiencia de tiro ajustada al valor de triples.",
-        turnovers_tooltip: "Total de pérdidas de balón cometidas por el equipo en cada encuentro.",
-        rebound_tooltip: "Volumen de rebotes ofensivos y defensivos capturados por partido.",
-        orb_pct_tooltip: "% de rebotes ofensivos disponibles que captura el equipo.",
-        tov_pct_tooltip: "% de posesiones que terminan en pérdida de balón."
-      };
-      return fallbacks[key] || fallback || key;
-    }
-    return text;
+  /**
+   * Resolve view-specific copy through its on-demand catalog, falling back to
+   * shared translations only for legacy consumers. Never translate sport data.
+   */
+  t(key, fallback = "", params = {}) {
+    const locale = I18n.getLocale?.() || "es";
+    const alias = key.startsWith("dashboard.v86.") ? key.slice("dashboard.v86.".length) : key;
+    const value = this.dashboardLocalePack?.[locale]?.[alias]
+      ?? this.dashboardLocalePack?.es?.[alias]
+      ?? TranslationStore.t(key, params, fallback);
+    return interpolateLanguageV80(value || fallback || key, params);
   }
 
   _canSync(teamId = null) {
@@ -129,7 +124,7 @@ export class SeasonDashboardView {
           map[pId] = {
             name: fullName,
             number: jerseyNum,
-            position: pInfo.primary_position || pInfo.primaryPosition || pInfo.position || "Jugador",
+            position: pInfo.primary_position || pInfo.primaryPosition || pInfo.position || this.t("dashboard.v86.player"),
             gamesPlayed: 0,
             totalMinutes: 0,
             totalVal: 0
@@ -185,8 +180,8 @@ export class SeasonDashboardView {
     if (!Array.isArray(games) || games.length === 0) {
       return `
         <div class="insight-item">
-          <div><strong>ℹ️ Sin partidos en el contexto activo</strong></div>
-          <span>No se generan conclusiones hasta disponer de partidos para el equipo y temporada seleccionados.</span>
+          <div><strong>ℹ️ ${this.t("dashboard.v86.noGamesInsight")}</strong></div>
+          <span>${this.t("dashboard.v86.noGamesDetail")}</span>
         </div>
       `;
     }
@@ -199,15 +194,15 @@ export class SeasonDashboardView {
       if (tovPct > 18) {
         items.push(`
           <div class="insight-item insight-warning">
-            <div><strong>⚠️ Volumen de pérdidas elevado</strong> <span class="insight-badge badge-alerta">Dato</span></div>
-            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%. Conviene revisar su evolución antes de atribuir una causa.</span>
+            <div><strong>⚠️ ${this.t("dashboard.v86.highTurnovers")}</strong> <span class="insight-badge badge-alerta">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.highTurnoversDetail","",{pct:tovPct.toFixed(1)})}</span>
           </div>
         `);
       } else {
         items.push(`
           <div class="insight-item">
-            <div><strong>✅ Control de pérdidas</strong> <span class="insight-badge">Dato</span></div>
-            <span>El TOV% calculado para el contexto activo es ${tovPct.toFixed(1)}%.</span>
+            <div><strong>✅ ${this.t("dashboard.v86.controlledTurnovers")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.turnoversDetail","",{pct:tovPct.toFixed(1)})}</span>
           </div>
         `);
       }
@@ -216,8 +211,8 @@ export class SeasonDashboardView {
     if (Number.isFinite(netRtg) && netRtg !== 0) {
       items.push(`
         <div class="insight-item ${netRtg < 0 ? 'insight-warning' : ''}">
-          <div><strong>${netRtg < 0 ? '⚠️' : '📈'} Net Rating ${netRtg < 0 ? 'negativo' : 'positivo'}</strong> <span class="insight-badge">Dato</span></div>
-          <span>El Net Rating del contexto activo es ${netRtg > 0 ? '+' : ''}${netRtg.toFixed(1)}. Es una descripción del rendimiento observado, no una explicación causal.</span>
+          <div><strong>${netRtg < 0 ? "⚠️" : "📈"} ${this.t(netRtg < 0 ? "dashboard.v86.netNegative" : "dashboard.v86.netPositive")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+          <span>${this.t("dashboard.v86.netDetail","",{rating:`${netRtg > 0 ? "+" : ""}${netRtg.toFixed(1)}`})}</span>
         </div>
       `);
     }
@@ -248,16 +243,16 @@ export class SeasonDashboardView {
         const worst = ranked[0];
         items.push(`
           <div class="insight-item ${worst.avgDiff < 0 ? 'insight-warning' : ''}">
-            <div><strong>🧭 Balance por cuartos</strong> <span class="insight-badge">Dato</span></div>
-            <span>El Q${worst.q} presenta el menor diferencial medio (${worst.avgDiff > 0 ? '+' : ''}${worst.avgDiff.toFixed(1)} puntos) entre los parciales registrados.</span>
+            <div><strong>🧭 ${this.t("dashboard.v86.quarterBalance")}</strong> <span class="insight-badge">${this.t("dashboard.v86.badgeFact")}</span></div>
+            <span>${this.t("dashboard.v86.quarterDetail","",{quarter:worst.q,difference:`${worst.avgDiff > 0 ? "+" : ""}${worst.avgDiff.toFixed(1)}`})}</span>
           </div>
         `);
       }
     } else {
       items.push(`
         <div class="insight-item">
-          <div><strong>ℹ️ Parciales no evaluables</strong></div>
-          <span>No hay suficientes datos de cuartos para generar una conclusión sobre rendimiento por periodo.</span>
+          <div><strong>ℹ️ ${this.t("dashboard.v86.periodsMissing")}</strong></div>
+          <span>${this.t("dashboard.v86.periodsMissingDetail")}</span>
         </div>
       `);
     }
@@ -342,7 +337,7 @@ export class SeasonDashboardView {
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
             <line x1="0" y1="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" stroke="#e2e8f0" stroke-dasharray="4 4" stroke-width="1.5"/>
-            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de posesiones</text>`}
+            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">${this.t("dashboard.v86.insufficientPoss")}</text>`}
             ${netPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#1e3a8a" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -360,8 +355,8 @@ export class SeasonDashboardView {
       return `
         <div class="bar-col">
           <div class="bar-pair">
-            <div class="bar-bar bar-blue" style="height: ${hUs}%;" title="A favor: ${m.ptsUs}"></div>
-            <div class="bar-bar bar-orange" style="height: ${hThem}%;" title="En contra: ${m.ptsThem}"></div>
+            <div class="bar-bar bar-blue" style="height: ${hUs}%;" title="${this.t("dashboard.v86.pointsForLabel","",{count:m.ptsUs})}"></div>
+            <div class="bar-bar bar-orange" style="height: ${hThem}%;" title="${this.t("dashboard.v86.pointsAgainstLabel","",{count:m.ptsThem})}"></div>
           </div>
           <span class="bar-label">${m.label}</span>
         </div>
@@ -380,8 +375,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> A favor</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> En contra</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
       </div>
     `;
 
@@ -405,7 +400,7 @@ export class SeasonDashboardView {
         </div>
         <div class="chart-svg-container">
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
-            ${efgCurveD ? `<path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">Sin datos suficientes de tiro</text>`}
+            ${efgCurveD ? `<path d="${efgCurveD}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">${this.t("dashboard.v86.insufficientShooting")}</text>`}
             ${efgPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#22c55e" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}%</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
@@ -422,7 +417,7 @@ export class SeasonDashboardView {
       return `
         <div class="bar-col">
           <div class="bar-pair">
-            <div class="bar-bar bar-red" style="height: ${hTov}%;" title="Pérdidas: ${m.tov}"></div>
+            <div class="bar-bar bar-red" style="height: ${hTov}%;" title="${this.t("dashboard.v86.turnoversLabel","",{count:m.tov})}"></div>
           </div>
           <span class="bar-label">${m.label}</span>
         </div>
@@ -468,8 +463,8 @@ export class SeasonDashboardView {
           <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
             <path d="${orbCurveD}" fill="none" stroke="#f97316" stroke-width="2.5" />
             <path d="${drbCurveD}" fill="none" stroke="#1e3a8a" stroke-width="2.5" />
-            ${orbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#f97316"><title>${p.label}: ${p.val} rebotes ofensivos</title></circle>`).join("")}
-            ${drbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#1e3a8a"><title>${p.label}: ${p.val} rebotes defensivos</title></circle>`).join("")}
+            ${orbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#f97316"><title>${p.label}: ${this.t("dashboard.v86.offReboundsLabel","",{count:p.val})}</title></circle>`).join("")}
+            ${drbPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#1e3a8a"><title>${p.label}: ${this.t("dashboard.v86.defReboundsLabel","",{count:p.val})}</title></circle>`).join("")}
           </svg>
           <div class="chart-x-labels">
             ${gameMetrics.map(m => `<span>${m.label}</span>`).join("")}
@@ -477,8 +472,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> Reb. ofensivos</span>
-        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> Reb. defensivos</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#f97316;"></span> ${this.t("dashboard.v86.offRebounds")}</span>
+        <span class="legend-badge"><span class="legend-line" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.defRebounds")}</span>
       </div>
     `;
 
@@ -541,8 +536,8 @@ export class SeasonDashboardView {
         </div>
       </div>
       <div class="chart-legend-box">
-        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> a favor</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> en contra</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
       </div>
     ` : `
       <div style="padding: 28px; text-align: center; color: #64748b; font-size: 12px;">
@@ -568,7 +563,7 @@ export class SeasonDashboardView {
             <span>${this.t("pts_scored_vs_received", "PUNTOS A FAVOR VS EN CONTRA")}</span>
             <div class="dash-tooltip-wrapper">
               <span class="tooltip-trigger">?</span>
-              <div class="dash-tooltip-popup">Comparación de puntos anotados frente a recibidos por partido.</div>
+              <div class="dash-tooltip-popup">${this.t("dashboard.v86.pointsCompareTooltip")}</div>
             </div>
           </div>
           ${chartPts}
@@ -612,7 +607,7 @@ export class SeasonDashboardView {
             <span>${this.t("quarter_performance", "RENDIMIENTO POR CUARTOS")}</span>
             <div class="dash-tooltip-wrapper">
               <span class="tooltip-trigger">?</span>
-              <div class="dash-tooltip-popup">Puntos medios anotados y recibidos en cada cuarto.</div>
+              <div class="dash-tooltip-popup">${this.t("dashboard.v86.quarterTooltip")}</div>
             </div>
           </div>
           ${chartQuarters}
@@ -658,7 +653,7 @@ export class SeasonDashboardView {
 
   _renderTableRows(sortedGames = []) {
     if (!sortedGames || sortedGames.length === 0) {
-      return `<tr><td colspan="8" style="padding: 20px; text-align: center; color: #94a3b8;">${this.t("no_games_recorded", "No hay partidos registrados para este equipo.")}</td></tr>`;
+      return `<tr><td colspan="8" style="padding: 20px; text-align: center; color: #94a3b8;">${this.t("dashboard.v86.noGames")}</td></tr>`;
     }
 
     return sortedGames.map((g) => {
@@ -670,9 +665,9 @@ export class SeasonDashboardView {
       const venueLower = String(g.venue || "").toLowerCase();
       const isHome = venueLower === "home" || venueLower === "local" || g.is_home === true || g.isHome === true;
       
-      const venueText = isHome ? "Local" : "Visitante";
+      const venueText = isHome ? this.t("dashboard.v86.home") : this.t("dashboard.v86.away");
       const scoreText = hasPlayed ? `${teamPts}-${oppPts}` : "-";
-      const opponentName = g.opponent || g.opponent_name || g.opponentName || "Rival";
+      const opponentName = g.opponent || g.opponent_name || g.opponentName || this.t("dashboard.v86.unknownOpponent");
       const formattedDate = this._formatDateES(g.date || "-");
       const ratings = this._calculateGameRatings(g);
 
@@ -699,7 +694,7 @@ export class SeasonDashboardView {
           </td>
           <td style="text-align: right;">
             <a href="#/boxscore/${g.id}" class="clean-análisis-link">
-              Análisis
+              ${this.t("dashboard.v86.analysis")}
             </a>
           </td>
         </tr>
@@ -736,27 +731,27 @@ export class SeasonDashboardView {
       if (!this._canSync()) {
         e.preventDefault();
         e.stopPropagation();
-        alert("⚠️ Esta función no está disponible para tu rol de usuario.");
+        alert(this.t("dashboard.v86.auditForbidden"));
         return;
       }
 
       syncBtn.disabled = true;
-      syncBtn.textContent = "⏳ Auditando sin modificar datos...";
+      syncBtn.textContent = `⏳ ${this.t("dashboard.v86.auditing")}`;
       syncBtn.style.opacity = "0.7";
 
       if (DataStore.init) await DataStore.init(teamId || this.currentTeamId, true);
       const result = await this.syncService.runFullAuditAndSync(teamId || this.currentTeamId, this.cachedPlayerStats);
 
       if (result && result.success) {
-        syncBtn.textContent = `✅ ${result.compared} registros revisados · ${result.discrepancies} discrepancias PIR`;
+        syncBtn.textContent = `✅ ${this.t("dashboard.v86.audited","",{compared:result.compared,discrepancies:result.discrepancies})}`;
         setTimeout(() => {
           this.render(container, teamId || this.currentTeamId);
         }, 1000);
       } else {
-        syncBtn.textContent = "❌ Auditoría no disponible";
+        syncBtn.textContent = `❌ ${this.t("dashboard.v86.auditUnavailable")}`;
         setTimeout(() => {
           syncBtn.disabled = false;
-          syncBtn.textContent = "🔎 Auditar estadísticas";
+          syncBtn.textContent = `🔎 ${this.t("dashboard.v86.audit")}`;
           syncBtn.style.opacity = "1";
         }, 2000);
       }
@@ -765,6 +760,11 @@ export class SeasonDashboardView {
 
   async render(containerId = "dashboard-content-area", teamId = null) {
     try {
+      // Resolve only when the dashboard is actually opened. Locale is read on every t() call.
+      if (!this.dashboardLocalePack) {
+        const { SEASON_DASHBOARD_V86 } = await import("../locales/seasonDashboardV86.js");
+        this.dashboardLocalePack = SEASON_DASHBOARD_V86;
+      }
       this.currentTeamId = teamId || DataStore.getActiveTeamId();
       const container = typeof containerId === "string" 
         ? (document.getElementById(containerId) || document.getElementById("main-content") || document.getElementById("app"))
@@ -775,7 +775,7 @@ export class SeasonDashboardView {
       const activeSeason = DataStore.getActiveSeasonDisplayName?.(this.currentTeamId)
         || activeSeasonContext?.name
         || DataStore.getActiveSeason?.()
-        || "Sin temporada";
+        || this.t("dashboard.v86.noSeason");
       const activeTeamSeasonId = activeSeasonContext?.team_season_id
         || activeSeasonContext?.teamSeasonId
         || DataStore.getActiveTeamSeasonId?.(this.currentTeamId)
@@ -801,9 +801,9 @@ export class SeasonDashboardView {
       const playersMap = new Map((players || []).map(p => [String(p.id), p]));
       const activeTeamObj = DataStore.getTeamById ? (DataStore.getTeamById(this.currentTeamId) || {}) : {};
       
-      const teamName = activeTeamObj.name || "JMJ Manyanet Sant Andreu";
-      const teamCategory = activeTeamObj.category || "Cadete Masculino";
-      const teamCompetition = activeTeamObj.competition || "B1";
+      const teamName = activeTeamObj.name || this.t("dashboard.v86.noTeam");
+      const teamCategory = activeTeamObj.category || "—";
+      const teamCompetition = activeTeamObj.competition || "—";
       const canSyncPreview = this._canSync(this.currentTeamId);
 
       let kpis = { wins: 0, losses: 0, ppg: 0, oppPpg: 0, diffPpg: 0, ortg: 0, drtg: 0, netRtg: 0, pace: 0, efg: 0, tovPct: 0 };
@@ -818,17 +818,17 @@ export class SeasonDashboardView {
 
       const topPlayersMarkup = topPlayers.map((p, index) => `
         <div class="purple-leader-col">
-          <span class="leader-pill-yellow">#${index + 1} LÍDER</span>
+          <span class="leader-pill-yellow">#${index + 1} ${this.t("dashboard.v86.leader")}</span>
           <div class="leader-main-info">
             <strong class="leader-player-name">${p.number} ${p.name}</strong>
-            <span class="leader-player-meta">${p.position} · ${p.gamesPlayed} PJ</span>
+            <span class="leader-player-meta">${p.position} · ${p.gamesPlayed} ${this.t("dashboard.v86.playedShort")}</span>
           </div>
           <div class="leader-val-box">
             <span class="leader-val-num">${p.avgVal}</span>
-            <span class="leader-val-txt">VAL / PJ</span>
+            <span class="leader-val-txt">${this.t("dashboard.v86.valuePerGame")}</span>
           </div>
         </div>
-      `).join("");
+      `).join("") || `<div class="dash-empty-leaders">${this.t("dashboard.v86.noLeaders")}</div>`;
 
       container.innerHTML = `
         <div class="clean-dashboard-wrapper">
@@ -971,15 +971,15 @@ export class SeasonDashboardView {
                 <span class="dash-category-badge">${teamCategory}</span>
               </div>
               <div class="dash-meta-line">
-                Temporada ${activeSeason} · ${teamCompetition} &nbsp;·&nbsp; 
-                <span class="dash-win-loss"><span class="w-text">${kpis.wins}V</span> <span class="l-text">${kpis.losses}D</span></span> &nbsp;·&nbsp; 
-                ${this.cachedGames.length} partidos
+                ${this.t("dashboard.v86.season")} ${activeSeason} · ${teamCompetition} &nbsp;·&nbsp; 
+                <span class="dash-win-loss"><span class="w-text">${kpis.wins}${this.t("dashboard.v86.winShort")}</span> <span class="l-text">${kpis.losses}${this.t("dashboard.v86.lossShort")}</span></span> &nbsp;·&nbsp; 
+                ${this.t("dashboard.v86.gamesCount","",{count:this.cachedGames.length})}
               </div>
             </div>
 
             <div class="dash-top-actions">
               <button id="btn-sync-data" aria-disabled="${!canSyncPreview}" style="background: ${canSyncPreview ? '#f8fafc' : '#e2e8f0'}; color: ${canSyncPreview ? '#0f172a' : '#64748b'}; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: ${canSyncPreview ? 'pointer' : 'not-allowed'};">
-                🔎 Auditar estadísticas${canSyncPreview ? '' : ' 🔒'}
+                🔎 ${this.t("dashboard.v86.audit")}${canSyncPreview ? "" : " 🔒"}
               </button>
             </div>
           </div>
@@ -988,42 +988,42 @@ export class SeasonDashboardView {
           <div class="kpi-cards-grid">
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PARTIDOS JUGADOS</span>
+                <span>${this.t("dashboard.v86.played")}</span>
               </div>
               <div class="kpi-main-number">${this.cachedGames.length}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>VICTORIAS</span>
+                <span>${this.t("dashboard.v86.wins")}</span>
               </div>
               <div class="kpi-main-number">${kpis.wins}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DERROTAS</span>
+                <span>${this.t("dashboard.v86.losses")}</span>
               </div>
               <div class="kpi-main-number">${kpis.losses}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PUNTOS POR PARTIDO</span>
+                <span>${this.t("dashboard.v86.pointsPerGame")}</span>
               </div>
               <div class="kpi-main-number">${kpis.ppg}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PUNTOS RECIBIDOS</span>
+                <span>${this.t("dashboard.v86.pointsAgainst")}</span>
               </div>
               <div class="kpi-main-number">${kpis.oppPpg}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DIFERENCIA MEDIA</span>
+                <span>${this.t("dashboard.v86.avgDiff")}</span>
               </div>
               <div class="kpi-main-number" style="color: ${kpis.diffPpg < 0 ? '#0f172a' : '#16a34a'};">
                 ${kpis.diffPpg > 0 ? '+' : ''}${kpis.diffPpg}
@@ -1032,47 +1032,47 @@ export class SeasonDashboardView {
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>OFFENSIVE RATING</span>
+                <span>${this.t("dashboard.v86.offensiveRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("off_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.ortg ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.ortg ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>DEFENSIVE RATING</span>
+                <span>${this.t("dashboard.v86.defensiveRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("def_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.drtg ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.drtg ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>NET RATING</span>
+                <span>${this.t("dashboard.v86.netRating")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("net_rating_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.netRtg===null || kpis.netRtg===undefined ? "N/D" : (kpis.netRtg>0?"+":"")+kpis.netRtg}</div>
-              <span class="kpi-sub-trend">Rendimiento neto no calculable sin posesiones rivales.</span>
+              <div class="kpi-main-number">${kpis.netRtg===null || kpis.netRtg===undefined ? this.t("dashboard.v86.notAvailable") : (kpis.netRtg>0?"+":"")+kpis.netRtg}</div>
+              ${kpis.netRtg===null||kpis.netRtg===undefined ? `<span class="kpi-sub-trend">${this.t("dashboard.v86.netNotAvailable")}</span>` : ""}
             </div>
 
             <div class="kpi-box-card">
               <div class="kpi-top-label">
-                <span>PACE</span>
+                <span>${this.t("dashboard.v86.pace")}</span>
                 <div class="dash-tooltip-wrapper">
                   <span class="tooltip-trigger">?</span>
                   <div class="dash-tooltip-popup">${this.t("pace_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.pace ?? "N/D"}</div>
+              <div class="kpi-main-number">${kpis.pace ?? this.t("dashboard.v86.notAvailable")}</div>
             </div>
 
             <div class="kpi-box-card">
@@ -1083,8 +1083,8 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("efg_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.efg===null||kpis.efg===undefined?"N/D":kpis.efg+"%"}</div>
-              <span class="kpi-sub-trend trend-down">▼ -1.8 vs previos</span>
+              <div class="kpi-main-number">${kpis.efg===null||kpis.efg===undefined?this.t("dashboard.v86.notAvailable"):kpis.efg+"%"}</div>
+              
             </div>
 
             <div class="kpi-box-card">
@@ -1095,15 +1095,15 @@ export class SeasonDashboardView {
                   <div class="dash-tooltip-popup">${this.t("tov_pct_tooltip")}</div>
                 </div>
               </div>
-              <div class="kpi-main-number">${kpis.tovPct===null||kpis.tovPct===undefined?"N/D":kpis.tovPct+"%"}</div>
-              <span class="kpi-sub-trend trend-up">▲ +4.0 vs previos</span>
+              <div class="kpi-main-number">${kpis.tovPct===null||kpis.tovPct===undefined?this.t("dashboard.v86.notAvailable"):kpis.tovPct+"%"}</div>
+              
             </div>
           </div>
 
           <!-- HERO CARD PURPLE LÍDERES FIBA (Texto en blanco) -->
           <div class="purple-leaders-banner">
             <div class="purple-card-title">
-              <span>🏆 LÍDERES EN VALORACIÓN FIBA (VAL/PJ)</span>
+              <span>🏆 ${this.t("dashboard.v86.fibaLeaders")}</span>
             </div>
             <div class="purple-leaders-grid">
               ${topPlayersMarkup}
@@ -1115,19 +1115,19 @@ export class SeasonDashboardView {
 
           <!-- TABLA DE ÚLTIMOS PARTIDOS -->
           <div class="clean-table-card">
-            <h3 class="clean-table-title">ÚLTIMOS PARTIDOS</h3>
+            <h3 class="clean-table-title">${this.t("dashboard.v86.recentGames")}</h3>
             <div style="overflow-x: auto;">
               <table class="clean-table">
                 <thead>
                   <tr>
-                    <th data-sort="date" style="cursor: pointer;">FECHA ↕</th>
-                    <th data-sort="opponent" style="cursor: pointer;">RIVAL ↕</th>
-                    <th data-sort="venue" style="cursor: pointer;">SEDE ↕</th>
-                    <th data-sort="score" style="cursor: pointer;">RESULTADO ↕</th>
-                    <th data-sort="diff" style="cursor: pointer;">DIF. ↕</th>
+                    <th data-sort="date" style="cursor: pointer;">${this.t("dashboard.v86.date")} ↕</th>
+                    <th data-sort="opponent" style="cursor: pointer;">${this.t("dashboard.v86.opponent")} ↕</th>
+                    <th data-sort="venue" style="cursor: pointer;">${this.t("dashboard.v86.venue")} ↕</th>
+                    <th data-sort="score" style="cursor: pointer;">${this.t("dashboard.v86.result")} ↕</th>
+                    <th data-sort="diff" style="cursor: pointer;">${this.t("dashboard.v86.difference")} ↕</th>
                     <th data-sort="off" style="cursor: pointer;">OFF ↕</th>
                     <th data-sort="def" style="cursor: pointer;">DEF ↕</th>
-                    <th style="text-align: right;">ACCIÓN</th>
+                    <th style="text-align: right;">${this.t("dashboard.v86.action")}</th>
                   </tr>
                 </thead>
                 <tbody id="games-table-body">
@@ -1140,7 +1140,7 @@ export class SeasonDashboardView {
           <!-- LO MÁS IMPORTANTE (ALERTAS Y DEBILIDADES) -->
           <div class="insights-box-card">
             <div class="insights-header">
-              <span>💡 LO MÁS IMPORTANTE</span>
+              <span>💡 ${this.t("dashboard.v86.insightsTitle")}</span>
             </div>
             <div class="insights-list">
               ${this._renderEvidenceInsights(kpis, this.cachedGames)}
