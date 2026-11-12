@@ -23,7 +23,8 @@ assert.equal(SEASON_DASHBOARD_V86.en.played,"Games played");
 assert.equal(SEASON_DASHBOARD_V86.fr.played,"Matchs joués");
 assert.equal(interpolateLanguageV80(SEASON_DASHBOARD_V86.ca.gamesCount,{count:5}),"5 partits");
 const source=readFileSync(new URL("../views/SeasonDashboardView.js",import.meta.url),"utf8");
-assert.match(source,/await import\("\.\.\/locales\/seasonDashboardV86\.js"\)/);
+assert.match(source,/import\("\.\.\/locales\/seasonDashboardV86\.js"\)/);
+assert.match(source,/import\("\.\.\/services\/i18n\/BasketballCategoryDisplayV88\.js"\)/);
 assert.match(source,/this\.dashboardLocalePack\?\.\[locale\]/);
 for(const forbidden of ["<span>PARTIDOS JUGADOS</span>","<span>VICTORIAS</span>","<span>DERROTAS</span>","<span>PUNTOS POR PARTIDO</span>","<span>PUNTOS RECIBIDOS</span>","<h3 class=\"clean-table-title\">ÚLTIMOS PARTIDOS</h3>"]){
   assert.ok(!source.includes(forbidden),"Raw Spanish UI: "+forbidden);

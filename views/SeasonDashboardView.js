@@ -762,8 +762,12 @@ export class SeasonDashboardView {
     try {
       // Resolve only when the dashboard is actually opened. Locale is read on every t() call.
       if (!this.dashboardLocalePack) {
-        const { SEASON_DASHBOARD_V86 } = await import("../locales/seasonDashboardV86.js");
-        this.dashboardLocalePack = SEASON_DASHBOARD_V86;
+        const [{SEASON_DASHBOARD_V86},{formatBasketballCategoryLabelV88}]=await Promise.all([
+          import("../locales/seasonDashboardV86.js"),
+          import("../services/i18n/BasketballCategoryDisplayV88.js")
+        ]);
+        this.dashboardLocalePack=SEASON_DASHBOARD_V86;
+        this.formatCategoryLabel=formatBasketballCategoryLabelV88;
       }
       this.currentTeamId = teamId || DataStore.getActiveTeamId();
       const container = typeof containerId === "string" 
@@ -802,7 +806,7 @@ export class SeasonDashboardView {
       const activeTeamObj = DataStore.getTeamById ? (DataStore.getTeamById(this.currentTeamId) || {}) : {};
       
       const teamName = activeTeamObj.name || this.t("dashboard.v86.noTeam");
-      const teamCategory = activeTeamObj.category || "—";
+      const teamCategory = this.formatCategoryLabel(activeTeamObj.category,I18n.getLocale?.()||"es") || "—";
       const teamCompetition = activeTeamObj.competition || "—";
       const canSyncPreview = this._canSync(this.currentTeamId);
 
