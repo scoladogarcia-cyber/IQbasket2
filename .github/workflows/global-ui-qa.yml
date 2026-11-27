@@ -53,7 +53,7 @@ env:
 jobs:
   shell-rbac:
     name: Shell + RBAC + read-only
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 20
 
     steps:
@@ -132,7 +132,7 @@ jobs:
 
   player360:
     name: Player 360 + wellness
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 22
 
     steps:
@@ -187,7 +187,7 @@ jobs:
 
   operations:
     name: Roster + transfers + locks + BoxScore
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 22
 
     steps:

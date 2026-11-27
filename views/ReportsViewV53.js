@@ -22,6 +22,7 @@ import { isFederationCsv, adaptFederationCsv } from "../services/reports/Federat
 import { createFederationWorksheetV72 } from "../services/reports/FederationWorksheetV72.js";
 import { REPORT_PROFILE_V74, resolveReportProfileV74 } from "../services/reports/ReportProfileV74.js";
 import { renderPlayerDevelopmentBriefV77 } from "../services/reports/PlayerDevelopmentBriefV77.js";
+import { renderPlayerCompleteBoxScore } from "./reports/PlayerCompleteBoxScore.js";
 import {filterReportGamesByDateV78} from "../services/reports/ReportDateRangeV78.js";
 import {serializeReportAuditManifestV78} from "../services/reports/ReportAuditManifestV78.js";
 import { exportRosterCsvV74, previewRosterCsvV74 } from "../services/exchange/RosterExchangeV74.js";
@@ -50,6 +51,7 @@ export class ReportsViewV53 extends ReportsViewV50 {
 
   /** Los eventos no forman parte de la carga inicial del DataStore: lectura RLS fresca. */
   async _loadPlayerSelection(context, selection) {
+    const token=this._playerReadToken;
     const stats=await super._loadPlayerSelection(context,selection);
     if (!supabase?.from) throw new Error("No se puede cargar el mapa de tiro individual.");
     const gameIds=new Set(selection.games.map(game=>id(game.id)));
@@ -70,6 +72,8 @@ export class ReportsViewV53 extends ReportsViewV50 {
       }
     }
     // Sustituir el estado solamente al completar la consulta y validación.
+    if(token!==this._playerReadToken || !this._isCurrentPlayerSelection(selection,context))
+      throw new Error("La selección individual ha cambiado durante la lectura.");
     this._playerEvents=events;
     this._playerEventsScope=gameIds;
     return stats;
@@ -211,7 +215,10 @@ export class ReportsViewV53 extends ReportsViewV50 {
       }
       const teamName=DataStore.getTeamById?.(context.teamId)?.name||"Equipo";
       const seasonName=DataStore.getActiveSeasonDisplayName?.(context.teamId)||"Temporada";
-      const html=renderPlayerDevelopmentBriefV77({reports,player,fromDate,toDate,teamName,seasonName});
+      let html=renderPlayerDevelopmentBriefV77({reports,player,fromDate,toDate,teamName,seasonName});
+      // A one-match brief must also contain the actual makes/attempts and
+      // complete individual boxscore, not just percentages or season KPIs.
+      if(reports.length===1) html+=renderPlayerCompleteBoxScore({player,games:[reports[0].game],stats:reports[0].stats});
       const authorization=this.reportAccessPolicy.authorizeExport(ReportType.PLAYER_STATS,playerScope);
       if(!authorization.allowed||!ReportExporter.printReport("IQBasket_Seguimiento_Jugador",html,{authorization,printWindow}))
         throw new Error("No se pudo preparar el PDF individual.");
@@ -505,6 +512,11 @@ export class ReportsViewV53 extends ReportsViewV50 {
     const fromDate=range("from","Desde"),toDate=range("to","Hasta");
     const playerPdf=button("PDF de seguimiento individual","#1d4ed8");playerBrief.append(playerPdf);
     panel.append(playerBrief);
+    if(this.selectedGameId!=="all") {
+      const matchPlayers=button("Fichas individuales de este partido","#0f766e");
+      matchPlayers.addEventListener("click",()=>{this.reportMode="player";this.selectedPlayerId="all";void this.render(containerId);});
+      playerBrief.append(matchPlayers);
+    }
     playerPdf.addEventListener("click",()=>{void this._exportPlayerBriefV77({
       status,playerId:playerSelect.value,fromDate:fromDate.value,toDate:toDate.value
     });});

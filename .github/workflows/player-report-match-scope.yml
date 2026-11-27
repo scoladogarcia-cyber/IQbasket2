@@ -1,0 +1,37 @@
+name: Individual match report regression
+on:
+  pull_request:
+    paths:
+      - 'views/ReportsView*.js'
+      - 'views/reports/PlayerCompleteBoxScore.js'
+      - 'services/reports/PlayerReportMatchScope.js'
+      - 'tests/player-report-match-scope.mjs'
+      - '.github/workflows/player-report-match-scope.yml'
+  push:
+    branches: [main, fix/player-report-match-scope-20261127]
+    paths:
+      - 'views/ReportsView*.js'
+      - 'views/reports/PlayerCompleteBoxScore.js'
+      - 'services/reports/PlayerReportMatchScope.js'
+      - 'tests/player-report-match-scope.mjs'
+      - '.github/workflows/player-report-match-scope.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node --check views/ReportsViewV50.js
+          node --check views/ReportsViewV53.js
+          node --check views/ReportsViewLegacyV36.js
+          node --check views/reports/PlayerCompleteBoxScore.js
+          node tests/player-report-match-scope.mjs
+          node tests/player-complete-report-v51.mjs
+          node tests/player-report-layout-v52.mjs
+          node tests/player-development-brief-v77.mjs
+          node tests/family-zero-evidence-v72.mjs

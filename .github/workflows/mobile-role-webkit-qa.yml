@@ -40,7 +40,7 @@ env:
 jobs:
   mobile-role-browser:
     name: iPhone roles · ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 20
     strategy:
       fail-fast: false

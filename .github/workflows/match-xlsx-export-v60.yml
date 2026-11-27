@@ -35,7 +35,7 @@ env:
 
 jobs:
   contract-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
 
   browser-download:
     name: XLSX download · ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.55 browser support
     timeout-minutes: 20
     strategy:
       fail-fast: false

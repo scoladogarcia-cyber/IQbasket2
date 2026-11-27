@@ -43,6 +43,12 @@ export function renderPlayerCompleteBoxScore({ player, games = [], stats = [] } 
   const sum = key => played.reduce((total, row) => total + row.m[key], 0);
   const totalPoints = played.reduce((total, row) => total + row.points, 0);
   const total = Object.fromEntries(["minutes", "fg2m", "fg2a", "fg3m", "fg3a", "ftm", "fta", "offReb", "defReb", "assists", "steals", "blocks", "turnovers", "foulsCommitted", "foulsDrawn", "pir"].map(key => [key, sum(key)]));
+  // Received blocks are distinct from made blocks; unknown historical values
+  // stay N/D rather than being converted to zero.
+  const receivedBlocks = row => numberOrNull(row.source.blocks_received ?? row.source.blocksReceived);
+  const totalReceivedBlocks = played.every(row => receivedBlocks(row) !== null)
+    ? played.reduce((sum, row) => sum + receivedBlocks(row), 0) : "N/D";
+  const scopeLabel = games.length === 1 ? "PARTIDO" : "SELECCIÓN";
   const fgMade = total.fg2m + total.fg3m;
   const fgAttempted = total.fg2a + total.fg3a;
   const gamesCount = played.filter(row => numberOrNull(row.source.minutes) > 0).length;
@@ -55,20 +61,20 @@ export function renderPlayerCompleteBoxScore({ player, games = [], stats = [] } 
   }).join("") + rowHtml("TOTAL", [minutes,totalPoints,attempts(total.fg2m,total.fg2a),percentage(total.fg2m,total.fg2a),attempts(total.fg3m,total.fg3a),percentage(total.fg3m,total.fg3a),attempts(fgMade,fgAttempted),percentage(fgMade,fgAttempted),attempts(total.ftm,total.fta),percentage(total.ftm,total.fta)], true);
   const rebounding = played.map(row => {
     const m = row.m;
-    return rowHtml(label(row), [m.offReb,m.defReb,m.rebounds,m.assists,m.steals,m.blocks,m.turnovers,m.foulsCommitted,m.foulsDrawn,m.pir]);
-  }).join("") + rowHtml("TOTAL", [total.offReb,total.defReb,total.offReb+total.defReb,total.assists,total.steals,total.blocks,total.turnovers,total.foulsCommitted,total.foulsDrawn,total.pir], true);
+    return rowHtml(label(row), [m.offReb,m.defReb,m.rebounds,m.assists,m.steals,m.blocks,receivedBlocks(row) ?? "N/D",m.turnovers,m.foulsCommitted,m.foulsDrawn,m.pir]);
+  }).join("") + rowHtml("TOTAL", [total.offReb,total.defReb,total.offReb+total.defReb,total.assists,total.steals,total.blocks,totalReceivedBlocks,total.turnovers,total.foulsCommitted,total.foulsDrawn,total.pir], true);
   const efficiency = played.map(row => {
     const m = row.m;
     return rowHtml(label(row), [formatMetric(m.efg,"%"),formatMetric(m.ts,"%"),formatMetric(m.astTo),numberOrNull(row.source.plus_minus ?? row.source.plusMinus) ?? "N/D"]);
-  }).join("") + rowHtml("TEMPORADA", [percentage(total.fg2m+1.5*total.fg3m,fgAttempted),percentage(totalPoints,2*(fgAttempted+0.44*total.fta)),ratio(total.assists,total.turnovers),"No aditivo"],true);
+  }).join("") + rowHtml(scopeLabel, [percentage(total.fg2m+1.5*total.fg3m,fgAttempted),percentage(totalPoints,2*(fgAttempted+0.44*total.fta)),ratio(total.assists,total.turnovers),"No aditivo"],true);
   const warnings = played.filter(row => row.points !== row.m.shootingPoints).map(row => `<p style="color:#9a3412">Revisar ${escapeHtml(label(row))}: puntos guardados (${row.points}) y puntos derivados de tiros (${row.m.shootingPoints}) no coinciden.</p>`).join("");
   return `<section class="iq-player-detail" style="margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:9px;break-inside:auto">
     <h2 style="font-size:16px;margin:0 0 8px">Acta individual completa · tiros de campo y estadísticas</h2>
-    <p style="font-size:11px;color:#334155">${played.length} actas registradas; ${gamesCount} partidos con minutos. Totales: ${totalPoints} puntos, ${minutes} minutos, ${formatMetric(gamesCount ? totalPoints/gamesCount : null)} puntos/PJ. No se mezclan otras temporadas.</p>
+    <p style="font-size:11px;color:#334155">${played.length} actas registradas; ${gamesCount} partidos con minutos. Totales: ${totalPoints} puntos, ${minutes} minutos, ${formatMetric(gamesCount ? totalPoints/gamesCount : null)} puntos/PJ. Solo se incluyen los partidos seleccionados.</p>
     ${table("Tiros: 2 puntos, triples, tiros de campo y libres",["Partido","MIN","PTS","T2 C/I","T2%","T3 C/I","T3%","TC C/I","TC%","TL C/I","TL%"],shooting)}
-    ${table("Rebotes y acciones individuales",["Partido","RO","RD","REB","AST","ROB","TAP","PER","FC","FR","VAL FIBA"],rebounding)}
+    ${table("Rebotes y acciones individuales",["Partido","RO","RD","REB","AST","ROB","TAP R.","TAP REC.","PER","FC","FR","VAL FIBA"],rebounding)}
     ${table("Eficiencia y diferencial",["Partido","eFG%","TS%","AST/PER","+/−"],efficiency)}
     ${warnings}
-    <p style="font-size:10px;color:#475569">C/I = convertidos/intentados; TC = tiros de campo (T2 + T3); RO/RD = rebotes ofensivos/defensivos; VAL = valoración FIBA; eFG% pondera el triple; TS% considera también tiros libres; N/D = sin denominador o dato no registrado. Porcentajes de temporada calculados sobre el total de aciertos e intentos, no promediando porcentajes. El diferencial +/− no se suma.</p>
+    <p style="font-size:10px;color:#475569">C/I = convertidos/intentados; TC = tiros de campo (T2 + T3); RO/RD = rebotes ofensivos/defensivos; VAL = valoración FIBA; eFG% pondera el triple; TS% considera también tiros libres; N/D = sin denominador o dato no registrado. TAP R./REC. = tapones realizados/recibidos. Porcentajes de la selección calculados sobre el total de aciertos e intentos, no promediando porcentajes. El diferencial +/− no se suma.</p>
   </section>`;
 }
