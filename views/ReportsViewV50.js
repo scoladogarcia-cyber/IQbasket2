@@ -185,7 +185,7 @@ export class ReportsViewV50 extends ReportsView {
       }
       replaceScopedPlayerStatsInMemory(DataStore, { ...selection, stats });
       const report = selection.players.map((player, i) => `<section style="${i ? "break-before:page;page-break-before:always;" : ""}break-inside:auto">
-        ${this._playerReportFormat === "short" ? renderPlayerCompleteBoxScore({player,games:selection.games,stats:DataStore.getPlayerGameStats?.(player.id)||[]}) : this._renderSinglePlayerCard(player, selection.games)}
+        ${this._playerReportFormat === "short" ? `<h2>${escapeHtml(`#${player.jersey ?? player.number ?? "–"} ${[player.first_name ?? player.firstName, player.last_name ?? player.lastName].filter(Boolean).join(" ") || player.name || "Jugador"}`)}</h2>${renderPlayerCompleteBoxScore({player,games:selection.games,stats:DataStore.getPlayerGameStats?.(player.id)||[]})}` : this._renderSinglePlayerCard(player, selection.games)}
       </section>`).join("");
       const team = DataStore.getTeamById?.(context.teamId);
       const season = DataStore.getActiveSeasonDisplayName?.(context.teamId) || "Temporada";
