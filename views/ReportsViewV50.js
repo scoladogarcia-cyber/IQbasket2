@@ -12,6 +12,7 @@ import { loadAuthorizedFinalGameReport } from "../services/games/GameFinalReport
 import { loadCompleteSeasonReports, buildCompleteSeasonReport } from "../services/reports/CompleteSeasonReportService.js";
 import { loadAuthorizedPlayerSeasonStats, replaceScopedPlayerStatsInMemory } from "../services/reports/PlayerSeasonReadService.js";
 import { renderPlayerCompleteBoxScore } from "./reports/PlayerCompleteBoxScore.js";
+import { selectPlayerReportGames, playerReportSelectionKey } from "../services/reports/PlayerReportMatchScope.js";
 
 const gameScope = (game, context) => ({
   ...context,
@@ -68,10 +69,11 @@ export class ReportsViewV50 extends ReportsView {
     // Se preserva el dorsal 0: player.jersey || '-' lo ocultaba en la ficha antigua.
     const label = `#${player.jersey ?? player.number ?? "–"} ${name}`;
     const original = super._renderSinglePlayerCard(player, games);
+    const scopeLabel = games.length === 1 ? `${games[0].date || "Sin fecha"} · ${games[0].opponent || "Rival"}` : `${games.length} partidos seleccionados`;
     return `<section class="iq-player-report" style="margin-bottom:20px;break-inside:auto">
       <header style="background:#eff6ff;border:1px solid #bfdbfe;padding:12px 14px;border-radius:10px;margin-bottom:10px">
         <h2 style="font-size:18px;color:#172554;margin:0">${escapeHtml(label)}</h2>
-        <p style="font-size:11px;margin:4px 0 0;color:#334155">Primero: tiros y estadísticas reales por partido y temporada. Después: gráficas y mapa de tiro, si existen posiciones registradas.</p>
+        <p style="font-size:11px;margin:4px 0 0;color:#334155">${escapeHtml(scopeLabel)} · Tiros, estadísticas, gráficas y mapa de tiro de la selección.</p>
       </header>
       ${detail}
       <div class="iq-player-visuals" style="margin-top:14px;break-before:page;page-break-before:always">
@@ -88,10 +90,23 @@ export class ReportsViewV50 extends ReportsView {
       ? authorized
       : authorized.filter(player => normalizeId(player.id) === normalizeId(this.selectedPlayerId));
     if (!players.length) throw new Error("No hay jugadores autorizados en esta selección.");
-    const games = this._getFilteredGames();
+    const games = selectPlayerReportGames(this._getFilteredGames(), this.selectedGameId);
     if (!games.length) throw new Error("No hay partidos de esta temporada con los filtros seleccionados.");
     if (!context.teamSeasonId) throw new Error("Selecciona una temporada válida para consultar las actas individuales.");
     return { players, games };
+  }
+
+  /** During legacy rendering, do not show cached season totals before the fresh read. */
+  _renderPlayerReport() {
+    return '<p role="status">Recuperando actas y tiros individuales actualizados…</p>';
+  }
+
+  /** Verify selection again before displaying or exporting asynchronous results. */
+  _isCurrentPlayerSelection(selection, context) {
+    if (this.reportMode !== "player" || !sameScope(context, this._reportContext())) return false;
+    try {
+      return playerReportSelectionKey(selection) === playerReportSelectionKey(this._playerSelection(this._reportContext()));
+    } catch { return false; }
   }
 
   /** Lectura con RLS y RBAC; reemplaza SOLO las actas autorizadas en memoria. */
@@ -118,14 +133,14 @@ export class ReportsViewV50 extends ReportsView {
     try {
       const selection = this._playerSelection(context);
       const stats = await this._loadPlayerSelection(context, selection);
-      if (token !== this._playerReadToken || this.reportMode !== "player"
-        || normalizeId(this.selectedPlayerId) !== selected || !sameScope(context, this._reportContext())) return;
+      if (token !== this._playerReadToken || normalizeId(this.selectedPlayerId) !== selected
+        || !this._isCurrentPlayerSelection(selection, context)) return;
       const stillAllowed = selection.players.every(player => this.reportAccessPolicy.canView(ReportType.PLAYER_STATS, {
         ...context, playerId: player.id, playerTeamId: player.team_id || player.teamId || context.teamId
       }));
       if (!stillAllowed) throw new Error("Tus permisos han cambiado durante la consulta.");
       replaceScopedPlayerStatsInMemory(DataStore, { ...selection, stats });
-      content.innerHTML = this._renderPlayerReport(selection.players, selection.games);
+      content.innerHTML = super._renderPlayerReport(selection.players, selection.games);
       this._playerReportReady = true;
       const button = container.querySelector("#btn-export-complete-players");
       if (button) button.disabled = !this._canExportPlayers(context, selection.players) || this._playerPdfRunning;
@@ -163,7 +178,7 @@ export class ReportsViewV50 extends ReportsView {
     try {
       const selected = normalizeId(this.selectedPlayerId);
       const stats = await this._loadPlayerSelection(context, selection);
-      if (!sameScope(context, this._reportContext()) || this.reportMode !== "player"
+      if (!this._isCurrentPlayerSelection(selection, context)
         || normalizeId(this.selectedPlayerId) !== selected
         || !this._canExportPlayers(this._reportContext(), selection.players)) {
         throw new Error("El jugador, la temporada o los permisos han cambiado durante la exportación.");
@@ -174,15 +189,16 @@ export class ReportsViewV50 extends ReportsView {
       </section>`).join("");
       const team = DataStore.getTeamById?.(context.teamId);
       const season = DataStore.getActiveSeasonDisplayName?.(context.teamId) || "Temporada";
+      const scopeLabel = selection.games.length === 1 ? `${selection.games[0].date || "Sin fecha"} · ${selection.games[0].opponent || "Rival"}` : `${selection.games.length} partidos seleccionados`;
       const name = selection.players.length === 1 ? selection.players[0].first_name || selection.players[0].name || "Jugador" : "Plantilla";
       const html = `<style>@media print{@page{size:A4 landscape;margin:9mm}.iq-player-boxscore{font-size:8px!important}.iq-player-boxscore td,.iq-player-boxscore th{padding:2px 3px!important}.iq-player-detail{break-inside:auto!important}}</style>
-        <header style="padding:12px;border-bottom:2px solid #1e3a8a;margin-bottom:14px"><h1>Informe individual completo · ${selection.players.length === 1 ? "Jugador" : "Plantilla"}</h1><p>${String(team?.name || "Equipo").replace(/[&<>"']/g, "")} · ${String(season).replace(/[&<>"']/g, "")} · ${selection.games.length} partidos seleccionados</p></header>${report}`;
+        <header style="padding:12px;border-bottom:2px solid #1e3a8a;margin-bottom:14px"><h1>Informe individual completo · ${selection.players.length === 1 ? "Jugador" : "Plantilla"}</h1><p>${String(team?.name || "Equipo").replace(/[&<>"']/g, "")} · ${String(season).replace(/[&<>"']/g, "")} · ${escapeHtml(scopeLabel)}</p></header>${report}`;
       const decision = this.reportAccessPolicy.authorizeExport(ReportType.PLAYER_STATS, {
         ...context,
         playerId: selection.players[0].id,
         playerTeamId: selection.players[0].team_id || selection.players[0].teamId || context.teamId
       });
-      if (!ReportExporter.printReport(`IQBasket_Jugador_${safeTitle(name)}_${safeTitle(season)}`, html, {
+      if (!ReportExporter.printReport(`IQBasket_Jugador_${safeTitle(name)}_${safeTitle(selection.games.length === 1 ? scopeLabel : season)}`, html, {
         authorization: decision, printWindow
       })) throw new Error("El navegador no ha podido preparar el PDF.");
     } catch (error) {
@@ -286,6 +302,29 @@ export class ReportsViewV50 extends ReportsView {
       const legacy = toolbar?.querySelector("#btn-open-dossier-modal");
       if (legacy) legacy.style.display = "none";
       if (toolbar) {
+        // Reuse the same match ID when switching from the team match report.
+        // No silent fallback if a venue/season filter excludes that match.
+        const matchLabel = document.createElement("label");
+        matchLabel.textContent = "Partido del informe individual: ";
+        matchLabel.style.cssText = "display:flex;gap:8px;align-items:center;font-size:12px;flex-wrap:wrap";
+        const match = document.createElement("select");
+        match.id = "select-player-game";
+        match.setAttribute("aria-label", "Partido del informe individual");
+        match.style.cssText = "min-height:44px;max-width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:8px";
+        const options = this._getFilteredGames();
+        for (const [value, label] of [["all", "Todos los partidos (temporada)"], ...options.map(g => [normalizeId(g.id), `${g.date || "Sin fecha"} · ${g.opponent || "Rival"}`])]) {
+          const option = document.createElement("option");
+          option.value = value; option.textContent = label; match.append(option);
+        }
+        if (this.selectedGameId !== "all" && !options.some(g => normalizeId(g.id) === normalizeId(this.selectedGameId))) {
+          const unavailable = document.createElement("option");
+          unavailable.value = normalizeId(this.selectedGameId);
+          unavailable.textContent = "Partido no disponible con estos filtros";
+          match.append(unavailable);
+        }
+        match.value = normalizeId(this.selectedGameId);
+        match.addEventListener("change", () => { this.selectedGameId = match.value; void this.render(containerId); });
+        matchLabel.append(match); toolbar.append(matchLabel);
         const formatLabel=document.createElement("label");
         formatLabel.textContent="Extensión del informe individual: ";
         formatLabel.style.cssText="display:flex;gap:8px;align-items:center;font-size:12px;flex-wrap:wrap";
