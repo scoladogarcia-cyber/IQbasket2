@@ -1,0 +1,103 @@
+name: One-time safe merged branch cleanup
+on:
+  push:
+    branches: [ops/branch-cleanup-20261127]
+    paths: ['.github/workflows/one-time-branch-cleanup.yml']
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
+concurrency:
+  group: one-time-branch-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'scoladogarcia-cyber/IQbasket2' && github.ref == 'refs/heads/ops/branch-cleanup-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLEANUP_BRANCH: ops/branch-cleanup-20261127
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify ancestry and delete only old integrated branches
+        shell: bash
+        run: |
+          git fetch --prune --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 - <<'PY'
+          import datetime, json, os, pathlib, re, subprocess
+          repo = os.environ['GITHUB_REPOSITORY']
+          cleanup = os.environ['CLEANUP_BRANCH']
+          def git(*args, check=True):
+              return subprocess.run(['git', *args], check=check, capture_output=True, text=True)
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+          def pages(path):
+              return [x for page in json.loads(subprocess.check_output(['gh','api','--paginate','--slurp',path],text=True)) for x in page]
+          def open_refs():
+              return {ref['ref'] for p in pages(f'repos/{repo}/pulls?state=open&per_page=100') for ref in (p['head'],p['base']) if (ref.get('repo') or {}).get('full_name')==repo}
+          metadata = api(f'repos/{repo}')
+          assert metadata['default_branch']=='main' and not metadata['archived']
+          main = git('rev-parse','refs/remotes/origin/main').stdout.strip()
+          assert git('merge-base','--is-ancestor','04d1553ee2cb141e6cdcbe1fa4b04490cf82bf1f',main,check=False).returncode==0
+          cutoff = datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=60)
+          branches = pages(f'repos/{repo}/branches?per_page=100')
+          active = open_refs()
+          report = {'main':main,'cutoff_utc':cutoff.isoformat(),'initial_count':len(branches),'candidates':[],'kept':[],'deleted':[],'skipped':[]}
+          for b in branches:
+              name, sha = b['name'], b['commit']['sha']
+              reason = None
+              if b.get('protected') or name in active or not re.fullmatch(r'(?:feat|feature|fix|hotfix|chore)/[A-Za-z0-9._/-]+',name):
+                  reason='protected, active PR, or reserved namespace'
+              elif any(word in name.lower() for word in ('backup','rollback','release','recovery','security','audit','rbac','privacy','lease','live-sync','live-conflict')):
+                  reason='operational safety reference'
+              elif git('rev-parse','--verify',f'refs/remotes/origin/{name}',check=False).stdout.strip()!=sha:
+                  reason='remote tip changed'
+              else:
+                  when=datetime.datetime.fromtimestamp(int(git('show','-s','--format=%ct',sha).stdout.strip()),datetime.timezone.utc)
+                  if when>=cutoff:
+                      reason='recent'
+                  elif git('merge-base','--is-ancestor',sha,main,check=False).returncode!=0:
+                      reason='not proven fully integrated into main'
+              (report['kept'] if reason else report['candidates']).append({'branch':name,'sha':sha,**({'reason':reason} if reason else {})})
+          out=pathlib.Path('docs/maintenance/branch-cleanup-20261127.json')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          def persist(message):
+              out.write_text(json.dumps(report,indent=2)+'\n')
+              git('add',str(out))
+              git('commit','-m',message)
+              git('push','origin',f'HEAD:refs/heads/{cleanup}')
+          # Persist exact branch names and tips before any deletion. If write
+          # permission or branch protection prevents this, stop without deleting.
+          persist('Record verified old merged branch cleanup candidates')
+          for item in report['candidates']:
+              name,sha=item['branch'],item['sha']
+              try:
+                  if name in open_refs():
+                      report['skipped'].append({**item,'reason':'new open PR'})
+                      continue
+                  current=api(f'repos/{repo}/branches/{name}')
+                  if current['commit']['sha']!=sha or current.get('protected'):
+                      report['skipped'].append({**item,'reason':'tip or protection changed'})
+                      continue
+                  r=git('push',f'--force-with-lease=refs/heads/{name}:{sha}','origin',f':refs/heads/{name}',check=False)
+                  if r.returncode==0:
+                      report['deleted'].append(item)
+                  else:
+                      report['skipped'].append({**item,'reason':'remote refused deletion'})
+              except (subprocess.CalledProcessError, KeyError, ValueError):
+                  report['skipped'].append({**item,'reason':'could not revalidate remote branch'})
+          report['remaining_count']=len(pages(f'repos/{repo}/branches?per_page=100'))
+          report['deployment_runs']=[{'id':r['id'],'name':r['name'],'status':r['status'],'conclusion':r.get('conclusion'),'url':r.get('html_url')} for r in api(f'repos/{repo}/actions/runs?head_sha=04d1553ee2cb141e6cdcbe1fa4b04490cf82bf1f&event=push&per_page=100').get('workflow_runs',[]) if 'Pages' in r['name'] or 'pages' in r['name']]
+          persist('Record verified branch cleanup results')
+          print(json.dumps({'deleted':len(report['deleted']),'skipped':len(report['skipped']),'remaining':report['remaining_count'],'deployment_runs':report['deployment_runs']},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: branch-cleanup-audit
+          path: docs/maintenance/branch-cleanup-20261127.json
