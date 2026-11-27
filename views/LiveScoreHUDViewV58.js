@@ -32,7 +32,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     if (this.liveOnlineBound || typeof window === "undefined") return;
     this.liveOnlineBound=true;
     window.addEventListener("online", () => {
-      if (!this.isExistingGame || !this.gameId || this.liveConflict) return;
+      if (!this.isExistingGame || !this.gameId) return;
       this._flushLiveSync().then(result => {
         if (result?.synced) this._renderHUD();
       }).catch(() => {});
@@ -112,6 +112,10 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     const remote=finite(recovery.remoteRevision);
 
     if(firstBase!==null && remote!==null && remote!==firstBase && !recovery.safeRebase){
+      // Keep the original revision and restore the local snapshot, not the remote one.
+      this.liveCaptureRevision=firstBase;
+      const localPayload=recovery.draft?.payload || recovery.pending.at(-1)?.payload;
+      this.liveConflictDraftRestored=this._restoreOfflinePayload(localPayload);
       this.liveConflict=true;
       this.liveSyncState="conflict";
       this.liveSyncError="El servidor avanzó mientras este dispositivo tenía datos pendientes.";
@@ -133,10 +137,14 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
   }
 
   _scheduleLiveSync() {
-    if(!this.isExistingGame || !this.gameId || this.liveConflict) return;
+    if(!this.isExistingGame || !this.gameId) return;
+    // Never replace a protected draft with a remote-only HUD after failed recovery.
+    if(this.liveConflict && this.liveConflictDraftRestored===false) return;
     const payload=this._buildLivePayload();
-    this.liveSyncState="pending";
-    this.liveSyncError="";
+    if(!this.liveConflict){
+      this.liveSyncState="pending";
+      this.liveSyncError="";
+    }
     this._updateSyncStatusDom();
 
     this.liveStagePromise=this.liveStagePromise
@@ -147,6 +155,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
         this._updateSyncStatusDom();
       });
 
+    if(this.liveConflict) return; // Persist locally; do not automatically overwrite the server.
     if(this.liveSyncTimer) globalThis.clearTimeout?.(this.liveSyncTimer);
     this.liveSyncTimer=globalThis.setTimeout?.(()=>{
       this.liveStagePromise.then(()=>this._flushLiveSync()).catch(()=>{});
@@ -156,7 +165,9 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
   async _flushLiveSync() {
     if(!this.isExistingGame || !this.gameId) return {synced:false,queued:false};
     await this.liveStagePromise.catch(()=>{});
-    if(this.liveConflict){
+    // Explicit finish/reconnect retries use the existing server revision and prefix checks.
+    // A conflict is never resolved by bypassing those checks.
+    if(this.liveConflict && this.liveConflictDraftRestored===false){
       return {synced:false,queued:true,pending:this.livePendingCount,conflict:true,error:new Error(this.liveSyncError)};
     }
 
