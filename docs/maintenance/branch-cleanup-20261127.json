@@ -1,0 +1,835 @@
+{
+  "main": "04d1553ee2cb141e6cdcbe1fa4b04490cf82bf1f",
+  "cutoff_utc": "2026-09-28T19:14:25.929953+00:00",
+  "initial_count": 176,
+  "candidates": [
+    {
+      "branch": "chore/github-pages-v1-deploy",
+      "sha": "be860402e69a3bd9bd41646bcb4135153ff8367f"
+    },
+    {
+      "branch": "feat/early-adopter-feedback-triage-v1",
+      "sha": "054ec4d1e8b7bccd3407d52fc5082a9ae2c0147c"
+    },
+    {
+      "branch": "feat/family-guardian-submissions-v1",
+      "sha": "a4190c3d9aafcb3c532cf48b4e22557009ea549d"
+    },
+    {
+      "branch": "feat/family-links-capture-comparison-v30",
+      "sha": "18128398adf70a5cd6e87a4089b6ffb6b438d9eb"
+    },
+    {
+      "branch": "feat/family-profile-controls-v1",
+      "sha": "8d8466244d2e8907ac9ffcbb40685293d46a96de"
+    },
+    {
+      "branch": "feat/family-scoped-player-support-v1",
+      "sha": "d46b6fd3835b5481bb7831370955fcd1a87ec614"
+    },
+    {
+      "branch": "feat/final-game-report-20260920",
+      "sha": "dea137a9687b178665301a0a104d6116e6b4210b"
+    },
+    {
+      "branch": "feat/game-capture-delegation-v1",
+      "sha": "d85bcf52fc49c883d1080248f4ecc1070fb3d499"
+    },
+    {
+      "branch": "feat/game-intelligence-foundation-v45",
+      "sha": "ad60a288e4244f37a15c787d1338acbd83cb8c2a"
+    },
+    {
+      "branch": "feat/game-intelligence-panel-v46",
+      "sha": "64706ebd8e7b12250e09555e673af059927b2fb3"
+    },
+    {
+      "branch": "feat/live-capture-onboarding-streaming-v39",
+      "sha": "93d571135ad75c859d04284d7abef3187edff1a4"
+    },
+    {
+      "branch": "feat/mobile-fast-pbp-v38",
+      "sha": "1d810a269754af9aeb245ad47792ec78bc8b9cdd"
+    },
+    {
+      "branch": "feat/player-development-loop-v2-foundation",
+      "sha": "b32460caaf493e6788b3bbdc76e4f580da9a9005"
+    },
+    {
+      "branch": "feature/approval-center-v1",
+      "sha": "26c84528e0075fa93252aa7fa0f0a3f1690c29aa"
+    },
+    {
+      "branch": "feature/family-ai-development-priority2-v2",
+      "sha": "94c54ff0044efc38b68247569d1fab5a7f502b1b"
+    },
+    {
+      "branch": "feature/family-billing-boundary-v1",
+      "sha": "024307a6da8f2ba714c8b93713bb881197cf707d"
+    },
+    {
+      "branch": "feature/family-commercial-readiness-v1",
+      "sha": "0af51c22448fd27db4b3e69bda7704b361cbdb74"
+    },
+    {
+      "branch": "feature/family-pilot-cohort-v1",
+      "sha": "d0c1ee6972402ece0ec6c97781a7a8bacdaa0523"
+    },
+    {
+      "branch": "feature/game-locking-v1",
+      "sha": "e7249249a0eec5cc1baebba4956a865b7af25c92"
+    },
+    {
+      "branch": "feature/mobile-session-switch-v1",
+      "sha": "e7a1f4b071ed1af02a05df46581d96b87e8cbd09"
+    },
+    {
+      "branch": "feature/player360-ai-edge-deploy-v1",
+      "sha": "9c27c2487c5edf9a71ff62538160b03d0a551268"
+    },
+    {
+      "branch": "feature/player360-analytics-ai-ui-v1",
+      "sha": "13e1e2f1cc29d992cef9cf39e5348f188e4918c7"
+    },
+    {
+      "branch": "feature/player360-core-v1",
+      "sha": "c78930863720157b685911e28cd4faa550dc5809"
+    },
+    {
+      "branch": "feature/player-data-submissions-v1",
+      "sha": "1654fb6a710b8bbac88bf5ba5242217c1e3a5707"
+    },
+    {
+      "branch": "feature/role-acceptance-gate-v1",
+      "sha": "e078166e9a84607886cb50dc6b992f0716cdfc71"
+    },
+    {
+      "branch": "feature/season-roster-history-v2",
+      "sha": "79514009fc63e76c63f3931d933f70d4e2fae67f"
+    },
+    {
+      "branch": "feature/team-season-freeze-v1",
+      "sha": "520489e436c1a9f2c034123e0a391b7f18a6fffb"
+    },
+    {
+      "branch": "feature/transfer-dual-approval-v1",
+      "sha": "07531e24b3c6e0d370c08976816da65afbd25b65"
+    },
+    {
+      "branch": "feature/uat-player-provisioning-ui",
+      "sha": "4dafe0548609d90a739f807d8a33ce4cdc828def"
+    },
+    {
+      "branch": "feature/wellness-v2-phase4e3",
+      "sha": "bf08f05535d7ed471225a640387bf82af31aa0b0"
+    },
+    {
+      "branch": "fix/admin-users-v7-boundary",
+      "sha": "024bf9e76d5b430576a33da8ed4fc4332ed57e2c"
+    },
+    {
+      "branch": "fix/context-identity-rls-v2",
+      "sha": "0f4648679fdcda4d43904ac7dd094c509fa29da0"
+    },
+    {
+      "branch": "fix/demo-readonly-reports-v37",
+      "sha": "66c2c3b696564a69e61d874713c47ea095b3405b"
+    },
+    {
+      "branch": "fix/family-delegation-onboarding-v29",
+      "sha": "5fd93438eef6b969022a627e1698106fb5f34529"
+    },
+    {
+      "branch": "fix/family-pilot-fk-indexes-v1",
+      "sha": "434645c21e7cb57c3c736183c549407f78a57a0d"
+    },
+    {
+      "branch": "fix/family-profile-empty-state-v27",
+      "sha": "21a85e4cf5c3dc73e02455ba6d43ecf44d858e0c"
+    },
+    {
+      "branch": "fix/family-runtime-data-v32",
+      "sha": "7b5859882f09d681e868b90049597c1d66ca5bc1"
+    },
+    {
+      "branch": "fix/invited-wellness-shell-v1",
+      "sha": "8cb8e6e65d1cd50fe46ffab84719b382e72f10bd"
+    },
+    {
+      "branch": "fix/live-away-scoreboard-preserve-pbp-20260920",
+      "sha": "e8adc95c8acc668eab1aed7b0ca9acda985c47d1"
+    },
+    {
+      "branch": "fix/live-boxscore-attribution-v44",
+      "sha": "9ab7dc2894a7c9c7b435eef787f7630cefd18671"
+    },
+    {
+      "branch": "fix/live-scorer-delete-v40",
+      "sha": "3c8e32d21cb8b1e23c2391503fc64098d39b9bf1"
+    },
+    {
+      "branch": "fix/mobile-contrast-superadmin-wellness-v1",
+      "sha": "c5cf1f7867d62aa979872fe777f37e540b434ca0"
+    },
+    {
+      "branch": "fix/mobile-nutrition-navigation-v1",
+      "sha": "5cc81938f5004500c04770c875d748684490430b"
+    },
+    {
+      "branch": "fix/mobile-scorer-viewport-v41",
+      "sha": "e04175d8d5f196ab9f3b0d780f264d0de80e8988"
+    },
+    {
+      "branch": "fix/mobile-training-invited-readonly-v1",
+      "sha": "881725ff5dff7fc9ce24970d6790fc2831dc3666"
+    },
+    {
+      "branch": "fix/mobile-training-readonly-ux-v1",
+      "sha": "5e0f2443e172f59f1c6e707934d26a26ca3be8d6"
+    },
+    {
+      "branch": "fix/pages-deploy-timeout-v28",
+      "sha": "81e0870bc5806ab8572abab3247879fb59cf8a7b"
+    },
+    {
+      "branch": "fix/player360-cancel-create-actions",
+      "sha": "ccb584dc84caaef459d721c042c47d664a209182"
+    },
+    {
+      "branch": "fix/player-link-scope-v2",
+      "sha": "2a02b84bdaf4d7528a771fad40e5648da5c738a6"
+    },
+    {
+      "branch": "fix/report-full-boxscore-opponent-heatmap-20260920",
+      "sha": "aa0eb02e48e405b071abd44e168ad5258dfff1be"
+    },
+    {
+      "branch": "fix/reports-complete-export-clear-advanced-20260920",
+      "sha": "9445ba8ce2c2e2a1e5c0812f65c471d2c8de138a"
+    },
+    {
+      "branch": "fix/scoped-grant-sql-alias-v1",
+      "sha": "03841cd1315e2fd746f6f84c6cdb1f1259a8b393"
+    },
+    {
+      "branch": "fix/training-update-duration-boundary-v1",
+      "sha": "79b1ee1986118b9b9f64bc43aed1973dc7f56a55"
+    },
+    {
+      "branch": "fix/v34-invoker-verifier-v1",
+      "sha": "2627377b11b9a360805330611b7674f89477d97e"
+    },
+    {
+      "branch": "hotfix/demo-player-self-wellness-v1",
+      "sha": "45b48efa00c4ff784a9ba995b843f9b836b5fe5e"
+    },
+    {
+      "branch": "hotfix/season-head-coach-v3",
+      "sha": "eb665acc5c90c0c37f41b9b1bff49c8d1d003e3b"
+    }
+  ],
+  "kept": [
+    {
+      "branch": "audit/game-lifecycle-priority2-v1",
+      "sha": "01ffd400c63e7767dd6acae05e8e450ee826cf7e",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "audit/i18n-css-coverage-v89-20261112",
+      "sha": "51c84743884277cb6e82af1872c8a210f8ce1dda",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "backup/pre-rbac-2026-09-01",
+      "sha": "f23a37bd81b5a4c43205f878715a6628669c96dd",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "chore/v1-hotpath-index-hardening",
+      "sha": "269b24906ba2029216df24041f17829775d13700",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "docs/product-gap-map-v1",
+      "sha": "5f5831b06f9b6fbcc55a0570bc152c15e877fd68",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "feat/game-live-writer-lease-v1",
+      "sha": "dd25c6433daad13b8e5d33f79d855ad10051a3dc",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feat/minutes-recovery-v63",
+      "sha": "ae7033424cb4d9ffa17ce734a47fc79ac8dbc185",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feat/offline-training-benchmark-v58",
+      "sha": "e668b9d01756d3d4117098bd936150d56b48cd0c",
+      "reason": "recent"
+    },
+    {
+      "branch": "feat/pbp-audit-editor-v59",
+      "sha": "c68b174fdda447db7df4784d45747a24be0eb43b",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feat/selected-reports-v53-20260920",
+      "sha": "ca997e3668cd4ec152d819433379ceae7b64b198",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feat/training-full-edit-block-participation-v54-20260921",
+      "sha": "65c137c20bdab2c4d6da8b2b7496130f863913f6",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feat/training-player-directory-v56",
+      "sha": "3090c0dbecca0b998a1e6521178342f9360aae2c",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/ai-gateway-free-v1",
+      "sha": "df23207dc8488866137e0b206769bd76f7b2a549",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/audit-center-v1",
+      "sha": "0ec09eda30d82602aa704a52cafce74cd0689331",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/core-corrections-v1",
+      "sha": "a773e0ad76657ef1ff794e032914730d55d7fe70",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/core-ux-completion-v1",
+      "sha": "b4d2d4fca2e34f72ef8de34b032d58daa8a68e53",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/demo-universe-v1",
+      "sha": "b3a3a431a98a88bc71cedb569cacd6925b9feda2",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/edit-training-wellness-boxscore-v1",
+      "sha": "64af359044672106ad1cb855da822c078344f95f",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/family-capture-polish-v33",
+      "sha": "ef9793192aef7b2ff7f29bdc8bdfe25253f44ac1",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/family-p0-p1-integration-20261025",
+      "sha": "852778ce3b9d8db489cd83c177a5f61017c1af65",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/family-product-priority2-v1",
+      "sha": "b5d0ee7396fd53485da8d0ba155aa261800b2a64",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/family-workspace-priority1-v1",
+      "sha": "eaa88a18284d3f692c0c818571a4767eb3219840",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/game-play-state-v2",
+      "sha": "0c918e7f079d00868e99c5297b24643e8c85641f",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/i18n-v80-bundled-catalog-20261107",
+      "sha": "4349f36ec8c5bdb96e8e0a2864b0ff579269e8be",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/match-capture-ux-v2",
+      "sha": "15379c6d75692bdaa50ba0dd9f84733f4969bff7",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/offline-outbox-v1",
+      "sha": "586eac63a69458400b0233ecc46006b735e98643",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/passport-family-audit-v70-20261025",
+      "sha": "1fc1021823029ecc5ae60fa872b400d649a45718",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/passport-reports-exchange-languages-family-motivation-v74",
+      "sha": "fe442ed16e8c50847c8e51e5de0d6056bdb2072a",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/passport-ux-exports-training-reports-v2",
+      "sha": "5711fba36d7d0a94e4a7f0d80e6bd97e9f5af7b4",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/passport-v68-lifetime-evidence-and-training-20261025",
+      "sha": "4d7c9648179839aa918f1a01c9f161fa94d8c9c5",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/password-recovery-v1",
+      "sha": "f02f2f9e40b6830bcffdece4eff0c8783bd28370",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/player360-ai-gate-b-v1",
+      "sha": "932fa449e2d8caf957042d915f72a22136a1cacc",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/player360-ai-gateway-v1",
+      "sha": "22d817d46e1f48ad12b5b4df30fd77c2f77d96b9",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/player360-nutrition-recovery-v1",
+      "sha": "101a2c26cb2e1d5a88281734d29465dadd56c01f",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/player360-privacy-abac-v1",
+      "sha": "ad44af2a1a0a1217854c2d70b02f3deb4a63bf50",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/player-journey-v1",
+      "sha": "24b2e5c29eb0d42816841a803ed24aacdf651138",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/player-passport-premium-v1",
+      "sha": "1479712f5ba847e085462d8525fa46d11b7d9e7b",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/player-wellness-challenge-v1",
+      "sha": "4b10fd90569ac2a65f09f7da7be96c1ffe83aeef",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/privacy-center-v1",
+      "sha": "757c203fce5a0ee3338a900bda0f2826906f8ba4",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/rbac-permissions-v2",
+      "sha": "646c4a0914940d3de5bca281ec8dcd0e72fd92f3",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "feature/saas-entitlements-v1",
+      "sha": "f6d3fbe979f2a026d3d1a3b666731f39b6d6b664",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "feature/six-modules-v75-completeness",
+      "sha": "05ef30fb2bd5d7740713e12facf608b12eadf991",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/six-modules-v77-transactional-training-import-reporting",
+      "sha": "a7671f2f2ae7d9f602ba358088f4c66aa5a8240d",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/six-modules-v78-integrity-20261107",
+      "sha": "e1ec20272c9f1340cc5605d9ee2aae2aacdda1c6",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/training-player-minutes-and-assessment-research-20261014",
+      "sha": "58cad64be958fb7946c6c33f13fc0f0c379262e3",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "feature/training-v65-player-centric-complete",
+      "sha": "31cc5e4066b692bafc3a84329717a58fc7f35dc5",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/training-v79-filter-bulk-validation-20261107",
+      "sha": "edd950e85e19cea25d068f3794a00e3067655abf",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/v76-import-revision-family-nodata-20261025",
+      "sha": "7867fab9baaf65e43d59509445dc2b87f05e549d",
+      "reason": "recent"
+    },
+    {
+      "branch": "feature/v76-safe-training-import-preflight",
+      "sha": "3aaa184d5d861f6eacb40dbe8b7ace288bbb9cd4",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/approval-submission-action-scope-v24",
+      "sha": "1da0ab3dda350245a74c6d3427c9748be1f0963a",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/boxscore-preserve-game-score-periods",
+      "sha": "64de8773d7859e9549e523569655520cd0b2d34b",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "fix/boxscore-read-after-live-finalization-20260920",
+      "sha": "4d3ad1bd2a883e12a86a5b064c25752c3b4b1bbe",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/dashboard-complete-i18n-v86-20261112",
+      "sha": "b549cb541de37afc8912e263ceb243fa935ae78c",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/family-access-delegation-v29",
+      "sha": "36c67c705543e46e2814c9b728c76a8be3dbdbfb",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/family-multiplayer-player-privacy-v34",
+      "sha": "a577fd2ad7ce0f044c4a99c3f4302a2148ec115f",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/family-nd-zero-precision-20261025",
+      "sha": "42d772466c128e33df108ed1c29a2a8aa8128de4",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/family-passport-legacy-evidence-v71-20261025",
+      "sha": "72a45dac9414d787e07990c2d61be44b1d048e56",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/family-passport-v70-schema-safe-20261025",
+      "sha": "203c25df9e73adc7b4e9a26314f1c0f543fef9a3",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/family-passport-visible-v71-20261025",
+      "sha": "c526daad63273b332182c4d9711a4e79ea662ec5",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/family-passport-visible-v71-integrated",
+      "sha": "e49889ce98e6e7f475403e4f08744822cf59fea3",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/heatmap-demo-made-shots",
+      "sha": "95a441b56451b16bf52384361334c4f68fe74c55",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/i18n-training-validation-overview-20261110",
+      "sha": "266ee692bc5596f289acd4fd5f7948a9a9ce6980",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/invited-demo-runtime-scope-v1",
+      "sha": "0984961df0b1ef1a465855aaf15a058c9441930d",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/invited-mobile-runtime-scope-v2",
+      "sha": "262549f3096f8a011d9e5da35cbb53504ee9aaad",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/ios-pages-release-freshness-passport",
+      "sha": "33a647a811c44fe9853934de49a12f7c34ad5d30",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/live-conflict-preserve-local-20261127",
+      "sha": "809ac79fea0529a041d44d254990e16fb5048985",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/live-gameplay-state-loader",
+      "sha": "d05bb2a8a214843e028cf7d60327a9cc8a3dffc3",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/live-lease-singleflight-retry-20261025",
+      "sha": "be7fda324f62ac4b1cd3a6a5a9158a9d9922b705",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/live-minutes-lineup-persistence-v62",
+      "sha": "2b0501272c137edfbdd0b9a756c8fb4fe580c0bd",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/mobile-shell-overlays-v1",
+      "sha": "f0dcc487711cfc7048a85af18cdcfd53cd5c8d1b",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/pages-release-metadata-v1",
+      "sha": "d57265ff01fab4695f067f0b271bf497b6dfe60d",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/passport-prefill-current-values",
+      "sha": "3846e04843ca6e0e3cb1b6ea99ec05b43e6b7c22",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/period-scores-and-dnp-report-20261025",
+      "sha": "eca3db560e2927e277ba3b013065e097b9209575",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/player360-inline-wellness-review-v23",
+      "sha": "0846b1f85894d05039e7f83a1dd13345aaf04c55",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/player-nutrition-delegated-game-ux-v25",
+      "sha": "b110f5ac82b8e3a43bf7c714137e47450ff361cc",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/player-report-complete-boxscore-pdf-20260920",
+      "sha": "c63e6c20484a683f4aa3f5709c2b0d22953c6849",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/player-report-match-scope-20261127",
+      "sha": "79ec641ca7448a09a87d67888f39feecdade5ad3",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/player-report-stats-first-v52-20260920",
+      "sha": "8f2fd919cc0db567604c762be3e132fce6ddbd97",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/recovery-ios-event-delegation",
+      "sha": "c46da4731dbc832aca0abdbecaac7aafb8f06ec7",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/release-freshness-lease-recovery-v43",
+      "sha": "88b30765b89d7b9460c3a635ff3de70f658d1c56",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/release-version-guard-v1",
+      "sha": "7e20e5c793f8e35da90a03953a19d4c26c3c553c",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/report-supabase-injection-hide-empty-advanced-20260920",
+      "sha": "391867899b0390548956b2a761a0717eaab70ee9",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/scorer-recovery-v42",
+      "sha": "0b33ab525cb4f2742b28c57c77ca035b4b27be72",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/season-legacy-fk-roster-date-20260920",
+      "sha": "10a0e82972fd0a3e014c294d85a524b4b0af1028",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/season-ppg-freshness-20260920",
+      "sha": "7751a979ae75fc7d129fab120fcc94cd3876a607",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/season-ppg-no-games-20260920",
+      "sha": "24eb39d640fac6d1888ddbe78b30345ed6b6fb11",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/stats-v81-canonical-source-audit-20261107",
+      "sha": "d90e91c366fb61090240be1e49ffb5e0a5fe8bc5",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "fix/team-advanced-i18n-v87-20261112",
+      "sha": "4934b19d71d99c672267f85e6ea3643dd29b5c6f",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-attendance-history-delete-v55-20260921",
+      "sha": "852fde97185f763b3475de5a9399a0624a8812b5",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "fix/training-focus-private-rpc-20261110",
+      "sha": "f52f2563e8a764759641c94b04701f6558b3b2aa",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-historical-edit-bulk-roster-20261014",
+      "sha": "05475c102869934c3b0df3db823d547c09fed29a",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-intelligence-i18n-v85-20261110",
+      "sha": "0a2a2c2eeca9f589aa9ba74b2d35fe5290ad902d",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-v55-final-passport-roster-consistency",
+      "sha": "d069a19ef9d2b7a7903ca3e6fbd78515cb58c2d8",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-v57-guest-player-selection",
+      "sha": "f492ff575c190c1fc2e7086f6abe4fe6e29a6a73",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-v66-historical-detail-layout",
+      "sha": "a1da346cca504407aac8d5fa30b552f4842c28a4",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/training-v67-unified-read-edit-layout",
+      "sha": "59d216715614631a172ba63cc53a95339084704c",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/uat-submissions-game-create-v22",
+      "sha": "dc20ea5d54768b70443af13cca3536af9e47d595",
+      "reason": "not proven fully integrated into main"
+    },
+    {
+      "branch": "fix/v82-blocks-received-safe-capture-20261107",
+      "sha": "e11fdee100ad8c264ed31f2055656b8123d59633",
+      "reason": "recent"
+    },
+    {
+      "branch": "fix/xlsx-match-export-v60",
+      "sha": "7be926f820b90a7f902e56f1dc9722872843f22e",
+      "reason": "recent"
+    },
+    {
+      "branch": "hardening/family-privacy-mobile-priority2-v1",
+      "sha": "a37785be46f58a14b8ea186f72cd0b836520d6df",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "hotfix/live-sync-partial-recovery-v61",
+      "sha": "15d41639ccadf8839e899108e51589aab1ec713f",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "hotfix/live-sync-v61",
+      "sha": "1741c6ce02fc155d9400492d7c3a3fd4fd794a80",
+      "reason": "operational safety reference"
+    },
+    {
+      "branch": "hotfix/minutes-save-ux",
+      "sha": "bfa74563cc163df828d0c4b57023ae5c0c622c8e",
+      "reason": "recent"
+    },
+    {
+      "branch": "hotfix/v63-lineup-player-id",
+      "sha": "dc487f17b0b278a76ce3dac263534b69122e28b8",
+      "reason": "recent"
+    },
+    {
+      "branch": "main",
+      "sha": "04d1553ee2cb141e6cdcbe1fa4b04490cf82bf1f",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "ops/branch-cleanup-20261127",
+      "sha": "37e3c4c80724698c9e9b9f9ba6dd9d743eb2f717",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "ops/game-locking-v5-security-sync-20260903",
+      "sha": "2d89e4f648b2e59da0e17689a3098a880b3c6882",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "ops/supabase-storage-audit",
+      "sha": "1429c091460a132aa9efa82ebf3169bc3a7f3f87",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "perf/route-code-splitting-v1",
+      "sha": "b3dc0b057058b03f1f014b4cd81ee1c65ec4ad22",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "qa/core-user-flows-v1",
+      "sha": "207f78f9f7823e1069217cbaadd0d45ce3fab7ad",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "qa/family-player-coherence-v31",
+      "sha": "e6bd95ae004a52e4acf2adbea2a59892a1aa6b35",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "qa/functional-ux-round2",
+      "sha": "2e788de20fd4cbd5cde897d809e5cffb74ca7d4d",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "qa/global-ui-acceptance-v1",
+      "sha": "78526feed14cd343e15631ff05310b4fcfa43f9d",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "qa/invited-route-matrix-v1",
+      "sha": "2752b52a9b04322c550a1f9e1b8131b5d287fe70",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "release/early-adopters-rc1",
+      "sha": "e9b6cc8e9a69a28a5c0c68c77f8bbac2fe786374",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "release/training-safe-ux-20261014",
+      "sha": "5de234ddde13c2854e49e06632e2bdca8e2fbd5b",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "security/account-status-foundation-v1",
+      "sha": "29d1fabb1f4b598d328a92123e3cce9f631e8f3e",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "security/admin-rpc-boundary-v35",
+      "sha": "a0a203ce530cb1f23f0eb43621fd24f25eef16a4",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "security/team-assignment-boundary-v36",
+      "sha": "72fd0cacbaccd6df641d37b0edb2f5d913c27db5",
+      "reason": "protected, active PR, or reserved namespace"
+    },
+    {
+      "branch": "security/tenant-isolation-audit-v1",
+      "sha": "7c57b2c2aa2413731a6252460fb8847a1eccd15b",
+      "reason": "protected, active PR, or reserved namespace"
+    }
+  ],
+  "deleted": [],
+  "skipped": []
+}
