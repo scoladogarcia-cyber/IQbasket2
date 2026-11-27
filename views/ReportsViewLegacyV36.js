@@ -4,6 +4,7 @@
  * shot charts espaciales, selector modular de dossier y exportación limpia a PDF.
  */
 
+import { filterPlayerReportShots } from "../services/reports/PlayerReportMatchScope.js";
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
@@ -623,7 +624,7 @@ export class ReportsView {
       val: Number(avgValPJ)
     };
 
-    const pEvents = this._getGameShotEvents(null, player.id);
+    const pEvents = filterPlayerReportShots(this._getGameShotEvents(null, player.id), allGames);
 
     return `
       <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 16px;">
