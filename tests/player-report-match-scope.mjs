@@ -36,6 +36,23 @@ replaceScopedPlayerStatsInMemory(store,{players:[player],games:selection,stats})
 assert.equal(store.playerGameStats.length,3);
 assert.ok(store.playerGameStats.includes(rows[1]));
 assert.ok(store.playerGameStats.includes(rows[2]));
+// Same shared report for a different club/team and historical season; no
+// hard-coded team identity, and a stale selection from another team fails closed.
+const otherPlayer={id:"p1",team_id:"t2"};
+const historical={id:"g3",team_id:"t2",team_season_id:"s2025",opponent:"Rival histórico"};
+const historicalRows=[...rows,row("g3",6,3,7,1)];
+const otherSelection=selectPlayerReportGames([historical],"g3");
+const otherHtml=renderPlayerCompleteBoxScore({player:otherPlayer,games:otherSelection,stats:historicalRows});
+assert.match(otherHtml,/6 puntos, 20 minutos/);
+assert.match(otherHtml,/3\/7/);
+assert.doesNotMatch(otherHtml,/Rival A|Rival B|28 puntos/);
+assert.throws(()=>selectPlayerReportGames([historical],"g1"),/no está disponible/);
+await assert.rejects(loadAuthorizedPlayerSeasonStats({supabase:db,policy:{canView:()=>true},context:{teamId:"t",teamSeasonId:"s"},players:[player],games:otherSelection}),/fuera/);
+await assert.rejects(loadAuthorizedPlayerSeasonStats({supabase:db,policy:{canView:()=>true},context:{teamId:"t2",teamSeasonId:"s2026"},players:[otherPlayer],games:otherSelection}),/fuera/);
+const historicalDb={from(){return {select(){return {in(k,v){if(k==="game_id")assert.deepEqual(v,["g3"]);else assert.deepEqual(v,["p1"]);return this;},range(){return Promise.resolve({data:[historicalRows.at(-1)],error:null});}};}};}};
+const historicalStats=await loadAuthorizedPlayerSeasonStats({supabase:historicalDb,policy:{canView:()=>true},context:{teamId:"t2",teamSeasonId:"s2025"},players:[otherPlayer],games:otherSelection});
+assert.equal(historicalStats[0].points,6);
+assert.deepEqual(filterPlayerReportShots([...events,{game_id:"g3",id:5}],otherSelection).map(e=>e.id),[5]);
 const source=path=>readFileSync(new URL("../"+path,import.meta.url),"utf8");
 const v50=source("views/ReportsViewV50.js"), v53=source("views/ReportsViewV53.js"), legacy=source("views/ReportsViewLegacyV36.js");
 assert.match(v50,/selectPlayerReportGames\(this\._getFilteredGames\(\), this\.selectedGameId\)/);
