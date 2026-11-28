@@ -1,0 +1,35 @@
+name: Training Attendance and History V55
+on:
+  push:
+    branches: [main, fix/training-attendance-history-delete-v55-20260921]
+    paths:
+      - 'domain/training/TrainingAttendanceV55.js'
+      - 'views/training/TrainingAttendanceHistoryV55View.js'
+      - 'services/player360/TrainingHistoryV55Service.js'
+      - 'services/player360/Player360ObservationAssembler.js'
+      - 'services/LazyViewRegistry.js'
+      - 'supabase/migrations/2026092111*training*'
+      - 'tests/training-attendance-history-v55.mjs'
+      - '.github/workflows/training-attendance-history-v55.yml'
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  training-attendance-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: |
+          node --check views/training/TrainingAttendanceHistoryV55View.js
+          node --check services/player360/TrainingHistoryV55Service.js
+          node --check services/player360/Player360ObservationAssembler.js
+          node tests/training-attendance-history-v55.mjs
+          node tests/player360-phase4d-orchestrator-smoke.mjs
+      - run: npm run build
