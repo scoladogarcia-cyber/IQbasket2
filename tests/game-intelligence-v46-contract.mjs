@@ -77,7 +77,8 @@ const [entrySource, baseSource, enhancerSource, adapterSource, presenterSource, 
 assert.match(entrySource, /GameBoxScoreIntelligenceV46View as GameBoxScoreView/);
 assert.match(baseSource, /Permission\.EDIT_BOXSCORE/);
 assert.match(baseSource, /GameLockService\.isLocked/);
-assert.match(baseSource, /DataStore\.saveGameAndStats/);
+assert.match(baseSource, /this\.captureService\.saveBoxScore/);
+assert.doesNotMatch(baseSource, /DataStore\.saveGameAndStats/);
 assert.match(enhancerSource, /super\._renderGameBoxScoreDetail/);
 assert.match(enhancerSource, /buildGameIntelligence/);
 assert.match(enhancerSource, /normalizeGameStatsForIntelligence/);

@@ -146,6 +146,28 @@ export class GameCaptureDelegationService {
     return Array.isArray(data) ? data : [];
   }
 
+  /** Save only the acta. Never fall back to a full-game write or a legacy lease bypass. */
+  async saveBoxScore({ gameId, starterIds, stats }) {
+    this._requireClient();
+    const id = requireUuid(gameId, "gameId");
+    if (!Array.isArray(starterIds) || !Array.isArray(stats)) throw new Error("Acta inválida.");
+    const { data, error } = await this.supabase.rpc("iq_v28_save_game_capture", {
+      p_game_id: id,
+      p_team_score: null,
+      p_opponent_score: null,
+      p_starter_ids: starterIds.map(playerId => requireUuid(playerId, "starterId")),
+      p_stats: stats,
+      p_periods: null,
+      p_events: null,
+      p_lease_token: this.liveSessionService.getStoredToken(id) || null
+    });
+    if (error) throw rpcError(error, "No se pudo guardar el acta.");
+    if (String(data?.game?.id) !== id || !Array.isArray(data?.stats)) {
+      throw new Error("No se pudo confirmar el acta guardada. Recarga el partido antes de reintentar.");
+    }
+    return data;
+  }
+
   async saveCapture({
     gameId,
     teamScore = null,

@@ -6,6 +6,7 @@
 
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
+import { blockedShotsIntegrityV82 } from "../domain/stats/BlockedShotIntegrityV82.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
@@ -591,6 +592,7 @@ export class GameBoxScoreView {
           const mFtm = getInpVal("ft_made");
           const mPts = mFg2m * 2 + mFg3m * 3 + mFtm;
 
+          const previousStat = this.gameStats.find(row => String(row.player_id ?? row.playerId) === String(playerId));
           statsList.push({
             game_id: currentGame.id,
             player_id: playerId,
@@ -615,7 +617,9 @@ export class GameBoxScoreView {
             turnovers: getInpVal("turnovers"),
             fouls_committed: getInpVal("fouls_committed"),
             fouls_drawn: getInpVal("fouls_drawn"),
-            fouls_received: getInpVal("fouls_drawn")
+            fouls_received: getInpVal("fouls_drawn"),
+            // This counter is not editable here; preserve the measured value.
+            plus_minus: Number(previousStat?.plus_minus ?? previousStat?.plusMinus ?? 0)
           });
         }
 
@@ -627,26 +631,22 @@ export class GameBoxScoreView {
         const saveButton = container.querySelector("#btn-save-boxscore");
         if (saveButton) saveButton.disabled = true;
         try {
+          // The partial RPC is the same authorized write boundary for staff and
+          // delegates. Do not send a full game, score, periods or play-by-play.
+          const priorByPlayer = new Map(this.gameStats.map(row => [String(row.player_id ?? row.playerId), row]));
+          for (const stat of statsList) blockedShotsIntegrityV82(stat, priorByPlayer.get(String(stat.player_id)) || null);
+          const snapshot = await this.captureService.saveBoxScore({
+            gameId: currentGame.id,
+            starterIds,
+            stats: statsList
+          });
           if (this.isGameScopedOnly) {
-            const snapshot = await this.captureService.saveCapture({
-              gameId: currentGame.id,
-              starterIds,
-              stats: statsList
-            });
-            this.gameScopedSnapshot = snapshot || this.gameScopedSnapshot;
-            this.games = [this.gameScopedSnapshot.game];
-            this.players = this.gameScopedSnapshot.players || this.players;
-            this.gameStats = this.gameScopedSnapshot.stats || statsList;
+            this.gameScopedSnapshot = snapshot;
+            this.games = [snapshot.game];
+            this.players = snapshot.players || this.players;
+            this.gameStats = snapshot.stats;
           } else {
-            // Preserve the established team-scoped save path for normal staff.
-            // The V21 RPC is reserved for users whose only authorization is the
-            // explicit per-game delegation, avoiding a regression in existing
-            // trainer/admin workflows and keeping DataStore as their boundary.
-            const gameData = {
-              ...currentGame,
-              starter_ids: starterIds
-            };
-            await DataStore.saveGameAndStats(gameData, statsList);
+            DataStore.applyBoxScoreSnapshot(snapshot);
           }
 
           alert("✅ " + this.t("boxscore_saved_msg", "BoxScore guardado y métricas recalculadas exitosamente."));

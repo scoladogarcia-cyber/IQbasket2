@@ -68,6 +68,7 @@ async function installFixture(page) {
           player_id: players[0].id,
           starter: true,
           minutes: 30,
+          plus_minus: -7,
           fg2_made: 2,
           fg2_attempted: 5,
           fg3_made: 1,
@@ -152,15 +153,11 @@ async function installFixture(page) {
       data_status: window.__box.frozen ? "FROZEN" : "ACTIVE"
     });
 
-    DataStore.saveGameAndStats = async (gameData, statsList) => {
-      window.__box.calls.push({
-        gameData: structuredClone(gameData),
-        statsList: structuredClone(statsList)
-      });
-      statsByGame[gameData.id] = statsList.map(row => ({ ...row }));
-      const index = games.findIndex(game => game.id === gameData.id);
-      if (index >= 0) games[index] = { ...games[index], ...structuredClone(gameData) };
-      return true;
+    DataStore.saveGameAndStats = async () => { throw new Error("BoxScore must not call the full-game writer"); };
+    DataStore.applyBoxScoreSnapshot = snapshot => {
+      statsByGame[snapshot.game.id] = snapshot.stats.map(row => ({ ...row }));
+      const index = games.findIndex(game => game.id === snapshot.game.id);
+      games[index] = { ...games[index], starter_ids: snapshot.game.starter_ids };
     };
 
     const makeAuth = role => {
@@ -189,6 +186,11 @@ async function installFixture(page) {
     window.__renderBox = async ({ role = "ENTRENADOR", gameId = "game-open", frozen = false } = {}) => {
       window.__box.frozen = Boolean(frozen);
       const view = new GameBoxScoreView(null, makeAuth(role));
+      view.captureService.saveBoxScore = async payload => {
+        window.__box.calls.push(structuredClone(payload));
+        const game = games.find(row => row.id === payload.gameId);
+        return { game: { ...game, starter_ids: payload.starterIds }, stats: payload.stats, players };
+      };
       window.__box.view = view;
       await view.render("boxscore-test-root", gameId);
     };
@@ -247,9 +249,11 @@ async function runViewport(browser, viewportName, viewport) {
   await page.waitForFunction(() => window.__box.calls.length === 1);
 
   const saveCall = await page.evaluate(() => window.__box.calls[0]);
-  const victor = saveCall.statsList.find(row => row.player_id === "10000000-0000-4000-8000-000000000001");
+  assertCondition(Object.keys(saveCall).sort().join(",") === "gameId,starterIds,stats", viewportName, "El acta envía campos ajenos a su edición");
+  const victor = saveCall.stats.find(row => row.player_id === "10000000-0000-4000-8000-000000000001");
   assertCondition(Boolean(victor), viewportName, "No se guarda la fila de Víctor");
   assertCondition(victor.fg2_made === 3, viewportName, "BoxScore guarda T2C incorrecto");
+  assertCondition(victor.plus_minus === -7, viewportName, "Se pierde el más/menos previo");
   assertCondition(victor.minutes === 32, viewportName, "BoxScore guarda minutos incorrectos");
   assertCondition(victor.points === 11, viewportName, "BoxScore guarda PTS derivados incorrectos");
   assertCondition(victor.blocks_received === 1, viewportName, "La captura pierde el tapón recibido al guardar");
