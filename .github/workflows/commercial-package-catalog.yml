@@ -1,0 +1,36 @@
+name: Commercial Package Catalogue
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/commercial-package-catalog.config.js'
+      - 'views/admin/BusinessMetricsView.js'
+      - 'tests/commercial-package-catalog.mjs'
+      - 'tests/business-metrics-ui-smoke.mjs'
+      - '.github/workflows/commercial-package-catalog.yml'
+permissions:
+  contents: read
+jobs:
+  catalogue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node tests/commercial-package-catalog.mjs
+      - run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/commercial-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/commercial-vite.log
+          exit 1
+      - run: node tests/business-metrics-ui-smoke.mjs
+      - run: npm run build
