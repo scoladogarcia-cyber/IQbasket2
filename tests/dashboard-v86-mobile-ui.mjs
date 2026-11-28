@@ -13,7 +13,7 @@ try {
   await installBrowserNetworkStubs(page);
   await page.goto(BASE_URL,{waitUntil:"domcontentloaded"});
   await page.waitForFunction(()=>Boolean(window.iqApp),null,{timeout:20000});
-  const {rows:results,netTitle,netLabels}=await page.evaluate(async()=>{
+  const {rows:results,netTitle,netLabels,axisFont,leaderTitle}=await page.evaluate(async()=>{
     const {DataStore}=await import("/services/DataStore.js");
     const {TranslationStore}=await import("/services/TranslationStore.js");
     const {SeasonDashboardView}=await import("/views/SeasonDashboardView.js");
@@ -53,10 +53,17 @@ try {
     await view.render(container,teamId);
     const netTitle=container.querySelector(".clean-chart-header > span")?.textContent?.trim();
     const netLabels=container.querySelector(".rating-chart-labels")?.textContent?.trim();
-    return {rows,netTitle,netLabels};
+    const axisFont = parseFloat(getComputedStyle(container.querySelector(".rating-chart-axis > span")).fontSize);
+    container.querySelector("#player-valuation-toggle").click();
+    for (let attempt=0; attempt<30 && !container.querySelector(".purple-card-title")?.textContent.includes("FIBA (EFF)"); attempt++) {
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    return {rows,netTitle,netLabels,axisFont,leaderTitle:container.querySelector(".purple-card-title").textContent};
   });
   assert.match(netTitle,/net rating trend/i);
   assert.match(netLabels,/20/);
+  assert.ok(axisFont <= 10);
+  assert.match(leaderTitle,/FIBA \(EFF\)/);
   const labels={
     es:["Partidos jugados","Últimos partidos","Auditar estadísticas"],
     ca:["Partits jugats","Últims partits","Auditar estadístiques"],

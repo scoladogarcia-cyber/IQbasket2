@@ -4,6 +4,7 @@
  * 6 gráficas analíticas SVG y bloque de insights automáticos.
  */
 
+import { getPlayerValuation, renderPlayerValuationToggle, setPlayerValuation } from "./PlayerValuationPreference.js";
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { selectScopedPlayerStatsV81 } from "../domain/stats/StatScopeV81.js";
@@ -58,9 +59,9 @@ export class SeasonDashboardView {
     return I18n && typeof I18n.formatDate === "function" ? I18n.formatDate(dateStr) : dateStr;
   }
 
-  /** Historical API name; metric is the canonical PIR, not FIBA EFF. */
+  /** Read the requested valuation from the canonical box score. */
   _calculateFibaVal(st = {}) {
-    return BoxScoreCalculator.calculatePlayerBoxScore(st).pir;
+    return BoxScoreCalculator.calculatePlayerBoxScore(st)[getPlayerValuation().field];
   }
 
   _normalizeGameScore(g) {
@@ -321,11 +322,11 @@ export class SeasonDashboardView {
     const chartY = value => chartInset + (svgHeight - chartInset * 2) * (axisLimit - value) / (axisLimit * 2);
     const trendGraphic = trendValues.some(value => value !== null) ? `
       <div class="chart-flex-wrap">
-        <div class="chart-y-axis" aria-hidden="true">
+        <div class="chart-y-axis rating-chart-axis" aria-hidden="true">
           ${[axisLimit, axisStep, 0, -axisStep, -axisLimit].map(value => `<span>${value}</span>`).join("")}
         </div>
         <div class="chart-svg-container">
-          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg" aria-hidden="true">
+          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg" preserveAspectRatio="none" aria-hidden="true">
             <line x1="0" y1="${chartY(0)}" x2="${svgWidth}" y2="${chartY(0)}" stroke="#cbd5e1" stroke-dasharray="4 4"/>
             ${trendValues.map((value, index) => {
               if (value === null) return "";
@@ -826,7 +827,7 @@ export class SeasonDashboardView {
           </div>
           <div class="leader-val-box">
             <span class="leader-val-num">${p.avgVal}</span>
-            <span class="leader-val-txt">${this.t("dashboard.v86.valuePerGame")}</span>
+            <span class="leader-val-txt">${this.t("dashboard.v86.valuePerGame", "", { metric: getPlayerValuation().label })}</span>
           </div>
         </div>
       `).join("") || `<div class="dash-empty-leaders">${this.t("dashboard.v86.noLeaders")}</div>`;
@@ -916,8 +917,12 @@ export class SeasonDashboardView {
             .chart-y-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 700; width: 28px; text-align: right; }
             .chart-svg-container { flex: 1; display: flex; flex-direction: column; }
             .chart-svg { width: 100%; height: 140px; overflow: visible; }
+            .rating-chart-axis { align-self: start; height: 140px; box-sizing: border-box; }
             .rating-chart-note { color: #475569; font-size: .8rem; margin: 12px 0 0; }
-            .rating-chart-labels span { text-align: center; }
+            .clean-chart-card .chart-y-axis > span,
+            .clean-chart-card .chart-x-labels > span { font-size: inherit; color: inherit; line-height: 1.15; }
+            .rating-chart-labels > span { text-align: center; }
+            .rating-chart-labels > span:only-child { margin-inline: auto; }
             .chart-x-labels { display: flex; justify-content: space-between; font-size: 9.5px; color: #64748b; font-weight: 700; margin-top: 6px; }
             
             .chart-bars-wrap { flex: 1; display: flex; flex-direction: column; height: 140px; }
@@ -1053,6 +1058,7 @@ export class SeasonDashboardView {
                 </div>
               </div>
               <div class="kpi-main-number">${kpis.drtg ?? this.t("dashboard.v86.notAvailable")}</div>
+              ${kpis.drtg == null ? `<span class="kpi-sub-trend">${this.t("reviewUi.defensiveMissing")}</span>` : ""}
             </div>
 
             <div class="kpi-box-card">
@@ -1076,6 +1082,7 @@ export class SeasonDashboardView {
                 </div>
               </div>
               <div class="kpi-main-number">${kpis.pace ?? this.t("dashboard.v86.notAvailable")}</div>
+              ${kpis.pace == null ? `<span class="kpi-sub-trend">${this.t("reviewUi.paceMissing")}</span>` : ""}
             </div>
 
             <div class="kpi-box-card">
@@ -1106,8 +1113,9 @@ export class SeasonDashboardView {
           <!-- HERO CARD PURPLE LÍDERES FIBA (Texto en blanco) -->
           <div class="purple-leaders-banner">
             <div class="purple-card-title">
-              <span>🏆 ${this.t("dashboard.v86.fibaLeaders")}</span>
+              <span>🏆 ${this.t("dashboard.v86.fibaLeaders", "", { metric: getPlayerValuation().label })}</span>
             </div>
+            ${renderPlayerValuationToggle()}
             <div class="purple-leaders-grid">
               ${topPlayersMarkup}
             </div>
@@ -1153,6 +1161,11 @@ export class SeasonDashboardView {
         </div>
       `;
 
+      container.querySelector("#player-valuation-toggle")?.addEventListener("click", async event => {
+        setPlayerValuation(event.currentTarget.value);
+        await this.render(container, this.currentTeamId);
+        container.querySelector("#player-valuation-toggle")?.focus({ preventScroll: true });
+      });
       this._attachSortEventListeners(container);
       this._attachSyncButtonListener(container, this.currentTeamId);
 

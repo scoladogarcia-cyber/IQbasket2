@@ -5,6 +5,7 @@
  * belonging to the same logical grant so the operator sees one access card per user/window.
  */
 
+import { TranslationStore } from "../../services/TranslationStore.js";
 import { Permission } from "../../security/permissions.js";
 import {
   DELEGATABLE_GAME_PERMISSIONS,
@@ -79,7 +80,7 @@ export class GameCaptureDelegationPanel {
   buttonMarkup(game = {}, { disabled = false } = {}) {
     if (!this.canManage(game)) return "";
     const isDisabled = disabled || String(game.edit_state || game.editState || "OPEN").toUpperCase() === "LOCKED";
-    return `<button type="button" class="btn-manage-game-delegations" data-id="${escapeHtml(game.id)}" ${isDisabled ? "disabled" : ""} style="background:${isDisabled ? "#f1f5f9" : "#f5f3ff"};color:${isDisabled ? "#94a3b8" : "#6d28d9"};border:1px solid ${isDisabled ? "#cbd5e1" : "#c4b5fd"};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:${isDisabled ? "not-allowed" : "pointer"};min-height:44px;">👤 Delegar captura</button>`;
+    return `<button type="button" class="btn-manage-game-delegations" data-id="${escapeHtml(game.id)}" ${isDisabled ? "disabled" : ""} style="background:${isDisabled ? "#f1f5f9" : "#f5f3ff"};color:${isDisabled ? "#94a3b8" : "#6d28d9"};border:1px solid ${isDisabled ? "#cbd5e1" : "#c4b5fd"};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:${isDisabled ? "not-allowed" : "pointer"};min-height:44px;">👤 ${TranslationStore.t("reviewUi.delegate")}</button>`;
   }
 
   bind(container, games = []) {

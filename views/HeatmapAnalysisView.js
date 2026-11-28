@@ -16,6 +16,8 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { StatsAggregator } from "../domain/stats/StatsAggregator.js";
+import { canonicalGameEventAction } from "../domain/games/GameEventCatalog.js";
+import { classifyShotCourtZone, shotCourtDistance, shotCourtThreePointPath } from "../domain/analytics/ShotCourtGeometry.js";
 import { resolveShotMade } from "../domain/analytics/ShotOutcomeResolver.js";
 
 export class HeatmapAnalysisView {
@@ -56,7 +58,7 @@ export class HeatmapAnalysisView {
 
   _isShotEvent(ev) {
     const act = String(ev.action_type ?? ev.action ?? ev.event_type ?? '').toLowerCase();
-    if (ev.is_opponent || ev.isOpponent || act.startsWith("opp_")) return false;
+    if (ev.is_opponent || ev.isOpponent || act.startsWith("opp_") || act.startsWith("ft_") || Number(ev.points) === 1) return false;
     
     return act.includes("fg") || act.includes("shot") || act.includes("t2") || act.includes("t3") || 
            act.includes("triple") || act.includes("canasta") || act.includes("tiro") ||
@@ -142,15 +144,9 @@ export class HeatmapAnalysisView {
       if (this.selectedShotType === "made" && !ev.made) return false;
       if (this.selectedShotType === "missed" && ev.made) return false;
 
-      const isPaint = ev.coord_x >= 34 && ev.coord_x <= 66 && ev.coord_y <= 40;
-      const distUnits = Math.hypot((ev.coord_x - 50) * 5.0, (ev.coord_y - 11.06) * 4.7);
-      const isCornerThree = (ev.coord_x <= 6.0 || ev.coord_x >= 94.0) && ev.coord_y <= 29.8;
-      const isThree = isCornerThree || distUnits >= 235.0;
-      const isMid = !isPaint && !isThree;
-
-      if (this.selectedDistanceRange === "paint" && !isPaint) return false;
-      if (this.selectedDistanceRange === "mid" && !isMid) return false;
-      if (this.selectedDistanceRange === "three" && !isThree) return false;
+      if (this.selectedDistanceRange !== "all") {
+        return shotCourtDistance(classifyShotCourtZone(ev)) === this.selectedDistanceRange;
+      }
 
       return true;
     });
@@ -247,17 +243,15 @@ export class HeatmapAnalysisView {
     const missedShots = totalShots - madeShots;
     const fgPct = totalShots > 0 ? ((madeShots / totalShots) * 100).toFixed(1) : "0.0";
     
-    const made3s = filtered.filter(e => {
-      const distUnits = Math.hypot((e.coord_x - 50) * 5.0, (e.coord_y - 11.06) * 4.7);
-      const isCornerThree = (e.coord_x <= 6.0 || e.coord_x >= 94.0) && e.coord_y <= 29.8;
-      return e.made && (isCornerThree || distUnits >= 235.0);
-    }).length;
+    const made3s = filtered.filter(e => e.made &&
+      (canonicalGameEventAction(e) === "fg3_made" || Number(e.points) === 3)).length;
 
     const eFGPct = totalShots > 0 ? (((madeShots + 0.5 * made3s) / totalShots) * 100).toFixed(1) : "0.0";
     const totalPts = (madeShots * 2) + made3s;
     const pps = totalShots > 0 ? (totalPts / totalShots).toFixed(2) : "0.00";
 
     return `
+      <p>${this.t("reviewUi.shotLegend")} · ${this.t("reviewUi.recordedThrees")}: ${made3s}</p>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; gap: 6px; overflow-x: auto;">
           <button class="dist-filter-btn ${this.selectedDistanceRange === 'all' ? 'active' : ''}" data-range="all" style="padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; border: 1px solid #cbd5e1; cursor: pointer; background: ${this.selectedDistanceRange === 'all' ? '#0f172a' : '#ffffff'}; color: ${this.selectedDistanceRange === 'all' ? '#ffffff' : '#334155'};">
@@ -297,9 +291,7 @@ export class HeatmapAnalysisView {
               <line x1="220" y1="40" x2="280" y2="40" stroke="#ffffff" stroke-width="4"/>
               <circle cx="250" cy="52" r="15" fill="none" stroke="#ff5722" stroke-width="4"/>
               <path d="M 215 52 A 35 35 0 0 0 285 52" fill="none" stroke="#ffffff" stroke-width="2"/>
-              <line x1="30" y1="0" x2="30" y2="140" stroke="#ffffff" stroke-width="3"/>
-              <line x1="470" y1="0" x2="470" y2="140" stroke="#ffffff" stroke-width="3"/>
-              <path d="M 30 140 A 235 235 0 0 0 470 140" fill="none" stroke="#ffffff" stroke-width="3"/>
+              <path d="${shotCourtThreePointPath}" fill="none" stroke="#ffffff" stroke-width="3"/>
             </svg>
 
             <canvas id="heatmap-canvas" width="500" height="470" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; opacity: 0.8;"></canvas>
@@ -617,19 +609,12 @@ export class HeatmapAnalysisView {
   _renderCourtZoneBadges(filteredEvents) {
     if (this.viewMode !== "zones") return "";
 
-    const paint = this._calculateZoneStats(filteredEvents, e => e.coord_x >= 34 && e.coord_x <= 66 && e.coord_y <= 40);
-    const leftCorner = this._calculateZoneStats(filteredEvents, e => e.coord_x <= 15 && e.coord_y <= 30);
-    const rightCorner = this._calculateZoneStats(filteredEvents, e => e.coord_x >= 85 && e.coord_y <= 30);
-    const topThree = this._calculateZoneStats(filteredEvents, e => {
-      const distUnits = Math.hypot((e.coord_x - 50) * 5.0, (e.coord_y - 11.06) * 4.7);
-      return distUnits >= 235.0 && e.coord_x > 15 && e.coord_x < 85;
-    });
-    const midRange = this._calculateZoneStats(filteredEvents, e => {
-      const isPaint = e.coord_x >= 34 && e.coord_x <= 66 && e.coord_y <= 40;
-      const distUnits = Math.hypot((e.coord_x - 50) * 5.0, (e.coord_y - 11.06) * 4.7);
-      const isThree = distUnits >= 235.0 || ((e.coord_x <= 15 || e.coord_x >= 85) && e.coord_y <= 30);
-      return !isPaint && !isThree;
-    });
+    const byZone = zone => this._calculateZoneStats(filteredEvents, e => classifyShotCourtZone(e) === zone);
+    const paint = byZone("paint");
+    const leftCorner = byZone("leftCorner");
+    const rightCorner = byZone("rightCorner");
+    const topThree = byZone("arc");
+    const midRange = byZone("mid");
 
     const getBadgeStyle = (pct, total) => {
       if (total === 0) return "background: rgba(15, 23, 42, 0.85); color: white;";
@@ -676,18 +661,11 @@ export class HeatmapAnalysisView {
   }
 
   _renderZonesBreakdown(filteredEvents) {
-    const paint = this._calculateZoneStats(filteredEvents, e => e.coord_x >= 34 && e.coord_x <= 66 && e.coord_y <= 40);
-    const three = this._calculateZoneStats(filteredEvents, e => {
-      const distUnits = Math.hypot((e.coord_x - 50) * 5.0, (e.coord_y - 11.06) * 4.7);
-      const isCornerThree = (e.coord_x <= 6.0 || e.coord_x >= 94.0) && e.coord_y <= 29.8;
-      return isCornerThree || distUnits >= 235.0;
-    });
-    const mid = this._calculateZoneStats(filteredEvents, e => {
-      const isPaint = e.coord_x >= 34 && e.coord_x <= 66 && e.coord_y <= 40;
-      const distUnits = Math.hypot((e.coord_x - 50) * 5.0, (e.coord_y - 11.06) * 4.7);
-      const isThree = distUnits >= 235.0 || ((e.coord_x <= 15 || e.coord_x >= 85) && e.coord_y <= 30);
-      return !isPaint && !isThree;
-    });
+    const byDistance = distance => this._calculateZoneStats(filteredEvents,
+      e => shotCourtDistance(classifyShotCourtZone(e)) === distance);
+    const paint = byDistance("paint");
+    const three = byDistance("three");
+    const mid = byDistance("mid");
 
     return `
       <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
@@ -764,7 +742,9 @@ export class HeatmapAnalysisView {
       marker.style.transform = "translate(-50%, -50%)";
       marker.style.width = "12px";
       marker.style.height = "12px";
-      marker.style.borderRadius = "50%";
+      const action = canonicalGameEventAction(ev);
+      const recordedThree = action.startsWith("fg3_") || action.startsWith("t3_") || Number(ev.points) === 3;
+      marker.style.borderRadius = recordedThree ? "2px" : "50%";
       marker.style.background = ev.made ? "#22c55e" : "#ef4444";
       marker.style.border = "2px solid #ffffff";
       marker.style.boxShadow = "0 1px 4px rgba(0,0,0,0.6)";

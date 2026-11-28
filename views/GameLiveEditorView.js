@@ -355,7 +355,7 @@ export class GameLiveEditorView {
     const gamesCardsMarkup = sortedGames.map(game => {
       const isWin = Number(game.team_score ?? game.teamScore ?? 0) > Number(game.opponent_score ?? game.opponentScore ?? 0);
       const resultClass = isWin ? "background: #166534; color: #ffffff;" : "background: #dc2626; color: #ffffff;";
-      const resultText = isWin ? this.t("win", "VICTORIA") : this.t("loss", "DERROTA");
+      const resultText = isWin ? this.t("reviewUi.win") : this.t("reviewUi.loss");
 
       const periods = DataStore.getGamePeriodScores(game.id) || [];
       const periodNumber = period => Number(period.period_number ?? period.periodNumber);
@@ -401,18 +401,18 @@ export class GameLiveEditorView {
       });
 
       const lifecycleBadge = locked
-        ? '<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔒 Cerrado</span>'
+        ? `<span style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔒 ${this.t("reviewUi.locked")}</span>`
         : pendingRequest
-          ? '<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">⏳ Cierre solicitado</span>'
-          : '<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔓 Abierto</span>';
+          ? `<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">⏳ ${this.t("reviewUi.requested")}</span>`
+          : `<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;">🔓 ${this.t("reviewUi.open")}</span>`;
 
       let lifecycleAction = "";
       if (canReopen) {
-        lifecycleAction = `<button type="button" class="btn-reopen-game" data-id="${game.id}" style="background:#ecfdf5;color:#166534;border:1px solid #86efac;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔓 Reabrir</button>`;
+        lifecycleAction = `<button type="button" class="btn-reopen-game" data-id="${game.id}" style="background:#ecfdf5;color:#166534;border:1px solid #86efac;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔓 ${this.t("reviewUi.reopen")}</button>`;
       } else if (canLock) {
-        lifecycleAction = `<button type="button" class="btn-lock-game" data-id="${game.id}" style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔒 Cerrar</button>`;
+        lifecycleAction = `<button type="button" class="btn-lock-game" data-id="${game.id}" style="background:#fff7ed;color:#9a3412;border:1px solid #fdba74;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;min-height:44px;">🔒 ${this.t("reviewUi.close")}</button>`;
       } else if (canRequestLock) {
-        lifecycleAction = `<button type="button" class="btn-request-game-lock" data-id="${game.id}" ${pendingRequest ? "disabled" : ""} style="background:${pendingRequest ? "#f1f5f9" : "#eff6ff"};color:${pendingRequest ? "#94a3b8" : "#1d4ed8"};border:1px solid ${pendingRequest ? "#cbd5e1" : "#93c5fd"};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:${pendingRequest ? "not-allowed" : "pointer"};min-height:44px;">${pendingRequest ? "⏳ Cierre solicitado" : "📨 Solicitar cierre"}</button>`;
+        lifecycleAction = `<button type="button" class="btn-request-game-lock" data-id="${game.id}" ${pendingRequest ? "disabled" : ""} style="background:${pendingRequest ? "#f1f5f9" : "#eff6ff"};color:${pendingRequest ? "#94a3b8" : "#1d4ed8"};border:1px solid ${pendingRequest ? "#cbd5e1" : "#93c5fd"};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:${pendingRequest ? "not-allowed" : "pointer"};min-height:44px;">${pendingRequest ? `⏳ ${this.t("reviewUi.requested")}` : `📨 ${this.t("reviewUi.request")}`}</button>`;
       }
 
       return `
@@ -440,14 +440,14 @@ export class GameLiveEditorView {
 
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <button class="btn-open-court-direct" data-id="${game.id}" aria-disabled="${!editable}" style="background:${editable ? "#0284c7" : "#e2e8f0"};color:${editable ? "#ffffff" : "#64748b"};border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:${editable ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:4px;">
-              🏀 Pista / Edición${editable ? "" : " 🔒"}
+              🏀 ${this.t("reviewUi.court")}${editable ? "" : " 🔒"}
             </button>
-            <button type="button" class="btn-live-existing-game" data-id="${game.id}" ${canCaptureGame ? "" : "disabled"} style="background:${canCaptureGame ? "#0f766e" : "#f1f5f9"};color:${canCaptureGame ? "#ffffff" : "#94a3b8"};border:1px solid ${canCaptureGame ? "#0f766e" : "#cbd5e1"};padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:${canCaptureGame ? "pointer" : "not-allowed"};min-height:44px;">⚡ Captura</button>
-            <button onclick="window.location.hash='#/boxscore/${game.id}'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📋 Boxscore</button>
-            <button onclick="window.location.hash='#/reports'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📊 Informe</button>
+            <button type="button" class="btn-live-existing-game" data-id="${game.id}" ${canCaptureGame ? "" : "disabled"} style="background:${canCaptureGame ? "#0f766e" : "#f1f5f9"};color:${canCaptureGame ? "#ffffff" : "#94a3b8"};border:1px solid ${canCaptureGame ? "#0f766e" : "#cbd5e1"};padding:8px 14px;border-radius:8px;font-size:12px;font-weight:800;cursor:${canCaptureGame ? "pointer" : "not-allowed"};min-height:44px;">⚡ ${this.t("reviewUi.live")}</button>
+            <button onclick="window.location.hash='#/boxscore/${game.id}'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📋 ${this.t("reviewUi.box")}</button>
+            <button onclick="window.location.hash='#/reports'" style="background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px;">📊 ${this.t("reviewUi.report")}</button>
             ${delegationAction}
             ${lifecycleAction}
-            <button class="btn-delete-game-direct" data-id="${game.id}" ${!canDelete ? "disabled" : ""} style="background:${canDelete ? "#fee2e2" : "#f1f5f9"};border:1px solid ${canDelete ? "#fca5a5" : "#cbd5e1"};font-size:18px;cursor:${canDelete ? "pointer" : "not-allowed"};color:${canDelete ? "#dc2626" : "#94a3b8"};min-height:44px;min-width:44px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;" title="${canDelete ? "Eliminar partido" : locked ? "Reabre el partido antes de eliminarlo" : "Tu rol no puede eliminar partidos"}">🗑️</button>
+            <button class="btn-delete-game-direct" data-id="${game.id}" ${!canDelete ? "disabled" : ""} style="background:${canDelete ? "#fee2e2" : "#f1f5f9"};border:1px solid ${canDelete ? "#fca5a5" : "#cbd5e1"};font-size:18px;cursor:${canDelete ? "pointer" : "not-allowed"};color:${canDelete ? "#dc2626" : "#94a3b8"};min-height:44px;min-width:44px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;" title="${canDelete ? this.t("reviewUi.deleteGame") : locked ? this.t("reviewUi.reopenToDelete") : this.t("reviewUi.cannotDelete")}">🗑️</button>
           </div>
         </div>
       `;
@@ -462,10 +462,10 @@ export class GameLiveEditorView {
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button id="btn-create-game-hud" aria-disabled="${!canRecordLive}" style="background:${canRecordLive ? "#f97316" : "#e2e8f0"};color:${canRecordLive ? "#ffffff" : "#64748b"};border:none;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:900;cursor:${canRecordLive ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:6px;">
-              ⚡ Nueva Anotación en Vivo (HUD Pro)${canRecordLive ? "" : " 🔒"}
+              ⚡ ${this.t("reviewUi.liveNew")}${canRecordLive ? "" : " 🔒"}
             </button>
             <button id="btn-create-game" aria-disabled="${!canCreateGame}" style="background:${canCreateGame ? "#0f172a" : "#e2e8f0"};color:${canCreateGame ? "#ffffff" : "#64748b"};border:none;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:800;cursor:${canCreateGame ? "pointer" : "not-allowed"};min-height:44px;display:inline-flex;align-items:center;gap:6px;">
-              + 🏀 Registro Rápido
+              + 🏀 ${this.t("reviewUi.quick")}
             </button>
           </div>
         </div>

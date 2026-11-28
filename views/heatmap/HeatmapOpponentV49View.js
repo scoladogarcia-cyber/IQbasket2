@@ -3,14 +3,15 @@
  * @description Conserva íntegra la UX propia y añade pista rival en modo solo
  * lectura. Respeta los partidos de DataStore (ya filtrados por RLS y equipo).
  */
+import { TranslationStore } from "../../services/TranslationStore.js";
 import { HeatmapAnalysisView } from "../HeatmapAnalysisView.js";
 import { DataStore } from "../../services/DataStore.js";
 import { buildGameShotMaps } from "../../domain/analytics/GameReportShotMaps.js";
 import { renderOpponentScoringCourt } from "../reports/OpponentScoringCourt.js";
 
-const modeButtons = active => `<div role="group" aria-label="Seleccionar mapa de tiro" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px">
-  <button type="button" data-map-team="own" aria-pressed="${active === "own"}" style="border:1px solid #94a3b8;border-radius:9px;min-height:44px;padding:10px 16px;background:${active === "own" ? "#1e3a8a" : "#fff"};color:${active === "own" ? "#fff" : "#0f172a"};font-weight:800;cursor:pointer">Nuestros tiros</button>
-  <button type="button" data-map-team="opponent" aria-pressed="${active === "opponent"}" style="border:1px solid #94a3b8;border-radius:9px;min-height:44px;padding:10px 16px;background:${active === "opponent" ? "#1e3a8a" : "#fff"};color:${active === "opponent" ? "#fff" : "#0f172a"};font-weight:800;cursor:pointer">Puntos recibidos · rival</button>
+const modeButtons = active => `<div role="group" aria-label="${TranslationStore.t("reviewUi.mapSelection")}" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px">
+  <button type="button" data-map-team="own" aria-pressed="${active === "own"}" style="border:1px solid #94a3b8;border-radius:9px;min-height:44px;padding:10px 16px;background:${active === "own" ? "#1e3a8a" : "#fff"};color:${active === "own" ? "#fff" : "#0f172a"};font-weight:800;cursor:pointer">${TranslationStore.t("reviewUi.ownShots")}</button>
+  <button type="button" data-map-team="opponent" aria-pressed="${active === "opponent"}" style="border:1px solid #94a3b8;border-radius:9px;min-height:44px;padding:10px 16px;background:${active === "opponent" ? "#1e3a8a" : "#fff"};color:${active === "opponent" ? "#fff" : "#0f172a"};font-weight:800;cursor:pointer">${TranslationStore.t("reviewUi.oppShots")}</button>
 </div>`;
 
 export class HeatmapOpponentV49View extends HeatmapAnalysisView {

@@ -5,6 +5,7 @@
  * Delegated users never receive EDIT_GAME or CREATE_GAME as a side effect of
  * capture access.
  */
+import { TranslationStore } from "../../services/TranslationStore.js";
 import { Permission } from "../../security/PermissionService.js";
 import { DataStore } from "../../services/DataStore.js";
 import { GameDeletionServiceV40 } from "../../services/games/GameDeletionServiceV40.js";
@@ -156,14 +157,14 @@ export class GameCaptureModesView extends GameLiveEditorView {
       let liveButton = actions.querySelector(".btn-live-existing-game");
       if (canLive) {
         if (liveButton) {
-          liveButton.textContent = "⚡ Anotación en vivo";
+          liveButton.textContent = `⚡ ${TranslationStore.t("reviewUi.live")}`;
           liveButton.removeAttribute("disabled");
         } else {
           liveButton = document.createElement("a");
           liveButton.href = `#/live/${encodeURIComponent(String(game.id))}`;
           liveButton.dataset.liveCaptureId = String(game.id);
           liveButton.setAttribute("style", modeButtonStyle("live"));
-          liveButton.textContent = "⚡ Anotación en vivo";
+          liveButton.textContent = `⚡ ${TranslationStore.t("reviewUi.live")}`;
           if (boxScoreButton) actions.insertBefore(liveButton, boxScoreButton);
           else actions.prepend(liveButton);
         }
@@ -172,7 +173,7 @@ export class GameCaptureModesView extends GameLiveEditorView {
       }
 
       if (boxScoreButton) {
-        boxScoreButton.textContent = canActa ? "📋 Acta / BoxScore" : "📋 BoxScore";
+        boxScoreButton.textContent = canActa ? `📋 ${TranslationStore.t("reviewUi.box")}` : "📋 BoxScore";
       }
 
       if (canViewBox && !actions.querySelector(`[data-live-view-id="${CSS.escape(String(game.id))}"]`)) {
@@ -180,7 +181,7 @@ export class GameCaptureModesView extends GameLiveEditorView {
         spectator.href = `#/boxscore/${encodeURIComponent(String(game.id))}/live`;
         spectator.dataset.liveViewId = String(game.id);
         spectator.setAttribute("style", modeButtonStyle("spectator"));
-        spectator.textContent = "📡 Marcador / Acta";
+        spectator.textContent = `📡 ${TranslationStore.t("reviewUi.score")}`;
         if (boxScoreButton) actions.insertBefore(spectator, boxScoreButton);
         else actions.appendChild(spectator);
       }
@@ -190,7 +191,7 @@ export class GameCaptureModesView extends GameLiveEditorView {
         quick.href = `#/easy-entry/${encodeURIComponent(String(game.id))}`;
         quick.dataset.quickCaptureId = String(game.id);
         quick.setAttribute("style", modeButtonStyle("quick"));
-        quick.textContent = "🏀 Partido rápido";
+        quick.textContent = `🏀 ${TranslationStore.t("reviewUi.quick")}`;
         if (boxScoreButton) actions.insertBefore(quick, boxScoreButton);
         else actions.appendChild(quick);
       }
@@ -200,11 +201,11 @@ export class GameCaptureModesView extends GameLiveEditorView {
         note.className = "game-capture-scope-note";
         note.setAttribute("style", `${modeButtonStyle("scope")}width:100%;cursor:default;min-height:auto;padding:6px 9px;font-size:10px;`);
         const modes = [
-          canLive ? "en vivo" : null,
-          canQuick ? "rápido" : null,
-          canActa ? "acta" : null
+          canLive ? TranslationStore.t("reviewUi.liveMode") : null,
+          canQuick ? TranslationStore.t("reviewUi.quickMode") : null,
+          canActa ? TranslationStore.t("reviewUi.sheetMode") : null
         ].filter(Boolean).join(" · ");
-        note.textContent = `🔐 Captura autorizada para este partido: ${modes}`;
+        note.textContent = `🔐 ${TranslationStore.t("reviewUi.capture", { modes })}`;
         actions.appendChild(note);
       }
     });
