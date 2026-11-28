@@ -16,6 +16,7 @@ const layout = fs.readFileSync(
   "utf8"
 );
 const index = fs.readFileSync(new URL("../index.js", import.meta.url), "utf8");
+const registry = fs.readFileSync(new URL("../services/LazyViewRegistry.js", import.meta.url), "utf8");
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const permissions = fs.readFileSync(
   new URL("../security/permissions.js", import.meta.url),
@@ -166,9 +167,9 @@ assert.match(
   "El drawer móvil debe exponer Solicitudes."
 );
 assert.match(
-  index,
-  /import\s+\{\s*ApprovalCenterView\s*\}\s+from\s+["']\.\/views\/ApprovalCenterView\.js["']/,
-  "El router principal debe importar ApprovalCenterView."
+  registry,
+  /import\("\.\.\/views\/ApprovalCenterView\.js"\)/,
+  "El registro lazy debe importar ApprovalCenterView."
 );
 assert.match(
   app,
@@ -213,3 +214,6 @@ assert.match(
 );
 
 console.log("APPROVAL_CENTER_FOUNDATION_OK");
+
+assert.match(index, /this\.lazyViews\.get\("approvals"\)/);
+assert.doesNotMatch(index, /import\s+\{\s*ApprovalCenterView/);

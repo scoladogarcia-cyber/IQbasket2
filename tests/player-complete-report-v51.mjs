@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { TranslationStore } from "../services/TranslationStore.js";
 import { setPlayerValuation, renderPlayerValuationToggle } from "../views/PlayerValuationPreference.js";
 import { readFileSync } from "node:fs";
 import { renderPlayerCompleteBoxScore } from "../views/reports/PlayerCompleteBoxScore.js";
@@ -15,6 +16,8 @@ const rows = [
   { player_id: "p1", game_id: "previous", minutes: 40, points: 99, fg2_made: 1, fg2_attempted: 1 },
   { player_id: "other", game_id: "g1", minutes: 40, points: 99, fg2_made: 1, fg2_attempted: 1 }
 ];
+await TranslationStore.setLanguage("es");
+setPlayerValuation("pir");
 const html = renderPlayerCompleteBoxScore({ player, games, stats: rows });
 assert.match(html, /Acta individual completa · tiros de campo y estadísticas/);
 assert.match(html, /T2 C\/I/);
@@ -30,12 +33,18 @@ assert.match(html, /11 puntos, 33 minutos/);
 assert.match(html, /Rebotes y acciones individuales/);
 assert.match(html, />PIR<\/th>/);
 assert.match(html, />17<\/td><\/tr>/);
+assert.match(renderPlayerValuationToggle(), /Valoración PIR · Ver FIBA/);
+await TranslationStore.setLanguage("en");
 assert.match(renderPlayerValuationToggle(), /PIR rating · Show FIBA/);
+await TranslationStore.setLanguage("es");
 setPlayerValuation("efficiency");
 const fiba = renderPlayerCompleteBoxScore({ player, games, stats: rows });
 assert.match(fiba, />FIBA \(EFF\)<\/th>/);
 assert.match(fiba, />15<\/td><\/tr>/);
+assert.match(renderPlayerValuationToggle(), /Valoración FIBA \(EFF\) · Ver PIR/);
+await TranslationStore.setLanguage("en");
 assert.match(renderPlayerValuationToggle(), /FIBA \(EFF\) rating · Show PIR/);
+await TranslationStore.setLanguage("es");
 setPlayerValuation("pir");
 assert.doesNotMatch(html, /99 puntos|99\/|previous/);
 assert.match(renderPlayerCompleteBoxScore({ player, games: [games[0]], stats: [rows[0]] }), /N\/D/, "Sin intentos de tres ni TL: N/D, no 0% ficticio");

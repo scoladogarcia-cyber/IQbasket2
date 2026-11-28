@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { PermissionService, Permission } from "../security/PermissionService.js";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 const service = readFileSync(
   new URL("../services/games/GameLockService.js", import.meta.url),
@@ -67,8 +68,16 @@ assert.match(service, /iq_v5_request_game_lock/);
 assert.match(service, /iq_v5_set_game_edit_state/);
 assert.match(service, /iq_v5_resolve_game_lock_request/);
 assert.match(dataStore, /Partido cerrado: reabre el partido antes de modificar datos/i);
-assert.match(view, /Solicitar cierre/i);
-assert.match(view, /Reabrir/i);
+assert.match(view, /this\.t\("reviewUi\.request"\)/);
+assert.match(view, /this\.t\("reviewUi\.reopen"\)/);
+assert.match(view, /canRequestLock/);
+assert.match(view, /canReopen/);
+await TranslationStore.setLanguage("es");
+assert.equal(TranslationStore.t("reviewUi.request"), "Solicitar cierre");
+assert.equal(TranslationStore.t("reviewUi.reopen"), "Reabrir");
+await TranslationStore.setLanguage("en");
+assert.equal(TranslationStore.t("reviewUi.request"), "Request lock");
+assert.equal(TranslationStore.t("reviewUi.reopen"), "Reopen");
 assert.match(view, /Peticiones de cierre/i);
 assert.match(boxScoreEntry, /GameBoxScoreIntelligenceV46View/);
 assert.match(boxScoreView, /Permission\.EDIT_BOXSCORE/);

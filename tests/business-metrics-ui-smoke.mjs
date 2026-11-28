@@ -64,6 +64,7 @@ for (const viewport of viewports) {
       overflow: document.documentElement.scrollWidth > innerWidth + 1,
       text: host.textContent,
       kpis: host.querySelectorAll(".biz-kpis article").length,
+      packageAudiences: host.querySelectorAll("[data-package-audience]").length,
       readinessPresent: Boolean(readiness),
       readinessPills: readiness?.querySelectorAll(".biz-readiness-pill").length || 0,
       blockedPills: readiness?.querySelectorAll(".biz-readiness-pill.is-blocked").length || 0,
@@ -77,6 +78,7 @@ for (const viewport of viewports) {
   });
 
   if (result.overflow) throw new Error(`[${viewport.name}] Business metrics overflows mobile: ${JSON.stringify(result)}`);
+  if (result.packageAudiences !== 4 || !result.text.includes("Jugador Plus") || !result.text.includes("Entrenador Pro")) throw new Error("Commercial catalogue missing audiences");
   if (result.kpis !== 4) throw new Error(`[${viewport.name}] Business metrics must show four KPIs: ${JSON.stringify(result)}`);
   if (!result.text.includes("25%") || !result.text.includes("FAMILY_PRO")) throw new Error(`[${viewport.name}] Business metrics content missing: ${JSON.stringify(result)}`);
   if (!result.readinessPresent || result.readinessPills !== 2) throw new Error(`[${viewport.name}] Commercial readiness card missing: ${JSON.stringify(result)}`);

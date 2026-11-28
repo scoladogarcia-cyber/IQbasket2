@@ -10,6 +10,7 @@ import { ProductFeedbackService } from "../../services/admin/ProductFeedbackServ
 import { evaluateFamilyCommercialReadiness } from "../../domain/family/FamilyCommercialReadinessPolicy.js";
 import { FAMILY_PILOT_CONFIG } from "../../config/family-pilot.config.js";
 import { Permission } from "../../security/permissions.js";
+import { COMMERCIAL_PACKAGE_CATALOG, COMMERCIAL_EXTENSIONS, COMMERCIAL_ROLLOUT_LABELS } from "../../config/commercial-package-catalog.config.js";
 
 const esc = (value = "") => String(value)
   .replaceAll("&","&amp;").replaceAll("<","&lt;")
@@ -100,6 +101,7 @@ export class BusinessMetricsView {
         ${this._kpi("Ofertas vistas",num(metrics.offer_views),"contextuales")}
         ${this._kpi("Interés",`${num(metrics.interest_rate)}%`,`${num(metrics.interest_clicks)} acciones`)}
       </div>
+      ${this._packageCatalogCard()}
       ${this._readinessCard(readiness)}
       ${this._pilotCard()}
       ${this._feedbackCard()}
@@ -212,6 +214,25 @@ export class BusinessMetricsView {
 
   _pilotCount(label,value) {
     return `<span><b>${num(value)}</b><i>${esc(label)}</i></span>`;
+  }
+
+  /** Internal, read-only positioning; effective plans remain a backend concern. */
+  _packageCatalogCard() {
+    return `<article class="biz-card biz-packages" data-commercial-package-catalog>
+      <p>Catálogo de producto</p><h2>Paquetes IQBasquet</h2>
+      <small>Propuesta de oferta por perfil. No activa suscripciones, cobros ni permisos.</small>
+      <div class="biz-package-grid">${COMMERCIAL_PACKAGE_CATALOG.map(group => `
+        <section class="biz-package-group" data-package-audience="${esc(group.id)}">
+          <h3>${esc(group.name)}</h3><small>${esc(group.buyer)}</small>
+          ${group.offers.map(offer => `<div class="biz-package-offer">
+            <strong>${esc(offer.name)}</strong>
+            <small>${esc(COMMERCIAL_ROLLOUT_LABELS[offer.rollout])}</small>
+            <ul>${offer.features.map(feature => `<li>${esc(feature)}</li>`).join("")}</ul>
+            ${offer.planCodes.length ? `<small>Referencia: ${esc(offer.planCodes.join(" / "))}</small>` : ""}
+          </div>`).join("")}
+        </section>`).join("")}</div>
+      <div class="biz-note"><b>Ampliaciones previstas:</b> ${esc(COMMERCIAL_EXTENSIONS.join(" · "))}. No disponibles para contratación desde este panel.</div>
+    </article>`;
   }
 
   _readinessCard(readiness = {}) {
@@ -332,6 +353,7 @@ export class BusinessMetricsView {
       .biz-pilot{margin:14px 0;padding:20px;border:1px solid #bfdbfe;border-radius:18px;background:#f8fbff}.biz-pilot-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.biz-pilot h2{margin:4px 0 5px}.biz-pilot-head>div>span,.biz-pilot>div>span{font-size:12px;color:#64748b}.biz-pilot-counts{display:flex;gap:7px}.biz-pilot-counts span{display:grid;min-width:72px;padding:8px 10px;text-align:center;border:1px solid #dbeafe;border-radius:11px;background:#fff}.biz-pilot-counts b{font-size:18px}.biz-pilot-counts i{font-size:10px;font-style:normal;color:#64748b;text-transform:uppercase}.biz-pilot-guardrail{margin:14px 0;padding:11px 12px;border-radius:10px;background:#eff6ff;font-size:12px;color:#475569}.biz-pilot-enroll{display:grid;grid-template-columns:minmax(0,2fr) minmax(110px,.6fr) auto;gap:10px;align-items:end;margin:12px 0 16px}.biz-pilot-enroll label{display:grid;gap:5px;min-width:0;font-size:12px;font-weight:800}.biz-pilot-enroll select,.biz-pilot-enroll button{min-height:42px;max-width:100%;border-radius:10px}.biz-pilot-enroll select{width:100%;border:1px solid #cbd5e1;background:#fff;padding:6px 9px}.biz-pilot-enroll button{border:0;background:#0f172a;color:#fff;padding:8px 14px;font-weight:800;cursor:pointer}.biz-pilot-enroll button:disabled{opacity:.45;cursor:not-allowed}.biz-pilot-table td:first-child{display:grid;gap:2px}.biz-pilot-table td small{color:#64748b}.biz-pilot-status{display:inline-flex;padding:3px 6px;border-radius:7px;background:#e2e8f0;font-size:10px;font-weight:900}.biz-pilot-status.is-active{background:#dcfce7;color:#166534}.biz-pilot-status.is-expired{background:#f1f5f9;color:#475569}.biz-pilot-status.is-revoked{background:#fee2e2;color:#991b1b}.biz-pilot-danger{min-height:34px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#b91c1c;padding:5px 8px;font-weight:800;cursor:pointer}
       .biz-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:14px}.biz-card{padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff}.biz-card h2{margin:4px 0 14px}.biz-card small,.biz-note{color:#64748b;font-size:12px}.biz-plan-list{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}.biz-plan{display:grid;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px}.biz-plan i{font-size:11px;color:#64748b;font-style:normal}
       .biz-feedback{margin:14px 0;padding:20px;border:1px solid #c4b5fd;border-radius:18px;background:#faf5ff}.biz-feedback p{margin:0;font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#7c3aed}.biz-feedback h2{margin:4px 0 5px}.biz-feedback-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.biz-feedback-head>div>span{font-size:12px;color:#64748b}.biz-feedback-head>label{display:grid;gap:5px;font-size:12px;font-weight:800}.biz-feedback-head select{min-height:40px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:5px 9px}.biz-feedback-list{display:grid;gap:10px;margin-top:14px}.biz-feedback-item{padding:14px;border:1px solid #e9d5ff;border-radius:13px;background:#fff;min-width:0}.biz-feedback-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.biz-feedback-top time{font-size:11px;color:#64748b}.biz-feedback-badges{display:flex;gap:5px;flex-wrap:wrap}.biz-feedback-badges span{padding:3px 6px;border-radius:7px;background:#f1f5f9;font-size:10px;font-weight:900}.biz-feedback-badges .is-blocker{background:#fee2e2;color:#991b1b}.biz-feedback-badges .is-important{background:#ffedd5;color:#9a3412}.biz-feedback-message{margin:10px 0!important;color:#0f172a!important;font-size:14px!important;font-weight:700!important;letter-spacing:0!important;text-transform:none!important;white-space:pre-wrap;overflow-wrap:anywhere}.biz-feedback-meta{display:grid;gap:2px}.biz-feedback-meta b{font-size:12px}.biz-feedback-meta small{font-size:11px;color:#64748b;overflow-wrap:anywhere}.biz-feedback-review{display:grid;grid-template-columns:minmax(120px,.45fr) minmax(0,1.6fr) auto;gap:8px;align-items:end;margin-top:12px;padding-top:12px;border-top:1px solid #f3e8ff}.biz-feedback-review label{display:grid;gap:4px;font-size:11px;font-weight:800}.biz-feedback-review select,.biz-feedback-review textarea{width:100%;min-height:40px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:7px 9px;font:inherit}.biz-feedback-review textarea{resize:vertical}.biz-feedback-review button{min-height:40px;border:0;border-radius:9px;background:#6d28d9;color:#fff;padding:7px 11px;font-weight:850;cursor:pointer}.biz-feedback-review button:disabled{opacity:.5;cursor:wait}.biz-feedback-empty{padding:18px;text-align:center;color:#64748b}.biz-table-wrap{overflow:auto;max-width:100%}.biz-card table,.biz-pilot table{width:100%;border-collapse:collapse;font-size:12px}.biz-card th,.biz-card td,.biz-pilot th,.biz-pilot td{text-align:left;padding:9px;border-bottom:1px solid #f1f5f9}.biz-card th:last-child,.biz-card td:last-child{text-align:right}.biz-note{margin-top:14px;padding:14px;border-radius:14px;background:#f8fafc}.biz-loading,.biz-error{padding:32px;text-align:center}
+      .biz-packages{margin:14px 0}.biz-package-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px;margin-top:14px}.biz-package-group{border:1px solid #e2e8f0;border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}.biz-package-group h3{margin:0 0 4px;font-size:15px}.biz-package-offer{display:grid;gap:5px;padding:10px 0;border-top:1px solid #e2e8f0;margin-top:10px}.biz-package-offer ul{font-size:12px;margin:0;padding-left:18px;color:#475569}
       @media(max-width:760px){.biz-hero,.biz-readiness-head,.biz-pilot-head,.biz-feedback-head{display:grid;align-items:start}.biz-feedback-review{grid-template-columns:1fr}.biz-feedback-review button{width:100%}.biz-readiness-statuses{justify-content:flex-start}.biz-pilot-counts{width:100%}.biz-pilot-counts span{flex:1;min-width:0}.biz-pilot-enroll{grid-template-columns:1fr 1fr}.biz-pilot-enroll label:first-child{grid-column:1/-1}.biz-pilot-enroll button{width:100%}.biz-kpis{grid-template-columns:1fr 1fr}.biz-grid{grid-template-columns:1fr}}
       @media(max-width:380px){.biz-kpis{grid-template-columns:1fr}.biz-readiness-statuses{display:grid;grid-template-columns:1fr 1fr}.biz-readiness-pill{min-width:0}.biz-pilot-enroll{grid-template-columns:1fr}.biz-pilot-enroll label:first-child{grid-column:auto}.biz-pilot-counts{display:grid;grid-template-columns:repeat(3,1fr)}}
     `;
