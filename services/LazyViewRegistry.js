@@ -5,6 +5,10 @@
  */
 
 const SINGLETON_LOADERS = Object.freeze({
+  approvals: async ({ supabase, authController }) => {
+    const { ApprovalCenterView } = await import("../views/ApprovalCenterView.js");
+    return new ApprovalCenterView(supabase, authController);
+  },
   team: async ({ supabase, authController }) => {
     const { TeamStatsView } = await import("../views/TeamStatsView.js");
     return new TeamStatsView(supabase, authController);

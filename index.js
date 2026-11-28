@@ -25,7 +25,6 @@ import { LazyViewRegistry } from "./services/LazyViewRegistry.js";
 
 import { AuthView } from "./views/AuthView.js";
 import { LayoutView } from "./views/LayoutView.js";
-import { ApprovalCenterView } from "./views/ApprovalCenterView.js";
 import { SeasonDashboardView } from "./views/SeasonDashboardView.js";
 import { GameController } from "./controllers/GameController.js";
 
@@ -57,8 +56,7 @@ export class IQBasketApp {
     // y se cachean tras el primer acceso para reducir el coste inicial en móvil.
     this.views = {
       auth: new AuthView(),
-      dashboard: new SeasonDashboardView(supabase, this.authController),
-      approvals: new ApprovalCenterView(supabase, this.authController)
+      dashboard: new SeasonDashboardView(supabase, this.authController)
     };
     this.lazyViews = new LazyViewRegistry({
       supabase,
@@ -868,7 +866,7 @@ export class IQBasketApp {
       case "requests":
       case "solicitudes":
       case "bandeja":
-        if (this.views.approvals) await this.views.approvals.render(contentArea);
+        await (await this.lazyViews.get("approvals")).render(contentArea);
         break;
 
       case "games":

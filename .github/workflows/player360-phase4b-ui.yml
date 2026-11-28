@@ -33,7 +33,7 @@ permissions:
 jobs:
   browser-smoke:
     name: Training desktop + mobile without DB writes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
 
     steps:

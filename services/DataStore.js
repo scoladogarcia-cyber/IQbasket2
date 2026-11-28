@@ -1384,6 +1384,28 @@ class DataStoreService {
   // 5. GUARDADO ATÓMICO Y SINCRONIZACIÓN EXACTA CON SUPABASE
   // =========================================================================
 
+  /**
+   * Apply a confirmed partial acta response to the authorized local projection.
+   * No remote writes, and no replacement of period/event caches or game metadata.
+   */
+  applyBoxScoreSnapshot(snapshot) {
+    const gameId = String(snapshot?.game?.id ?? "");
+    if (!gameId || !Array.isArray(snapshot.stats)) throw new Error("Respuesta de acta inválida.");
+    const index = this.games.findIndex(game => String(game.id) === gameId);
+    if (index < 0) return;
+    const starterIds = snapshot.game.starter_ids;
+    this.games[index] = { ...this.games[index], starter_ids: starterIds, starterIds };
+    const existingByPlayer = new Map(this.playerGameStats
+      .filter(row => String(row.game_id ?? row.gameId) === gameId)
+      .map(row => [String(row.player_id ?? row.playerId), row]));
+    const returned = snapshot.stats.map(row => this._normalizeStat({
+      ...existingByPlayer.get(String(row.player_id ?? row.playerId)), ...row, game_id: gameId
+    }));
+    this.playerGameStats = this.playerGameStats.filter(row => String(row.game_id ?? row.gameId) !== gameId).concat(returned);
+    this._persistToStorage();
+    this._notifyListeners();
+  }
+
   async saveGameAndStats(gameData, statsList = [], periodScores = [], liveEvents = []) {
     const requestedTeamId = gameData.team_id || gameData.teamId || this.getActiveTeamId();
     const requestedSeasonId = gameData.season_id || gameData.seasonId || this.getActiveSeasonId(requestedTeamId);
@@ -1578,7 +1600,7 @@ class DataStoreService {
           periods_count: 4,
           period_minutes: 10,
           status: normalizedGame.status || "Finalizado",
-          periods: formattedPeriods,
+          ...(formattedPeriods.length > 0 || !existingGame ? { periods: formattedPeriods } : {}),
           team_score: normalizedGame.team_score,
           opponent_score: normalizedGame.opponent_score,
           starter_ids: Array.isArray(gameData.starter_ids) ? gameData.starter_ids : [],

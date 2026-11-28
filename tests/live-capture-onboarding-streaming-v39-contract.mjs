@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { TranslationStore } from "../services/TranslationStore.js";
 
 const launch = await readFile(new URL("../services/games/LiveGameLaunchService.js", import.meta.url), "utf8");
 const setup = await readFile(new URL("../views/games/LiveGameSetupV39View.js", import.meta.url), "utf8");
@@ -50,7 +51,11 @@ assert.doesNotMatch(viewer, /\.delete\(/);
 
 assert.match(modes, /cloneNode\(true\)/);
 assert.match(modes, /Nuevo partido en vivo/);
-assert.match(modes, /Marcador \/ Acta/);
+assert.match(modes, /TranslationStore\.t\("reviewUi\.score"\)/);
+await TranslationStore.setLanguage("es");
+assert.equal(TranslationStore.t("reviewUi.score"), "Marcador / Acta");
+await TranslationStore.setLanguage("en");
+assert.equal(TranslationStore.t("reviewUi.score"), "Scoreboard / Scoresheet");
 
 // V39 guarantees remain required even if a later scorer presentation wraps them.
 assert.match(registry, /attachLiveCaptureStartGate/);

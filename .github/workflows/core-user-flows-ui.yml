@@ -52,7 +52,7 @@ permissions:
 jobs:
   browser-acceptance:
     name: Training, Nutrition and BoxScore desktop + iPhone
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -94,6 +94,9 @@ jobs:
         env:
           CORE_USER_FLOWS_BASE_URL: http://127.0.0.1:4173/
         run: node tests/nutrition-route-ui-smoke.mjs
+
+      - name: BoxScore partial RPC contract
+        run: node tests/boxscore-partial-save-contract.mjs
 
       - name: BoxScore edit browser smoke
         env:

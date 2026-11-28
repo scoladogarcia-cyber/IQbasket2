@@ -44,7 +44,7 @@ env:
 jobs:
   contract-build:
     name: Contracts + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
 
   browser-editor:
     name: PBP editor · ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false

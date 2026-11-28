@@ -26,6 +26,8 @@ async function installFixture(page) {
       import("/views/family/FamilyWorkspaceV31View.js")
     ]);
 
+    const { TranslationStore } = await import("/services/TranslationStore.js");
+    await TranslationStore.setLanguage("es");
     document.body.innerHTML = '<main id="v31-host"></main>';
     const host = document.getElementById("v31-host");
 

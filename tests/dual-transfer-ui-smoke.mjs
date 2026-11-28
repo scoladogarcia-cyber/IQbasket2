@@ -147,7 +147,7 @@ async function installFixture(page) {
       return { request_id: REQUEST_ID, workflow_version: "DUAL_REVIEW_V2" };
     };
 
-    const approval = app.views.approvals;
+    const approval = await app.lazyViews.get("approvals");
     window.__dualReviewCalls = [];
     window.__dualFinalizeCalls = [];
     approval.service.reviewTransfer = async (...args) => {
@@ -261,7 +261,7 @@ async function checkViewport(browser, name, viewport) {
   }
 
   await page.evaluate(async () => {
-    const approval = window.iqApp.views.approvals;
+    const approval = await window.iqApp.lazyViews.get("approvals");
     document.getElementById("dashboard-content-area").innerHTML = "";
     await approval.render("dashboard-content-area");
   });
