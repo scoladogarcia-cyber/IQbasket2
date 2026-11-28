@@ -58,7 +58,16 @@ export class PlayerStatsView {
   // CONTROL DE PERMISOS POR ROL
   // =========================================================================
   _canEditFullProfile() {
-    return Boolean(this.auth?.canPreview?.(Permission.EDIT_PLAYER_MASTER));
+    const player = this.selectedPlayer;
+    if (!player?.id) return false;
+    const playerTeamId = player.team_id || player.teamId || this.teamId;
+    const teamId = this.teamId || playerTeamId;
+    return Boolean(this.auth?.canPreview?.(Permission.EDIT_PLAYER_MASTER, {
+      playerId: player.id,
+      playerTeamId,
+      teamId,
+      teamSeasonId: DataStore.getActiveTeamSeasonId?.(teamId)
+    }));
   }
 
   _canEditNotes() {
@@ -358,7 +367,7 @@ export class PlayerStatsView {
             </a>
           ` : ""}
           ${canEditFull ? `
-            <button id="btn-edit-tab" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
+            <button type="button" id="btn-edit-tab" aria-expanded="${this.activeTab === "editar"}" aria-controls="tab-content" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 44px;">
               ✏️ ${this.t("edit_player", "Editar Jugador")}
             </button>
           ` : `
@@ -710,7 +719,7 @@ export class PlayerStatsView {
       }).join(" ");
 
       return `
-        <form id="form-edit-player" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+        <form id="form-edit-player" tabindex="-1" aria-label="${this.t("edit_player", "Editar jugador")}" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
           <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase;">FOTOGRAFÍA DEL JUGADOR</h3>
           <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
             <div id="photo-preview-box">
@@ -891,8 +900,14 @@ export class PlayerStatsView {
         const btnEditTab = container.querySelector("#btn-edit-tab");
         if (btnEditTab) {
           btnEditTab.addEventListener("click", () => {
-            this.activeTab = "editar";
-            renderDetail();
+            if (this.activeTab !== "editar") {
+              this.activeTab = "editar";
+              renderDetail();
+            }
+            // Bring the form into view without opening the mobile keyboard.
+            const form = container.querySelector("#form-edit-player");
+            form?.focus({ preventScroll: true });
+            form?.scrollIntoView({ block: "start", behavior: "instant" });
           });
         }
 

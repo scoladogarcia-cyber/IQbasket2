@@ -10,6 +10,7 @@ try {
   await page.evaluate(async () => {
     const { DataStore } = await import("/services/DataStore.js");
     const { supabase } = await import("/config/database.config.js");
+    const { Permission } = await import("/security/PermissionService.js");
     const { PlayerStatsView } = await import("/views/PlayerStatsView.js");
     const player = { id: "player-test", team_id: "team-test", first_name: "Alex", last_name: "Example",
       jersey: 4, height_cm: 176, weight_kg: 88, joined_at: "2026-08-02T14:00:00Z" };
@@ -35,13 +36,31 @@ try {
     const container = document.createElement("div");
     container.id = "profile-test";
     document.body.replaceChildren(container);
-    const view = new PlayerStatsView(supabase, { canPreview: () => true });
-    view.activeTab = "editar";
-    await view.render(container.id, player.id, player.team_id);
+    const auth = {
+      canPreview: (permission, scope) => permission === Permission.EDIT_PLAYER_MASTER &&
+        scope?.teamSeasonId === "season-test" && scope.playerId === player.id
+    };
+    const view = new PlayerStatsView(supabase, auth);
+    window.addEventListener("hashchange", () => {
+      const playerId = location.hash.match(/^#\/player\/(.+)$/)?.[1];
+      void view.render(container.id, playerId, player.team_id);
+    });
+    window.openReadOnlyProfile = () => new PlayerStatsView(supabase, { canPreview: () => false })
+      .render(container.id, player.id, player.team_id);
+    await view.render(container.id, null, player.team_id);
   });
+  await page.locator(".player-card").tap();
+  await page.waitForURL("**/#/player/player-test");
+  const edit = page.locator("#btn-edit-tab");
+  await edit.tap();
   const form = page.locator("#form-edit-player");
+  assert.equal(await form.evaluate(node => document.activeElement === node), true);
+  await form.locator("h3").first().waitFor({ state: "visible" });
+  assert.ok((await form.boundingBox()).y < 150, JSON.stringify(await form.boundingBox()));
   assert.equal(await form.locator('[name="jersey"]').isDisabled(), true);
   await form.locator('[name="weight_kg"]').fill("89");
+  await edit.tap();
+  assert.equal(await form.locator('[name="weight_kg"]').inputValue(), "89");
   await form.locator('[type="submit"]').tap();
   await page.locator("#player-save-error").waitFor({ state: "visible" });
   assert.equal(await form.locator('[name="weight_kg"]').inputValue(), "89");
@@ -54,6 +73,10 @@ try {
   await page.locator("#btn-edit-tab").tap();
   assert.equal(await form.locator('[name="weight_kg"]').inputValue(), "89");
   assert.equal(await form.locator('[name="jersey"]').inputValue(), "9");
+  await page.evaluate(() => window.openReadOnlyProfile());
+  assert.equal(await edit.count(), 0);
+  assert.equal(await page.locator("#btn-edit-tab-disabled").isVisible(), true);
+  assert.equal(await form.count(), 0);
   console.log("PASS mobile player profile save, retry and season roster isolation");
 } finally {
   await browser.close();
