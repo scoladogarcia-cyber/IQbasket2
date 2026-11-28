@@ -15,6 +15,7 @@ import { TranslationStore } from "../services/TranslationStore.js";
 import { I18n } from "../services/I18nService.js";
 import { APP_CONFIG } from "../config/app.config.js";
 import { Permission, ROLE_PERMISSIONS } from "../security/permissions.js";
+import { buildPackageNavigation, resolvePackageNavigation } from "../domain/commercial/PackageNavigationPolicy.js";
 
 export class LayoutView {
   static t(key, fallback = "") {
@@ -312,9 +313,10 @@ export class LayoutView {
       }
     ];
 
-    const desktopNavMarkup = navGroups.map(group => `
-      <div class="nav-group">
-        <span class="nav-group-title">${LayoutView.t(group.titleKey, group.defaultTitle).toUpperCase()}</span>
+    const packageAccess = resolvePackageNavigation({role:userRole});
+    const effectiveNavGroups = buildPackageNavigation(navGroups, packageAccess);
+    const desktopNavMarkup = effectiveNavGroups.map(group => `
+      ${group.packageId ? `<details class="nav-group package-nav-group" data-package-id="${group.packageId}" open><summary class="nav-group-title">${LayoutView.t(group.titleKey,group.defaultTitle)}</summary>` : `<div class="nav-group"><span class="nav-group-title">${LayoutView.t(group.titleKey,group.defaultTitle).toUpperCase()}</span>`}
         ${group.items.map(item => {
           const isActive = currentActiveKey === item.key;
           const label = LayoutView.t(item.labelKey, item.fallback);
@@ -328,8 +330,10 @@ export class LayoutView {
             </a>
           `;
         }).join("")}
-      </div>
+      ${group.packageId ? "</details>" : "</div>"}
     `).join("");
+
+    const packageDrawerMarkup = effectiveNavGroups.map(group=>`<details class="package-drawer-group" ${group.packageId ? `data-package-id="${group.packageId}"` : ""} open><summary>${LayoutView.t(group.titleKey,group.defaultTitle)}</summary><div class="package-drawer-links">${group.items.map(item=>`<a class="drawer-item ${item.disabled ? "disabled-link" : ""}" data-route-key="${item.key}" href="${item.disabled ? "javascript:void(0);" : "#/"+item.route}"><svg class="drawer-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">${item.svg}</svg><span>${LayoutView.t(item.labelKey,item.fallback)}${item.disabled ? " 🔒" : ""}</span></a>`).join("")}</div></details>`).join("");
 
     const teamOptionsMarkup = teamsToRender.length > 0 ? teamsToRender.map(t => `
       <option value="${t.id}" ${String(t.id) === String(currentActiveTeamId) ? 'selected' : ''}>
@@ -480,6 +484,7 @@ export class LayoutView {
               <button type="button" id="btn-close-drawer" class="drawer-close">&times;</button>
             </div>
             <div class="drawer-grid">
+              ${packageAccess.mode !== "LEGACY" ? packageDrawerMarkup : `
               <a href="#/approvals" class="drawer-item" data-route-key="approvals">
                 <span class="drawer-icon">📥</span>
                 <span>${LayoutView.t("approval_center", "Solicitudes")}</span>
@@ -541,6 +546,7 @@ export class LayoutView {
                 <span class="drawer-icon">⚙️</span>
                 <span>${LayoutView.t("settings", "Configuración")}</span>
               </a>
+              `}
               <button type="button"
                       id="btn-mobile-logout"
                       class="drawer-item drawer-item-logout"
@@ -707,6 +713,11 @@ export class LayoutView {
           gap: 3px;
         }
 
+        .package-nav-group summary{cursor:pointer;min-height:36px;padding-top:8px;list-style-position:inside}
+        .package-drawer-group{grid-column:1/-1;min-width:0;border:1px solid #dbe3ee;border-radius:10px;padding:8px}
+        .package-drawer-group summary{font-weight:800;cursor:pointer;min-height:36px;padding:8px;color:#1e3a8a}
+        .package-drawer-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+        .package-drawer-links .drawer-item{min-width:0;overflow-wrap:anywhere}
         /* TÍTULOS DE CATEGORÍA: AZUL CELESTE LUMINOSO */
         .nav-group-title {
           font-size: 10px;
