@@ -1,0 +1,9 @@
+# Four cumulative products and common modules
+
+Phase 1: Admin and Superadmin see all four collapsible packages plus a Team data section (Datos del equipo), on desktop and mobile. Preview roles retain their existing behavior. Four package landing pages reuse existing views and route permission checks. Current non-admin users retain their legacy access until server-backed license migration is verified.
+
+A route used by several selected products is placed once in Team data; product homes still link to it. Identity, teams, seasons, players, matches, PBP, statistics, training, evaluations, reports and privacy remain shared single sources. No duplicate records or writes per product.
+
+Phase 2 (not enabled): one user may belong to several billing accounts with separate subscriptions. Keep the existing one-live-subscription-per-account constraint until a verified migration. Explicit product identity and independent coach beneficiary must be added; overlapping existing plan codes cannot be interpreted as independently purchased products. A self-only authenticated server snapshot must derive active product IDs from verified scoped beneficiaries, account status, payment and expiry. The union is passed to the pure presentation policy. Actual commercial operation checks must be enforced on backend and DB, not in navigation. Preserve existing access during rollout. Cancellation must not delete history. Shared modules must never double-count usage. Checkout, payments and commercial enforcement remain disabled. No production DB changes in phase 1.
+
+General and account actions stay outside Team data. Contrast uses shared semantic CSS tokens; the PIR/FIBA control on the violet dashboard has an explicit accessible foreground, background and focus indicator. No statistical calculations or data fields change.

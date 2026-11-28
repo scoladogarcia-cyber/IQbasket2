@@ -1,0 +1,33 @@
+name: Package Navigation V1
+on:
+  pull_request:
+    branches: [main]
+    paths: ["config/package-navigation.config.js","domain/commercial/**","views/commercial/**","views/LayoutView.js","index.js","locales/**","tests/package-navigation-*.mjs",".github/workflows/package-navigation-v1.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-navigation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node tests/package-navigation-policy.mjs
+      - run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/package-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/package-vite.log
+          exit 1
+      - run: node tests/package-navigation-ui.mjs
+      - run: node tests/dashboard-v86-mobile-ui.mjs
+      - run: npm run build

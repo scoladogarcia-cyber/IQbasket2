@@ -20,6 +20,8 @@ import { AuthorizationContextService } from "./services/security/AuthorizationCo
 import { AccountStatusService } from "./services/security/AccountStatusService.js";
 import { PermissionService, Permission, UserRole } from "./security/PermissionService.js";
 import { ROUTE_PERMISSIONS } from "./security/permissions.js";
+import { PACKAGE_HOME_ROUTES } from "./config/package-navigation.config.js";
+import { resolvePackageNavigation } from "./domain/commercial/PackageNavigationPolicy.js";
 import { AccountAccessError, AccountStatus, assertAccountActive } from "./security/accountStatus.js";
 import { LazyViewRegistry } from "./services/LazyViewRegistry.js";
 
@@ -729,6 +731,12 @@ export class IQBasketApp {
       playerTeamId: this.teamId || DataStore.getActiveTeamId?.() || null,
       gameId: routeGameId
     };
+    if (PACKAGE_HOME_ROUTES.includes(targetRoute) && this.isAuthenticated) {
+      const access=resolvePackageNavigation({role:this.permissionService.getEffectiveRole(routeContext)});
+      if(!access.ids.includes(targetRoute.slice("package-".length).toUpperCase())) {
+        window.location.hash="#/dashboard"; this.currentRoute="dashboard"; this.routeParams={}; return;
+      }
+    }
     if (requiredPermission && this.isAuthenticated) {
       let canNavigate = this.permissionService.canPreview(requiredPermission, routeContext);
 
@@ -831,6 +839,11 @@ export class IQBasketApp {
     const route = this.currentRoute;
     const contentArea = "dashboard-content-area";
 
+    if(PACKAGE_HOME_ROUTES.includes(route)) {
+      const {renderPackageHome}=await import("./views/commercial/PackageHomeView.js");
+      renderPackageHome(document.getElementById(contentArea),route,this.permissionService,{teamId:this.teamId,teamSeasonId:DataStore.getActiveTeamSeasonId?.()});
+      return;
+    }
     switch (route) {
       case "dashboard":
         if (this.permissionService.getAuthenticatedRole() === UserRole.FAMILIA_TUTOR) {

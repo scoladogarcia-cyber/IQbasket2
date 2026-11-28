@@ -5,6 +5,7 @@
  */
 
 export const fr = {
+  packages: {"common":"Données de l’équipe","home":"Accueil du forfait","unavailable":"Forfait indisponible","sharedInfo":"Les modules partagés utilisent les mêmes données et autorisations.","TEAMS":{"title":"IQBasquet Équipes","description":"Gestion et performance collective."},"COACHES":{"title":"IQBasquet Entraîneurs","description":"Planification, analyse et développement sportif."},"PLAYERS":{"title":"IQBasquet Joueurs","description":"Évolution, passeport et bien-être du joueur."},"FAMILIES":{"title":"IQBasquet Familles","description":"Accompagnement et suivi familial."}},
   // =========================================================================
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================

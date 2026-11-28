@@ -567,6 +567,10 @@ export const AI_MONTHLY_LIMITS = Object.freeze({
 
 export const ROUTE_PERMISSIONS = Object.freeze({
   dashboard: Permission.VIEW_DASHBOARD,
+  "package-teams": Permission.VIEW_DASHBOARD,
+  "package-coaches": Permission.VIEW_DASHBOARD,
+  "package-players": Permission.VIEW_DASHBOARD,
+  "package-families": Permission.VIEW_DASHBOARD,
   approvals: Permission.VIEW_APPROVAL_CENTER,
   requests: Permission.VIEW_APPROVAL_CENTER,
   solicitudes: Permission.VIEW_APPROVAL_CENTER,

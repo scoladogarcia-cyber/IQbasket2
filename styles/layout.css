@@ -167,7 +167,7 @@
 }
 
 .nav-item.active, .nav-link.active {
-  background-color: var(--color-primary, #f97316) !important;
+  background-color: var(--color-action-primary, #c2410c) !important;
   color: #ffffff !important;
   font-weight: var(--font-weight-bold, 800);
   box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
@@ -220,7 +220,7 @@
 }
 
 .mobile-nav-item.active {
-  color: var(--color-primary, #f97316) !important;
+  color: var(--color-on-dark-accent, #fdba74) !important;
   font-weight: var(--font-weight-bold, 800);
 }
 
@@ -280,7 +280,7 @@
    ========================================================================= */
 .purple-leaders-banner,
 .fiba-card-purple {
-  background: #2e1065 !important;
+  background: var(--color-dark-violet, #2e1065) !important;
   color: #ffffff !important;
 }
 
@@ -292,6 +292,26 @@
   font-weight: 900 !important;
 }
 
+/* Explicit dark-card control: do not globally invert nested light cards. */
+.purple-leaders-banner #player-valuation-toggle,
+.fiba-card-purple #player-valuation-toggle {
+  color: var(--color-text-inverse, #fff) !important;
+  -webkit-text-fill-color: var(--color-text-inverse, #fff) !important;
+  background: var(--color-dark-violet-control, #4c1d95);
+  border: 1px solid var(--color-dark-violet-muted, #ddd6fe);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  white-space: normal;
+  max-width: 100%;
+}
+.purple-leaders-banner #player-valuation-toggle:focus-visible,
+.fiba-card-purple #player-valuation-toggle:focus-visible {
+  outline: 3px solid var(--color-dark-violet-muted, #ddd6fe);
+  outline-offset: 3px;
+}
+.purple-leaders-banner .dash-empty-leaders {
+  color: var(--color-dark-violet-muted, #ddd6fe);
+}
 /* =========================================================================
    6. MEDIA QUERIES RESPONSIVE
    ========================================================================= */
