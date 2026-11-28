@@ -22,6 +22,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     this.liveCaptureRevision=null;
     this.livePendingCount=0;
     this.liveConflict=false;
+    this.liveConflictDraftRestored=false;
     this.liveRecoveryMessage="";
     this.liveStagePromise=Promise.resolve();
     this.liveOnlineBound=false;
@@ -32,7 +33,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     if (this.liveOnlineBound || typeof window === "undefined") return;
     this.liveOnlineBound=true;
     window.addEventListener("online", () => {
-      if (!this.isExistingGame || !this.gameId || this.liveConflict) return;
+      if (!this.isExistingGame || !this.gameId) return;
       this._flushLiveSync().then(result => {
         if (result?.synced) this._renderHUD();
       }).catch(() => {});
@@ -43,13 +44,17 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     if (!payload || !Array.isArray(payload.events)) return false;
     this.teamScore=Number(payload.teamScore || 0);
     this.opponentScore=Number(payload.opponentScore || 0);
+    if (Array.isArray(payload.starterIds)) {
+      const starterIds=new Set(payload.starterIds.map(String));
+      for (const player of this.roster) player.isStarter=starterIds.has(String(player.id));
+    }
     this.playByPlayEvents=payload.events.map((event,index)=>{
       const periodName=this._periodNameFromNumber(event.period, Number(event.period) > Number(this.gameSnapshot?.game?.periods_count || 4));
       const timeRemaining=this._clockToSeconds(event.game_clock,this._getPeriodDuration(periodName));
       const isOpponent=Boolean(event.is_opponent ?? event.isOpponent ?? String(event.action_type||"").startsWith("opp_"));
       const player=this.roster.find(row=>String(row.id)===String(event.player_id||event.playerId||""));
       return {
-        id:String(event.id || `offline-${index}`),
+        id:String(event.client_event_key || event.id || `offline-${index}`),
         isOpponent,
         period:periodName,
         timeRemaining,
@@ -105,6 +110,10 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     this.liveCaptureRevision=serverRevision;
 
     const recovery=await this._liveSync().recover(this.gameId).catch(()=>null);
+    this._applyPendingRecovery(recovery);
+  }
+
+  _applyPendingRecovery(recovery) {
     if(!recovery?.pending?.length) return;
 
     this.livePendingCount=recovery.pending.length;
@@ -112,6 +121,10 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
     const remote=finite(recovery.remoteRevision);
 
     if(firstBase!==null && remote!==null && remote!==firstBase && !recovery.safeRebase){
+      this.liveCaptureRevision=firstBase;
+      this.liveConflictDraftRestored=this._restoreOfflinePayload(
+        recovery.draft?.payload || recovery.pending.at(-1)?.payload
+      );
       this.liveConflict=true;
       this.liveSyncState="conflict";
       this.liveSyncError="El servidor avanzó mientras este dispositivo tenía datos pendientes.";
@@ -125,6 +138,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
 
     const payload=recovery.draft?.payload || recovery.pending.at(-1)?.payload;
     if(this._restoreOfflinePayload(payload)){
+      this.liveConflictDraftRestored=true;
       this.liveSyncState="queued";
       this.liveRecoveryMessage=recovery.safeRebase
         ? `Recuperadas ${this.livePendingCount} operaciones del mismo registro; se reanudará la sincronización desde la revisión ${remote}.`
@@ -133,24 +147,33 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
   }
 
   _scheduleLiveSync() {
-    if(!this.isExistingGame || !this.gameId || this.liveConflict) return;
+    if(!this.isExistingGame || !this.gameId) return;
+    if(this.liveConflict && !this.liveConflictDraftRestored) return;
     const payload=this._buildLivePayload();
-    this.liveSyncState="pending";
-    this.liveSyncError="";
+    if(!this.liveConflict){
+      this.liveSyncState="pending";
+      this.liveSyncError="";
+    }
     this._updateSyncStatusDom();
 
     this.liveStagePromise=this.liveStagePromise
       .catch(()=>{})
       .then(()=>this._liveSync().stage(this.gameId,payload,{baseRevision:this.liveCaptureRevision}))
       .then(async ()=>{
+        this.liveConflictDraftRestored=true;
         this.livePendingCount=await this._liveSync().offlineStore.pendingCount(this.gameId);
         this._updateSyncStatusDom();
       });
 
     // Observe a storage failure immediately while the scheduled flush reports it.
-    this.liveStagePromise.catch(()=>{});
+    this.liveStagePromise.catch(()=>{
+      this.liveSyncState="error";
+      this.liveSyncError="Hay jugadas sin guardar. Mantén esta pantalla abierta.";
+      this._updateSyncStatusDom();
+    });
 
     if(this.liveSyncTimer) globalThis.clearTimeout?.(this.liveSyncTimer);
+    if(this.liveConflict) return; // Persist locally while the remote revisions diverge.
     this.liveSyncTimer=globalThis.setTimeout?.(()=>{
       this._flushLiveSync().catch(()=>{});
     },300) || null;
@@ -166,7 +189,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       this._updateSyncStatusDom();
       return {synced:false,queued:false,localSaveFailed:true,error:new Error(this.liveSyncError)};
     }
-    if(this.liveConflict){
+    if(this.liveConflict && !this.liveConflictDraftRestored){
       return {synced:false,queued:true,pending:this.livePendingCount,conflict:true,error:new Error(this.liveSyncError)};
     }
 
@@ -192,12 +215,14 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       this.liveSyncState="synced";
       this.liveSyncError="";
       this.liveConflict=false;
+      this.liveConflictDraftRestored=false;
+      this.liveRecoveryMessage="";
       this.lastLiveSyncAt=new Date();
       const rev=finite(result.revision ?? result.result?.capture_revision);
       if(rev!==null)this.liveCaptureRevision=rev;
     } else {
       this.liveSyncState=result?.conflict ? "conflict" : (result?.queued ? "queued" : "error");
-      this.liveConflict=Boolean(result?.conflict);
+      this.liveConflict=this.liveConflict || Boolean(result?.conflict);
       this.liveSyncError=String(result?.error?.message || result?.error || "");
     }
     this._updateSyncStatusDom();
