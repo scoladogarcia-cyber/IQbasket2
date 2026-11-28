@@ -39,7 +39,7 @@ permissions:
 jobs:
   privacy-center:
     name: Privacy Center desktop + iPhone
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       PRIVACY_CENTER_BASE_URL: http://127.0.0.1:4173/
