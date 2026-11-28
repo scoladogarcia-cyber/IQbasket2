@@ -1984,7 +1984,10 @@ export class TranslationsView {
         container.querySelector("#edit-p-name").value = player.first_name || player.firstName || "";
         container.querySelector("#edit-p-lastname").value = player.last_name || player.lastName || "";
         container.querySelector("#edit-p-number").value = player.jersey ?? player.number ?? "";
-        container.querySelector("#edit-p-position").value = player.primary_position || player.position || "Alero";
+        const positionSelect = container.querySelector("#edit-p-position");
+        const currentPosition = String(player.primary_position || player.position || "").toLowerCase();
+        positionSelect.value = [...positionSelect.options].find(option =>
+          option.value.toLowerCase() === currentPosition)?.value || "";
         container.querySelector("#edit-p-status").value = player.status || "Activo";
         const currentPhoto = player.photo_url || player.photoUrl || "";
         const photoUrlInput = container.querySelector("#edit-p-photo-url");

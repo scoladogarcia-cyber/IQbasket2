@@ -9,7 +9,7 @@ export const en = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   reviewUi: {
-    seasonPlayerFields: "Edit the jersey number and primary position in the season roster in Settings.",
+    seasonPlayerFields: "Edit the jersey number in the season roster in Settings.",
     playerSaveError: "Changes could not be saved. Check your connection and permissions, then try again.",
     win: "Win",
     loss: "Loss",

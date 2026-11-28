@@ -9,7 +9,7 @@ export const es = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   reviewUi: {
-    seasonPlayerFields: "El dorsal y la posición principal se editan en Configuración, en la plantilla de la temporada.",
+    seasonPlayerFields: "El dorsal se edita en Configuración, en la plantilla de la temporada.",
     playerSaveError: "No se han podido guardar los cambios. Comprueba la conexión y tus permisos e inténtalo de nuevo.",
     win: "Victoria",
     loss: "Derrota",

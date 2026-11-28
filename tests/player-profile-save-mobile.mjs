@@ -15,12 +15,17 @@ try {
     const player = { id: "player-test", team_id: "team-test", first_name: "Alex", last_name: "Example",
       jersey: 4, height_cm: 176, weight_kg: 88, joined_at: "2026-08-02T14:00:00Z" };
     DataStore.players = [player];
-    DataStore.rosterMemberships = [{ id: "membership-test", player_id: player.id, team_season_id: "season-test", jersey: 9 }];
+    DataStore.rosterMemberships = [{ id: "membership-test", player_id: player.id, team_season_id: "season-test", jersey: 9, primary_position: "Ala-pívot", status: "ACTIVE" }];
     DataStore.getActiveTeamId = () => player.team_id;
     DataStore.getActiveTeamSeasonId = () => "season-test";
     DataStore.getSeasonParticipantPlayers = () => [DataStore._applyRosterMembership(DataStore.players[0], DataStore.rosterMemberships[0])];
     DataStore._assertPermission = () => {};
     window.profileWrites = [];
+    window.rosterWrites = [];
+    supabase.rpc = async (name, args) => {
+      window.rosterWrites.push({ name, args });
+      return { data: { ...DataStore.rosterMemberships[0], primary_position: args.p_primary_position }, error: null };
+    };
     supabase.from = table => ({
       update: updates => ({
         eq: (_field, id) => ({
@@ -37,7 +42,7 @@ try {
     container.id = "profile-test";
     document.body.replaceChildren(container);
     const auth = {
-      canPreview: (permission, scope) => permission === Permission.EDIT_PLAYER_MASTER &&
+      canPreview: (permission, scope) => [Permission.EDIT_PLAYER_MASTER, Permission.MANAGE_ROSTER].includes(permission) &&
         scope?.teamSeasonId === "season-test" && scope.playerId === player.id
     };
     const view = new PlayerStatsView(supabase, auth);
@@ -73,6 +78,22 @@ try {
   await page.locator("#btn-edit-tab").tap();
   assert.equal(await form.locator('[name="weight_kg"]').inputValue(), "89");
   assert.equal(await form.locator('[name="jersey"]').inputValue(), "9");
+  const position = form.locator('[name="primary_position"]');
+  assert.equal(await position.inputValue(), "Ala-Pívot");
+  assert.equal(await page.evaluate(() => window.rosterWrites.length), 0);
+  await position.selectOption("Escolta");
+  await form.locator(".btn-sec-pos[data-pos='Base']").tap();
+  await form.locator('[type="submit"]').tap();
+  await form.waitFor({ state: "detached" });
+  assert.deepEqual(await page.evaluate(() => window.rosterWrites), [{
+    name: "iq_v3_set_roster_member",
+    args: { p_team_season_id: "season-test", p_player_id: "player-test", p_status: "ACTIVE",
+      p_jersey: 9, p_primary_position: "Escolta", p_effective_date: null }
+  }]);
+  assert.deepEqual(await page.evaluate(() => window.profileWrites.at(-1).updates), { secondary_positions: ["Base"] });
+  await edit.tap();
+  assert.equal(await position.inputValue(), "Escolta");
+  assert.equal(await form.locator(".btn-sec-pos[data-pos='Base']").evaluate(button => button.classList.contains("active")), true);
   await page.evaluate(() => window.openReadOnlyProfile());
   assert.equal(await edit.count(), 0);
   assert.equal(await page.locator("#btn-edit-tab-disabled").isVisible(), true);

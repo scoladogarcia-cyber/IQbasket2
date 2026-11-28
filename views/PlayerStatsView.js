@@ -70,6 +70,15 @@ export class PlayerStatsView {
     }));
   }
 
+  _canEditSeasonPosition() {
+    const player = this.selectedPlayer;
+    const teamSeasonId = DataStore.getActiveTeamSeasonId(this.teamId);
+    return Boolean(teamSeasonId && player?.roster_status === "ACTIVE" &&
+      this.auth?.canPreview?.(Permission.MANAGE_ROSTER, {
+        playerId: player.id, teamId: this.teamId, teamSeasonId
+      }));
+  }
+
   _canEditNotes() {
     return Boolean(this.auth?.canPreview?.(Permission.EDIT_TACTICAL_NOTES));
   }
@@ -708,6 +717,8 @@ export class PlayerStatsView {
       const secPositions = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
       const posList = ["Base", "Escolta", "Alero", "Ala-Pívot", "Pívot"];
       const seasonManaged = Boolean(p.roster_membership_id ?? p.rosterMembershipId);
+      const selectedPosition = p.primary_position || p.primaryPosition || p.position || "";
+      const currentPosition = posList.find(pos => pos.toLowerCase() === selectedPosition.toLowerCase()) || "";
 
       const secPosButtons = posList.map(pos => {
         const isSelected = secPositions.includes(pos);
@@ -759,12 +770,9 @@ export class PlayerStatsView {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posición Principal</label>
-              <select name="primary_position" ${seasonManaged ? "disabled" : ""} style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
-                <option value="Base" ${(p.primary_position || p.primaryPosition) === 'Base' ? 'selected' : ''}>Base</option>
-                <option value="Escolta" ${(p.primary_position || p.primaryPosition) === 'Escolta' ? 'selected' : ''}>Escolta</option>
-                <option value="Alero" ${(p.primary_position || p.primaryPosition) === 'Alero' ? 'selected' : ''}>Alero</option>
-                <option value="Ala-Pívot" ${(p.primary_position || p.primaryPosition) === 'Ala-Pívot' ? 'selected' : ''}>Ala-Pívot</option>
-                <option value="Pívot" ${(p.primary_position || p.primaryPosition) === 'Pívot' ? 'selected' : ''}>Pívot</option>
+              <select name="primary_position" ${seasonManaged && !this._canEditSeasonPosition() ? "disabled" : ""} style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
+                <option value="" disabled ${currentPosition ? "" : "selected"}>—</option>
+                ${posList.map(pos => `<option value="${pos}" ${pos === currentPosition ? "selected" : ""}>${pos}</option>`).join("")}
               </select>
             </div>
             <div>
@@ -1001,6 +1009,8 @@ export class PlayerStatsView {
             return updates;
           };
           const initial = readProfile();
+          const teamSeasonId = DataStore.getActiveTeamSeasonId(this.teamId);
+          const seasonManaged = Boolean(this.selectedPlayer.roster_membership_id ?? this.selectedPlayer.rosterMembershipId);
           const submit = formEdit.querySelector('button[type="submit"]');
           const saveError = formEdit.querySelector("#player-save-error");
           formEdit.addEventListener("submit", async (event) => {
@@ -1013,6 +1023,12 @@ export class PlayerStatsView {
             submit.disabled = true;
             saveError.hidden = true;
             try {
+              if (seasonManaged && updates.primary_position) {
+                if (!this._canEditSeasonPosition()) throw new Error("No se puede editar la posición de esta plantilla.");
+                await DataStore.updatePlayerSeasonPosition(playerId, this.teamId, teamSeasonId, updates.primary_position);
+                initial.primary_position = updates.primary_position;
+                delete updates.primary_position;
+              }
               if (Object.keys(updates).length) await DataStore.updatePlayer(playerId, updates);
               this.players = DataStore.getSeasonParticipantPlayers?.(this.teamId)
                 || DataStore.getPlayers(this.teamId)

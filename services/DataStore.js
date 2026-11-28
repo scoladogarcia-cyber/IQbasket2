@@ -9,6 +9,7 @@ import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
 import { valuationDiscrepancyV81 } from "../domain/stats/StatScopeV81.js";
 import { blockedShotsIntegrityV82 } from "../domain/stats/BlockedShotIntegrityV82.js";
 import { SupabaseAdapter } from "../core-modules/database-adapter/SupabaseAdapter.js";
+import { RosterManagementService } from "./roster/RosterManagementService.js";
 import { SeasonContextService } from "./context/SeasonContextService.js";
 import { Permission, UserRole } from "../security/PermissionService.js";
 import { resolveHeadCoachName } from "../domain/staff/resolveHeadCoach.js";
@@ -1693,6 +1694,29 @@ class DataStoreService {
 
     this._notifyListeners();
     return true;
+  }
+
+  /** Update the active season position through the authorized roster API. */
+  async updatePlayerSeasonPosition(playerId, teamId, teamSeasonId, primaryPosition) {
+    this._assertPermission(Permission.MANAGE_ROSTER, { playerId, teamId, teamSeasonId });
+    if (!teamSeasonId || this.getActiveTeamSeasonId(teamId) !== teamSeasonId) {
+      throw new Error("La temporada activa ha cambiado.");
+    }
+    const membership = this._getRosterMembershipsForTeamSeason(teamSeasonId)
+      .find(row => String(row.player_id) === String(playerId));
+    if (membership?.status !== "ACTIVE" || membership.left_at) {
+      throw new Error("El jugador no está activo en esta plantilla.");
+    }
+    const saved = await new RosterManagementService(supabase, this).setMember({
+      teamSeasonId, playerId, primaryPosition, jersey: membership.jersey
+    });
+    if (String(saved?.id) !== String(membership.id) || saved?.primary_position !== primaryPosition) {
+      throw new Error("No se pudo confirmar la posición de temporada.");
+    }
+    const index = this.rosterMemberships.findIndex(row => row.id === membership.id);
+    if (index >= 0) this.rosterMemberships[index] = { ...this.rosterMemberships[index], ...saved };
+    this._persistToStorage();
+    this._notifyListeners();
   }
 
   async updatePlayer(playerId, updates, permissionKey = Permission.EDIT_PLAYER_MASTER) {
