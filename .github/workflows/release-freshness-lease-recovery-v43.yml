@@ -51,7 +51,7 @@ env:
 jobs:
   contract-build:
     name: Contract + V42 regression + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -81,7 +81,7 @@ jobs:
 
   browser-recovery:
     name: Same-user recovery · ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false

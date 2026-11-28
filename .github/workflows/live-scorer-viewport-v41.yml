@@ -35,7 +35,7 @@ env:
 jobs:
   contract-build:
     name: Contract + regressions + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -60,7 +60,7 @@ jobs:
 
   mobile-browser:
     name: iPhone viewport · ${{ matrix.browser }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
