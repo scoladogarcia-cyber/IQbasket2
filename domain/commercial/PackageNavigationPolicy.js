@@ -16,11 +16,13 @@ export function buildPackageNavigation(groups,access){
  const used=new Set();
  const take=key=>{if(used.has(key)||!available.has(key))return [];used.add(key);return [available.get(key)];};
  const shared=[...available.keys()].filter(key=>counts.get(key)>1);
- const common={titleKey:"packages.common",defaultTitle:"Common",items:[...COMMON_NAV_KEYS,...shared].flatMap(take)};
+ const general={titleKey:"navigation.groups.general",defaultTitle:"General",items:["dashboard","approvals","business"].flatMap(take)};
+ const account={titleKey:"navigation.groups.account",defaultTitle:"Account",items:COMMON_NAV_KEYS.flatMap(take)};
+ const common={titleKey:"packages.common",defaultTitle:"Team data",items:[...new Set([...shared,...(selected.some(p=>p.id==="TEAMS")?["team"]:[])])].flatMap(take)};
  const modules=selected.map(p=>({packageId:p.id,titleKey:p.titleKey,defaultTitle:p.id,items:[
  {key:p.home,route:p.home,labelKey:"packages.home",fallback:"Overview",svg:'<rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M3 10h18M10 10v11"></path>'},
  ...p.routes.flatMap(take)]}));
  // In the admin rollout retain all prior actions; no route or permission is removed.
  if(access.mode==="ADMIN")for(const key of available.keys())common.items.push(...take(key));
- return [common,...modules].filter(g=>g.items.length);
+ return [general,common,...modules,account].filter(g=>g.items.length);
 }

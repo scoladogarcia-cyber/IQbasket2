@@ -771,7 +771,7 @@ export class LayoutView {
         .nav-link.active,
         .app-sidebar .nav-link.active span,
         .app-sidebar .nav-link.active .nav-label {
-          background-color: var(--color-primary, #f97316) !important;
+          background-color: var(--color-action-primary, #c2410c) !important;
           color: #ffffff !important;
           -webkit-text-fill-color: #ffffff !important;
           box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
@@ -840,6 +840,7 @@ export class LayoutView {
           transition: background 0.15s ease;
         }
 
+        .btn-logout span { color: inherit !important; -webkit-text-fill-color: currentColor !important; }
         .btn-logout .nav-svg {
           stroke: #fca5a5 !important;
         }
@@ -999,7 +1000,7 @@ export class LayoutView {
           }
 
           .mobile-nav-item.active {
-            color: var(--color-primary, #f97316);
+            color: var(--color-on-dark-accent, #fdba74);
           }
 
           .mobile-svg {

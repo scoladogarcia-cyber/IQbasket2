@@ -852,7 +852,7 @@ export class SeasonDashboardView {
             
             /* TOOLTIP SYSTEM */
             .dash-tooltip-wrapper { position: relative; display: inline-flex; align-items: center; }
-            .tooltip-trigger { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border: 1px solid #cbd5e1; color: #94a3b8; border-radius: 50%; font-size: 10px; font-weight: 800; cursor: pointer; background: #ffffff; }
+            .tooltip-trigger { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border: 1px solid #64748b; color: #64748b; border-radius: 50%; font-size: 10px; font-weight: 800; cursor: pointer; background: #ffffff; }
             .dash-tooltip-popup {
               display: none;
               position: absolute;
@@ -904,7 +904,7 @@ export class SeasonDashboardView {
             .purple-leader-col { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
             .leader-pill-yellow { font-size: 9px; font-weight: 900; color: #fbbf24; display: block; margin-bottom: 2px; }
             .leader-player-name { font-size: 13.5px; font-weight: 800; color: #ffffff; display: block; }
-            .leader-player-meta { font-size: 11px; color: #c4b5fd; }
+            .leader-player-meta { font-size: 11px; color: var(--color-dark-violet-muted, #ddd6fe); }
             .leader-val-box { text-align: right; }
             .leader-val-num { font-size: 22px; font-weight: 900; color: #fde047; display: block; }
             .leader-val-txt { font-size: 9px; font-weight: 800; color: #ffffff; }
@@ -914,7 +914,7 @@ export class SeasonDashboardView {
             .clean-chart-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
             .clean-chart-header { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 12px; }
             .chart-flex-wrap { display: flex; gap: 10px; align-items: stretch; }
-            .chart-y-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 700; width: 28px; text-align: right; }
+            .chart-y-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #64748b; font-weight: 700; width: 28px; text-align: right; }
             .chart-svg-container { flex: 1; display: flex; flex-direction: column; }
             .chart-svg { width: 100%; height: 140px; overflow: visible; }
             .rating-chart-axis { align-self: start; height: 140px; box-sizing: border-box; }

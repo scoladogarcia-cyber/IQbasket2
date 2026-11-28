@@ -69,14 +69,14 @@
 }
 
 .btn-primary {
-  background-color: var(--color-primary, #f97316);
+  background-color: var(--color-action-primary, #c2410c);
   color: #ffffff !important;
   font-weight: var(--font-weight-semibold, 700);
   border: none;
 }
 
 .btn-primary:hover {
-  background-color: var(--color-primary-hover, #ea580c);
+  background-color: var(--color-action-primary-hover, #9a3412);
   color: #ffffff !important;
 }
 
@@ -116,14 +116,14 @@
 }
 
 .btn-success {
-  background-color: var(--color-success, #16a34a);
+  background-color: var(--color-action-success, #15803d);
   color: #ffffff !important;
   font-weight: var(--font-weight-semibold, 700);
   border: none;
 }
 
 .btn-success:hover {
-  background-color: #15803d;
+  background-color: #166534;
 }
 
 .btn-sm {

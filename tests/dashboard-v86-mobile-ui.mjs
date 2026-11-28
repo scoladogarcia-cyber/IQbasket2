@@ -13,7 +13,7 @@ try {
   await installBrowserNetworkStubs(page);
   await page.goto(BASE_URL,{waitUntil:"domcontentloaded"});
   await page.waitForFunction(()=>Boolean(window.iqApp),null,{timeout:20000});
-  const {rows:results,netTitle,netLabels,axisFont,leaderTitle}=await page.evaluate(async()=>{
+  const {rows:results,netTitle,netLabels,axisFont,leaderTitle,contrast}=await page.evaluate(async()=>{
     const {DataStore}=await import("/services/DataStore.js");
     const {TranslationStore}=await import("/services/TranslationStore.js");
     const {SeasonDashboardView}=await import("/views/SeasonDashboardView.js");
@@ -58,12 +58,18 @@ try {
     for (let attempt=0; attempt<30 && !container.querySelector(".purple-card-title")?.textContent.includes("FIBA (EFF)"); attempt++) {
       await new Promise(resolve=>setTimeout(resolve,20));
     }
-    return {rows,netTitle,netLabels,axisFont,leaderTitle:container.querySelector(".purple-card-title").textContent};
+    const button=container.querySelector("#player-valuation-toggle");
+    const color=getComputedStyle(button).color;
+    const background=getComputedStyle(button).backgroundColor;
+    const luminance=rgb=>rgb.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((acc,v,i)=>acc+v*[.2126,.7152,.0722][i],0);
+    const l=[luminance(color),luminance(background)].sort((a,b)=>b-a);
+    return {rows,netTitle,netLabels,axisFont,leaderTitle:container.querySelector(".purple-card-title").textContent,contrast:(l[0]+.05)/(l[1]+.05)};
   });
   assert.match(netTitle,/net rating trend/i);
   assert.match(netLabels,/20/);
   assert.ok(axisFont <= 10);
   assert.match(leaderTitle,/FIBA \(EFF\)/);
+  assert.ok(contrast>=4.5,`Valuation toggle contrast: ${contrast}`);
   const labels={
     es:["Partidos jugados","Últimos partidos","Auditar estadísticas"],
     ca:["Partits jugats","Últims partits","Auditar estadístiques"],

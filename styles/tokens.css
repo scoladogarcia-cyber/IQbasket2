@@ -60,7 +60,15 @@
   --color-text-muted: #64748b;
   --color-text-disabled: #94a3b8;
   --color-text-inverse: #ffffff;
-  --color-text-inverse-muted: #94a3b8;
+  --color-text-inverse-muted: #cbd5e1;
+  /* Semantic foreground/background pairs for dark surfaces. */
+  --color-dark-violet: #2e1065;
+  --color-dark-violet-muted: #ddd6fe;
+  --color-dark-violet-control: #4c1d95;
+  --color-on-dark-accent: #fdba74;
+  --color-action-primary: #c2410c;
+  --color-action-primary-hover: #9a3412;
+  --color-action-success: #15803d;
 
   /* =========================================================================
      2. VARIABLES ESPECÍFICAS DE PISTA Y ANALÍTICA (SHOT CHART & HEATMAP)

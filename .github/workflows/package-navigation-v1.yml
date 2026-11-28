@@ -29,4 +29,5 @@ jobs:
           cat /tmp/package-vite.log
           exit 1
       - run: node tests/package-navigation-ui.mjs
+      - run: node tests/dashboard-v86-mobile-ui.mjs
       - run: npm run build

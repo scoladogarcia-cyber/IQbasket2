@@ -14,9 +14,9 @@ try{
     document.getElementById("app").innerHTML=LayoutView.wrap("","dashboard",role);LayoutView.bindMobileDrawerEvents();
     if(innerWidth<768)document.querySelector("#btn-mobile-more-toggle").click();
     const host=document.querySelector(innerWidth<768?"#mobile-more-drawer":"#app-sidebar");
-    return {ids:[...host.querySelectorAll("[data-package-id]")].map(e=>e.dataset.packageId),reports:host.querySelectorAll('a[href="#/reports"]').length,logout:!!host.querySelector('[data-session-action="logout"]'),overflow:document.documentElement.scrollWidth>innerWidth+1};
+    return {ids:[...host.querySelectorAll("[data-package-id]")].map(e=>e.dataset.packageId),reports:host.querySelectorAll('a[href="#/reports"]').length,teamData:/datos del equipo/i.test(host.textContent),logout:!!host.querySelector('[data-session-action="logout"]'),overflow:document.documentElement.scrollWidth>innerWidth+1};
    },role);
-   assert.equal(state.ids.length,role==="ENTRENADOR"?0:4);assert.equal(state.reports,1);assert.ok(state.logout);assert.equal(state.overflow,false);
+   assert.equal(state.ids.length,role==="ENTRENADOR"?0:4);assert.equal(state.reports,1);if(role!=="ENTRENADOR")assert.ok(state.teamData);assert.ok(state.logout);assert.equal(state.overflow,false);
   }
   await page.close();
  }

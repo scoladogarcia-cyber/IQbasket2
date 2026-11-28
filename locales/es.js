@@ -5,7 +5,7 @@
  */
 
 export const es = {
-  packages: {"common":"Común","home":"Inicio del paquete","unavailable":"Paquete no disponible","sharedInfo":"Los módulos compartidos utilizan los mismos datos y permisos.","TEAMS":{"title":"IQBasquet Equipos","description":"Gestión y rendimiento colectivo."},"COACHES":{"title":"IQBasquet Entrenadores","description":"Planificación, análisis y desarrollo deportivo."},"PLAYERS":{"title":"IQBasquet Jugadores","description":"Evolución, pasaporte y bienestar del jugador."},"FAMILIES":{"title":"IQBasquet Familias","description":"Acompañamiento y seguimiento familiar."}},
+  packages: {"common":"Datos del equipo","home":"Inicio del paquete","unavailable":"Paquete no disponible","sharedInfo":"Los módulos compartidos utilizan los mismos datos y permisos.","TEAMS":{"title":"IQBasquet Equipos","description":"Gestión y rendimiento colectivo."},"COACHES":{"title":"IQBasquet Entrenadores","description":"Planificación, análisis y desarrollo deportivo."},"PLAYERS":{"title":"IQBasquet Jugadores","description":"Evolución, pasaporte y bienestar del jugador."},"FAMILIES":{"title":"IQBasquet Familias","description":"Acompañamiento y seguimiento familiar."}},
   // =========================================================================
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
