@@ -9,6 +9,8 @@ export const ca = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   reviewUi: {
+    seasonPlayerFields: "El dorsal i la posició principal s’editen a Configuració, a la plantilla de la temporada.",
+    playerSaveError: "No s’han pogut desar els canvis. Comprova la connexió i els permisos i torna-ho a provar.",
     win: "Victòria",
     loss: "Derrota",
     locked: "Tancat",

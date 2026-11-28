@@ -1714,73 +1714,32 @@ class DataStoreService {
     );
 
     const idx = this.players.findIndex((p) => String(p.id) === String(playerId));
-    const previousPlayer = idx >= 0 ? this.players[idx] : null;
-    const membershipIdx = (this.rosterMemberships || []).findIndex(row =>
+    const hasSeasonMembership = (this.rosterMemberships || []).some(row =>
       String(row.player_id || row.playerId || "") === String(playerId)
       && String(row.team_season_id || row.teamSeasonId || "") === String(activeTeamSeasonId || "")
     );
-    const previousMembership = membershipIdx >= 0 ? this.rosterMemberships[membershipIdx] : null;
 
-    // jersey/position are contextual to a team-season in v3. Keep the current
-    // roster row synchronized with the player editor so season views do not
-    // overwrite the freshly edited values with stale membership data.
-    const rosterUpdates = {};
-    if (Object.prototype.hasOwnProperty.call(updates || {}, "jersey")) {
-      rosterUpdates.jersey = updates.jersey == null || updates.jersey === "" ? null : Number(updates.jersey);
-    }
-    if (Object.prototype.hasOwnProperty.call(updates || {}, "primary_position")) {
-      rosterUpdates.primary_position = updates.primary_position || null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates || {}, "secondary_positions")) {
-      rosterUpdates.secondary_positions = Array.isArray(updates.secondary_positions)
-        ? updates.secondary_positions
-        : [];
+    // Season roster changes belong to the authorized roster workflow.
+    if (hasSeasonMembership && ("jersey" in updates || "primary_position" in updates)) {
+      throw new Error("El dorsal y la posición principal se gestionan en la plantilla de la temporada.");
     }
 
-    try {
-      if (supabase) {
-        const { error: playerError } = await supabase
-          .from("players")
-          .update(updates)
-          .eq("id", playerId);
-        if (playerError) throw playerError;
-
-        if (previousMembership?.id && Object.keys(rosterUpdates).length > 0) {
-          const { data: membershipRow, error: rosterError } = await supabase
-            .from("roster_memberships")
-            .update(rosterUpdates)
-            .eq("id", previousMembership.id)
-            .select("id,player_id,team_season_id,jersey,primary_position,secondary_positions,status,joined_at,left_at")
-            .single();
-          if (rosterError) throw rosterError;
-          if (membershipIdx >= 0 && membershipRow) {
-            this.rosterMemberships[membershipIdx] = {
-              ...this.rosterMemberships[membershipIdx],
-              ...membershipRow
-            };
-          }
-        }
-      }
-
-      if (idx >= 0) {
-        this.players[idx] = this._normalizePlayer({ ...this.players[idx], ...updates });
-      }
-      if (membershipIdx >= 0 && Object.keys(rosterUpdates).length > 0 && !supabase) {
-        this.rosterMemberships[membershipIdx] = {
-          ...this.rosterMemberships[membershipIdx],
-          ...rosterUpdates
-        };
-      }
-      this._persistToStorage();
-      this._notifyListeners();
-    } catch (err) {
-      // Restore local state if one of the authoritative writes failed.
-      if (idx >= 0 && previousPlayer) this.players[idx] = previousPlayer;
-      if (membershipIdx >= 0 && previousMembership) this.rosterMemberships[membershipIdx] = previousMembership;
-      this._persistToStorage();
-      console.warn("[DataStore] Error actualizando jugador/plantilla:", err?.message || err);
-      throw err;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("players")
+        .update(updates)
+        .eq("id", playerId)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("No se pudo confirmar la actualización de la ficha.");
     }
+
+    if (idx >= 0) {
+      this.players[idx] = this._normalizePlayer({ ...this.players[idx], ...updates });
+    }
+    this._persistToStorage();
+    this._notifyListeners();
   }
 
   subscribe(listener) {

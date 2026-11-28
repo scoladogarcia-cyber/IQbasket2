@@ -698,6 +698,7 @@ export class PlayerStatsView {
       const photo = p.photo_url || p.photoUrl || "";
       const secPositions = Array.isArray(p.secondary_positions ?? p.secondaryPositions) ? (p.secondary_positions ?? p.secondaryPositions) : [];
       const posList = ["Base", "Escolta", "Alero", "Ala-Pívot", "Pívot"];
+      const seasonManaged = Boolean(p.roster_membership_id ?? p.rosterMembershipId);
 
       const secPosButtons = posList.map(pos => {
         const isSelected = secPositions.includes(pos);
@@ -729,6 +730,7 @@ export class PlayerStatsView {
           <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 4px 0;" />
 
           <h3 style="margin: 0; font-size: 13px; font-weight: 800; color: #64748b; text-transform: uppercase;">DATOS DE LA FICHA</h3>
+          ${seasonManaged ? `<p>${this.t("reviewUi.seasonPlayerFields")}</p>` : ""}
           
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
             <div>
@@ -741,14 +743,14 @@ export class PlayerStatsView {
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Dorsal (jersey)</label>
-              <input type="number" name="jersey" value="${p.jersey ?? p.number ?? 0}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
+              <input type="number" name="jersey" ${seasonManaged ? "disabled" : ""} value="${p.jersey ?? p.number ?? 0}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Posición Principal</label>
-              <select name="primary_position" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
+              <select name="primary_position" ${seasonManaged ? "disabled" : ""} style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: white;">
                 <option value="Base" ${(p.primary_position || p.primaryPosition) === 'Base' ? 'selected' : ''}>Base</option>
                 <option value="Escolta" ${(p.primary_position || p.primaryPosition) === 'Escolta' ? 'selected' : ''}>Escolta</option>
                 <option value="Alero" ${(p.primary_position || p.primaryPosition) === 'Alero' ? 'selected' : ''}>Alero</option>
@@ -783,7 +785,7 @@ export class PlayerStatsView {
             </div>
             <div>
               <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">${this.t("birth_date", "Fecha de nacimiento")}</label>
-              <input type="date" name="birth_date" value="${p.birth_date || p.birthDate || ''}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              <input type="date" name="birth_date" value="${String(p.birth_date || p.birthDate || '').split('T')[0]}" style="width: 100%; height: 44px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
             </div>
           </div>
 
@@ -807,6 +809,7 @@ export class PlayerStatsView {
             <textarea name="notes" rows="3" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-family: inherit;" placeholder="Observaciones generales...">${p.notes || ''}</textarea>
           </div>
 
+          <p id="player-save-error" role="alert" hidden></p>
           <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;">
             <button type="button" id="btn-cancel-edit" style="background: #f1f5f9; color: #475569; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">${this.t("cancel", "Cancelar")}</button>
             <button type="submit" style="background: var(--color-primary, #f97316); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; min-height: 44px;">💾 ${this.t("save_changes", "Guardar Cambios")}</button>
@@ -971,40 +974,45 @@ export class PlayerStatsView {
             renderDetail();
           });
 
-          formEdit.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const formData = new FormData(formEdit);
+          const readProfile = () => {
+            const fields = new FormData(formEdit);
+            const updates = Object.fromEntries(fields);
+            for (const key of ["birth_date", "joined_at"]) updates[key] = fields.get(key) || null;
+            for (const key of ["jersey", "height_cm", "weight_kg"]) {
+              if (fields.has(key)) updates[key] = fields.get(key) === "" ? null : Number(fields.get(key));
+            }
+            updates.secondary_positions = Array.from(secContainer?.querySelectorAll(".btn-sec-pos.active") || [],
+              button => button.dataset.pos);
+            return updates;
+          };
+          const initial = readProfile();
+          const submit = formEdit.querySelector('button[type="submit"]');
+          const saveError = formEdit.querySelector("#player-save-error");
+          formEdit.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (submit.disabled) return;
 
-            const selectedSecPos = [];
-            secContainer?.querySelectorAll(".btn-sec-pos.active").forEach(btn => {
-              selectedSecPos.push(btn.getAttribute("data-pos"));
-            });
-
-            const updates = {
-              photo_url: formData.get("photo_url"),
-              first_name: formData.get("first_name"),
-              last_name: formData.get("last_name"),
-              jersey: Number(formData.get("jersey")),
-              primary_position: formData.get("primary_position"),
-              secondary_positions: selectedSecPos,
-              dominant_hand: formData.get("dominant_hand"),
-              status: formData.get("status"),
-              birth_date: formData.get("birth_date") || null,
-              height_cm: formData.get("height_cm") ? Number(formData.get("height_cm")) : null,
-              weight_kg: formData.get("weight_kg") ? Number(formData.get("weight_kg")) : null,
-              joined_at: formData.get("joined_at") || null,
-              notes: formData.get("notes")
-            };
-
-            await DataStore.updatePlayer(playerId, updates);
-            this.players = DataStore.getSeasonParticipantPlayers?.(this.teamId)
-              || DataStore.getPlayers(this.teamId)
-              || [];
-            this.selectedPlayer = (this.players || []).find(
-              player => String(player.id) === String(playerId)
-            ) || { ...this.selectedPlayer, ...updates };
-            this.activeTab = "resumen";
-            renderDetail();
+            const updates = Object.fromEntries(Object.entries(readProfile()).filter(
+              ([key, value]) => JSON.stringify(value) !== JSON.stringify(initial[key])
+            ));
+            submit.disabled = true;
+            saveError.hidden = true;
+            try {
+              if (Object.keys(updates).length) await DataStore.updatePlayer(playerId, updates);
+              this.players = DataStore.getSeasonParticipantPlayers?.(this.teamId)
+                || DataStore.getPlayers(this.teamId)
+                || [];
+              this.selectedPlayer = this.players.find(player => String(player.id) === String(playerId))
+                || { ...this.selectedPlayer, ...updates };
+              this.activeTab = "resumen";
+              renderDetail();
+            } catch (error) {
+              console.warn("[PlayerStatsView] Player profile save failed:", error?.code || error?.name);
+              saveError.textContent = this.t("reviewUi.playerSaveError");
+              saveError.hidden = false;
+            } finally {
+              submit.disabled = false;
+            }
           });
         }
       };

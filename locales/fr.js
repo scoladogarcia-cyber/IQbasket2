@@ -9,6 +9,8 @@ export const fr = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   reviewUi: {
+    seasonPlayerFields: "Modifiez le numéro et le poste principal dans l’effectif de la saison, dans les paramètres.",
+    playerSaveError: "Impossible d’enregistrer les modifications. Vérifiez la connexion et vos droits, puis réessayez.",
     win: "Victoire",
     loss: "Défaite",
     locked: "Verrouillé",
