@@ -9,6 +9,7 @@ export const ca = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   common: {
+    playerValuationToggle: "Valoració {current} · Mostra {next}",
     loading: "Carregant...",
     saving: "Desant...",
     saved: "Desat correctament",

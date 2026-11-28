@@ -11,6 +11,7 @@
  * - Control de acceso estricto RBAC para edición de perfil y notas técnicas.
  */
 
+import { getPlayerValuation, renderPlayerValuationToggle, setPlayerValuation } from "./PlayerValuationPreference.js";
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { DataStore } from "../services/DataStore.js";
 import { TranslationStore } from "../services/TranslationStore.js";
@@ -228,7 +229,7 @@ export class PlayerStatsView {
       totPts += c.points || 0;
       totReb += c.rebounds || 0;
       totAst += Number(st.assists ?? st.ast ?? 0);
-      totVal += c.pir || 0;
+      totVal += c[getPlayerValuation().field] ?? 0;
     });
 
     return {
@@ -302,7 +303,7 @@ export class PlayerStatsView {
             <div><span style="font-size: 10px; font-weight: 800; color: #94a3b8; display: block;">PTS</span><strong style="font-size: 14px; color: #0f172a;">${avgs.pts}</strong></div>
             <div><span style="font-size: 10px; font-weight: 800; color: #94a3b8; display: block;">REB</span><strong style="font-size: 14px; color: #0f172a;">${avgs.reb}</strong></div>
             <div><span style="font-size: 10px; font-weight: 800; color: #94a3b8; display: block;">AST</span><strong style="font-size: 14px; color: #0f172a;">${avgs.ast}</strong></div>
-            <div><span style="font-size: 10px; font-weight: 800; color: #a855f7; display: block;">VAL</span><strong style="font-size: 14px; color: #a855f7;">${avgs.val}</strong></div>
+            <div><span style="font-size: 10px; font-weight: 800; color: #a855f7; display: block;">${getPlayerValuation().label}</span><strong style="font-size: 14px; color: #a855f7;">${avgs.val}</strong></div>
           </div>
         </div>
       `;
@@ -416,7 +417,7 @@ export class PlayerStatsView {
       totBlk += c.blocksMade;
       totBlkReceived += c.blocksReceived;
       totTov += Number(r.turnovers ?? r.tov ?? 0);
-      totVal += c.pir || 0;
+      totVal += c[getPlayerValuation().field] ?? 0;
 
       totFg2m += Number(r.fg2_made ?? 0);
       totFg2a += Number(r.fg2_attempted ?? 0);
@@ -432,7 +433,7 @@ export class PlayerStatsView {
         gameScore: c.gameScore || 0,
         efg: c.eFG || 0,
         tov: Number(r.turnovers ?? r.tov ?? 0),
-        val: c.pir || 0
+        val: c[getPlayerValuation().field] ?? 0
       };
     });
 
@@ -464,8 +465,8 @@ export class PlayerStatsView {
             <div class="kpi-card"><span class="kpi-title">${this.t("blocks", "Tapones")}</span><span class="kpi-val">${totBlk}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("blocks_received", "Tapones recibidos")}</span><span class="kpi-val">${totBlkReceived}</span></div>
             <div class="kpi-card"><span class="kpi-title">${this.t("turnovers", "Pérdidas")}</span><span class="kpi-val" style="color:#ef4444;">${totTov}</span></div>
-            <div class="kpi-card"><span class="kpi-title">PIR / VAL (total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
-            <div class="kpi-card"><span class="kpi-title">${this.t("val_per_game", "VAL / Partido")}</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${getPlayerValuation().label} (total)</span><span class="kpi-val" style="color:#a855f7;">${totVal}</span></div>
+            <div class="kpi-card"><span class="kpi-title">${getPlayerValuation().label} / Partido</span><span class="kpi-val" style="color:#a855f7;">${avgVal}</span></div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
@@ -546,7 +547,7 @@ export class PlayerStatsView {
             <td style="padding: 10px; color: #64748b;">${venueText}</td>
             <td style="padding: 10px; font-weight: 700;">${gInfo.team_score ?? gInfo.teamScore ?? 0} - ${gInfo.opponent_score ?? gInfo.opponentScore ?? 0}</td>
             <td style="padding: 10px;">${r.minutes ?? r.minutesPlayed ?? 0}'</td>
-            <td style="padding: 10px; font-weight: 800; color: #a855f7;">${comp.pir || 0}</td>
+            <td style="padding: 10px; font-weight: 800; color: #a855f7;">${comp[getPlayerValuation().field] ?? 0}</td>
           </tr>
         `;
       }).join("");
@@ -559,7 +560,7 @@ export class PlayerStatsView {
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">GAME SCORE</h4>${this._renderLineChartSVG(gsPts, "#16a34a", -5, 25)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">EFG%</h4>${this._renderLineChartSVG(efgPts, "#a855f7", 0, 100)}</div>
             <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #ef4444; text-transform: uppercase;">PÉRDIDAS</h4>${this._renderLineChartSVG(tovPts, "#ef4444", 0, 10)}</div>
-            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #a855f7; text-transform: uppercase;">PIR / VAL</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
+            <div class="chart-card-box"><h4 style="margin:0 0 12px 0; font-size: 12px; font-weight: 800; color: #a855f7; text-transform: uppercase;">${getPlayerValuation().label}</h4>${this._renderLineChartSVG(valPts, "#8b5cf6", -5, 30)}</div>
           </div>
 
           <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; overflow-x: auto;">
@@ -573,7 +574,7 @@ export class PlayerStatsView {
                   <th style="padding: 10px;">CONDICIÓN</th>
                   <th style="padding: 10px;">MARCADOR</th>
                   <th style="padding: 10px;">MIN JUGADOS</th>
-                  <th style="padding: 10px;">VAL (FIBA)</th>
+                  <th style="padding: 10px;">${getPlayerValuation().label}</th>
                 </tr>
               </thead>
               <tbody>${rowsMarkup || '<tr><td colspan="7" style="padding: 12px; text-align: center; color: #64748b;">Sin partidos registrados.</td></tr>'}</tbody>
@@ -855,6 +856,7 @@ export class PlayerStatsView {
           <div style="max-width: 1400px; margin: 0 auto; font-family: var(--font-family-base, system-ui); padding-bottom: 40px;">
             <a href="#/players" style="color: #64748b; text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;">← ${this.t("back_to_players", "Volver a jugadores")}</a>
             ${this._renderDetailHeader()}
+            ${renderPlayerValuationToggle()}
             ${this._renderNavTabs()}
             <div id="tab-content">${this._renderTabContent(playerId)}</div>
           </div>
@@ -869,6 +871,11 @@ export class PlayerStatsView {
             .has-tooltip:hover .tooltip-box { visibility: visible; opacity: 1; }
           </style>
         `;
+
+        container.querySelector("#player-valuation-toggle")?.addEventListener("click", (event) => {
+          setPlayerValuation(event.currentTarget.value);
+          renderDetail();
+        });
 
         // Eventos de Pestañas
         container.querySelectorAll(".tab-btn").forEach(btn => {

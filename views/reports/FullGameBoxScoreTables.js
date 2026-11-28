@@ -3,6 +3,7 @@
  * @description Tablas separadas de acta, ratios y acciones adicionales. Los
  * campos opcionales ausentes son N/D; los ceros predeterminados no prueban captura.
  */
+import { getPlayerValuation } from "../PlayerValuationPreference.js";
 import { buildGameReportMetrics, formatMetric } from "../../domain/stats/GameReportMetrics.js";
 const esc = x => String(x ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
 const present = value => value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value));
@@ -20,7 +21,7 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
   const computed = buildGameReportMetrics(stats, game);
   const names = new Map(players.map(player => [String(player.id), player]));
   const named = row => `<th scope="row">${names.has(row.id) ? playerLabel(names.get(row.id)) : "Jugador sin ficha accesible"}</th>`;
-  const mainHeaders = ["Jugador", "TIT", "MIN", "PTS", "T2 C/I", "T3 C/I", "TL C/I", "RO", "RD", "REB", "AST", "ROB", "TAP", "PER", "FC", "FR", "TAP REC", "+/−", "VAL"];
+  const mainHeaders = ["Jugador", "TIT", "MIN", "PTS", "T2 C/I", "T3 C/I", "TL C/I", "RO", "RD", "REB", "AST", "ROB", "TAP", "PER", "FC", "FR", "TAP REC", "+/−", getPlayerValuation().label];
   const hasMinuteEvidence = stats.some(row => (raw(row, "minutes") ?? 0) > 0);
   const activityFields = ["points", "fg2a", "fg3a", "fta", "offReb", "defReb",
     "assists", "steals", "blocks", "turnovers", "foulsCommitted", "foulsDrawn"];
@@ -34,11 +35,11 @@ export function renderFullGameBoxScoreTables({ game = {}, players = [], stats = 
   const absentNote = absentEntries.length
     ? `<p style="font-size:11px;color:#475569;margin:8px 0"><strong>No participaron:</strong> ${absentEntries.map(({m}) => names.has(m.id) ? playerLabel(names.get(m.id)) : "Jugador sin ficha accesible").join(", ")}. Se conservan en la convocatoria, pero no se mezclan con las estadísticas de quienes jugaron.</p>`
     : "";
-  const mainCells = (m, r) => [m.starter ? "Sí" : "No", hasMinuteEvidence ? m.minutes : "N/D", m.points, madeAttempted(m.fg2m, m.fg2a), madeAttempted(m.fg3m, m.fg3a), madeAttempted(m.ftm, m.fta), m.offReb, m.defReb, m.rebounds, m.assists, m.steals, m.blocks, m.turnovers, m.foulsCommitted, m.foulsDrawn, show(raw(r, "blocks_received", "blocksReceived")), show(raw(r, "plus_minus", "plusMinus")), m.pir];
+  const mainCells = (m, r) => [m.starter ? "Sí" : "No", hasMinuteEvidence ? m.minutes : "N/D", m.points, madeAttempted(m.fg2m, m.fg2a), madeAttempted(m.fg3m, m.fg3a), madeAttempted(m.ftm, m.fta), m.offReb, m.defReb, m.rebounds, m.assists, m.steals, m.blocks, m.turnovers, m.foulsCommitted, m.foulsDrawn, show(raw(r, "blocks_received", "blocksReceived")), show(raw(r, "plus_minus", "plusMinus")), m[getPlayerValuation().field]];
   const mainRows = activeEntries.map(({m, source}) => `<tr>${named(m)}${mainCells(m, source).map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("");
   const t = computed.totals;
   const sumOptional = key => stats.length && stats.every(row => raw(row, key) !== null) ? stats.reduce((sum, row) => sum + raw(row, key), 0) : "N/D";
-  const totalMain = ["–", hasMinuteEvidence ? t.minutes : "N/D", t.points, madeAttempted(t.fg2m,t.fg2a), madeAttempted(t.fg3m,t.fg3a), madeAttempted(t.ftm,t.fta), t.offReb,t.defReb,t.rebounds,t.assists,t.steals,t.blocks,t.turnovers,t.foulsCommitted,t.foulsDrawn,sumOptional("blocks_received"),"–",t.pir];
+  const totalMain = ["–", hasMinuteEvidence ? t.minutes : "N/D", t.points, madeAttempted(t.fg2m,t.fg2a), madeAttempted(t.fg3m,t.fg3a), madeAttempted(t.ftm,t.fta), t.offReb,t.defReb,t.rebounds,t.assists,t.steals,t.blocks,t.turnovers,t.foulsCommitted,t.foulsDrawn,sumOptional("blocks_received"),"–",t[getPlayerValuation().field]];
   const footerMain = `<tr><th scope="row">TOTAL EQUIPO</th>${totalMain.map(cell => `<td>${cell}</td>`).join("")}</tr>`;
 
   const efficiencyHeaders = ["Jugador", "T2%", "T3%", "TL%", "TC C/I", "TC%", "eFG%", "TS%", "AST/PER", "USG% estim.", "Game Score", "ORtg", "DRtg"];

@@ -147,15 +147,25 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
         this._updateSyncStatusDom();
       });
 
+    // Observe a storage failure immediately while the scheduled flush reports it.
+    this.liveStagePromise.catch(()=>{});
+
     if(this.liveSyncTimer) globalThis.clearTimeout?.(this.liveSyncTimer);
     this.liveSyncTimer=globalThis.setTimeout?.(()=>{
-      this.liveStagePromise.then(()=>this._flushLiveSync()).catch(()=>{});
+      this._flushLiveSync().catch(()=>{});
     },300) || null;
   }
 
   async _flushLiveSync() {
     if(!this.isExistingGame || !this.gameId) return {synced:false,queued:false};
-    await this.liveStagePromise.catch(()=>{});
+    try {
+      await this.liveStagePromise;
+    } catch {
+      this.liveSyncState="error";
+      this.liveSyncError="Hay jugadas sin guardar. Mantén esta pantalla abierta.";
+      this._updateSyncStatusDom();
+      return {synced:false,queued:false,localSaveFailed:true,error:new Error(this.liveSyncError)};
+    }
     if(this.liveConflict){
       return {synced:false,queued:true,pending:this.livePendingCount,conflict:true,error:new Error(this.liveSyncError)};
     }
@@ -205,6 +215,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
       if(this.liveSyncError?.includes("turno de escritura")) return `Guardado local · esperando turno de escritura`;
       return `Sin sincronizar · ${this.livePendingCount || "cambios"} pendientes`;
     }
+    if(this.liveSyncState==="error" && this.liveSyncError) return this.liveSyncError;
     if(this.liveSyncState==="pending") return `Guardando · ${Math.max(1,this.livePendingCount)} pendiente`;
     return super._syncStatusText();
   }
@@ -212,7 +223,7 @@ export class LiveScoreHUDViewV58 extends LiveScoreHUDViewV44 {
   async _beforeFinishLiveCapture() {
     const result=await this._flushLiveSync().catch(error=>({synced:false,queued:true,error}));
     if(result?.synced && !result?.pending) return true;
-    const message=result?.conflict
+    const message=result?.localSaveFailed ? result.error.message : result?.conflict
       ? "Existe un conflicto de sincronización. Los datos locales están protegidos y no se cerrará el partido hasta resolverlo."
       : "Quedan datos pendientes de sincronizar. Mantén el partido abierto y recuperará el envío cuando vuelva la conexión.";
     globalThis.alert?.(message);

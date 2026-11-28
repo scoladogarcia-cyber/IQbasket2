@@ -4,6 +4,7 @@
  * shot charts espaciales, selector modular de dossier y exportación limpia a PDF.
  */
 
+import { getPlayerValuation, renderPlayerValuationToggle, setPlayerValuation } from "./PlayerValuationPreference.js";
 import { filterPlayerReportShots } from "../services/reports/PlayerReportMatchScope.js";
 import { StatsEngine } from "../engine/StatsEngine.js";
 import { BoxScoreCalculator } from "../domain/stats/BoxScoreCalculator.js";
@@ -54,35 +55,6 @@ export class ReportsView {
 
   t(key, fallback = "") {
     return (TranslationStore ? TranslationStore.t(key, fallback) : I18n.t(key, fallback)) || fallback;
-  }
-
-  // =========================================================================
-  // 1. CÁLCULO OFICIAL DE VALORACIÓN FIBA / ACB
-  // =========================================================================
-  _calculateFibaVal(st = {}) {
-    const pts = Number(st.points ?? (Number(st.fg2_made ?? st.fg2Made ?? 0) * 2 + Number(st.fg3_made ?? st.fg3Made ?? 0) * 3 + Number(st.ft_made ?? st.ftMade ?? 0)));
-    const oreb = Number(st.off_reb ?? st.offReb ?? st.rebounds_offensive ?? 0);
-    const dreb = Number(st.def_reb ?? st.defReb ?? st.rebounds_defensive ?? 0);
-    const reb = Number(st.rebounds ?? (oreb + dreb));
-    const ast = Number(st.assists ?? st.ast ?? 0);
-    const stl = Number(st.steals ?? st.stl ?? 0);
-    const blk = Number(st.blocks ?? st.blocks_made ?? st.blk ?? 0);
-    const foulsDrawn = Number(st.fouls_drawn ?? st.foulsDrawn ?? st.fouls_received ?? 0);
-
-    const fg2m = Number(st.fg2_made ?? st.fg2Made ?? 0);
-    const fg2a = Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
-    const fg3m = Number(st.fg3_made ?? st.fg3Made ?? 0);
-    const fg3a = Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
-    const ftm = Number(st.ft_made ?? st.ftMade ?? 0);
-    const fta = Number(st.ft_attempted ?? st.ftAttempted ?? 0);
-
-    const missedFg = Math.max(0, (fg2a + fg3a) - (fg2m + fg3m));
-    const missedFt = Math.max(0, fta - ftm);
-    const tov = Number(st.turnovers ?? st.tov ?? 0);
-    const blkAgainst = Number(st.blocks_received ?? st.blocksReceived ?? 0);
-    const foulsCommitted = Number(st.fouls_committed ?? st.fouls ?? 0);
-
-    return (pts + reb + ast + stl + blk + foulsDrawn) - (missedFg + missedFt + tov + blkAgainst + foulsCommitted);
   }
 
   // =========================================================================
@@ -140,7 +112,7 @@ export class ReportsView {
         const stl = Number(match.steals ?? match.stl ?? 0);
         const blk = Number(match.blocks ?? match.blocks_made ?? match.blk ?? 0);
         const tov = Number(match.turnovers ?? match.tov ?? 0);
-        const val = this._calculateFibaVal(match);
+        const val = BoxScoreCalculator.calculatePlayerBoxScore(match)[getPlayerValuation().field];
 
         statsList.push({
           id: p.id,
@@ -295,7 +267,7 @@ export class ReportsView {
         tStl += Number(st.steals ?? st.stl ?? 0);
         tBlk += Number(st.blocks ?? st.blocks_made ?? 0);
         tTov += Number(st.turnovers ?? st.tov ?? 0);
-        tVal += this._calculateFibaVal(st);
+        tVal += BoxScoreCalculator.calculatePlayerBoxScore(st)[getPlayerValuation().field];
       });
 
       const factor40 = tMin > 0 ? 40 / tMin : 0;
@@ -334,7 +306,7 @@ export class ReportsView {
     const size = 260;
     const center = size / 2;
     const radius = 85;
-    const labels = ["PTS", "REB", "AST", "ROB", "VAL"];
+    const labels = ["PTS", "REB", "AST", "ROB", getPlayerValuation().label];
     const maxVals = [25, 12, 8, 4, 25];
     const rawVals = [stats.pts || 0, stats.reb || 0, stats.ast || 0, stats.stl || 0, stats.val || 0];
 
@@ -379,7 +351,7 @@ export class ReportsView {
 
     return `
       <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
-        <span style="font-size: 11px; font-weight: 800; color: #475569; margin-bottom: 8px; display: block;">PROGRESIÓN DE VALORACIÓN FIBA POR PARTIDO</span>
+        <span style="font-size: 11px; font-weight: 800; color: #475569; margin-bottom: 8px; display: block;">PROGRESIÓN DE ${getPlayerValuation().label} POR PARTIDO</span>
         <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto;">
           <line x1="${padding}" y1="${height - 25}" x2="${width - padding}" y2="${height - 25}" stroke="#cbd5e1" stroke-width="1.5" />
           ${gameStatsList.map((g, i) => {
@@ -490,7 +462,8 @@ export class ReportsView {
           📖 GLOSARIO Y METODOLOGÍA ANALÍTICA OFICIAL FIBA / ACB
         </h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; font-size: 11px; color: #334155; margin-top: 10px;">
-          <div><strong>VAL / PIR (FIBA):</strong> (PTS + REB + AST + ROB + TAP + FP Recibidas) - (Tiros Campo Fallados + TL Fallados + PER + TAP Recibidos + FC Cometidas).</div>
+          <div><strong>FIBA (EFF):</strong> Puntos + rebotes + asistencias + robos + tapones realizados − tiros de campo fallados − tiros libres fallados − pérdidas.</div>
+          <div><strong>PIR:</strong> (PTS + REB + AST + ROB + TAP + FP Recibidas) - (Tiros Campo Fallados + TL Fallados + PER + TAP Recibidos + FC Cometidas).</div>
           <div><strong>OFF / DEF RTG:</strong> Eficiencia de puntos anotados y concedidos por cada 100 posesiones estimadas.</div>
           <div><strong>NET RATING:</strong> Diferencial neto (Offensive Rating - Defensive Rating).</div>
           <div><strong>POSESIONES:</strong> Volumen estimado de juego mediante ritmo acumulado.</div>
@@ -567,7 +540,7 @@ export class ReportsView {
                 <th title="Robos de balón">ROB ⓘ</th>
                 <th title="Tapones">TAP ⓘ</th>
                 <th title="Pérdidas de balón">PER ⓘ</th>
-                <th title="Valoración Oficial FIBA">VAL (FIBA) ⓘ</th>
+                <th title="Valoración ${getPlayerValuation().label}">${getPlayerValuation().label} ⓘ</th>
               </tr>
             </thead>
             <tbody>
@@ -595,7 +568,7 @@ export class ReportsView {
     const gameProgression = [];
 
     statsList.forEach((st, idx) => {
-      const v = this._calculateFibaVal(st);
+      const v = BoxScoreCalculator.calculatePlayerBoxScore(st)[getPlayerValuation().field];
       tMin += Number(st.minutes ?? st.minutesPlayed ?? 0);
       tPts += Number(st.points ?? 0);
       const oreb = Number(st.off_reb ?? st.offReb ?? 0);
@@ -634,12 +607,12 @@ export class ReportsView {
             <span style="font-size: 12px; color: #64748b;">Posición: ${player.primary_position || 'Alero'} · ${gp} Partidos Disputados (${tMin} min)</span>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div style="background:#eff6ff; border: 1px solid #bfdbfe; padding:8px 14px; border-radius:8px; text-align:center;" title="Valoración FIBA oficial por partido jugado">
-              <span style="font-size:9px; color:#1e40af; font-weight:800;">VAL FIBA/PJ ⓘ</span>
+            <div style="background:#eff6ff; border: 1px solid #bfdbfe; padding:8px 14px; border-radius:8px; text-align:center;" title="Valoración ${getPlayerValuation().label} por partido jugado">
+              <span style="font-size:9px; color:#1e40af; font-weight:800;">${getPlayerValuation().label}/PJ ⓘ</span>
               <strong style="display:block; font-size:18px; color:#1e40af;">${avgValPJ}</strong>
             </div>
-            <div style="background:#f0fdf4; border: 1px solid #bbf7d0; padding:8px 14px; border-radius:8px; text-align:center;" title="Valoración FIBA proyectada a 40 minutos">
-              <span style="font-size:9px; color:#15803d; font-weight:800;">VAL FIBA/40 ⓘ</span>
+            <div style="background:#f0fdf4; border: 1px solid #bbf7d0; padding:8px 14px; border-radius:8px; text-align:center;" title="Valoración ${getPlayerValuation().label} proyectada a 40 minutos">
+              <span style="font-size:9px; color:#15803d; font-weight:800;">${getPlayerValuation().label}/40 ⓘ</span>
               <strong style="display:block; font-size:18px; color:#15803d;">${val40}</strong>
             </div>
           </div>
@@ -701,7 +674,7 @@ export class ReportsView {
                 <th title="Asistencias">AST ⓘ</th>
                 <th title="Robos de balón">ROB ⓘ</th>
                 <th title="Pérdidas de balón">PER ⓘ</th>
-                <th title="Valoración FIBA oficial">VAL (FIBA) ⓘ</th>
+                <th title="Valoración ${getPlayerValuation().label}">${getPlayerValuation().label} ⓘ</th>
               </tr>
             </thead>
             <tbody>
@@ -841,7 +814,7 @@ export class ReportsView {
             <thead>
               <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; font-weight: 800;">
                 <th style="text-align: left; padding: 6px;">JUGADOR</th>
-                <th>PJ</th><th>MIN</th><th>PTS/PJ</th><th>REB/PJ</th><th>AST/PJ</th><th>ROB/PJ</th><th>PER/PJ</th><th>VAL/PJ</th><th>VAL/40</th>
+                <th>PJ</th><th>MIN</th><th>PTS/PJ</th><th>REB/PJ</th><th>AST/PJ</th><th>ROB/PJ</th><th>PER/PJ</th><th>${getPlayerValuation().label}/PJ</th><th>${getPlayerValuation().label}/40</th>
               </tr>
             </thead>
             <tbody>
@@ -948,6 +921,7 @@ export class ReportsView {
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
           <span style="font-size: 11px; font-weight: 900; color: #64748b;">FILTROS:</span>
           
+          ${renderPlayerValuationToggle()}
           <select id="filter-venue" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 700; background: white; color: #0f172a; cursor: pointer;">
             <option value="all" ${this.filters.venue === 'all' ? 'selected' : ''}>Sede: Todas</option>
             <option value="local" ${this.filters.venue === 'local' ? 'selected' : ''}>Local</option>
@@ -1001,6 +975,11 @@ export class ReportsView {
         this.seasonMetricMode = btn.dataset.metric;
         this.render(containerId);
       });
+    });
+
+    container.querySelector("#player-valuation-toggle")?.addEventListener("click", (event) => {
+      setPlayerValuation(event.currentTarget.value);
+      this.render(containerId);
     });
 
     container.querySelector("#select-game")?.addEventListener("change", (e) => {

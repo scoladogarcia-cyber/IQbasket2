@@ -58,4 +58,7 @@ const sync=read("services/StatsSyncService.js");
 const audit=sync.slice(sync.indexOf("async runFullAuditAndSync("));
 assert.match(audit,/dryRun:true/);
 assert.doesNotMatch(audit,/\.upsert\(|\.update\(/);
+const legacyReport = read("views/ReportsViewLegacyV36.js");
+assert.equal([...legacyReport.matchAll(/BoxScoreCalculator\.calculatePlayerBoxScore\((?:match|st)\)\[getPlayerValuation\(\)\.field\]/g)].length, 3);
+assert.doesNotMatch(legacyReport, /_calculateFibaVal|VAL \(FIBA\)|PIR \(FIBA\)/);
 console.log("PASS V81: canonical PIR/EFF, identity scope, zeros, no invented ratings or writes.");

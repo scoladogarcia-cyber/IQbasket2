@@ -157,9 +157,14 @@ export class LiveOfflineStore {
     };
     const localRows = this._loadLocalOutbox(id).filter(item => item.operationId !== row.operationId);
     localRows.push(row);
-    this._saveLocalOutbox(id, localRows);
-    await this._put(OUTBOX_STORE, row);
-    await this.saveDraft(id, payload, { baseRevision: row.baseRevision, operationId });
+    const savedLocally = this._saveLocalOutbox(id, localRows);
+    const savedInIndexedDb = await this._put(OUTBOX_STORE, row).catch(() => false);
+    if (!savedLocally && !savedInIndexedDb) {
+      throw new Error("El dispositivo no ha podido guardar las jugadas.");
+    }
+
+    // The outbox is the durable record. The draft is a recovery shortcut.
+    await this.saveDraft(id, payload, { baseRevision: row.baseRevision, operationId }).catch(() => false);
     return row;
   }
 

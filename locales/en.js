@@ -9,6 +9,7 @@ export const en = {
   // 1. ESTRUCTURA SEMÁNTICA ANIDADA
   // =========================================================================
   common: {
+    playerValuationToggle: "{current} rating · Show {next}",
     loading: "Loading...",
     saving: "Saving...",
     saved: "Successfully saved",

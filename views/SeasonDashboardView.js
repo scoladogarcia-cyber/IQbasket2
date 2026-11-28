@@ -76,7 +76,8 @@ export class SeasonDashboardView {
     return {
       teamPts: teamPts !== null ? Number(teamPts) : 0,
       oppPts: oppPts !== null ? Number(oppPts) : 0,
-      hasPlayed
+      hasPlayed,
+      hasScore: teamPts !== null && oppPts !== null && Number.isFinite(Number(teamPts)) && Number.isFinite(Number(oppPts))
     };
   }
 
@@ -267,10 +268,10 @@ export class SeasonDashboardView {
     const totalGames = chronGames.length;
 
     const gameMetrics = chronGames.map((g, idx) => {
-      const { teamPts, oppPts } = this._normalizeGameScore(g);
+      const { teamPts, oppPts, hasScore } = this._normalizeGameScore(g);
       const statsList = DataStore.getPlayerGameStats ? (DataStore.getPlayerGameStats(null, g.id) || []) : [];
 
-      let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0, totFta = 0;
+      let totFg2m = 0, totFg2a = 0, totFg3m = 0, totFg3a = 0;
       let totOffReb = 0, totDefReb = 0, totTov = 0;
 
       statsList.forEach((st) => {
@@ -278,7 +279,6 @@ export class SeasonDashboardView {
         totFg2a += Number(st.fg2_attempted ?? st.fg2Attempted ?? 0);
         totFg3m += Number(st.fg3_made ?? st.fg3Made ?? 0);
         totFg3a += Number(st.fg3_attempted ?? st.fg3Attempted ?? 0);
-        totFta  += Number(st.ft_attempted ?? st.ftAttempted ?? 0);
         totOffReb += Number(st.off_reb ?? st.rebOff ?? st.rebounds_offensive ?? 0);
         totDefReb += Number(st.def_reb ?? st.rebDef ?? st.rebounds_defensive ?? 0);
         totTov += Number(st.turnovers ?? st.tov ?? 0);
@@ -290,17 +290,8 @@ export class SeasonDashboardView {
       const efgVal = totFga > 0
         ? Number((((totFgm + 0.5 * totFg3m) / totFga) * 100).toFixed(1))
         : null;
-      const poss = totFga + 0.44 * totFta + totTov;
-      const ortg = poss > 0 ? (teamPts / poss) * 100 : null;
-      // Opponent defensive possessions are not given by own-player statistics.
-      const drtg = null;
-
-      const rawNet = ortg !== null && drtg !== null
-        ? Number((ortg - drtg).toFixed(1))
-        : null;
-      const netRating = rawNet === null
-        ? null
-        : Math.max(-90, Math.min(40, rawNet));
+      const ratings = this._calculateGameRatings(g);
+      const netRating = ratings.off === "-" ? null : Number((ratings.offNum - ratings.defNum).toFixed(1));
 
       return {
         label: `P${idx + 1}`,
@@ -308,6 +299,7 @@ export class SeasonDashboardView {
         ptsThem: oppPts,
         tov: totTov,
         netRating,
+        pointMargin: hasScore ? teamPts - oppPts : null,
         efgVal,
         orbCount: totOffReb,
         drbCount: totDefReb
@@ -317,35 +309,39 @@ export class SeasonDashboardView {
     const svgWidth = 600;
     const svgHeight = 150;
 
-    // 1. Net Rating
-    const minNet = -90;
-    const maxNet = 30;
-    const netPoints = gameMetrics.map((m, i) => {
-      if (m.netRating === null) return null;
-      const divisor = totalGames > 1 ? (totalGames - 1) : 1;
-      const x = (i / divisor) * svgWidth;
-      const y = svgHeight - ((m.netRating - minNet) / (maxNet - minNet)) * svgHeight;
-      return { x, y, val: m.netRating, label: m.label };
-    }).filter(Boolean);
-    const netCurveD = this._buildSmoothSvgPath(netPoints);
-
-    const svgNetRating = `
+    // Use the recorded score margin when no game has a verified rating pair.
+    const hasNetRating = gameMetrics.some(game => game.netRating !== null);
+    const trendField = hasNetRating ? "netRating" : "pointMargin";
+    const trendValues = gameMetrics.map(game => game[trendField]);
+    const axisStep = Math.max(5, Math.ceil(Math.max(0, ...trendValues.map(value => Math.abs(value ?? 0))) / 10) * 5);
+    const axisLimit = axisStep * 2;
+    const chartInset = 8;
+    const chartX = index => chartInset + (svgWidth - chartInset * 2) *
+      (totalGames > 1 ? index / (totalGames - 1) : 0.5);
+    const chartY = value => chartInset + (svgHeight - chartInset * 2) * (axisLimit - value) / (axisLimit * 2);
+    const trendGraphic = trendValues.some(value => value !== null) ? `
       <div class="chart-flex-wrap">
-        <div class="chart-y-axis">
-          <span>30</span><span>0</span><span>-30</span><span>-60</span><span>-90</span>
+        <div class="chart-y-axis" aria-hidden="true">
+          ${[axisLimit, axisStep, 0, -axisStep, -axisLimit].map(value => `<span>${value}</span>`).join("")}
         </div>
         <div class="chart-svg-container">
-          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg">
-            <line x1="0" y1="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" x2="${svgWidth}" y2="${svgHeight - ((0 - minNet) / (maxNet - minNet)) * svgHeight}" stroke="#e2e8f0" stroke-dasharray="4 4" stroke-width="1.5"/>
-            ${netCurveD ? `<path d="${netCurveD}" fill="none" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />` : `<text x="300" y="78" text-anchor="middle" fill="#94a3b8" font-size="13">${this.t("dashboard.v86.insufficientPoss")}</text>`}
-            ${netPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#1e3a8a" stroke="white" stroke-width="2"><title>${p.label}: ${p.val}</title></circle>`).join("")}
+          <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="chart-svg" aria-hidden="true">
+            <line x1="0" y1="${chartY(0)}" x2="${svgWidth}" y2="${chartY(0)}" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+            ${trendValues.map((value, index) => {
+              if (value === null) return "";
+              const previous = trendValues[index - 1];
+              const segment = index > 0 && previous !== null
+                ? `<line x1="${chartX(index - 1)}" y1="${chartY(previous)}" x2="${chartX(index)}" y2="${chartY(value)}" stroke="#1e3a8a" stroke-width="3"/>`
+                : "";
+              return segment + `<circle cx="${chartX(index)}" cy="${chartY(value)}" r="5" fill="#1e3a8a"><title>${gameMetrics[index].label}: ${value}</title></circle>`;
+            }).join("")}
           </svg>
-          <div class="chart-x-labels">
-            ${gameMetrics.map(m => `<span>${m.label}</span>`).join("")}
+          <div class="chart-x-labels rating-chart-labels">
+            ${gameMetrics.map((game, index) => `<span>${game.label}<br>${trendValues[index] ?? "—"}</span>`).join("")}
           </div>
         </div>
-      </div>
-    `;
+      </div>` : "";
+    const trendNote = hasNetRating ? "" : `<p class="rating-chart-note">${this.t("dashboard.v86.netNotAvailable")}</p>`;
 
     // 2. Puntos Anotados vs Recibidos
     const maxPtsVal = 100;
@@ -376,7 +372,7 @@ export class SeasonDashboardView {
       </div>
       <div class="chart-legend-box">
         <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLegend")}</span>
       </div>
     `;
 
@@ -512,8 +508,8 @@ export class SeasonDashboardView {
       return `
         <div class="bar-col" style="flex: 1; max-width: 60px;">
           <div class="bar-pair" style="gap: 6px;">
-            <div class="bar-bar bar-blue" style="height: ${hUs}%; width: 22px;" title="A favor: ${q.us === null ? 'Sin datos' : q.us.toFixed(1)}"></div>
-            <div class="bar-bar bar-orange" style="height: ${hThem}%; width: 22px;" title="En contra: ${q.them === null ? 'Sin datos' : q.them.toFixed(1)}"></div>
+            <div class="bar-bar bar-blue" style="height: ${hUs}%; width: 22px;" title="${this.t("dashboard.v86.pointsForLabel","",{count:q.us === null ? "—" : q.us.toFixed(1)})}"></div>
+            <div class="bar-bar bar-orange" style="height: ${hThem}%; width: 22px;" title="${this.t("dashboard.v86.pointsAgainstLabel","",{count:q.them === null ? "—" : q.them.toFixed(1)})}"></div>
           </div>
           <span class="bar-label" style="font-weight: 800; font-size: 11px;">${q.name}</span>
         </div>
@@ -537,11 +533,11 @@ export class SeasonDashboardView {
       </div>
       <div class="chart-legend-box">
         <span class="legend-badge"><span class="legend-sq" style="background:#1e3a8a;"></span> ${this.t("dashboard.v86.pointsFor")}</span>
-        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLabel")}</span>
+        <span class="legend-badge"><span class="legend-sq" style="background:#f97316;"></span> ${this.t("dashboard.v86.pointsAgainstLegend")}</span>
       </div>
     ` : `
       <div style="padding: 28px; text-align: center; color: #64748b; font-size: 12px;">
-        Sin datos de parciales para este contexto.
+        ${this.t("dashboard.v86.periodsMissingDetail")}
       </div>
     `;
 
@@ -549,13 +545,14 @@ export class SeasonDashboardView {
       <div class="clean-charts-grid">
         <div class="clean-chart-card">
           <div class="clean-chart-header">
-            <span>${this.t("net_rating_evolution", "EVOLUCIÓN DEL NET RATING")}</span>
+            <span>${this.t(hasNetRating ? "net_rating_evolution" : "dashboard.v86.pointMarginTrend")}</span>
             <div class="dash-tooltip-wrapper">
               <span class="tooltip-trigger">?</span>
-              <div class="dash-tooltip-popup">${this.t("net_rating_tooltip")}</div>
+              <div class="dash-tooltip-popup">${this.t(hasNetRating ? "net_rating_tooltip" : "dashboard.v86.pointMarginHelp")}</div>
             </div>
           </div>
-          ${svgNetRating}
+          ${trendGraphic}
+          ${trendNote}
         </div>
 
         <div class="clean-chart-card">
@@ -919,6 +916,8 @@ export class SeasonDashboardView {
             .chart-y-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 700; width: 28px; text-align: right; }
             .chart-svg-container { flex: 1; display: flex; flex-direction: column; }
             .chart-svg { width: 100%; height: 140px; overflow: visible; }
+            .rating-chart-note { color: #475569; font-size: .8rem; margin: 12px 0 0; }
+            .rating-chart-labels span { text-align: center; }
             .chart-x-labels { display: flex; justify-content: space-between; font-size: 9.5px; color: #64748b; font-weight: 700; margin-top: 6px; }
             
             .chart-bars-wrap { flex: 1; display: flex; flex-direction: column; height: 140px; }

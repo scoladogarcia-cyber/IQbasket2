@@ -3,6 +3,7 @@
  * @description Solo utiliza marcadores y actas persistidos de la selección autorizada.
  * Todos los SVG son autocontenidos e imprimibles; N/D no se transforma en cero.
  */
+import { getPlayerValuation } from "../PlayerValuationPreference.js";
 import { buildGameReportMetrics } from "../../domain/stats/GameReportMetrics.js";
 
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
@@ -26,7 +27,7 @@ export function buildSelectedGamesSummary(entries = []) {
   });
   const scores = rows.filter(row => row.forPoints !== null && row.againstPoints !== null);
   const full = rows.every(row => row.metrics && row.metrics.rows.length > 0);
-  const keys = ["points","fg2m","fg2a","fg3m","fg3a","ftm","fta","offReb","defReb","assists","turnovers","steals","pir"];
+  const keys = ["points","fg2m","fg2a","fg3m","fg3a","ftm","fta","offReb","defReb","assists","turnovers","steals",getPlayerValuation().field];
   const totals = full ? Object.fromEntries(keys.map(key => [key, rows.reduce((sum, row) => sum + row.metrics.totals[key], 0)])) : null;
   const scored = scores.reduce((sum, row) => sum + row.forPoints, 0);
   const conceded = scores.reduce((sum, row) => sum + row.againstPoints, 0);
@@ -80,7 +81,7 @@ export function renderSelectedGamesOverview(entries = [], { title = "Resumen vis
     card("Tiros libres", t ? pct(t.ftm,t.fta) : "N/D", t ? `${t.ftm}/${t.fta}` : "Acta incompleta"),
     card("Rebotes", t ? t.offReb+t.defReb : "N/D", t ? `${t.offReb} RO · ${t.defReb} RD` : ""),
     card("Asistencias / pérdidas", t ? `${t.assists} / ${t.turnovers}` : "N/D"),
-    card("Valoración FIBA acumulada", t ? t.pir : "N/D", "Suma de actas disponibles")
+    card(`Valoración ${getPlayerValuation().label} acumulada`, t ? t[getPlayerValuation().field] : "N/D", "Suma de actas disponibles")
   ].join("");
   const style = `<style>.iq-overview{background:#fff;border:2px solid #dbeafe;border-radius:14px;padding:18px;margin:16px 0;break-inside:auto;color:#0f172a}.iq-overview h2{color:#1e3a8a;margin:0 0 8px}.iq-overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:9px}.iq-overview-card{background:#eff6ff;border-left:4px solid #1e40af;border-radius:7px;padding:10px;break-inside:avoid}.iq-overview-card span,.iq-overview-card strong,.iq-overview-card small{display:block}.iq-overview-card span{font-size:10px;text-transform:uppercase;font-weight:800}.iq-overview-card strong{font-size:21px}.iq-overview-card small{font-size:10px;color:#475569}.iq-overview-charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}.iq-overview-charts>div{border:1px solid #cbd5e1;border-radius:9px;padding:8px;break-inside:avoid}.iq-overview li{margin:4px 0}@media(max-width:650px){.iq-overview-charts{grid-template-columns:1fr}}@media print{.iq-overview{break-inside:auto!important}.iq-overview-charts{grid-template-columns:1fr 1fr}.iq-overview-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.iq-overview-card{padding:6px}.iq-overview-card strong{font-size:17px}}</style>`;
   return `${style}<section class="iq-overview" aria-label="Resumen visual selección"><h2>${escape(title)}</h2><p>${s.rows.length} partido(s) de la selección autorizada. Indicadores calculados solo con marcadores y actas realmente disponibles.</p><div class="iq-overview-grid">${cards}</div><div class="iq-overview-charts"><div><h3>Puntos: equipo frente a rivales</h3>${scoreChart(s.rows)}</div><div><h3>Volumen de tiros por tipo</h3>${proportionChart(t)}</div></div><h3>Lectura rápida · basada en los datos</h3><ul>${s.notes.map(note=>`<li>${escape(note)}</li>`).join("")}</ul><p style="font-size:10px;color:#475569">La comparación describe esta muestra; no atribuye causas ni proyecta resultados. N/D = dato no disponible. Actas, comparativas y mapas desglosados a continuación.</p></section>`;

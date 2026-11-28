@@ -361,7 +361,11 @@ export class LiveCaptureSyncService {
     if (!id || !this.captureService?.saveCapture) {
       return { synced: false, queued: false, pending: 0, error: new Error("Live sync backend no disponible.") };
     }
-    await this.stage(id, payload, { baseRevision });
+    try {
+      await this.stage(id, payload, { baseRevision });
+    } catch (error) {
+      return { synced: false, queued: false, pending: 0, error };
+    }
     return this.flush(id);
   }
 }

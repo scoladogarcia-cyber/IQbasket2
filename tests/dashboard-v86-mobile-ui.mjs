@@ -13,7 +13,7 @@ try {
   await installBrowserNetworkStubs(page);
   await page.goto(BASE_URL,{waitUntil:"domcontentloaded"});
   await page.waitForFunction(()=>Boolean(window.iqApp),null,{timeout:20000});
-  const results=await page.evaluate(async()=>{
+  const {rows:results,netTitle,netLabels}=await page.evaluate(async()=>{
     const {DataStore}=await import("/services/DataStore.js");
     const {TranslationStore}=await import("/services/TranslationStore.js");
     const {SeasonDashboardView}=await import("/views/SeasonDashboardView.js");
@@ -36,6 +36,8 @@ try {
       await TranslationStore.setLanguage(code);
       await view.render(container,teamId);
       rows[code]={
+        trend:container.querySelector(".clean-chart-header > span")?.textContent?.trim(),
+        trendLabels:container.querySelector(".chart-x-labels")?.textContent?.trim(),
         kpis:[...container.querySelectorAll(".kpi-top-label > span")].map(x=>x.textContent.trim()),
         header:container.querySelector(".dash-meta-line")?.textContent?.trim(),
         table:container.querySelector(".clean-table-title")?.textContent?.trim(),
@@ -45,8 +47,16 @@ try {
         category:container.querySelector(".dash-category-badge")?.textContent?.trim()
       };
     }
-    return rows;
+    await TranslationStore.setLanguage("en");
+    game.off_rating=110;
+    game.def_rating=90;
+    await view.render(container,teamId);
+    const netTitle=container.querySelector(".clean-chart-header > span")?.textContent?.trim();
+    const netLabels=container.querySelector(".rating-chart-labels")?.textContent?.trim();
+    return {rows,netTitle,netLabels};
   });
+  assert.match(netTitle,/net rating trend/i);
+  assert.match(netLabels,/20/);
   const labels={
     es:["Partidos jugados","Últimos partidos","Auditar estadísticas"],
     ca:["Partits jugats","Últims partits","Auditar estadístiques"],
@@ -61,6 +71,11 @@ try {
     assert.ok(row.audit.includes(audit),lang+" audit");
     assert.equal(row.team,"Club de Prova","Team names must not be translated");
   }
+  assert.match(results.es.trend,/diferencial de puntos/i);
+  assert.match(results.en.trend,/point differential/i);
+  assert.match(results.fr.trend,/écart de points/i);
+  assert.match(results.ca.trend,/diferencial de punts/i);
+  for (const row of Object.values(results)) assert.match(row.trendLabels,/13/);
   assert.ok(!results.ca.kpis.some(k=>["PARTIDOS JUGADOS","VICTORIAS"].includes(k)));
   assert.equal(results.es.category,"Cadete Masculino");
   assert.equal(results.ca.category,"Cadet · masculí");

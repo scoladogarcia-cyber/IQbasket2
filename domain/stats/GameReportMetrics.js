@@ -38,11 +38,11 @@ export function canonicalPlayerRow(row = {}) {
     efg: ratio(fg2m + 1.5 * fg3m, attempts),
     ts: ratio(shootingPoints, 2 * (attempts + 0.44 * fta)),
     astTo: turnovers > 0 ? round(assists / turnovers) : null,
-    pir: box.pir, usage: null
+    pir: box.pir, efficiency: box.efficiency, usage: null
   };
 }
 
-const FIELDS = ["minutes", "points", "fg2m", "fg2a", "fg3m", "fg3a", "ftm", "fta", "offReb", "defReb", "rebounds", "assists", "steals", "blocks", "turnovers", "foulsCommitted", "foulsDrawn", "fga", "usageActions", "pir"];
+const FIELDS = ["minutes", "points", "fg2m", "fg2a", "fg3m", "fg3a", "ftm", "fta", "offReb", "defReb", "rebounds", "assists", "steals", "blocks", "turnovers", "foulsCommitted", "foulsDrawn", "fga", "usageActions", "pir", "efficiency"];
 
 /**
  * Calcula USG% con denominador de acciones del equipo en este MISMO partido.
